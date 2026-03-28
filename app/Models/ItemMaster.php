@@ -1,5 +1,4 @@
 <?php
-// app/Models/ItemMaster.php
 
 namespace App\Models;
 
@@ -18,9 +17,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'description',
     'item_type',
     'inventory_method',
-    'vat_id',                        // NEW: Default VAT
-    'general_posting_setup_id',      // NEW: GL accounts for sales/purchase
-    'inventory_posting_setup_id',    // NEW: GL accounts for inventory
+    'vat_id',                        // 3NF: References VAT master table
+    'general_posting_setup_id',      // 3NF: References posting setup master
+    'inventory_posting_setup_id',    // 3NF: References inventory posting setup
     'reference_cost',
     'reference_price',
     'shelf_life_days',
@@ -47,6 +46,14 @@ class ItemMaster extends Model
         'reference_cost' => 0,
         'reference_price' => 0,
     ];
+
+    /**
+     * Category assignments with pivot data
+     */
+    public function categoryAssignments(): HasMany
+    {
+        return $this->hasMany(ItemCategoryAssignment::class, 'item_id');
+    }
 
     /**
      * UOM assignments (M2M with pivot)
@@ -93,7 +100,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * VAT for this item
+     * VAT for this item (3NF: Direct reference, no transitive dependency)
      */
     public function vat(): BelongsTo
     {
@@ -101,7 +108,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * General Posting Setup (GL accounts)
+     * General Posting Setup (GL accounts) - 3NF compliant
      */
     public function generalPostingSetup(): BelongsTo
     {
@@ -109,7 +116,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * Inventory Posting Setup (GL accounts)
+     * Inventory Posting Setup (GL accounts) - 3NF compliant
      */
     public function inventoryPostingSetup(): BelongsTo
     {
@@ -149,7 +156,8 @@ class ItemMaster extends Model
     public function categories(): BelongsToMany
     {
         return $this->belongsToMany(Category::class, 'item_category_assignments')
-            ->withPivot('is_primary', 'sort_order');
+            ->withPivot('is_primary', 'sort_order')
+            ->orderByPivot('sort_order');
     }
 
     /**
@@ -212,28 +220,26 @@ class ItemMaster extends Model
     }
 
     /**
-     * Get current effective VAT
+     * Get current effective VAT (3NF: Item-level only)
+     * REMOVED: Category fallback that violated 3NF
      */
     public function getEffectiveVatAttribute(): ?VatMaster
     {
-        // Item VAT > Category VAT > null
-        return $this->vat
-            ?? $this->primaryCategory()?->vat;
+        return $this->vat;
     }
 
     /**
-     * Get effective posting setups
+     * Get effective posting setups (3NF: Item-level only)
+     * REMOVED: Category fallbacks that violated 3NF
      */
     public function getEffectiveGeneralPostingSetupAttribute(): ?GeneralPostingSetup
     {
-        return $this->generalPostingSetup
-            ?? $this->primaryCategory()?->generalPostingSetup;
+        return $this->generalPostingSetup;
     }
 
     public function getEffectiveInventoryPostingSetupAttribute(): ?InventoryPostingSetup
     {
-        return $this->inventoryPostingSetup
-            ?? $this->primaryCategory()?->inventoryPostingSetup;
+        return $this->inventoryPostingSetup;
     }
 
     /**

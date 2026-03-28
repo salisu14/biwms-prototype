@@ -1,5 +1,4 @@
 <?php
-// database/seeders/CategorySeeder.php
 
 namespace Database\Seeders;
 
@@ -84,7 +83,7 @@ class CategorySeeder extends Seeder
             'description' => 'Categories for digestive system health',
         ]);
 
-        // BOTANICAL CATEGORIES (Part Used)
+        // BOTANICAL CATEGORIES
         $botanical = $this->createCategory([
             'category_code' => 'BOT',
             'category_name' => 'Botanical Parts',
@@ -198,14 +197,12 @@ class CategorySeeder extends Seeder
         // Build hierarchy path
         $path = $data['category_code'];
         if ($parentId) {
-            // FIX: Ensure parent exists before querying
             $parent = Category::find($parentId);
             if ($parent) {
                 $path = $parent->hierarchy_path . '.' . $data['category_code'];
             }
         }
 
-        // FIX: Add sort_order and ensure all required fields are set
         $data['hierarchy_path'] = $path;
         $data['sort_order'] = $this->sortOrder++;
         $data['description'] = $data['description'] ?? null;
