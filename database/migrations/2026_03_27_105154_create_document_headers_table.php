@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -14,15 +15,9 @@ return new class extends Migration
     {
         Schema::create('document_headers', function (Blueprint $table) {
             $table->id();
-            $table->enum('doc_type', [
-                'PURCHASE_ORDER',
-                'PRODUCTION_ORDER',
-                'SALES_ORDER',
-                'TRANSFER_ORDER',
-                'ADJUSTMENT',
-                'RETURN',
-                'SCRAP'
-            ]);
+
+            $table->enum('doc_type', array_column(DocumentType::cases(), 'value'))
+                ->default('PURCHASE_ORDER');
             $table->string('doc_no', 50)->unique();
             $table->date('doc_date');
             $table->date('posting_date');
