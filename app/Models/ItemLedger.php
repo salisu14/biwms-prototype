@@ -61,7 +61,7 @@ class ItemLedger extends Model
      */
     public function document(): BelongsTo
     {
-        return $this->belongsTo(DocumentHeader::class);
+        return $this->belongsTo(DocumentHeader::class, 'doc_id', 'id');
     }
 
     /**
@@ -77,7 +77,7 @@ class ItemLedger extends Model
      */
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by', 'user_id');
+        return $this->belongsTo(User::class, 'created_by', 'id');
     }
 
     /**
