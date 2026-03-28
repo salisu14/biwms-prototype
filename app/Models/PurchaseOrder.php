@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 #[Fillable([
     'order_number',
@@ -145,10 +146,12 @@ class PurchaseOrder extends Model
      */
     public function recalculateTotals(): void
     {
-        $this->total_amount = $this->lines()->sum('line_total');
-        $this->total_vat = $this->lines()->sum('vat_amount');
-        $this->grand_total = $this->total_amount + $this->total_vat;
-        $this->save();
+        static::withoutEvents(function () {
+            $this->total_amount = $this->lines()->sum('line_total');
+            $this->total_vat = $this->lines()->sum('vat_amount');
+            $this->grand_total = $this->total_amount + $this->total_vat;
+            $this->save();
+        });
     }
 
     /**

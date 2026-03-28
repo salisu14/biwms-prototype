@@ -101,4 +101,20 @@ class PurchaseOrderLine extends Model
     {
         return $this->received_quantity > 0 && $this->received_quantity < $this->quantity;
     }
+
+    // In PurchaseOrderLine model
+    public function getLineTotalAttribute(): float
+    {
+        return $this->quantity * $this->unit_cost;
+    }
+
+    public function getVatAmountAttribute(): float
+    {
+        return $this->line_total * ($this->vat_percentage / 100);
+    }
+
+    public function getTotalAmountAttribute(): float
+    {
+        return $this->line_total + $this->vat_amount;
+    }
 }
