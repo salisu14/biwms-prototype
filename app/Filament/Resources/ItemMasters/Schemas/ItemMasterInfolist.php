@@ -40,44 +40,57 @@ class ItemMasterInfolist
                 Section::make('Classification')
                     ->columns(2)
                     ->schema([
-                        // FIXED: M2M categories with primary indicator
-                        TextEntry::make('categories')
+                        TextEntry::make('category_list')
                             ->label('Categories')
-                            ->formatStateUsing(function ($record) {
-                                return $record->categories
-                                    ->map(fn ($cat) => $cat->pivot->is_primary
+                            ->state(fn ($record) => $record->categories?->count()
+                                ? $record->categories
+                                    ->map(fn ($cat) => $cat->pivot?->is_primary
                                         ? "{$cat->category_name} ★"
                                         : $cat->category_name)
-                                    ->join(', ');
-                            }),
+                                    ->join(', ')
+                                : '-'
+                            ),
 
-                        // FIXED: Primary category only
-                        TextEntry::make('primaryCategory.category_name')
+                        TextEntry::make('primary_category_name')
                             ->label('Primary Category')
-                            ->placeholder('-'),
+                            ->state(fn ($record) => $record->getPrimaryCategory()?->category_name ?? '-'),
                     ]),
 
                 Section::make('Unit of Measures')
                     ->columns(2)
                     ->schema([
-                        // FIXED: Use model method to get base UOM
-                        TextEntry::make('base_uom')
+                        TextEntry::make('base_uom_code')
                             ->label('Base UOM')
                             ->state(fn ($record) => $record->getDefaultUom(UomType::BASE)?->uom_code ?? '-'),
 
-                        // Show all assigned UOMs
-                        TextEntry::make('uom_assignments')
+                        TextEntry::make('uom_summary')
                             ->label('All UOMs')
-                            ->state(fn ($record) => $record->uomAssignments
-                                ->map(fn ($ua) => "{$ua->uom->uom_code} ({$ua->uom_type->label()})")
-                                ->join(', '))
+                            ->state(fn ($record) => $record->uomAssignments?->count()
+                                ? $record->uomAssignments
+                                    ->map(function ($ua) {
+                                        $uomCode = $ua->uom?->uom_code ?? 'N/A';
+
+                                        // FIX: Handle if uom_type is a string (from DB) or an Enum instance
+                                        $type = $ua->uom_type;
+                                        if (is_string($type)) {
+                                            $typeLabel = UomType::tryFrom($type)?->label() ?? $type;
+                                        } elseif ($type instanceof UomType) {
+                                            $typeLabel = $type->label();
+                                        } else {
+                                            $typeLabel = '-';
+                                        }
+
+                                        return "{$uomCode} ({$typeLabel})";
+                                    })
+                                    ->join(', ')
+                                : '-'
+                            )
                             ->placeholder('-'),
                     ]),
 
                 Section::make('Pricing & Costing')
                     ->columns(2)
                     ->schema([
-                        // FIXED: Use correct accessor
                         TextEntry::make('current_standard_cost')
                             ->label('Current Standard Cost')
                             ->money('USD'),
@@ -90,27 +103,26 @@ class ItemMasterInfolist
                             ->label('Reference Price')
                             ->money('USD'),
 
-                        // FIXED: Calculate from vendor items
-                        TextEntry::make('preferred_vendor')
+                        TextEntry::make('preferred_vendor_name')
                             ->label('Preferred Vendor')
-                            ->state(fn ($record) => $record->preferredVendor()?->vendor_name ?? '-'),
+                            ->state(fn ($record) => $record->preferredVendor?->vendor_name ?? '-'),
                     ]),
 
                 Section::make('Posting Setup (3NF)')
                     ->columns(2)
                     ->collapsible()
                     ->schema([
-                        TextEntry::make('vat.vat_code')
+                        TextEntry::make('vat_code')
                             ->label('VAT Code')
-                            ->placeholder('-'),
+                            ->state(fn ($record) => $record->vat?->vat_code ?? '-'),
 
-                        TextEntry::make('generalPostingSetup.description')
+                        TextEntry::make('general_posting_setup_desc')
                             ->label('General Posting Setup')
-                            ->placeholder('-'),
+                            ->state(fn ($record) => $record->generalPostingSetup?->description ?? '-'),
 
-                        TextEntry::make('inventoryPostingSetup.description')
+                        TextEntry::make('inventory_posting_setup_desc')
                             ->label('Inventory Posting Setup')
-                            ->placeholder('-'),
+                            ->state(fn ($record) => $record->inventoryPostingSetup?->description ?? '-'),
                     ]),
 
                 Section::make('Additional')

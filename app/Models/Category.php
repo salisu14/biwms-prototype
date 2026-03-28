@@ -64,7 +64,14 @@ class Category extends Model
      */
     public function items(): BelongsToMany
     {
-        return $this->belongsToMany(ItemMaster::class, 'item_category_assignments')
+        return $this->belongsToMany(
+            ItemMaster::class,
+            'item_category_assignments',
+            'category_id',      // Foreign key on pivot table for this model
+            'item_id',          // Foreign key on pivot table for related model
+            'id',               // Local key on this model
+            'id'                // Local key on related model
+        )
             ->withPivot('is_primary', 'sort_order');
     }
 

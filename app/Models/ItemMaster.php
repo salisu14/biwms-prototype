@@ -17,9 +17,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'description',
     'item_type',
     'inventory_method',
-    'vat_id',                        // 3NF: References VAT master table
-    'general_posting_setup_id',      // 3NF: References posting setup master
-    'inventory_posting_setup_id',    // 3NF: References inventory posting setup
+    'vat_id',
+    'general_posting_setup_id',
+    'inventory_posting_setup_id',
     'reference_cost',
     'reference_price',
     'shelf_life_days',
@@ -48,15 +48,7 @@ class ItemMaster extends Model
     ];
 
     /**
-     * Category assignments with pivot data
-     */
-    public function categoryAssignments(): HasMany
-    {
-        return $this->hasMany(ItemCategoryAssignment::class, 'item_id');
-    }
-
-    /**
-     * UOM assignments (M2M with pivot)
+     * UOM assignments
      */
     public function uomAssignments(): HasMany
     {
@@ -100,7 +92,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * VAT for this item (3NF: Direct reference, no transitive dependency)
+     * VAT for this item
      */
     public function vat(): BelongsTo
     {
@@ -108,7 +100,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * General Posting Setup (GL accounts) - 3NF compliant
+     * General Posting Setup
      */
     public function generalPostingSetup(): BelongsTo
     {
@@ -116,7 +108,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * Inventory Posting Setup (GL accounts) - 3NF compliant
+     * Inventory Posting Setup
      */
     public function inventoryPostingSetup(): BelongsTo
     {
@@ -124,7 +116,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * Vendor items (M2M with full pivot data)
+     * Vendor items
      */
     public function vendorItems(): HasMany
     {
@@ -141,9 +133,9 @@ class ItemMaster extends Model
     }
 
     /**
-     * Get preferred vendor
+     * Get preferred vendor - RENAMED to avoid conflict
      */
-    public function preferredVendor(): ?Vendor
+    public function getPreferredVendor(): ?Vendor  // CHANGED: was preferredVendor()
     {
         return $this->vendors()
             ->wherePivot('is_preferred', true)
@@ -151,19 +143,33 @@ class ItemMaster extends Model
     }
 
     /**
-     * Categories (M2M) - includes Category, SubCategory, Family
+     * Categories (M2M)
      */
     public function categories(): BelongsToMany
     {
-        return $this->belongsToMany(Category::class, 'item_category_assignments')
-            ->withPivot('is_primary', 'sort_order')
+        return $this->belongsToMany(
+            Category::class,           // Related model
+            'item_category_assignments', // Pivot table
+            'item_id',                 // Foreign key on pivot for THIS model (ItemMaster)
+            'category_id',             // Foreign key on pivot for RELATED model (Category)
+            'id',                      // Local key on THIS model
+            'id'                       // Local key on RELATED model
+        )->withPivot('is_primary', 'sort_order')
             ->orderByPivot('sort_order');
     }
 
     /**
-     * Get primary category
+     * Category assignments for repeater form
      */
-    public function primaryCategory(): ?Category
+    public function categoryAssignments(): HasMany
+    {
+        return $this->hasMany(ItemCategoryAssignment::class, 'item_id');
+    }
+
+    /**
+     * Get primary category - RENAMED to avoid conflict
+     */
+    public function getPrimaryCategory(): ?Category  // CHANGED: was primaryCategory()
     {
         return $this->categories()
             ->wherePivot('is_primary', true)
@@ -171,7 +177,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * SKUs for this item (across locations)
+     * SKUs for this item
      */
     public function skus(): HasMany
     {
@@ -220,8 +226,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * Get current effective VAT (3NF: Item-level only)
-     * REMOVED: Category fallback that violated 3NF
+     * Get effective VAT
      */
     public function getEffectiveVatAttribute(): ?VatMaster
     {
@@ -229,8 +234,7 @@ class ItemMaster extends Model
     }
 
     /**
-     * Get effective posting setups (3NF: Item-level only)
-     * REMOVED: Category fallbacks that violated 3NF
+     * Get effective posting setups
      */
     public function getEffectiveGeneralPostingSetupAttribute(): ?GeneralPostingSetup
     {
