@@ -22,13 +22,23 @@ return new class extends Migration
                 ->constrained('categories', 'id')
                 ->onDelete('cascade');
             $table->integer('level')->default(0); // 0=root, 1=category, 2=subcategory, etc.
-            $table->integer('sort_order')->default(0)->after('level');
+            $table->integer('sort_order')->default(0);
             // FIX: Dynamically set enum values from the PHP Enum to ensure consistency
             $table->enum('category_type', array_column(CategoryType::cases(), 'value'))
                 ->default('THERAPEUTIC');
             $table->text('description')->nullable();
             $table->json('attributes')->nullable(); // Flexible attributes per category
             $table->boolean('is_active')->default(true);
+
+            // FIX: Separate column definition from foreign key constraints
+            $table->foreignId('vat_id')->nullable()->constrained('vat_masters');
+            $table->foreignId('general_posting_setup_id')->nullable();
+            $table->foreignId('inventory_posting_setup_id')->nullable();
+
+            // Foreign keys to posting setups (tables must exist first)
+            $table->foreign('general_posting_setup_id')->references('id')->on('general_posting_setups');
+            $table->foreign('inventory_posting_setup_id')->references('id')->on('inventory_posting_setups');
+
             $table->timestamps();
 
             $table->index(['category_type', 'level', 'is_active']);
