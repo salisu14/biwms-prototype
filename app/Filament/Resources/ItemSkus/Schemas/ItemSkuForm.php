@@ -2,9 +2,17 @@
 
 namespace App\Filament\Resources\ItemSkus\Schemas;
 
+use App\Models\ItemMaster;
+use App\Models\LocationMaster;
+use Filament\Forms;
+use Filament\Forms\Components\DatePicker; // Added for date fields
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class ItemSkuForm
@@ -13,24 +21,122 @@ class ItemSkuForm
     {
         return $schema
             ->components([
-                Select::make('item_id')
-                    ->relationship('item', 'id')
-                    ->required(),
-                Select::make('location_id')
-                    ->relationship('location', 'id')
-                    ->required(),
-                TextInput::make('sku_code')
-                    ->required(),
-                TextInput::make('reorder_point')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
-                TextInput::make('safety_stock')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
-                Toggle::make('is_active')
-                    ->required(),
+                Section::make('SKU Definition')
+                    ->description('Select an Item and Location to automatically generate the SKU.')
+                    ->schema([
+                        Select::make('item_id')
+                            ->label('Item')
+                            ->relationship(
+                                name: 'item',
+                                titleAttribute: 'item_code'
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function (Set $set, Get $get) {
+                                static::generateSkuCode($set, $get);
+                            })
+                            ->required(),
+
+                        Select::make('location_id')
+                            ->label('Location')
+                            ->relationship(
+                                name: 'location',
+                                titleAttribute: 'location_code'
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function (Set $set, Get $get) {
+                                static::generateSkuCode($set, $get);
+                            })
+                            ->required(),
+
+                        TextInput::make('sku_code')
+                            ->label('SKU Code (Auto-Generated)')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->required(),
+
+                        // ADDED: Barcode field
+                        TextInput::make('barcode')
+                            ->label('Barcode')
+                            ->unique(ignoreRecord: true)
+                            ->maxLength(50)
+                            ->helperText('Scannable barcode for this SKU.'),
+                    ]),
+
+                Section::make('Inventory Parameters')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            TextInput::make('reorder_point')
+                                ->label('Reorder Point')
+                                ->required()
+                                ->numeric()
+                                ->default(0)
+                                ->suffix('qty'),
+
+                            TextInput::make('safety_stock')
+                                ->label('Safety Stock')
+                                ->required()
+                                ->numeric()
+                                ->default(0)
+                                ->suffix('qty'),
+
+                            TextInput::make('lead_time_days')
+                                ->label('Lead Time (Days)')
+                                ->numeric()
+                                ->default(0)
+                                ->suffix('days'),
+                        ])
+                    ]),
+
+                Section::make('Validity & Status')
+                    ->description('Control the lifecycle and activation of this SKU.')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            // ADDED: Effective Date
+                            DatePicker::make('effective_date')
+                                ->label('Effective Date')
+                                ->native(false)
+                                ->helperText('When this SKU becomes active.'),
+
+                            // ADDED: Expiry Date
+                            DatePicker::make('expiry_date')
+                                ->label('Expiry Date')
+                                ->native(false)
+                                ->helperText('When this SKU expires.'),
+                        ]),
+
+                        Toggle::make('is_active')
+                            ->label('Active')
+                            ->default(true)
+                            ->inline(false),
+                    ])
+                    ->collapsible(),
             ]);
+    }
+
+    /**
+     * Helper method to generate and preview the SKU code in the form
+     */
+    protected static function generateSkuCode(Set $set, Get $get): void
+    {
+        $itemId = $get('item_id');
+        $locationId = $get('location_id');
+
+        if ($itemId && $locationId) {
+            $item = ItemMaster::find($itemId);
+            $location = LocationMaster::find($locationId);
+
+            if ($item && $location) {
+                $skuCode = sprintf('%s-%s', $item->item_code, $location->location_code);
+                $set('sku_code', $skuCode);
+            } else {
+                $set('sku_code', null);
+            }
+        } else {
+            $set('sku_code', null);
+        }
     }
 }

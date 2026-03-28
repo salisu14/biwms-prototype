@@ -47,6 +47,104 @@ class ItemMaster extends Model
         'reference_price' => 0,
     ];
 
+
+    /**
+     * SKUs for this item (across locations)
+     */
+    public function skus(): HasMany
+    {
+        return $this->hasMany(ItemSku::class, 'item_id');
+    }
+
+    /**
+     * Active SKUs only
+     */
+    public function activeSkus(): HasMany
+    {
+        return $this->hasMany(ItemSku::class, 'item_id')
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $now = now();
+                $query->whereNull('effective_date')
+                    ->orWhere('effective_date', '<=', $now);
+            })
+            ->where(function ($query) {
+                $now = now();
+                $query->whereNull('expiry_date')
+                    ->orWhere('expiry_date', '>=', $now);
+            });
+    }
+
+    /**
+     * Get SKU for specific location
+     */
+    public function getSkuAtLocation(int $locationId): ?ItemSku
+    {
+        return $this->skus()
+            ->where('location_id', $locationId)
+            ->first();
+    }
+
+    /**
+     * Get or create SKU for location
+     */
+    public function getOrCreateSku(int $locationId): ItemSku
+    {
+        return $this->skus()
+            ->firstOrCreate(
+                ['location_id' => $locationId],
+                [
+                    'reorder_point' => 0,
+                    'safety_stock' => 0,
+                    'is_active' => true,
+                ]
+            );
+    }
+
+    /**
+     * Check if item needs reorder at any location
+     */
+    public function getNeedsReorderAttribute(): bool
+    {
+        return $this->skus()
+            ->where('is_active', true)
+            ->get()
+            ->contains(fn ($sku) => $sku->needs_reorder);
+    }
+
+    /**
+     * Get total quantity across all locations
+     */
+    public function getTotalQuantityAttribute(): float
+    {
+        return $this->ledgerEntries()
+            ->selectRaw('
+                SUM(CASE
+                    WHEN entry_type IN (\'RECEIPT\', \'TRANSFER_IN\', \'ADJUSTMENT_POS\') THEN quantity
+                    WHEN entry_type IN (\'ISSUE\', \'TRANSFER_OUT\', \'SALE\', \'ADJUSTMENT_NEG\') THEN -quantity
+                    ELSE 0
+                END) as total
+            ')
+            ->value('total') ?? 0;
+    }
+
+//    /**
+//     * Get quantity at specific location
+//     */
+//    public function quantityAtLocation(int $locationId): float
+//    {
+//        return $this->ledgerEntries()
+//            ->where('location_id', $locationId)
+//            ->selectRaw('
+//                SUM(CASE
+//                    WHEN entry_type IN (\'RECEIPT\', \'TRANSFER_IN\', \'ADJUSTMENT_POS\') THEN quantity
+//                    WHEN entry_type IN (\'ISSUE\', \'TRANSFER_OUT\', \'SALE\', \'ADJUSTMENT_NEG\') THEN -quantity
+//                    ELSE 0
+//                END) as total
+//            ')
+//            ->value('total') ?? 0;
+//    }
+
     /**
      * UOM assignments
      */
@@ -176,13 +274,13 @@ class ItemMaster extends Model
             ->first();
     }
 
-    /**
-     * SKUs for this item
-     */
-    public function skus(): HasMany
-    {
-        return $this->hasMany(ItemSku::class, 'item_id');
-    }
+//    /**
+//     * SKUs for this item
+//     */
+//    public function skus(): HasMany
+//    {
+//        return $this->hasMany(ItemSku::class, 'item_id');
+//    }
 
     /**
      * Ledger entries
@@ -192,21 +290,21 @@ class ItemMaster extends Model
         return $this->hasMany(ItemLedger::class, 'item_id');
     }
 
-    /**
-     * Calculate current quantity
-     */
-    public function getTotalQuantityAttribute(): float
-    {
-        return $this->ledgerEntries()
-            ->selectRaw('
-                SUM(CASE
-                    WHEN entry_type IN (\'RECEIPT\', \'TRANSFER_IN\', \'ADJUSTMENT_POS\') THEN quantity
-                    WHEN entry_type IN (\'ISSUE\', \'TRANSFER_OUT\', \'SALE\', \'ADJUSTMENT_NEG\') THEN -quantity
-                    ELSE 0
-                END) as total
-            ')
-            ->value('total') ?? 0;
-    }
+//    /**
+//     * Calculate current quantity
+//     */
+//    public function getTotalQuantityAttribute(): float
+//    {
+//        return $this->ledgerEntries()
+//            ->selectRaw('
+//                SUM(CASE
+//                    WHEN entry_type IN (\'RECEIPT\', \'TRANSFER_IN\', \'ADJUSTMENT_POS\') THEN quantity
+//                    WHEN entry_type IN (\'ISSUE\', \'TRANSFER_OUT\', \'SALE\', \'ADJUSTMENT_NEG\') THEN -quantity
+//                    ELSE 0
+//                END) as total
+//            ')
+//            ->value('total') ?? 0;
+//    }
 
     /**
      * Get quantity at specific location

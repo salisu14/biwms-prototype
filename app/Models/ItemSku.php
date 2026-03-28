@@ -62,11 +62,17 @@ class ItemSku extends Model
 
         static::creating(function ($sku) {
             if (empty($sku->sku_code)) {
-                $sku->sku_code = sprintf(
-                    '%s-%s',
-                    $sku->item->item_code,
-                    $sku->location->location_code
-                );
+                // Eager load if not already loaded
+                $item = $sku->item ?? \App\Models\ItemMaster::find($sku->item_id);
+                $location = $sku->location ?? \App\Models\LocationMaster::find($sku->location_id);
+
+                if ($item && $location) {
+                    $sku->sku_code = sprintf(
+                        '%s-%s',
+                        $item->item_code,
+                        $location->location_code
+                    );
+                }
             }
         });
     }
