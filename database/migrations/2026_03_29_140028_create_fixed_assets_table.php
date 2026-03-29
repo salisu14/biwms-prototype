@@ -50,7 +50,7 @@ return new class extends Migration
             $table->foreignId('depreciation_expense_gl_account_id')->constrained('gl_accounts');
 
             // CapEx project reference (if created from project)
-            $table->foreignId('capex_project_id')->nullable()->constrained('capex_projects');
+//            $table->foreignId('capex_project_id')->nullable()->constrained('capex_projects');
 
             // Location
             $table->string('location_code')->nullable();

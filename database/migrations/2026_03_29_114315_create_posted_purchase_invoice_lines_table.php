@@ -85,6 +85,8 @@ return new class extends Migration
 
             $table->integer('line_number'); // Line sequence
 
+            $table->date('posting_date');
+
             $table->timestamps();
 
             // Indexes

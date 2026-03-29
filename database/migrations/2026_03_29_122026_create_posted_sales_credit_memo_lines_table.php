@@ -85,6 +85,8 @@ return new class extends Migration
             $table->string('serial_number', 50)->nullable();
             $table->date('expiration_date')->nullable();
 
+            $table->date('posting_date'); // When posted to G/L
+
             // Warehouse Receipt (physical return)
             $table->unsignedBigInteger('warehouse_receipt_id')->nullable();
             $table->string('return_bin_code', 20)->nullable();

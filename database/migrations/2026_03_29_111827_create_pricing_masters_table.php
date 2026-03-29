@@ -87,7 +87,7 @@ return new class extends Migration
             $table->enum('status', array_column(PricingStatus::cases(), 'value'))
                 ->default('DRAFT');
 
-            $table->foreignId('approved_by')->references('users');
+            $table->foreignId('approved_by')->constrained('users');
             $table->timestamp('approved_at')->nullable();
 
             // Audit

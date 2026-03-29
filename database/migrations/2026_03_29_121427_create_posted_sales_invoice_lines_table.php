@@ -29,6 +29,8 @@ return new class extends Migration
             $table->string('item_description', 100);
             $table->string('variant_code', 20)->nullable();
 
+            $table->date('posting_date'); // When posted to G/L
+
             // Posting Groups (snapshot)
             $table->foreignId('general_product_posting_group_id')
                 ->nullable()

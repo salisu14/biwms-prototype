@@ -20,6 +20,23 @@ return new class extends Migration
             $table->string('email')->nullable();
             $table->string('phone')->nullable();
 
+            // Address
+            $table->string('city', 100)->nullable();
+            $table->string('state', 100)->nullable();
+            $table->string('postal_code', 20)->nullable();
+            $table->string('country', 100)->nullable();
+
+            // Business information
+            $table->string('tax_id', 50)->nullable();
+            $table->string('payment_terms', 100)->nullable();
+            $table->char('currency', 3)->default('NGN');
+
+            // Operational
+            $table->integer('lead_time_days')->nullable();
+            $table->decimal('minimum_order_amount', 15, 4)->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->text('notes')->nullable();
+
             // Posting Groups
             $table->foreignId('general_business_posting_group_id')
                 ->constrained('general_business_posting_groups');

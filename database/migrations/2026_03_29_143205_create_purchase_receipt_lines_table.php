@@ -37,7 +37,6 @@ return new class extends Migration
             $table->integer('appl_to_item_entry')->nullable();
             $table->string('shortcut_dimension_1_code', 20)->nullable();
             $table->string('shortcut_dimension_2_code', 20)->nullable();
-            $table->foreignId('dimension_set_id')->nullable();
             $table->foreignId('item_category_code')->nullable();
             $table->foreignId('product_group_code')->nullable();
             $table->string('location_code', 10)->nullable();
@@ -58,7 +57,6 @@ return new class extends Migration
             $table->string('job_currency_factor', 18, 6)->nullable();
             $table->string('whse_posting_group', 10)->nullable();
             $table->string('variant_code', 10)->nullable();
-            $table->string('bin_code', 20)->nullable();
             $table->decimal('qty_per_unit_of_measure', 18, 4)->nullable();
             $table->string('unit_of_measure_code', 10)->nullable();
             $table->decimal('quantity_base', 18, 4)->default(0);
@@ -82,9 +80,7 @@ return new class extends Migration
             $table->decimal('vat_bus_posting_group', 18, 4)->nullable();
             $table->string('vat_prod_posting_group', 10)->nullable();
             $table->decimal('vat_base_amount', 18, 4)->default(0);
-            $table->decimal('unit_cost_lcy', 18, 4)->default(0);
             $table->decimal('system_created_entry', 18, 4)->nullable();
-            $table->decimal('line_amount', 18, 4)->default(0);
             $table->decimal('vat_difference', 18, 4)->default(0);
             $table->decimal('inv_disc_amount_to_invoice', 18, 4)->default(0);
             $table->string('prepayment_percent', 5, 2)->default(0);
