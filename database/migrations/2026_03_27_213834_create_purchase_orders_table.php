@@ -56,6 +56,23 @@ return new class extends Migration
             $table->index(['order_type', 'status']);
             $table->index('vendor_id');
             $table->index('order_date');
+
+            // Posting Groups (copied from vendor on create)
+            $table->foreignId('general_business_posting_group_id')
+                ->nullable()
+                ->after('vendor_id')
+                ->constrained('general_business_posting_groups');
+
+            $table->foreignId('vendor_posting_group_id')
+                ->nullable()
+                ->after('general_business_posting_group_id')
+                ->constrained('vendor_posting_groups');
+
+            $table->string('vat_bus_posting_group', 20)->nullable()->after('vendor_posting_group_id');
+
+            // For tracking receipt/invoice status
+            $table->timestamp('fully_received_at')->nullable()->after('approved_at');
+            $table->timestamp('fully_invoiced_at')->nullable()->after('fully_received_at');
         });
     }
 

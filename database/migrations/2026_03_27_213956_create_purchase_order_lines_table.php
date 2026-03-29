@@ -42,6 +42,13 @@ return new class extends Migration
             $table->date('expected_delivery_date')->nullable();
             $table->text('comment')->nullable();
 
+            $table->foreignId('general_product_posting_group_id')
+                ->nullable()
+                ->after('item_id')
+                ->constrained('general_product_posting_groups');
+
+            $table->string('variant_code', 20)->nullable()->after('item_code');
+
             $table->timestamps();
 
             // Indexes

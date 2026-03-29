@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'purchase_order_id',
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'item_id',
     'item_code',
     'description',
+    'variant_code',           // NEW: Item variant
     'quantity',
     'unit_of_measure',
     'unit_cost',
@@ -26,7 +28,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'returned_quantity',
     'invoiced_quantity',
     'expected_delivery_date',
-    'comment'
+    'comment',
+    // NEW posting-related
+    'general_product_posting_group_id', // Copied from item
 ])]
 class PurchaseOrderLine extends Model
 {
@@ -48,25 +52,6 @@ class PurchaseOrderLine extends Model
         'expected_delivery_date' => 'date',
     ];
 
-    /**
-     * Parent order
-     */
-    public function purchaseOrder(): BelongsTo
-    {
-        return $this->belongsTo(PurchaseOrder::class);
-    }
-
-    /**
-     * Item master
-     */
-    public function item(): BelongsTo
-    {
-        return $this->belongsTo(ItemMaster::class);
-    }
-
-    /**
-     * Calculate line totals before save
-     */
     protected static function boot(): void
     {
         parent::boot();
@@ -76,33 +61,76 @@ class PurchaseOrderLine extends Model
             $line->vat_amount = $line->line_total * ($line->vat_percentage / 100);
             $line->total_amount = $line->line_total + $line->vat_amount;
         });
+
+        // Auto-set posting group from item
+        static::creating(function ($line) {
+            if ($line->item_id && !$line->general_product_posting_group_id) {
+                $item = Item::find($line->item_id);
+                if ($item) {
+                    $line->general_product_posting_group_id = $item->general_product_posting_group_id;
+                    $line->item_code = $item->item_number;
+                }
+            }
+        });
     }
 
-    /**
-     * Get remaining quantity to receive
-     */
+    // ==================== RELATIONSHIPS ====================
+
+    public function purchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseOrder::class);
+    }
+
+    public function item(): BelongsTo
+    {
+        return $this->belongsTo(Item::class);
+    }
+
+    // NEW: Product Posting Group
+    public function generalProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralProductPostingGroup::class);
+    }
+
+    // NEW: Warehouse Receipt Lines
+    public function warehouseReceiptLines(): HasMany
+    {
+        return $this->hasMany(WarehouseReceiptLine::class, 'source_line_id');
+    }
+
+    // NEW: Posted Invoice Lines
+    public function postedInvoiceLines(): HasMany
+    {
+        return $this->hasMany(PostedPurchaseInvoiceLine::class, 'po_line_id');
+    }
+
+    // ==================== CALCULATED ATTRIBUTES ====================
+
     public function getRemainingQuantityAttribute(): float
     {
         return max(0, $this->quantity - $this->received_quantity);
     }
 
-    /**
-     * Check if fully received
-     */
+    public function getRemainingToInvoiceAttribute(): float
+    {
+        return max(0, $this->received_quantity - $this->invoiced_quantity);
+    }
+
     public function getIsFullyReceivedAttribute(): bool
     {
         return $this->received_quantity >= $this->quantity;
     }
 
-    /**
-     * Check if partially received
-     */
     public function getIsPartiallyReceivedAttribute(): bool
     {
         return $this->received_quantity > 0 && $this->received_quantity < $this->quantity;
     }
 
-    // In PurchaseOrderLine model
+    public function getIsFullyInvoicedAttribute(): bool
+    {
+        return $this->invoiced_quantity >= $this->quantity;
+    }
+
     public function getLineTotalAttribute(): float
     {
         return $this->quantity * $this->unit_cost;
@@ -116,5 +144,62 @@ class PurchaseOrderLine extends Model
     public function getTotalAmountAttribute(): float
     {
         return $this->line_total + $this->vat_amount;
+    }
+
+    // ==================== POSTING HELPERS ====================
+
+    /**
+     * Get General Posting Setup for this line
+     */
+    public function getPostingSetup(): ?GeneralPostingSetup
+    {
+        $businessGroupId = $this->purchaseOrder->general_business_posting_group_id;
+        $productGroupId = $this->general_product_posting_group_id;
+
+        if (!$businessGroupId || !$productGroupId) {
+            return null;
+        }
+
+        return GeneralPostingSetup::where([
+            'general_business_posting_group_id' => $businessGroupId,
+            'general_product_posting_group_id' => $productGroupId,
+        ])->first();
+    }
+
+    /**
+     * Get purchase account for posting
+     */
+    public function getPurchaseAccount(): ?ChartOfAccount
+    {
+        return $this->getPostingSetup()?->getPurchaseAccount();
+    }
+
+    /**
+     * Get direct cost applied account
+     */
+    public function getDirectCostAccount(): ?ChartOfAccount
+    {
+        return $this->getPostingSetup()?->getDirectCostAppliedAccount();
+    }
+
+    /**
+     * Validate posting setup exists
+     */
+    public function validatePostingSetup(): array
+    {
+        $errors = [];
+
+        if (!$this->getPostingSetup()) {
+            $errors[] = "General Posting Setup missing for Business Group: " .
+                $this->purchaseOrder->generalBusinessPostingGroup?->code .
+                " and Product Group: " .
+                $this->generalProductPostingGroup?->code;
+        }
+
+        if (!$this->getPurchaseAccount()) {
+            $errors[] = "Purchase Account not configured";
+        }
+
+        return $errors;
     }
 }
