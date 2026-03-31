@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\AccountCategory;
+use App\Enums\AccountType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -40,6 +42,8 @@ class GlAccount extends Model
     ];
 
     protected $casts = [
+        'account_type' => AccountType::class,
+        'account_category' => AccountCategory::class,
         'blocked' => 'boolean',
         'direct_posting' => 'boolean',
         'reconciliation_account' => 'boolean',

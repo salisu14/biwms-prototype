@@ -8,6 +8,7 @@ enum AccountType: string
     case LIABILITY = 'LIABILITY';
     case EQUITY = 'EQUITY';
     case REVENUE = 'REVENUE';
+
     case COGS = 'COGS';
     case EXPENSE = 'EXPENSE';
     case INTEREST = 'INTEREST';
