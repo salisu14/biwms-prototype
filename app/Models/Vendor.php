@@ -1,53 +1,59 @@
 <?php
-// app/Models/Vendor.php
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable([
-    'vendor_code',
-    'vendor_name',
-    'contact_person',
-    'email',
-    'phone',
-    'mobile',
-    'address',
-    'city',
-    'state',
-    'postal_code',
-    'country',
-    'tax_id',
-    'payment_terms',
-    'currency',
-    'lead_time_days',
-    'minimum_order_amount',
-    'is_active',
-    'notes'
-])]
 class Vendor extends Model
-{use HasFactory;
+{
+    use HasFactory;
 
     protected $fillable = [
-        'vendor_number',
-        'name',
-        'address',
+        'vendor_code',
+        'vendor_name',
+        'contact_person',
         'email',
         'phone',
+        'mobile',
+        'address',
+        'city',
+        'state',
+        'postal_code',
+        'country',
+        'tax_id',
+        'payment_terms',
+        'currency',
+        'lead_time_days',
+        'minimum_order_amount',
+        'is_active',
         'general_business_posting_group_id',
         'vendor_posting_group_id',
         'vat_bus_posting_group',
         'payment_terms_code',
         'blocked',
         'blocked_reason',
+        'notes',
     ];
 
     protected $casts = [
+        'lead_time_days' => 'integer',
+        'minimum_order_amount' => 'decimal:4',
+        'is_active' => 'boolean',
         'blocked' => 'boolean',
+    ];
+
+    protected $appends = [
+        'balance',
+        'open_balance',
+        'overdue_balance',
+        'aging',
+        'available_discounts',
+        'total_available_discount',
+        'is_overpaid',
+        'available_credit',
     ];
 
     // Relationships
@@ -64,6 +70,19 @@ class Vendor extends Model
     public function warehouseReceipts(): HasMany
     {
         return $this->hasMany(WarehouseReceipt::class);
+    }
+
+    public function ledgerEntries(): HasMany
+    {
+        return $this->hasMany(VendorLedgerEntry::class)
+            ->orderBy('entry_number');
+    }
+
+    public function openLedgerEntries(): HasMany
+    {
+        return $this->hasMany(VendorLedgerEntry::class)
+            ->where('open', true)
+            ->orderBy('due_date');
     }
 
     // Get posting setup for an item
@@ -83,26 +102,12 @@ class Vendor extends Model
     }
 
     // Get A/P account
-    public function getPayablesAccount(): ChartOfAccount
+    public function getPayablesAccount(): ?ChartOfAccount
     {
-        return $this->vendorPostingGroup->payablesAccount;
+        return $this->vendorPostingGroup?->payablesAccount;
     }
 
-    // Relationship
-    public function ledgerEntries(): HasMany
-    {
-        return $this->hasMany(VendorLedgerEntry::class)
-            ->orderBy('entry_number');
-    }
-
-    public function openLedgerEntries(): HasMany
-    {
-        return $this->hasMany(VendorLedgerEntry::class)
-            ->where('open', true)
-            ->orderBy('due_date');
-    }
-
-// Balance calculations
+    // Balance calculations
     public function getBalanceAttribute(): float
     {
         return VendorLedgerEntry::getBalance($this->id);
@@ -127,7 +132,7 @@ class Vendor extends Model
         return VendorLedgerEntry::getAging($this->id);
     }
 
-// Available discounts (early payment opportunities)
+    // Available discounts (early payment opportunities)
     public function getAvailableDiscountsAttribute(): array
     {
         return VendorLedgerEntry::getAvailableDiscounts($this->id);
@@ -138,7 +143,7 @@ class Vendor extends Model
         return collect($this->available_discounts)->sum('discount_amount');
     }
 
-   // Credit status
+    // Credit status
     public function getIsOverpaidAttribute(): bool
     {
         return $this->balance < 0; // Negative balance = we have credit
@@ -149,9 +154,21 @@ class Vendor extends Model
         return max(0, -$this->balance);
     }
 
-    // Scope
+    // Scopes
     public function scopeActive($query)
     {
-        return $query->where('blocked', false);
+        return $query->where('blocked', false)->where('is_active', true);
+    }
+
+    public function scopeBlocked($query)
+    {
+        return $query->where('blocked', true);
+    }
+
+    public function scopeWithOpenBalance($query)
+    {
+        return $query->whereHas('ledgerEntries', function ($q) {
+            $q->where('open', true);
+        });
     }
 }

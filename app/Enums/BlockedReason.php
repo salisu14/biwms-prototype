@@ -7,6 +7,7 @@ enum BlockedReason: string
     case NONE = 'NONE';
     case PAYMENT = 'PAYMENT';
     case INVOICE = 'INVOICE';
+    case INACTIVE = 'INACTIVE';
     case ALL = 'ALL';
 
     public function label(): string
@@ -15,6 +16,7 @@ enum BlockedReason: string
             self::NONE => 'Not Blocked',
             self::PAYMENT => 'Payment Issue',
             self::INVOICE => 'Invoice Issue',
+            self::INACTIVE => 'Inactive',
             self::ALL => 'Blocked for All Activities',
         };
     }
@@ -25,6 +27,7 @@ enum BlockedReason: string
             self::NONE => 'bg-emerald-100 text-emerald-800',
             self::PAYMENT => 'bg-amber-100 text-amber-800',
             self::INVOICE => 'bg-blue-100 text-rose-800',
+            self::INACTIVE => 'bg-red-100 text-green-800',
             self::ALL => 'bg-rose-100 text-rose-800',
         };
     }

@@ -17,7 +17,13 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             CategorySeeder::class,
+            LocationSeeder::class,
             UnitOfMeasureSeeder::class,
+            ChartOfAccountSeeder::class,
+            GeneralBusinessPostingGroupSeeder::class,
+            VendorPostingGroupSeeder::class,
+            CustomerPostingGroupSeeder::class,
+            CustomerSeeder::class,
             VendorSeeder::class,
             NumberSeriesSeeder::class,
             VatMasterSeeder::class,
