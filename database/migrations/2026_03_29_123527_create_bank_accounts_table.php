@@ -30,13 +30,8 @@ return new class extends Migration
             $table->string('currency_code', 3)->default('USD');
 
             // Account Type
-            $table->enum('account_type', [
-                'CHECKING',
-                'SAVINGS',
-                'MONEY_MARKET',
-                'CERTIFICATE_OF_DEPOSIT',
-                'FOREIGN_CURRENCY',
-            ])->default('CHECKING');
+            $table->enum('account_type', array_column(\App\Enums\BankAccountType::cases(), 'value'))
+                ->default('CHECKING');
 
             // Controls
             $table->decimal('current_balance', 15, 4)->default(0);

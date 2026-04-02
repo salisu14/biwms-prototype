@@ -139,4 +139,8 @@ class Item extends Model
     {
         return $query->where('item_type', 'INVENTORY');
     }
+
+    public function valueEntries() {
+        return $this->hasMany(ValueEntry::class);
+    }
 }

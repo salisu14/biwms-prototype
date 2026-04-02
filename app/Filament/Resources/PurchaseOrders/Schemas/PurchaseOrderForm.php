@@ -66,7 +66,7 @@ class PurchaseOrderForm
 
                             Select::make('location_id')
                                 ->label('Ship To Location')
-                                ->relationship('location', 'location_name')
+                                ->relationship('location', 'name')
                                 ->searchable()
                                 ->preload()
                                 ->required(),

@@ -5,6 +5,7 @@ namespace App\Models;
 
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
+use App\Services\PostingService;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -177,7 +178,7 @@ class PurchaseOrder extends Model
             }
 
             // Update PO status
-            $this->status = PurchaseOrderStatus::RECEIVING;
+            $this->status = PurchaseOrderStatus::PARTIALLY_RECEIVED;
             $this->save();
 
             return $receipt;
@@ -288,7 +289,7 @@ class PurchaseOrder extends Model
         if ($fullyInvoiced) {
             $this->status = PurchaseOrderStatus::INVOICED;
         } elseif ($partiallyInvoiced) {
-            $this->status = PurchaseOrderStatus::PARTIALLY_INVOICED;
+            $this->status = PurchaseOrderStatus::INVOICED;
         }
 
         $this->save();

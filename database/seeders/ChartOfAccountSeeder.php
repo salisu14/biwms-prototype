@@ -69,6 +69,144 @@ class ChartOfAccountSeeder extends Seeder
                 'direct_posting' => true,
                 'parent_account_number' => '60000',
             ],
+
+            // INVENTORY ASSET ACCOUNTS (21000-21999 range - Assets)
+            // Parent/Control Accounts
+            [
+                'account_number' => '21000',
+                'name' => 'Inventory Assets',
+                'account_type' => AccountType::ASSET,        // Current Asset
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => false,                  // Control account
+            ],
+            [
+                'account_number' => '21100',
+                'name' => 'Raw Materials',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => false,                  // Control account
+            ],
+            [
+                'account_number' => '21300',
+                'name' => 'Work in Progress',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => false,                  // Control account
+            ],
+            [
+                'account_number' => '21400',
+                'name' => 'Finished Goods',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => false,                  // Control account
+            ],
+
+// Specific Inventory Accounts (Direct Posting)
+            [
+                'account_number' => '21110',
+                'name' => 'Raw Materials - Warehouse',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => true,
+                'parent_account_number' => '21100',
+            ],
+            [
+                'account_number' => '21120',
+                'name' => 'Raw Materials - In Transit',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => true,
+                'parent_account_number' => '21100',
+            ],
+            [
+                'account_number' => '21310',
+                'name' => 'WIP - Production Floor',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => true,
+                'parent_account_number' => '21300',
+            ],
+            [
+                'account_number' => '21320',
+                'name' => 'WIP - Subcontracting',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => true,
+                'parent_account_number' => '21300',
+            ],
+            [
+                'account_number' => '21410',
+                'name' => 'Finished Goods - Warehouse A',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => true,
+                'parent_account_number' => '21400',
+            ],
+            [
+                'account_number' => '21420',
+                'name' => 'Finished Goods - Warehouse B',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => true,
+                'parent_account_number' => '21400',
+            ],
+
+            // CONTRA/ADJUSTMENT ACCOUNTS (52000-52999 range - COGS/Expense)
+            // These offset inventory accounts during production posting
+            [
+                'account_number' => '52000',
+                'name' => 'Inventory Adjustments',
+                'account_type' => AccountType::COGS,        // Or EXPENSE depending on your setup
+                'account_category' => AccountCategory::COGS,
+                'direct_posting' => false,                  // Control account
+            ],
+
+            // Direct Cost Applied Account (Material Cost Transfer)
+            [
+                'account_number' => '52100',
+                'name' => 'Direct Cost Applied - Raw Materials',
+                'account_type' => AccountType::COGS,
+                'account_category' => AccountCategory::COGS,
+                'direct_posting' => true,
+                'parent_account_number' => '52000',
+            ],
+
+            [
+                'account_number' => '50300',
+                'name' => 'Purchase Variance',
+                'account_type' => AccountType::COGS,
+                'account_category' => AccountCategory::COGS,
+                'direct_posting' => true,
+                'parent_account_number' => '50000',
+            ],
+
+            // Overhead Applied Account (Indirect Manufacturing Costs)
+            [
+                'account_number' => '52200',
+                'name' => 'Overhead Applied - Manufacturing',
+                'account_type' => AccountType::COGS,
+                'account_category' => AccountCategory::COGS,
+                'direct_posting' => true,
+                'parent_account_number' => '52000',
+            ],
+
+            // Alternative: Use Expense category for applied costs if preferred
+            [
+                'account_number' => '62100',
+                'name' => 'Direct Cost Applied - Labor/Machine',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::OPERATING_EXPENSE,
+                'direct_posting' => true,
+                'parent_account_number' => '60000',        // Your existing Operating Expenses
+            ],
+            [
+                'account_number' => '62200',
+                'name' => 'Overhead Applied - Capacity',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::OPERATING_EXPENSE,
+                'direct_posting' => true,
+                'parent_account_number' => '60000',
+            ],
         ];
 
         foreach ($accounts as $accountData) {

@@ -11,6 +11,7 @@ enum PurchaseOrderStatus: string
     case INVOICED = 'INVOICED';
     case CLOSED = 'CLOSED';
     case CANCELLED = 'CANCELLED';
+    case PARTIALLY_RECEIVED = 'PARTIALLY_RECEIVED';
 
     /**
      * Get human-readable label
@@ -24,6 +25,7 @@ enum PurchaseOrderStatus: string
             self::INVOICED => 'Invoiced',
             self::CLOSED => 'Closed',
             self::CANCELLED => 'Cancelled',
+            self::PARTIALLY_RECEIVED => 'Partially Received',
         };
     }
 
@@ -39,6 +41,7 @@ enum PurchaseOrderStatus: string
             self::INVOICED => 'primary',
             self::CLOSED => 'secondary',
             self::CANCELLED => 'danger',
+            self::PARTIALLY_RECEIVED => 'warning',
         };
     }
 
@@ -70,7 +73,7 @@ enum PurchaseOrderStatus: string
      */
     public function canReceive(): bool
     {
-        return in_array($this, [self::APPROVED, self::PARTIAL]);
+        return in_array($this, [self::APPROVED, self::PARTIALLY_RECEIVED]);
     }
 
     /**

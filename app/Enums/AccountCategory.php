@@ -15,6 +15,11 @@ enum AccountCategory: string
     case OPERATING_EXPENSE = 'OPERATING_EXPENSE';
     case NON_OPERATING = 'NON_OPERATING';
 
+    case CURRENT_ASSET = 'CURRENT_ASSET';
+    case FIXED_ASSET_LIABILITIES = 'FIXED_ASSET_LIABILITIES';
+    case NON_CURRENT_ASSET = 'NON_CURRENT_ASSET';
+    case NON_CURRENT_LIABILITY = 'NON_CURRENT_LIABILITY';
+
     public function label(): string
     {
         return match($this) {
@@ -28,6 +33,11 @@ enum AccountCategory: string
             self::COGS => 'COGS Category',
             self::OPERATING_EXPENSE => 'Operating Expense',
             self::NON_OPERATING => 'Non-Operating Items',
+            self::CURRENT_ASSET => 'Current Assets',
+            self::FIXED_ASSET_LIABILITIES => 'Fixed Asset Liabilities',
+            self::NON_CURRENT_ASSET => 'Non-Current Assets',
+            self::NON_CURRENT_LIABILITY => 'Non-Current Liabilities',
+            default => $this->value,
         };
     }
 
@@ -55,6 +65,11 @@ enum AccountCategory: string
             self::COGS => 'heroicon-o-truck',
             self::OPERATING_EXPENSE => 'heroicon-o-briefcase',
             self::NON_OPERATING => 'heroicon-o-no-symbol',
+            self::CURRENT_ASSET => 'heroicon-o-banknotes',
+            self::FIXED_ASSET_LIABILITIES => 'heroicon-o-building-library',
+            self::NON_CURRENT_ASSET => 'heroicon-o-cube',
+            self::NON_CURRENT_LIABILITY => 'heroicon-o-credit-card',
+            default => 'heroicon-o-banknotes',
         };
     }
 

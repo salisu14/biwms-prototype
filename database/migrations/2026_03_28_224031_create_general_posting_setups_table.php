@@ -17,6 +17,30 @@ return new class extends Migration
                 ->constrained('general_business_posting_groups');
             $table->foreignId('general_product_posting_group_id')
                 ->constrained('general_product_posting_groups');
+
+
+            // Sales accounts
+            $table->foreignId('sales_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('sales_credit_memo_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('sales_prepayment_account_id')->nullable()->constrained('chart_of_accounts');
+
+            // COGS accounts
+            $table->foreignId('cogs_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('cogs_credit_memo_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('cogs_prepayment_account_id')->nullable()->constrained('chart_of_accounts');
+
+            // Purchase/Inventory accounts
+            $table->foreignId('inventory_adj_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('inventory_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('direct_cost_applied_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('overhead_applied_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('purchase_variance_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('material_variance_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('capacity_variance_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('capacity_overhead_variance_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('manufacturing_overhead_variance_account_id')->nullable()->constrained('chart_of_accounts');
+
+
             $table->boolean('blocked')->default(false);
             $table->timestamps();
 

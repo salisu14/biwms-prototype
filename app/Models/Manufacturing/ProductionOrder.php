@@ -2,6 +2,12 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Enums\ItemLedgerEntryType;
+use App\Enums\ProductionOrderSourceType;
+use App\Enums\ProductionOrderStatus;
+use App\Events\ProductionOrderStatusChanged;
+use App\Models\GeneralPostingSetup;
+use App\Models\ItemLedgerEntry;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,18 +24,6 @@ class ProductionOrder extends Model
     use HasFactory;
 
     protected $table = 'production_orders';
-
-    // Production Order Statuses
-    const STATUS_SIMULATED = 'SIMULATED';
-    const STATUS_PLANNED = 'PLANNED';
-    const STATUS_FIRM_PLANNED = 'FIRM_PLANNED';
-    const STATUS_RELEASED = 'RELEASED';
-    const STATUS_FINISHED = 'FINISHED';
-
-    // Source Types
-    const SOURCE_TYPE_ITEM = 'ITEM';
-    const SOURCE_TYPE_FAMILY = 'FAMILY';
-    const SOURCE_TYPE_SALES_HEADER = 'SALES_HEADER';
 
     protected $fillable = [
         'document_number',
@@ -103,8 +97,8 @@ class ProductionOrder extends Model
     ];
 
     protected $casts = [
-        'status' => 'string',
-        'source_type' => 'string',
+        'status' => ProductionOrderStatus::class,
+        'source_type' => ProductionOrderSourceType::class,
         'quantity' => 'decimal:4',
         'quantity_base' => 'decimal:4',
         'due_date' => 'date',
@@ -129,6 +123,14 @@ class ProductionOrder extends Model
     public function productionBom(): BelongsTo
     {
         return $this->belongsTo(ProductionBom::class, 'production_bom_id');
+    }
+
+
+// ProductionOrder.php
+    public function getPostingSetup() {
+        return GeneralPostingSetup::where('gen_bus_posting_group', 'MANUFACTURING')
+            ->where('gen_prod_posting_group', $this->item->gen_prod_posting_group_code)
+            ->first();
     }
 
     public function routing(): BelongsTo
@@ -190,34 +192,34 @@ class ProductionOrder extends Model
 
     public function scopeSimulated($query)
     {
-        return $query->where('status', self::STATUS_SIMULATED);
+        return $query->where('status', ProductionOrderStatus::SIMULATED);
     }
 
     public function scopePlanned($query)
     {
-        return $query->where('status', self::STATUS_PLANNED);
+        return $query->where('status', ProductionOrderStatus::PLANNED);
     }
 
     public function scopeFirmPlanned($query)
     {
-        return $query->where('status', self::STATUS_FIRM_PLANNED);
+        return $query->where('status', ProductionOrderStatus::FIRM_PLANNED);
     }
 
     public function scopeReleased($query)
     {
-        return $query->where('status', self::STATUS_RELEASED);
+        return $query->where('status', ProductionOrderStatus::RELEASED);
     }
 
     public function scopeFinished($query)
     {
-        return $query->where('status', self::STATUS_FINISHED);
+        return $query->where('status', ProductionOrderStatus::FINISHED);
     }
 
     public function scopeActive($query)
     {
         return $query->whereIn('status', [
-            self::STATUS_FIRM_PLANNED,
-            self::STATUS_RELEASED,
+            ProductionOrderStatus::FIRM_PLANNED,
+            ProductionOrderStatus::RELEASED,
         ]);
     }
 
@@ -236,7 +238,7 @@ class ProductionOrder extends Model
     public function getRemainingQuantityAttribute(): float
     {
         $produced = $this->itemLedgerEntries()
-            ->where('entry_type', ItemLedgerEntry::ENTRY_TYPE_OUTPUT)
+            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
             ->sum('quantity');
 
         return $this->quantity - $produced;
@@ -251,7 +253,7 @@ class ProductionOrder extends Model
     {
         return $this->capacityLedgerEntries()->sum('total_cost') +
             $this->itemLedgerEntries()
-                ->where('entry_type', ItemLedgerEntry::ENTRY_TYPE_CONSUMPTION)
+                ->where('entry_type', ItemLedgerEntryType::CONSUMPTION)
                 ->sum('cost_amount_actual');
     }
 
@@ -268,30 +270,24 @@ class ProductionOrder extends Model
      */
     public function changeStatus(string $newStatus, ?int $userId = null): void
     {
-        $validTransitions = [
-            self::STATUS_SIMULATED => [self::STATUS_PLANNED, self::STATUS_FIRM_PLANNED],
-            self::STATUS_PLANNED => [self::STATUS_FIRM_PLANNED, self::STATUS_FINISHED],
-            self::STATUS_FIRM_PLANNED => [self::STATUS_RELEASED, self::STATUS_FINISHED],
-            self::STATUS_RELEASED => [self::STATUS_FINISHED],
-        ];
-
-        if (!in_array($newStatus, $validTransitions[$this->status] ?? [])) {
-            throw new \Exception("Invalid status transition from {$this->status} to {$newStatus}");
+        if (!$this->status->canTransitionTo($newStatus)) {
+            throw new \Exception("Invalid status transition from {$this->status->label()} to {$newStatus->label()}");
         }
 
+
         // Special validations
-        if ($newStatus === self::STATUS_RELEASED) {
+        if ($newStatus === ProductionOrderStatus::RELEASED) {
             $this->validateForRelease();
         }
 
-        if ($newStatus === self::STATUS_FINISHED) {
+        if ($newStatus === ProductionOrderStatus::FINISHED) {
             $this->validateForFinish();
         }
 
         $oldStatus = $this->status;
         $this->status = $newStatus;
 
-        if ($newStatus === self::STATUS_FINISHED) {
+        if ($newStatus === ProductionOrderStatus::FINISHED) {
             $this->finished_at = now();
             $this->finished_by = $userId;
         }
@@ -311,7 +307,7 @@ class ProductionOrder extends Model
 
     protected function validateForFinish(): void
     {
-        if ($this->status !== self::STATUS_RELEASED) {
+        if ($this->status !== ProductionOrderStatus::RELEASED) {
             throw new \Exception('Only released production orders can be finished');
         }
     }
@@ -323,7 +319,7 @@ class ProductionOrder extends Model
      */
     public function refreshOrder(bool $calculateLines = true, bool $calculateRoutings = true, bool $calculateComponents = true): void
     {
-        if ($this->status === self::STATUS_FINISHED) {
+        if ($this->status === ProductionOrderStatus::FINISHED) {
             throw new \Exception('Cannot refresh finished production order');
         }
 
@@ -377,7 +373,7 @@ class ProductionOrder extends Model
         if (!$this->production_bom_id) return;
 
         // Clear existing components if not started
-        if ($this->itemLedgerEntries()->where('entry_type', ItemLedgerEntry::ENTRY_TYPE_CONSUMPTION)->count() === 0) {
+        if ($this->itemLedgerEntries()->where('entry_type', ItemLedgerEntryType::CONSUMPTION)->count() === 0) {
             $this->components()->delete();
         }
 
@@ -503,7 +499,7 @@ class ProductionOrder extends Model
 
                 // Create item ledger entry for consumption
                 ItemLedgerEntry::create([
-                    'entry_type' => ItemLedgerEntry::ENTRY_TYPE_CONSUMPTION,
+                    'entry_type' => ItemLedgerEntryType::CONSUMPTION,
                     'item_id' => $component->item_id,
                     'quantity' => -$qty,
                     'remaining_quantity' => 0,
@@ -539,7 +535,7 @@ class ProductionOrder extends Model
         \DB::transaction(function () use ($quantity, $userId, $postingDate, $routingLineId) {
             // Create item ledger entry for output
             ItemLedgerEntry::create([
-                'entry_type' => ItemLedgerEntry::ENTRY_TYPE_OUTPUT,
+                'entry_type' => ItemLedgerEntryType::OUTPUT,
                 'item_id' => $this->item_id,
                 'quantity' => $quantity,
                 'remaining_quantity' => $quantity,
@@ -604,14 +600,14 @@ class ProductionOrder extends Model
             // 2. Calculate actual unit cost
             $totalCost = $this->total_actual_cost;
             $totalOutput = $this->itemLedgerEntries()
-                ->where('entry_type', ItemLedgerEntry::ENTRY_TYPE_OUTPUT)
+                ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                 ->sum('quantity');
 
             $unitCost = $totalOutput > 0 ? $totalCost / $totalOutput : 0;
 
             // 3. Update output entries with calculated cost
             $this->itemLedgerEntries()
-                ->where('entry_type', ItemLedgerEntry::ENTRY_TYPE_OUTPUT)
+                ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                 ->update([
                     'unit_cost' => $unitCost,
                     'cost_amount_actual' => \DB::raw("quantity * {$unitCost}"),
@@ -621,7 +617,7 @@ class ProductionOrder extends Model
             $this->createFinishGlEntries($totalCost, $postingDate);
 
             // 5. Change status
-            $this->changeStatus(self::STATUS_FINISHED, $userId);
+            $this->changeStatus(ProductionOrderStatus::FINISHED->value, $userId);
 
             // 6. Update item unit cost if needed
             if ($this->costing_method === 'STANDARD') {

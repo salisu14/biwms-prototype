@@ -121,6 +121,24 @@ class GeneralBusinessPostingGroupSeeder extends Seeder
                 'default_vat_bus_posting_group' => 'MOSS',
                 'auto_create_vat_bus_posting_group' => false,
             ],
+            [
+                'code' => 'DOM-VENDOR',
+                'description' => 'Domestic Vendors',
+                'default_vat_bus_posting_group' => 'DOMESTIC',
+                'auto_create_vat_bus_posting_group' => false,
+            ],
+            [
+                'code' => 'IMPORT-VENDOR',
+                'description' => 'Import Vendors',
+                'default_vat_bus_posting_group' => 'IMPORT',
+                'auto_create_vat_bus_posting_group' => false,
+            ],
+            [
+                'code' => 'MANUFACTURING',
+                'description' => 'Internal Manufacturing',
+                'default_vat_bus_posting_group' => 'ZERO',
+                'auto_create_vat_bus_posting_group' => false,
+            ],
 
             // Free Trade Zones
             [
