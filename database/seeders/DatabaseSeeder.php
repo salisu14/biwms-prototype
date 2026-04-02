@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
             VendorPostingGroupSeeder::class,
             CustomerPostingGroupSeeder::class,
             CustomerSeeder::class,
+            ItemSeeder::class,
             VendorSeeder::class,
             NumberSeriesSeeder::class,
             VatMasterSeeder::class,

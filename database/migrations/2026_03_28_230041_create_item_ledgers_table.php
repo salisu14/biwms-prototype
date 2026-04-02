@@ -16,10 +16,10 @@ return new class extends Migration
 
             // Foreign keys
             $table->foreignId('item_id')
-                ->constrained('item_masters', 'id')
+                ->constrained('items', 'id')
                 ->onDelete('restrict');
             $table->foreignId('location_id')
-                ->constrained('location_masters', 'id')
+                ->constrained('locations', 'id')
                 ->onDelete('restrict');
             $table->foreignId('doc_id')
                 ->constrained('document_headers', 'id')
@@ -65,7 +65,7 @@ return new class extends Migration
             $table->index('created_at');
 
             // Partitioning support (for high volume)
-            // $table->index(['created_at', 'item_id']); // For monthly partitioning
+            $table->index(['created_at', 'item_id']); // For monthly partitioning
         });
     }
 

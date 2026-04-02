@@ -27,7 +27,7 @@ return new class extends Migration
 
             // Dates
             $table->date('order_date');
-            $table->foreignId('location_id')->constrained('location_masters');
+            $table->foreignId('location_id')->constrained('locations');
             $table->date('posting_date')->nullable();
             $table->date('due_date')->nullable();
             $table->date('delivery_date')->nullable();

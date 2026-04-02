@@ -345,4 +345,82 @@ class PostingService
 
         return $entries;
     }
+
+    public function postPurchaseLine(
+        Vendor $vendor,
+        Item $item,
+        float $quantity,
+        float $unitCost,
+        float $lineTotal,
+        \DateTime $postingDate,
+        string $documentNumber,
+        string $description
+    ): array {
+        $setup = $vendor->getPostingSetupFor($item);
+
+        if (!$setup) {
+            throw new \Exception("Posting setup missing for vendor {$vendor->vendor_number} and item {$item->item_number}");
+        }
+
+        $entries = [];
+
+        // Inventory item
+        if ($item->isInventoryItem()) {
+            $inventoryAccount = $item->getInventoryAccount();
+
+            if (!$inventoryAccount) {
+                throw new \Exception("Inventory account missing for item {$item->item_number}");
+            }
+
+            $entries[] = $this->createGlEntry([
+                'chart_of_account_id' => $inventoryAccount->id,
+                'debit_amount' => $lineTotal,
+                'credit_amount' => 0,
+                'source_type' => 'ITEM',
+                'source_number' => $item->item_number,
+                'document_type' => 'PURCHASE_INVOICE',
+                'document_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'description' => "Inventory receipt: {$description}",
+            ]);
+        } else {
+            // Expense
+            $entries[] = $this->createGlEntry([
+                'chart_of_account_id' => $setup->getPurchaseAccount()->id,
+                'debit_amount' => $lineTotal,
+                'credit_amount' => 0,
+                'source_type' => 'ITEM',
+                'source_number' => $item->item_number,
+                'document_type' => 'PURCHASE_INVOICE',
+                'document_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'description' => "Purchase expense: {$description}",
+            ]);
+        }
+
+        return $entries;
+    }
+
+    public function postVendorPayable(
+        Vendor $vendor,
+        float $amount,
+        \DateTime $postingDate,
+        string $documentNumber
+    ): array {
+        $entries = [];
+
+        $entries[] = $this->createGlEntry([
+            'chart_of_account_id' => $vendor->getPayablesAccount()->id,
+            'debit_amount' => 0,
+            'credit_amount' => $amount,
+            'source_type' => 'VENDOR',
+            'source_number' => $vendor->vendor_code,
+            'document_type' => 'PURCHASE_INVOICE',
+            'document_number' => $documentNumber,
+            'posting_date' => $postingDate,
+            'description' => "Payable to {$vendor->vendor_name}",
+        ]);
+
+        return $entries;
+    }
 }

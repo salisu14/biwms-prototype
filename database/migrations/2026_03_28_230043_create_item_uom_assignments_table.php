@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('item_uom_assignments', function (Blueprint $table) {
             $table->id('assignment_id');
 
-            $table->foreignId('item_id')->constrained('item_masters')->onDelete('cascade');
+            $table->foreignId('item_id')->constrained('items')->onDelete('cascade');
             $table->foreignId('uom_id')->constrained('unit_of_measures')->onDelete('cascade');
 
             // UOM type: base, sales, purchase, inventory, shipping, reporting, etc.

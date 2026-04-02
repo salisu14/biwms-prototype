@@ -78,6 +78,9 @@ return new class extends Migration
             $table->string('shelf_no', 20)->nullable();
             $table->string('item_tracking_code', 20)->nullable();
 
+            $table->integer('shelf_life_days')->nullable();
+            $table->boolean('is_active')->default(true);
+
             $table->boolean('blocked')->default(false);
             $table->boolean('sales_blocked')->default(false);
             $table->boolean('purchasing_blocked')->default(false);

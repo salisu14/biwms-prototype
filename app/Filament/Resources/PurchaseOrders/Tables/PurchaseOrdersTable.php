@@ -2,12 +2,18 @@
 
 namespace App\Filament\Resources\PurchaseOrders\Tables;
 
+use App\Data\Purchase\ApprovePurchaseOrderData;
+use App\Data\Purchase\CancelPurchaseOrderData;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
+use App\Services\Purchase\PurchaseOrderService;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -90,6 +96,52 @@ class PurchaseOrdersTable
                     ->money('USD')
                     ->sortable()
                     ->weight('bold'),
+            ])->recordActions([
+                ViewAction::make(),
+                EditAction::make(),
+
+                ActionGroup::make([
+                    // APPROVE ACTION
+                    Action::make('approve')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record) => $record->status === PurchaseOrderStatus::PENDING)
+                        ->action(function ($record, PurchaseOrderService $service) {
+                            $service->approve(new ApprovePurchaseOrderData(
+                                purchaseOrderId: $record->id,
+                                approvedBy: auth()->id()
+                            ));
+
+                            Notification::make()->title('Order Approved')->success()->send();
+                        }),
+
+                    // CANCEL ACTION
+                    Action::make('cancel')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record) => $record->can_edit && $record->status !== PurchaseOrderStatus::CANCELLED)
+                        ->action(function ($record, PurchaseOrderService $service) {
+                            try {
+                                $service->cancel(new CancelPurchaseOrderData(
+                                    purchaseOrderId: $record->id
+                                ));
+                                Notification::make()->title('Order Cancelled')->success()->send();
+                            } catch (\Exception $e) {
+                                Notification::make()->title('Error')->body($e->getMessage())->danger()->send();
+                            }
+                        }),
+
+                    // RECALCULATE TOTALS ACTION
+                    Action::make('recalculate')
+                        ->label('Refresh Totals')
+                        ->icon('heroicon-o-calculator')
+                        ->action(function ($record, PurchaseOrderService $service) {
+                            $record->recalculateTotals();
+                            Notification::make()->title('Totals Recalculated')->success()->send();
+                        }),
+                ])
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -106,10 +158,10 @@ class PurchaseOrdersTable
                     ->searchable()
                     ->preload(),
             ])
-            ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
-            ])
+//            ->recordActions([
+//                ViewAction::make(),
+//                EditAction::make(),
+//            ])
             ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),

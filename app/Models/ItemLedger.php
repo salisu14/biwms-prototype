@@ -45,7 +45,7 @@ class ItemLedger extends Model
      */
     public function item(): BelongsTo
     {
-        return $this->belongsTo(ItemMaster::class);
+        return $this->belongsTo(Item::class);
     }
 
     /**
@@ -53,7 +53,7 @@ class ItemLedger extends Model
      */
     public function location(): BelongsTo
     {
-        return $this->belongsTo(LocationMaster::class);
+        return $this->belongsTo(Location::class);
     }
 
     /**

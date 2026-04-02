@@ -18,7 +18,7 @@ return new class extends Migration
             $table->integer('line_number');
 
             // Item info (denormalized for history)
-            $table->foreignId('item_id')->constrained('item_masters');
+            $table->foreignId('item_id')->constrained('items');
             $table->string('item_code', 50);
             $table->string('description', 255);
 

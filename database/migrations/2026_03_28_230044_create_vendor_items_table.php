@@ -16,7 +16,7 @@ return new class extends Migration
 
             // Relationships
             $table->foreignId('vendor_id')->constrained('vendors')->onDelete('cascade');
-            $table->foreignId('item_id')->constrained('item_masters')->onDelete('cascade');
+            $table->foreignId('item_id')->constrained('items')->onDelete('cascade');
 
             // Vendor's item identification
             $table->string('vendor_item_number', 50);

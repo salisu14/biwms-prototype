@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('item_lots', function (Blueprint $table) {
             $table->id();
             $table->foreignId('item_id')
-                ->constrained('item_masters', 'id')
+                ->constrained('items', 'id')
                 ->onDelete('cascade');
             $table->string('lot_number', 50);
             $table->string('supplier_lot', 50)->nullable();

@@ -5,7 +5,6 @@ namespace App\Filament\Resources\PurchaseOrders\RelationManagers;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
 use App\Models\Item;
 use App\Models\PurchaseOrder;
-use App\Services\Purchase\PurchaseOrderService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -18,27 +17,17 @@ use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Schema;
-use Filament\Tables;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
-class PurchaseOrderLinesRelationManager extends RelationManager
+class LinesRelationManager extends RelationManager
 {
     protected static string $relationship = 'lines';
 
-    protected static ?string $title = 'Order Lines';
-
     protected static ?string $relatedResource = PurchaseOrderResource::class;
-
-    /**
-     * NOTE ON THE ERROR:
-     * Your SQL error shows: "Key (item_id)=(1) is not present in table "item_masters".
-     * However, your code uses the "Item" model which seems to point to the "items" table.
-     * * FIX: Please check your App\Models\Item.php file.
-     * If your table is named "item_masters", the model should have:
-     * protected $table = 'item_masters';
-     */
 
     public function form(Schema $schema): Schema
     {
@@ -192,7 +181,7 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                     ->label('Subtotal')
                     ->money('USD')
                     ->summarize([
-                        Tables\Columns\Summarizers\Sum::make()
+                        Sum::make()
                             ->money('USD'),
                     ]),
 
@@ -200,11 +189,11 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                     ->label('Total')
                     ->money('USD')
                     ->summarize([
-                        Tables\Columns\Summarizers\Sum::make()
+                        Sum::make()
                             ->money('USD'),
                     ]),
 
-                Tables\Columns\IconColumn::make('is_fully_received')
+                IconColumn::make('is_fully_received')
                     ->label('Received')
                     ->boolean()
                     ->trueIcon('heroicon-o-check-badge')
