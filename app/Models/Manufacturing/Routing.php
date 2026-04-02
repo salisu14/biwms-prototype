@@ -52,4 +52,15 @@ class Routing extends Model
     {
         return $this->hasMany(RoutingVersion::class, 'routing_id');
     }
+
+    protected static function booted(): void
+    {
+        static::creating(function ($routing) {
+            $routing->created_by = auth()->id();
+        });
+
+        static::updating(function ($routing) {
+            $routing->last_modified_by = auth()->id();
+        });
+    }
 }

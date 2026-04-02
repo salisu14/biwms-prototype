@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             UnitOfMeasureSeeder::class,
             ChartOfAccountSeeder::class,
             BankAccountSeeder::class,
+            GlAccountSeeder::class,
             InventoryPostingGroupSeeder::class,
             InventoryPostingSetupSeeder::class,
             GeneralBusinessPostingGroupSeeder::class,

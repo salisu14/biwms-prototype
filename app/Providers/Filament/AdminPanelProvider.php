@@ -274,9 +274,17 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-cpu-chip')
                                     ->url('/admin/machine-centers'),
 
+                                NavigationItem::make('Work Center Groups')
+                                    ->icon('heroicon-o-cpu-chip')
+                                    ->url('/admin/work-center-groups'),
+
                                 NavigationItem::make('Work Centers')
                                     ->icon('heroicon-o-wrench-screwdriver')
                                     ->url('/admin/work-centers'),
+
+                                NavigationItem::make('Work Center Calendars')
+                                    ->icon('heroicon-o-calendar')
+                                    ->url('/admin/work-center-calendars'),
 
                                 NavigationItem::make('Routing')
                                     ->icon('heroicon-o-map')

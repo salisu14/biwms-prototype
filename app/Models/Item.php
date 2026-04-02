@@ -94,6 +94,14 @@ class Item extends Model
             ->first();
     }
 
+    public function baseUnitOfMeasure(): BelongsToMany
+    {
+        return $this->belongsToMany(UnitOfMeasure::class, 'item_uom_assignments', 'item_id', 'uom_id')
+            ->wherePivot('uom_type', 'BASE')
+            ->wherePivot('is_default', true)
+            ->withPivot(['conversion_factor']);
+    }
+
     /**
      * Get default UOM for type
      */

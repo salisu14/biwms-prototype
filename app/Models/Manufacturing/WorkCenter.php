@@ -68,6 +68,11 @@ class WorkCenter extends Model
         return $this->hasMany(WorkCenterCalendar::class, 'work_center_id');
     }
 
+    public function Subcontractor(): BelongsTo
+    {
+        return $this->BelongsTo(\App\Models\Vendor::class, 'subcontractor_id');
+    }
+
     /**
      * Get available capacity for date range
      */
