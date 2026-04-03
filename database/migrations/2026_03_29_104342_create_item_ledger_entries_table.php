@@ -45,6 +45,9 @@ return new class extends Migration
             $table->decimal('cost_amount_expected', 15, 4)->default(0);
             $table->decimal('purchase_amount_actual', 15, 4)->default(0);
 
+            $table->string('source_type')->nullable()->index();
+            $table->unsignedBigInteger('source_id')->nullable()->index();
+
             // Posting Groups (copied from source)
             $table->foreignId('general_business_posting_group_id')
                 ->nullable()

@@ -72,14 +72,22 @@ class Item extends Model
      */
     public function uoms(): BelongsToMany
     {
-        return $this->belongsToMany(
-            UnitOfMeasure::class,
-            'item_uom_assignments',
-            'item_id',
-            'uom_id'
-        )->withPivot('uom_type', 'conversion_factor', 'is_default', 'sort_order')
-            ->orderByPivot('sort_order');
+        return $this->belongsToMany(UnitOfMeasure::class, 'item_uom_assignments', 'item_id', 'uom_id')
+            ->using(ItemUomAssignment::class)
+            ->withPivot(['uom_type', 'conversion_factor', 'is_default'])
+            ->withTimestamps();
     }
+
+//    public function uoms(): BelongsToMany
+//    {
+//        return $this->belongsToMany(
+//            UnitOfMeasure::class,
+//            'item_uom_assignments',
+//            'item_id',
+//            'uom_id'
+//        )->withPivot('uom_type', 'conversion_factor', 'is_default', 'sort_order')
+//            ->orderByPivot('sort_order');
+//    }
 
     /**
      * Get UOM by type

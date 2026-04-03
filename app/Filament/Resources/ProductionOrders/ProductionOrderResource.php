@@ -40,7 +40,8 @@ class ProductionOrderResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\ProductionOrderLineRelationManager::class,
+            RelationManagers\ComponentsRelationManager::class,
         ];
     }
 

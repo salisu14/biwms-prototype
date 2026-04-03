@@ -43,8 +43,8 @@ return new class extends Migration
             $table->decimal('capitalization_threshold', 15, 2)->default(5000); // Minimum amount to capitalize
 
             // GL accounts
-            $table->foreignId('wip_gl_account_id')->constrained('gl_accounts'); // Construction in Progress
-            $table->foreignId('capex_gl_account_id')->constrained('gl_accounts'); // Fixed Asset account
+            $table->foreignId('wip_gl_account_id')->constrained('chart_of_accounts'); // Construction in Progress
+            $table->foreignId('capex_gl_account_id')->constrained('chart_of_accounts'); // Fixed Asset account
 
             // Interest capitalization (for long-term projects)
             $table->decimal('interest_capitalization_rate', 5, 2)->nullable(); // Weighted average borrowing rate

@@ -6,10 +6,11 @@ use App\Filament\Resources\ProductionBoms\Pages\CreateProductionBom;
 use App\Filament\Resources\ProductionBoms\Pages\EditProductionBom;
 use App\Filament\Resources\ProductionBoms\Pages\ListProductionBoms;
 use App\Filament\Resources\ProductionBoms\Pages\ViewProductionBom;
+use App\Filament\Resources\ProductionBoms\RelationManagers\ProductionBomLinesRelationManager;
 use App\Filament\Resources\ProductionBoms\Schemas\ProductionBomForm;
 use App\Filament\Resources\ProductionBoms\Schemas\ProductionBomInfolist;
 use App\Filament\Resources\ProductionBoms\Tables\ProductionBomsTable;
-use AppModelsManufacturing\ProductionBom;
+use App\Models\Manufacturing\ProductionBom;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -42,7 +43,7 @@ class ProductionBomResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            ProductionBomLinesRelationManager::class
         ];
     }
 

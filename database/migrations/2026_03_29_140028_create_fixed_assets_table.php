@@ -45,9 +45,9 @@ return new class extends Migration
             $table->decimal('disposal_proceeds', 15, 2)->default(0);
 
             // GL accounts
-            $table->foreignId('asset_gl_account_id')->constrained('gl_accounts');
-            $table->foreignId('accumulated_depreciation_gl_account_id')->constrained('gl_accounts');
-            $table->foreignId('depreciation_expense_gl_account_id')->constrained('gl_accounts');
+            $table->foreignId('asset_gl_account_id')->constrained('chart_of_accounts');
+            $table->foreignId('accumulated_depreciation_gl_account_id')->constrained('chart_of_accounts');
+            $table->foreignId('depreciation_expense_gl_account_id')->constrained('chart_of_accounts');
 
             // CapEx project reference (if created from project)
 //            $table->foreignId('capex_project_id')->nullable()->constrained('capex_projects');

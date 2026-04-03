@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 class BankAccount extends Model
 {
@@ -85,18 +86,25 @@ class BankAccount extends Model
 
     // ==================== BUSINESS METHODS ====================
 
-    public function updateBalance(float $amount, string $type): void
+    public function getBalance(): float
     {
-        if ($type === 'RECEIPT') {
-            $this->current_balance += $amount;
-            $this->available_balance += $amount;
-        } else {
-            $this->current_balance -= $amount;
-            $this->available_balance -= $amount;
-        }
-
-        $this->save();
+        return $this->glAccount
+            ->glEntries()
+            ->sum(DB::raw('debit_amount - credit_amount'));
     }
+
+//    public function updateBalance(float $amount, string $type): void
+//    {
+//        if ($type === 'RECEIPT') {
+//            $this->current_balance += $amount;
+//            $this->available_balance += $amount;
+//        } else {
+//            $this->current_balance -= $amount;
+//            $this->available_balance -= $amount;
+//        }
+//
+//        $this->save();
+//    }
 
     public function getNextCheckNumber(): string
     {

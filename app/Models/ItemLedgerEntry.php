@@ -37,6 +37,8 @@ class ItemLedgerEntry extends Model
         'entry_date',
         'applied_entry_id',
         'open',
+        'source_type',
+        'source_id',
     ];
 
     protected $casts = [
@@ -55,6 +57,11 @@ class ItemLedgerEntry extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function source()
+    {
+        return $this->morphTo();
     }
 
     public function location(): BelongsTo

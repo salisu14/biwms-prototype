@@ -112,7 +112,7 @@ class ProductionOrdersTable
                 Action::make('view_entries')
                     ->label('View Entries')
                     ->icon('heroicon-m-document-text')
-                    ->url(fn($record) => ProductionOrderResource::getUrl('entries', ['record' => $record]))
+//                    ->url(fn($record) => ProductionOrderResource::getUrl('entries', ['record' => $record]))
                     ->openUrlInNewTab(),
             ])
             ->toolbarActions([

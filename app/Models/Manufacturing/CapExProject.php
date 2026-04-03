@@ -2,6 +2,7 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\ChartOfAccount;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -61,6 +62,8 @@ class CapExProject extends Model
         'capitalize_interest' => 'boolean',
     ];
 
+    protected $table = 'capex_projects';
+
     // Relationships
 
     public function lines(): HasMany
@@ -76,6 +79,22 @@ class CapExProject extends Model
     public function targetAsset(): BelongsTo
     {
         return $this->belongsTo(FixedAsset::class, 'fixed_asset_id');
+    }
+
+    /**
+     * Relationship for WIP G/L Account
+     */
+    public function wipAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'wip_gl_account_id');
+    }
+
+    /**
+     * Relationship for CapEx G/L Account
+     */
+    public function capexAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'capex_gl_account_id');
     }
 
     public function projectManager(): BelongsTo
@@ -252,5 +271,22 @@ class CapExProject extends Model
         return in_array($this->status, ['IN_PROGRESS', 'ON_HOLD'])
             && $this->getEligibleForCapitalization() > 0
             && $this->lines()->where('eligible_for_capitalization', true)->where('capitalized', false)->exists();
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function ($capex) {
+            if (auth()->check()) {
+                $capex->approver_id = auth()->id();
+                $capex->created_by = auth()->id();
+                $capex->last_modified_by = auth()->id();
+            }
+        });
+
+        static::updating(function ($capex) {
+            if (auth()->check()) {
+                $capex->last_modified_by = auth()->id();
+            }
+        });
     }
 }

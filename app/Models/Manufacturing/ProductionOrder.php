@@ -7,6 +7,8 @@ use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
 use App\Events\ProductionOrderStatusChanged;
 use App\Models\GeneralPostingSetup;
+use App\Models\GeneralProductPostingGroup;
+use App\Models\InventoryPostingGroup;
 use App\Models\ItemLedgerEntry;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -138,6 +140,11 @@ class ProductionOrder extends Model
         return $this->belongsTo(Routing::class);
     }
 
+    public function routingVersion(): BelongsTo
+    {
+        return $this->belongsTo(RoutingVersion::class, 'routing_version_id');
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(ProductionOrderLine::class, 'production_order_id');
@@ -151,6 +158,14 @@ class ProductionOrder extends Model
     public function routingLines(): HasMany
     {
         return $this->hasMany(ProductionOrderRoutingLine::class, 'production_order_id');
+    }
+
+    public function inventoryPostingGroup() {
+        return $this->belongsTo(InventoryPostingGroup::class, 'inventory_posting_group_id');
+    }
+
+    public function generalProductPostingGroup() {
+        return $this->belongsTo(GeneralProductPostingGroup::class, 'general_product_posting_group_id');
     }
 
     public function capacityLedgerEntries(): HasMany
@@ -677,5 +692,16 @@ class ProductionOrder extends Model
         $year = date('Y');
         $count = self::whereYear('created_at', $year)->count() + 1;
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function ($order) {
+            $order->created_by = auth()->id();
+        });
+
+        static::updating(function ($order) {
+            $order->last_modified_by = auth()->id();
+        });
     }
 }

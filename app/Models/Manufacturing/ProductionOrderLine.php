@@ -3,6 +3,8 @@
 namespace App\Models\Manufacturing;
 
 use App\Enums\ItemLedgerEntryType;
+use App\Models\GeneralProductPostingGroup;
+use App\Models\InventoryPostingGroup;
 use App\Models\Item;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -85,6 +87,16 @@ class ProductionOrderLine extends Model
     public function lastModifiedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'last_modified_by');
+    }
+
+    public function inventoryPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(InventoryPostingGroup::class, 'inventory_posting_group_id');
+    }
+
+    public function generalProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralProductPostingGroup::class, 'general_product_posting_group_id');
     }
 
     // ==================== SCOPES ====================

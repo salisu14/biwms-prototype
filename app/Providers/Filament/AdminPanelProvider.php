@@ -34,6 +34,8 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Amber,
             ])
+            ->spa(hasPrefetching: true)
+            ->brandName('BIFLI Group')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
@@ -270,6 +272,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-building-office')
                                     ->url('/admin/capex-projects'),
 
+                                NavigationItem::make('Fixed Assets')
+                                    ->icon('heroicon-o-building-office')
+                                    ->url('/admin/fixed-assets'),
+
                                 NavigationItem::make('Machine Centers')
                                     ->icon('heroicon-o-cpu-chip')
                                     ->url('/admin/machine-centers'),
@@ -290,9 +296,17 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-map')
                                     ->url('/admin/routings'),
 
-                                NavigationItem::make('BOMs')
+                                NavigationItem::make('Routing Versions')
+                                    ->icon('heroicon-o-map')
+                                    ->url('/admin/routing-versions'),
+
+                                NavigationItem::make('Production Bom')
                                     ->icon('heroicon-o-list-bullet')
-                                    ->url('/admin/boms'),
+                                    ->url('/admin/production-boms'),
+
+                                NavigationItem::make('Production Bom Version')
+                                    ->icon('heroicon-o-list-bullet')
+                                    ->url('/admin/production-bom-versions'),
                             ])
                     )
                     // Setup & Administration

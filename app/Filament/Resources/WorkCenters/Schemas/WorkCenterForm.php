@@ -108,6 +108,7 @@ class WorkCenterForm
                         Grid::make(3)->schema([
                             TextInput::make('direct_unit_cost')
                                 ->label('Direct Unit Cost')
+                                ->required()
                                 ->numeric()
                                 ->prefix('$')
                                 ->step(0.0001),
@@ -120,6 +121,7 @@ class WorkCenterForm
 
                             TextInput::make('overhead_rate')
                                 ->label('Overhead Rate ($/hr)')
+                                ->required()
                                 ->numeric()
                                 ->prefix('$')
                                 ->step(0.0001),
@@ -133,6 +135,7 @@ class WorkCenterForm
                         Grid::make(2)->schema([
                             TextInput::make('queue_time')
                                 ->label('Queue Time')
+                                ->required()
                                 ->numeric()
 //                                ->suffix(fn ($get): string => $get('unit_of_measure_code')), // Show UoM suffix
                                 ->helperText('Average time waiting to enter this center'),

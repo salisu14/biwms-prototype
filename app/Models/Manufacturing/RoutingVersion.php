@@ -85,4 +85,14 @@ class RoutingVersion extends Model
 
         return $totalTime;
     }
+    protected static function booted(): void
+    {
+        static::creating(function ($routing) {
+            $routing->created_by = auth()->id();
+        });
+
+        static::updating(function ($routing) {
+            $routing->last_modified_by = auth()->id();
+        });
+    }
 }

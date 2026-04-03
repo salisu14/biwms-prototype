@@ -2,12 +2,18 @@
 
 namespace App\Filament\Resources\ProductionOrders\Schemas;
 
+use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
 use App\Models\Item;
+use App\Models\Manufacturing\ProductionBomVersion;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Manufacturing\RoutingVersion;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -19,144 +25,242 @@ class ProductionOrderForm
     {
         return $schema
             ->components([
-                    Section::make('Production Order Information')
-                        ->columns(2)
-                        ->schema([
-                            TextInput::make('document_number')
-                                ->default(fn () => ProductionOrder::generateDocumentNumber())
-                                ->disabled()
-                                ->dehydrated(),
+                Section::make('General Information')
+                    ->description('Primary document identification and status.')
+                    ->icon('heroicon-m-document-text')
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('document_number')
+                            ->label('Order No.')
+                            ->default(fn () => ProductionOrder::generateDocumentNumber())
+                            ->disabled()
+                            ->dehydrated()
+                            ->required(),
 
-                            Select::make('status')
-                                ->enum(ProductionOrderStatus::class)
-                                ->options(ProductionOrderStatus::class)
-                                ->default(ProductionOrderStatus::SIMULATED)
-                                ->required()
-                                ->disabled(fn ($record) => $record?->status === ProductionOrderStatus::FINISHED),
+                        Select::make('status')
+                            ->options(ProductionOrderStatus::class)
+                            ->default(ProductionOrderStatus::SIMULATED)
+                            ->required()
+                            ->native(false),
 
-                            Select::make('item_id')
-                                ->relationship('item', 'description')
-                                ->searchable()
-                                ->preload()
-                                ->required()
-                                ->live()
-                                ->afterStateUpdated(function ($state, Set $set) {
-                                    $item = \App\Models\Item::find($state);
-                                    if ($item) {
-                                        $set('unit_of_measure_code', $item->base_unit_of_measure);
-                                        $set('production_bom_id', $item->production_bom_id);
-                                        $set('routing_id', $item->routing_id);
-                                    }
-                                }),
+                        Select::make('source_type')
+                            ->options(ProductionOrderSourceType::class)
+                            ->default(ProductionOrderSourceType::ITEM)
+                            ->required()
+                            ->live(),
 
-                            TextInput::make('description')
-                                ->required()
-                                ->maxLength(255),
+                        TextInput::make('source_no')
+                            ->label('Source No.')
+                            ->maxLength(50),
 
-                            TextInput::make('quantity')
-                                ->numeric()
-                                ->required()
-                                ->default(1)
-                                ->live()
-                                ->afterStateUpdated(fn ($state, Set $set) => $set('quantity_base', $state)),
+                        Select::make('item_id')
+                            ->label('Item')
+                            ->relationship('item', 'description')
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->live()
+                            ->columnSpan(2)
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                if (!$state) return;
 
-                            Select::make('unit_of_measure_code')
-                                ->options(function (Get $get) {
-                                    $itemId = $get('item_id');
-                                    if (!$itemId) return [];
+                                $item = Item::find($state);
+                                if ($item) {
+                                    $set('description', $item->description);
+                                    $set('unit_of_measure_code', $item->base_unit_of_measure);
+                                    $set('production_bom_id', $item->production_bom_id);
+                                    $set('routing_id', $item->routing_id);
+                                    $set('inventory_posting_group_id', $item->inventory_posting_group_id);
+                                    $set('general_product_posting_group_id', $item->general_product_posting_group_id);
+                                    $set('flushing_method', $item->flushing_method ?? 'MANUAL');
+                                    $set('costing_method', $item->costing_method ?? 'STANDARD');
+                                    $set('unit_cost', $item->unit_cost ?? 0);
+                                }
+                            }),
 
-                                    // Load UOMs from pivot table
-                                    return Item::find($itemId)
-                                        ?->uoms()
-                                        ?->get()
-                                        ?->mapWithKeys(fn ($uom) => [
-                                            $uom->code => sprintf(
-                                                '%s (%s) - %s : 1 %s',
-                                                $uom->code,
-                                                $uom->description,
-                                                $uom->pivot->conversion_factor,
-                                                $uom->pivot->uom_type
-                                            )
-                                        ])
-                                        ?->toArray() ?? [];
-                                })
-                                ->searchable()
-                                ->required()
-                                ->live()
-                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                    $itemId = $get('item_id');
-                                    if (!$itemId || !$state) return;
+                        TextInput::make('description')
+                            ->required()
+                            ->columnSpanFull()
+                            ->maxLength(255),
+                    ]),
 
-                                    // Get conversion factor for selected UOM
-                                    $uom = Item::find($itemId)
-                                        ->unitOfMeasures()
-                                        ->where('code', $state)
-                                        ->first();
+                Section::make('Quantities & Unit of Measure')
+                    ->icon('heroicon-m-beaker')
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('quantity')
+                            ->numeric()
+                            ->required()
+                            ->default(1)
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                $factor = (float) ($get('conversion_factor') ?? 1);
+                                $set('quantity_base', (float) $state * $factor);
+                            }),
 
-                                    if ($uom) {
-                                        $set('conversion_factor', $uom->pivot->conversion_factor);
-                                        $set('uom_type', $uom->pivot->uom_type);
+                        Select::make('unit_of_measure_code')
+                            ->label('UOM')
+                            ->options(function (Get $get) {
+                                $itemId = $get('item_id');
+                                if (!$itemId) return [];
 
-                                        // Recalculate quantity_base if quantity exists
-                                        $qty = $get('quantity');
-                                        if ($qty) {
-                                            $set('quantity_base', $qty * $uom->pivot->conversion_factor);
-                                        }
-                                    }
-                                }),
+                                $item = Item::find($itemId);
+                                if (!$item) return [];
 
+                                return $item->uoms()
+                                    ->get()
+                                    ->mapWithKeys(fn ($uom) => [
+                                        $uom->uom_code => $uom->uom_code . ($uom->description ? " ({$uom->description})" : "")
+                                    ])
+                                    ->toArray();
+                            })
+                            ->live()
+//                            ->required()
+                            ->searchable(),
 
-                            DatePicker::make('due_date')
-                                ->required()
-                                ->default(now()->addDays(7)),
+                        TextInput::make('quantity_base')
+                            ->label('Base Quantity')
+                            ->numeric()
+                            ->disabled()
+                            ->dehydrated(),
+                    ]),
 
-                            Select::make('location_code')
-                                ->options([
-                                    'RAW-WAREHOUSE' => 'Raw Materials Warehouse',
-                                    'PROD-FLOOR' => 'Production Floor',
-                                    'FG-WAREHOUSE-A' => 'Finished Goods A',
-                                ])
-                                ->default('PROD-FLOOR')
-                                ->required(),
-                        ]),
-
-                    Section::make('BOM & Routing')
-                        ->columns(2)
-                        ->schema([
+                Section::make('BOM & Routing Configuration')
+                    ->description('Technical structure and versioning.')
+                    ->icon('heroicon-m-wrench-screwdriver')
+                    ->columns(2)
+                    ->schema([
+                        Grid::make(2)->schema([
                             Select::make('production_bom_id')
+                                ->label('Production BOM')
                                 ->relationship('productionBom', 'description')
                                 ->searchable()
-                                ->preload(),
+                                ->preload()
+                                ->live(),
 
+                            Select::make('production_bom_version_id')
+                                ->label('BOM Version')
+                                ->placeholder('Latest Active')
+                                ->options(function (Get $get) {
+                                    $bomId = $get('production_bom_id');
+                                    if (!$bomId) return [];
+
+                                    return ProductionBomVersion::where('production_bom_id', $bomId)
+                                        ->pluck('version_code', 'id');
+                                })
+                                ->live(),
+                        ]),
+
+                        Grid::make(2)->schema([
                             Select::make('routing_id')
+                                ->label('Routing')
                                 ->relationship('routing', 'description')
                                 ->searchable()
-                                ->preload(),
+                                ->preload()
+                                ->live(),
 
-                            Select::make('costing_method')
-                                ->options([
-                                    'STANDARD' => 'Standard',
-                                    'FIFO' => 'FIFO',
-                                    'AVERAGE' => 'Average',
-                                    'ACTUAL' => 'Actual',
-                                ])
-                                ->default('STANDARD')
-                                ->required(),
+                            Select::make('routing_version_id')
+                                ->label('Routing Version')
+                                ->relationship('routingVersion', 'version_code')
+                                ->placeholder('Latest Active')
+                                ->options(function (Get $get) {
+                                    $routingId = $get('routing_id');
+                                    if (!$routingId) return [];
 
-                            TextInput::make('unit_cost')
-                                ->numeric()
-                                ->prefix('$')
-                                ->default(0),
+                                    return RoutingVersion::where('routing_id', $routingId)
+                                        ->pluck('version_code', 'id');
+                                })
+                                ->live(),
                         ]),
 
-                    Section::make('Dimensions')
-                        ->columns(2)
-                        ->schema([
-                           TextInput::make('shortcut_dimension_1_code')
-                                ->label('Department'),
-                            TextInput::make('shortcut_dimension_2_code')
-                                ->label('Project'),
+                        Select::make('flushing_method')
+                            ->options([
+                                'MANUAL' => 'Manual',
+                                'FORWARD' => 'Forward',
+                                'BACKWARD' => 'Backward',
+                                'PICK + BACKWARD' => 'Pick + Backward',
+                                'PICK + FORWARD' => 'Pick + Forward',
+                            ])
+                            ->required(),
+
+                        TextInput::make('scrap_percent')
+                            ->label('Scrap %')
+                            ->numeric()
+                            ->suffix('%')
+                            ->default(0),
+                    ]),
+
+                Section::make('Scheduling & Warehouse')
+                    ->icon('heroicon-m-calendar-days')
+                    ->columns(2)
+                    ->schema([
+                        DatePicker::make('due_date')
+                            ->required()
+                            ->native(false)
+                            ->default(now()->addDays(7)),
+
+                        Grid::make(2)->schema([
+                            DateTimePicker::make('starting_date_time')
+                                ->label('Starting')
+                                ->native(false),
+                            DateTimePicker::make('ending_date_time')
+                                ->label('Ending')
+                                ->native(false),
                         ]),
-                ]);
+
+                        Select::make('location_code')
+                            ->label('Target Location')
+                            ->options([
+                                'PROD-FLOOR' => 'Production Floor',
+                                'FG-WAREHOUSE' => 'Finished Goods Warehouse',
+                            ])
+                            ->required(),
+
+                        TextInput::make('bin_code')
+                            ->label('Target Bin'),
+                    ]),
+
+                Section::make('Costing & Posting')
+                    ->icon('heroicon-m-banknotes')
+                    ->columns(2)
+                    ->schema([
+                        Select::make('costing_method')
+                            ->options([
+                                'STANDARD' => 'Standard',
+                                'FIFO' => 'FIFO',
+                                'LIFO' => 'LIFO',
+                                'AVERAGE' => 'Average',
+                                'SPECIFIC' => 'Specific',
+                            ])
+                            ->required(),
+
+                        TextInput::make('unit_cost')
+                            ->numeric()
+                            ->prefix('$')
+                            ->step(0.0001),
+
+                        Select::make('inventory_posting_group_id')
+                            ->label('Inventory Posting Group')
+                            ->relationship('inventoryPostingGroup', 'code')
+                            ->required(),
+
+                        Select::make('general_product_posting_group_id')
+                            ->label('Gen. Product Posting Group')
+                            ->relationship('generalProductPostingGroup', 'code')
+                            ->required(),
+                    ]),
+
+                Section::make('Dimensions & Planning')
+                    ->icon('heroicon-m-tag')
+                    ->columns(2)
+                    ->collapsed()
+                    ->schema([
+                        TextInput::make('shortcut_dimension_1_code')->label('Department'),
+                        TextInput::make('shortcut_dimension_2_code')->label('Project'),
+                        TextInput::make('priority')->numeric()->default(100),
+                        Toggle::make('reserved_from_stock')
+                            ->label('Reserve from Stock'),
+                    ]),
+            ]);
     }
 }

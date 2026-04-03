@@ -2,12 +2,12 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\ChartOfAccount;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class FixedAsset extends Model
@@ -60,7 +60,18 @@ class FixedAsset extends Model
 
     // Relationships
 
-    public function capExProject(): BelongsTo
+    public function assetAccount(): BelongsTo {
+        return $this->belongsTo(ChartOfAccount::class, 'asset_gl_account_id');
+    }
+
+    public function accumDepAccount(): BelongsTo {
+        return $this->belongsTo(ChartOfAccount::class, 'accumulated_depreciation_gl_account_id');
+    }
+
+    public function depExpenseAccount(): BelongsTo {
+        return $this->belongsTo(ChartOfAccount::class, 'depreciation_expense_gl_account_id');
+    }
+   public function capExProject(): BelongsTo
     {
         return $this->belongsTo(CapExProject::class);
     }
@@ -194,5 +205,21 @@ class FixedAsset extends Model
 
         $elapsedYears = $this->acquisition_date->diffInYears(now());
         return max(0, $this->useful_life_years - $elapsedYears);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function ($fixedAsset) {
+            if (auth()->check()) {
+                $fixedAsset->created_by = auth()->id();
+                $fixedAsset->last_modified_by = auth()->id();
+            }
+        });
+
+        static::updating(function ($fixedAsset) {
+            if (auth()->check()) {
+                $fixedAsset->last_modified_by = auth()->id();
+            }
+        });
     }
 }

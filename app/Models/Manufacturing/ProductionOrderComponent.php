@@ -80,4 +80,9 @@ class ProductionOrderComponent extends Model
     {
         return $this->actual_quantity_consumed >= ($this->expected_quantity - 0.01);
     }
+
+    public function getRemainingQuantityAttribute(): float
+    {
+        return ($this->expected_quantity ?? 0) - ($this->actual_quantity_consumed ?? 0);
+    }
 }
