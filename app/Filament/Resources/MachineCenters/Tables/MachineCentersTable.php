@@ -7,6 +7,7 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 class MachineCentersTable
@@ -16,48 +17,67 @@ class MachineCentersTable
         return $table
             ->columns([
                 TextColumn::make('code')
-                    ->searchable(),
+                    ->label('Code')
+                    ->copyable()
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
+
                 TextColumn::make('name')
-                    ->searchable(),
+                    ->label('Machine Name')
+                    ->searchable()
+                    ->sortable(),
+
                 TextColumn::make('workCenter.name')
-                    ->searchable(),
+                    ->label('Work Center')
+                    ->badge()
+                    ->color('gray')
+                    ->searchable()
+                    ->sortable(),
+
                 TextColumn::make('capacity')
                     ->numeric()
-                    ->sortable(),
+                    ->suffix(' U/h')
+                    ->sortable()
+                    ->alignEnd(),
+
                 TextColumn::make('efficiency')
                     ->numeric()
-                    ->sortable(),
+                    ->suffix('%')
+                    ->sortable()
+                    ->color(fn ($state) => $state < 90 ? 'warning' : 'success')
+                    ->alignEnd(),
+
+                TextColumn::make('location_code')
+                    ->label('Location')
+                    ->placeholder('-')
+                    ->searchable()
+                    ->toggleable(),
+
+                // Financials and timings moved to infoList/hidden by default for a cleaner UI
                 TextColumn::make('direct_unit_cost')
                     ->money()
-                    ->sortable(),
-                TextColumn::make('indirect_cost_percent')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('overhead_rate')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('setup_time')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('wait_time')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('move_time')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('location_code')
-                    ->searchable(),
-                TextColumn::make('created_at')
-                    ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
+
+                TextColumn::make('setup_time')
+                    ->label('Setup')
+                    ->numeric()
+                    ->suffix('m')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('work_center_id')
+                    ->relationship('workCenter', 'name')
+                    ->label('Work Center')
+                    ->searchable()
+                    ->preload(),
             ])
             ->recordActions([
                 ViewAction::make(),

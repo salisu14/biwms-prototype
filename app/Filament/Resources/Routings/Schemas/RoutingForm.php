@@ -81,6 +81,7 @@ class RoutingForm
 
                         TextInput::make('cost_rollup')
                             ->label('Cost Rollup')
+                            ->required()
                             ->numeric()
                             ->prefix('$')
                             ->step(0.01)
