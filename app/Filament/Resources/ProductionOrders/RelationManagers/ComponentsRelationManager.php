@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\ProductionOrders\RelationManagers;
 
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
+use App\Models\Item;
+use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
@@ -25,6 +27,7 @@ use Filament\Tables\Table;
 class ComponentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'components';
+
     protected static ?string $relatedResource = ProductionOrderResource::class;
 
     protected static ?string $recordTitleAttribute = 'description';
@@ -43,8 +46,7 @@ class ComponentsRelationManager extends RelationManager
                     Select::make('production_order_line_id')
                         ->label('Related Order Line')
                         ->placeholder('Optional: Link to a specific output line')
-                        ->options(fn ($livewire) =>
-                        $livewire->ownerRecord->lines->pluck('description', 'id')
+                        ->options(fn ($livewire) => $livewire->ownerRecord->lines->pluck('description', 'id')
                         )
                         ->columnSpan(2),
 
@@ -65,7 +67,7 @@ class ComponentsRelationManager extends RelationManager
                             ->live()
                             ->afterStateUpdated(function ($state, Set $set) {
                                 if ($state) {
-                                    $item = \App\Models\Item::find($state);
+                                    $item = Item::find($state);
                                     $set('description', $item?->description);
                                     $set('unit_of_measure_code', $item?->base_unit_of_measure);
                                     $set('unit_cost', $item?->unit_cost);
@@ -93,8 +95,7 @@ class ComponentsRelationManager extends RelationManager
                             ->default(1)
                             ->required()
                             ->live()
-                            ->afterStateUpdated(fn ($state, Set $set, $livewire) =>
-                            $set('expected_quantity', $state * ($livewire->ownerRecord->quantity ?? 1))
+                            ->afterStateUpdated(fn ($state, Set $set, $livewire) => $set('expected_quantity', $state * ($livewire->ownerRecord->quantity ?? 1))
                             ),
 
                         TextInput::make('expected_quantity')
@@ -145,7 +146,7 @@ class ComponentsRelationManager extends RelationManager
 //                    ->color('danger')
                     ->color(fn ($state, $record) => ($state ?? 0) >= ($record?->expected_quantity ?? 0) ? 'success' : 'gray')
                     ->hidden(fn ($record) => ($record?->remaining_quantity ?? 0) <= 0),
-//                    ->hidden(fn ($record) => $record->remaining_quantity <= 0),
+                //                    ->hidden(fn ($record) => $record->remaining_quantity <= 0),
 
                 TextColumn::make('location_code')
                     ->label('Warehouse')
@@ -155,8 +156,7 @@ class ComponentsRelationManager extends RelationManager
                 // Filter components by the specific Output Line
                 SelectFilter::make('production_order_line_id')
                     ->label('By Output Line')
-                    ->options(fn ($livewire) =>
-                    $livewire->ownerRecord->lines->pluck('description', 'id')
+                    ->options(fn ($livewire) => $livewire->ownerRecord->lines->pluck('description', 'id')
                     ),
 
                 TernaryFilter::make('has_shortage')
@@ -182,12 +182,20 @@ class ComponentsRelationManager extends RelationManager
                             TextInput::make('amount')
                                 ->numeric()
                                 ->required()
-                                ->default(fn ($record) => $record->expected_quantity - $record->actual_quantity_consumed)
+                                ->default(fn ($record) => $record->expected_quantity - $record->actual_quantity_consumed),
                         ])
-                        ->action(function ($record, array $data) {
-                            $record->increment('actual_quantity_consumed', $data['amount']);
-                        })
-                ])
+                        ->action(function ($record, array $data, $livewire) {
+                            app(ProductionOrderService::class)->postConsumption(
+                                $livewire->getOwnerRecord(),
+                                [[
+                                    'component_id' => $record->id,
+                                    'quantity' => $data['amount'],
+                                    'scrap_quantity' => 0,
+                                ]],
+                                auth()->id()
+                            );
+                        }),
+                ]),
             ]);
     }
 }

@@ -5,21 +5,18 @@ namespace App\Models\Manufacturing;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
-use App\Events\ProductionOrderStatusChanged;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
+use App\Models\GlEntry;
 use App\Models\InventoryPostingGroup;
+use App\Models\Item;
 use App\Models\ItemLedgerEntry;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-use App\Models\Item;
-use App\Models\Vendor;
-use App\Models\SalesOrder;
-use App\Models\User;
-use App\Models\GlEntry;
 
 class ProductionOrder extends Model
 {
@@ -127,9 +124,9 @@ class ProductionOrder extends Model
         return $this->belongsTo(ProductionBom::class, 'production_bom_id');
     }
 
-
-// ProductionOrder.php
-    public function getPostingSetup() {
+    // ProductionOrder.php
+    public function getPostingSetup()
+    {
         return GeneralPostingSetup::where('gen_bus_posting_group', 'MANUFACTURING')
             ->where('gen_prod_posting_group', $this->item->gen_prod_posting_group_code)
             ->first();
@@ -160,11 +157,13 @@ class ProductionOrder extends Model
         return $this->hasMany(ProductionOrderRoutingLine::class, 'production_order_id');
     }
 
-    public function inventoryPostingGroup() {
+    public function inventoryPostingGroup()
+    {
         return $this->belongsTo(InventoryPostingGroup::class, 'inventory_posting_group_id');
     }
 
-    public function generalProductPostingGroup() {
+    public function generalProductPostingGroup()
+    {
         return $this->belongsTo(GeneralProductPostingGroup::class, 'general_product_posting_group_id');
     }
 
@@ -274,425 +273,14 @@ class ProductionOrder extends Model
 
     public function getCostVarianceAttribute(): float
     {
-        if (!$this->cost_rollup) return 0;
+        if (! $this->cost_rollup) {
+            return 0;
+        }
+
         return $this->total_actual_cost - ($this->cost_rollup * $this->quantity);
     }
 
-    // ==================== STATUS TRANSITIONS ====================
-
-    /**
-     * Change status with validation
-     */
-    public function changeStatus(string $newStatus, ?int $userId = null): void
-    {
-        if (!$this->status->canTransitionTo($newStatus)) {
-            throw new \Exception("Invalid status transition from {$this->status->label()} to {$newStatus->label()}");
-        }
-
-
-        // Special validations
-        if ($newStatus === ProductionOrderStatus::RELEASED) {
-            $this->validateForRelease();
-        }
-
-        if ($newStatus === ProductionOrderStatus::FINISHED) {
-            $this->validateForFinish();
-        }
-
-        $oldStatus = $this->status;
-        $this->status = $newStatus;
-
-        if ($newStatus === ProductionOrderStatus::FINISHED) {
-            $this->finished_at = now();
-            $this->finished_by = $userId;
-        }
-
-        $this->save();
-
-        // Fire status changed event
-        event(new ProductionOrderStatusChanged($this, $oldStatus, $newStatus));
-    }
-
-    protected function validateForRelease(): void
-    {
-        if ($this->components()->count() === 0) {
-            throw new \Exception('Production order must have components before release');
-        }
-    }
-
-    protected function validateForFinish(): void
-    {
-        if ($this->status !== ProductionOrderStatus::RELEASED) {
-            throw new \Exception('Only released production orders can be finished');
-        }
-    }
-
-    // ==================== BUSINESS METHODS ====================
-
-    /**
-     * Refresh production order - recalculate components and routing
-     */
-    public function refreshOrder(bool $calculateLines = true, bool $calculateRoutings = true, bool $calculateComponents = true): void
-    {
-        if ($this->status === ProductionOrderStatus::FINISHED) {
-            throw new \Exception('Cannot refresh finished production order');
-        }
-
-        \DB::transaction(function () use ($calculateLines, $calculateRoutings, $calculateComponents) {
-            if ($calculateLines) {
-                $this->refreshLines();
-            }
-
-            if ($calculateRoutings) {
-                $this->refreshRouting();
-            }
-
-            if ($calculateComponents) {
-                $this->refreshComponents();
-            }
-
-            // Recalculate dates
-            $this->scheduleOrder();
-        });
-    }
-
-    /**
-     * Create or update production order lines
-     */
-    protected function refreshLines(): void
-    {
-        // Delete existing lines if no ledger entries exist
-        if ($this->itemLedgerEntries()->count() === 0) {
-            $this->lines()->delete();
-        }
-
-        // Create main line
-        $this->lines()->create([
-            'line_number' => 10000,
-            'item_id' => $this->item_id,
-            'description' => $this->description,
-            'quantity' => $this->quantity,
-            'unit_of_measure_code' => $this->unit_of_measure_code,
-            'quantity_base' => $this->quantity_base,
-            'due_date' => $this->due_date,
-            'production_bom_id' => $this->production_bom_id,
-            'routing_id' => $this->routing_id,
-        ]);
-    }
-
-    /**
-     * Explode BOM and create components
-     */
-    protected function refreshComponents(): void
-    {
-        if (!$this->production_bom_id) return;
-
-        // Clear existing components if not started
-        if ($this->itemLedgerEntries()->where('entry_type', ItemLedgerEntryType::CONSUMPTION)->count() === 0) {
-            $this->components()->delete();
-        }
-
-        $bom = $this->productionBom;
-        if (!$bom) return;
-
-        $lineNo = 10000;
-        foreach ($bom->lines as $bomLine) {
-            $expectedQty = $bomLine->quantity_per * $this->quantity * (1 + $bomLine->scrap_percent / 100);
-
-            $this->components()->create([
-                'line_number' => $lineNo,
-                'item_id' => $bomLine->item_id,
-                'description' => $bomLine->description,
-                'unit_of_measure_code' => $bomLine->unit_of_measure_code,
-                'quantity_per' => $bomLine->quantity_per,
-                'expected_quantity' => $expectedQty,
-                'expected_quantity_base' => $expectedQty * $bomLine->item->qty_per_unit_of_measure,
-                'scrap_percent' => $bomLine->scrap_percent,
-                'routing_link_code' => $bomLine->routing_link_code,
-                'flushing_method' => $bomLine->flushing_method ?? $this->flushing_method,
-                'location_code' => $bomLine->location_code ?? $this->location_code,
-                'bin_code' => $bomLine->bin_code,
-                'due_date' => $this->starting_date_time?->copy()->subDays($bomLine->lead_time_offset_days ?? 0),
-            ]);
-
-            $lineNo += 10000;
-        }
-    }
-
-    /**
-     * Create routing lines from routing
-     */
-    protected function refreshRouting(): void
-    {
-        if (!$this->routing_id) return;
-
-        if ($this->capacityLedgerEntries()->count() === 0) {
-            $this->routingLines()->delete();
-        }
-
-        $routing = $this->routing;
-        if (!$routing) return;
-
-        $lineNo = 10000;
-        foreach ($routing->lines as $routingLine) {
-            $this->routingLines()->create([
-                'line_number' => $lineNo,
-                'operation_no' => $routingLine->operation_no,
-                'description' => $routingLine->description,
-                'work_center_id' => $routingLine->work_center_id,
-                'machine_center_id' => $routingLine->machine_center_id,
-                'setup_time' => $routingLine->setup_time,
-                'run_time' => $routingLine->run_time * $this->quantity,
-                'wait_time' => $routingLine->wait_time,
-                'move_time' => $routingLine->move_time,
-                'setup_time_unit' => $routingLine->setup_time_unit,
-                'run_time_unit' => $routingLine->run_time_unit,
-                'routing_link_code' => $routingLine->routing_link_code,
-                'scrap_factor_percent' => $routingLine->scrap_factor_percent,
-            ]);
-
-            $lineNo += 10000;
-        }
-    }
-
-    /**
-     * Schedule the production order (Forward or Backward)
-     */
-    protected function scheduleOrder(bool $forward = false): void
-    {
-        if ($forward) {
-            // Forward scheduling: Start from starting_date_time
-            $currentDate = $this->starting_date_time ?? now();
-
-            foreach ($this->routingLines()->orderBy('line_number')->get() as $routingLine) {
-                $routingLine->starting_date_time = $currentDate;
-                $routingLine->ending_date_time = $currentDate->copy()->addMinutes(
-                    $routingLine->total_time_minutes
-                );
-                $routingLine->save();
-
-                $currentDate = $routingLine->ending_date_time->copy()->addMinutes($routingLine->move_time);
-            }
-
-            $this->ending_date_time = $currentDate;
-        } else {
-            // Backward scheduling: End before due_date
-            $currentDate = $this->due_date?->copy()->subDay() ?? now();
-
-            foreach ($this->routingLines()->orderByDesc('line_number')->get() as $routingLine) {
-                $routingLine->ending_date_time = $currentDate;
-                $routingLine->starting_date_time = $currentDate->copy()->subMinutes(
-                    $routingLine->total_time_minutes
-                );
-                $routingLine->save();
-
-                $currentDate = $routingLine->starting_date_time->copy()->subMinutes($routingLine->wait_time);
-            }
-
-            $this->starting_date_time = $currentDate;
-        }
-
-        $this->save();
-    }
-
-    /**
-     * Post consumption of components
-     */
-    public function postConsumption(array $consumptions, int $userId, ?\DateTime $postingDate = null): void
-    {
-        // $consumptions = [['component_id' => 1, 'quantity' => 5.0, 'scrap_quantity' => 0.5], ...]
-
-        $postingDate = $postingDate ?? now();
-
-        \DB::transaction(function () use ($consumptions, $userId, $postingDate) {
-            foreach ($consumptions as $consumption) {
-                $component = $this->components()->find($consumption['component_id']);
-                if (!$component) continue;
-
-                $qty = $consumption['quantity'];
-                $scrapQty = $consumption['scrap_quantity'] ?? 0;
-
-                // Create item ledger entry for consumption
-                ItemLedgerEntry::create([
-                    'entry_type' => ItemLedgerEntryType::CONSUMPTION,
-                    'item_id' => $component->item_id,
-                    'quantity' => -$qty,
-                    'remaining_quantity' => 0,
-                    'open' => false,
-                    'posting_date' => $postingDate,
-                    'document_number' => $this->document_number,
-                    'external_document_number' => $component->line_number,
-                    'source_id' => $this->id,
-                    'source_type' => self::class,
-                    'location_code' => $component->location_code,
-                    'unit_cost' => $component->item->unit_cost,
-                    'cost_amount_actual' => $qty * $component->item->unit_cost,
-                ]);
-
-                // Update component actual consumption
-                $component->actual_quantity_consumed += $qty;
-                $component->actual_scrap_quantity += $scrapQty;
-                $component->save();
-            }
-
-            // Create WIP G/L entries
-            $this->createWipGlEntries($postingDate);
-        });
-    }
-
-    /**
-     * Post output (finished goods)
-     */
-    public function postOutput(float $quantity, int $userId, ?\DateTime $postingDate = null, ?int $routingLineId = null): void
-    {
-        $postingDate = $postingDate ?? now();
-
-        \DB::transaction(function () use ($quantity, $userId, $postingDate, $routingLineId) {
-            // Create item ledger entry for output
-            ItemLedgerEntry::create([
-                'entry_type' => ItemLedgerEntryType::OUTPUT,
-                'item_id' => $this->item_id,
-                'quantity' => $quantity,
-                'remaining_quantity' => $quantity,
-                'open' => true,
-                'posting_date' => $postingDate,
-                'document_number' => $this->document_number,
-                'source_id' => $this->id,
-                'source_type' => self::class,
-                'location_code' => $this->location_code,
-                'unit_cost' => 0, // Will be calculated at finish
-            ]);
-
-            // If routing line specified, update operation output
-            if ($routingLineId) {
-                $routingLine = $this->routingLines()->find($routingLineId);
-                if ($routingLine) {
-                    $routingLine->actual_output_quantity += $quantity;
-                    $routingLine->save();
-                }
-            }
-        });
-    }
-
-    /**
-     * Post capacity (time/cost)
-     */
-    public function postCapacity(int $routingLineId, float $setupTime, float $runTime, float $cost, int $userId): void
-    {
-        $routingLine = $this->routingLines()->find($routingLineId);
-        if (!$routingLine) return;
-
-        CapacityLedgerEntry::create([
-            'production_order_id' => $this->id,
-            'routing_line_id' => $routingLineId,
-            'work_center_id' => $routingLine->work_center_id,
-            'machine_center_id' => $routingLine->machine_center_id,
-            'posting_date' => now(),
-            'setup_time' => $setupTime,
-            'run_time' => $runTime,
-            'setup_time_unit' => $routingLine->setup_time_unit,
-            'run_time_unit' => $routingLine->run_time_unit,
-            'direct_cost' => $cost,
-            'overhead_cost' => $cost * 0.25, // Example overhead calculation
-            'total_cost' => $cost * 1.25,
-            'document_number' => $this->document_number,
-        ]);
-    }
-
-    /**
-     * Finish production order - calculate costs and post to inventory
-     */
-    public function finish(int $userId, ?\DateTime $postingDate = null): void
-    {
-        $postingDate = $postingDate ?? now();
-
-        \DB::transaction(function () use ($userId, $postingDate) {
-            // 1. Flush remaining components if backward flushing
-            if ($this->flushing_method === 'BACKWARD') {
-                $this->backwardFlushComponents($postingDate);
-            }
-
-            // 2. Calculate actual unit cost
-            $totalCost = $this->total_actual_cost;
-            $totalOutput = $this->itemLedgerEntries()
-                ->where('entry_type', ItemLedgerEntryType::OUTPUT)
-                ->sum('quantity');
-
-            $unitCost = $totalOutput > 0 ? $totalCost / $totalOutput : 0;
-
-            // 3. Update output entries with calculated cost
-            $this->itemLedgerEntries()
-                ->where('entry_type', ItemLedgerEntryType::OUTPUT)
-                ->update([
-                    'unit_cost' => $unitCost,
-                    'cost_amount_actual' => \DB::raw("quantity * {$unitCost}"),
-                ]);
-
-            // 4. Create G/L entries for WIP to Finished Goods
-            $this->createFinishGlEntries($totalCost, $postingDate);
-
-            // 5. Change status
-            $this->changeStatus(ProductionOrderStatus::FINISHED->value, $userId);
-
-            // 6. Update item unit cost if needed
-            if ($this->costing_method === 'STANDARD') {
-                // Calculate variance
-                $variance = $totalCost - ($this->unit_cost * $totalOutput);
-                if (abs($variance) > 0.01) {
-                    $this->createVarianceGlEntries($variance, $postingDate);
-                }
-            }
-        });
-    }
-
-    /**
-     * Backward flush components automatically
-     */
-    protected function backwardFlushComponents(\DateTime $postingDate): void
-    {
-        foreach ($this->components as $component) {
-            if ($component->flushing_method !== 'BACKWARD') continue;
-
-            $expectedQty = $component->expected_quantity;
-            $consumedQty = $component->actual_quantity_consumed;
-            $remainingQty = $expectedQty - $consumedQty;
-
-            if ($remainingQty <= 0) continue;
-
-            $this->postConsumption([[
-                'component_id' => $component->id,
-                'quantity' => $remainingQty,
-                'scrap_quantity' => 0,
-            ]], $this->finished_by ?? 1, $postingDate);
-        }
-    }
-
-    protected function createWipGlEntries(\DateTime $postingDate): void
-    {
-        // Debit WIP Inventory, Credit Raw Materials Inventory
-        // Implementation depends on your G/L account structure
-    }
-
-    protected function createFinishGlEntries(float $totalCost, \DateTime $postingDate): void
-    {
-        // Debit Finished Goods Inventory, Credit WIP Inventory
-        // Implementation depends on your G/L account structure
-    }
-
-    protected function createVarianceGlEntries(float $variance, \DateTime $postingDate): void
-    {
-        // Debit/Credit Variance accounts based on favorable/unfavorable variance
-    }
-
-    // ==================== STATIC METHODS ====================
-
-    public static function generateDocumentNumber(): string
-    {
-        $prefix = 'PROD';
-        $year = date('Y');
-        $count = self::whereYear('created_at', $year)->count() + 1;
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
-    }
+    // ==================== BOOTED ====================
 
     protected static function booted(): void
     {

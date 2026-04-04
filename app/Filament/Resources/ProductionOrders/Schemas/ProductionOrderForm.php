@@ -6,8 +6,8 @@ use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
 use App\Models\Item;
 use App\Models\Manufacturing\ProductionBomVersion;
-use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\RoutingVersion;
+use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -32,7 +32,7 @@ class ProductionOrderForm
                     ->schema([
                         TextInput::make('document_number')
                             ->label('Order No.')
-                            ->default(fn () => ProductionOrder::generateDocumentNumber())
+                            ->default(fn () => app(ProductionOrderService::class)->generateDocumentNumber())
                             ->disabled()
                             ->dehydrated()
                             ->required(),
@@ -62,7 +62,9 @@ class ProductionOrderForm
                             ->live()
                             ->columnSpan(2)
                             ->afterStateUpdated(function ($state, Set $set) {
-                                if (!$state) return;
+                                if (! $state) {
+                                    return;
+                                }
 
                                 $item = Item::find($state);
                                 if ($item) {
@@ -102,20 +104,24 @@ class ProductionOrderForm
                             ->label('UOM')
                             ->options(function (Get $get) {
                                 $itemId = $get('item_id');
-                                if (!$itemId) return [];
+                                if (! $itemId) {
+                                    return [];
+                                }
 
                                 $item = Item::find($itemId);
-                                if (!$item) return [];
+                                if (! $item) {
+                                    return [];
+                                }
 
                                 return $item->uoms()
                                     ->get()
                                     ->mapWithKeys(fn ($uom) => [
-                                        $uom->uom_code => $uom->uom_code . ($uom->description ? " ({$uom->description})" : "")
+                                        $uom->uom_code => $uom->uom_code.($uom->description ? " ({$uom->description})" : ''),
                                     ])
                                     ->toArray();
                             })
                             ->live()
-//                            ->required()
+                            ->required()
                             ->searchable(),
 
                         TextInput::make('quantity_base')
@@ -143,7 +149,9 @@ class ProductionOrderForm
                                 ->placeholder('Latest Active')
                                 ->options(function (Get $get) {
                                     $bomId = $get('production_bom_id');
-                                    if (!$bomId) return [];
+                                    if (! $bomId) {
+                                        return [];
+                                    }
 
                                     return ProductionBomVersion::where('production_bom_id', $bomId)
                                         ->pluck('version_code', 'id');
@@ -165,7 +173,9 @@ class ProductionOrderForm
                                 ->placeholder('Latest Active')
                                 ->options(function (Get $get) {
                                     $routingId = $get('routing_id');
-                                    if (!$routingId) return [];
+                                    if (! $routingId) {
+                                        return [];
+                                    }
 
                                     return RoutingVersion::where('routing_id', $routingId)
                                         ->pluck('version_code', 'id');
