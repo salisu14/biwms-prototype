@@ -45,6 +45,12 @@ class ProductionOrderInfolist
                             ->label('Source No.')
                             ->placeholder('N/A'),
 
+                        TextEntry::make('capexProject.project_number')
+                            ->label('CapEx Project')
+                            ->placeholder('None (Operational)')
+                            ->color('info')
+                            ->icon('heroicon-m-building-office'),
+
                         TextEntry::make('item.description')
                             ->label('Item')
                             ->columnSpan(2)

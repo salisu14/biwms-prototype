@@ -3,13 +3,12 @@
 namespace App\Filament\Resources\ProductionOrders\Tables;
 
 use App\Enums\ProductionOrderStatus;
+use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
-use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -31,7 +30,8 @@ class ProductionOrdersTable
                         ProductionOrderStatus::PLANNED => 'info',
                         ProductionOrderStatus::FIRM_PLANNED => 'warning',
                         ProductionOrderStatus::RELEASED => 'success',
-                        ProductionOrderStatus::FINISHED => 'success',
+                        ProductionOrderStatus::FINISHED => 'primary',
+                        ProductionOrderStatus::CANCELLED => 'danger',
                     }),
 
                 TextColumn::make('item.description')
@@ -56,56 +56,12 @@ class ProductionOrdersTable
                     ->options(ProductionOrderStatus::class),
             ])
             ->recordActions([
-                Action::make('refresh')
-                    ->label('Refresh Lines')
-                    ->icon('heroicon-m-arrow-path')
-                    ->visible(fn ($record) => $record->status->isEditable())
-                    ->action(fn ($record) => app(ProductionOrderService::class)->refresh($record)),
-
-                Action::make('release')
-                    ->label('Release')
-                    ->icon('heroicon-m-play')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->visible(fn ($record) => $record->status === ProductionOrderStatus::FIRM_PLANNED)
-                    ->action(function ($record) {
-                        try {
-                            app(ProductionOrderService::class)->changeStatus($record, ProductionOrderStatus::RELEASED, auth()->id());
-                            Notification::make()
-                                ->title('Production Order Released')
-                                ->success()
-                                ->send();
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Error')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
-
-                Action::make('finish')
-                    ->label('Finish')
-                    ->icon('heroicon-m-check-circle')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->visible(fn ($record) => $record->status === ProductionOrderStatus::RELEASED)
-                    ->action(function ($record) {
-                        try {
-                            app(ProductionOrderService::class)->finish($record, auth()->id());
-                            Notification::make()
-                                ->title('Production Order Finished')
-                                ->body('Unit cost: $'.number_format($record->fresh()->unit_cost, 2))
-                                ->success()
-                                ->send();
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Error')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
+                ProductionOrderActions::refresh(),
+                ProductionOrderActions::release(),
+                ProductionOrderActions::postOutput(),
+                ProductionOrderActions::finish(),
+                ProductionOrderActions::cancel(),
+                ProductionOrderActions::reopen(),
 
                 EditAction::make()
                     ->visible(fn ($record) => $record->status->isEditable()),

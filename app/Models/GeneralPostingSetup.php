@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/GeneralPostingSetup.php
 
 namespace App\Models;
@@ -77,9 +78,15 @@ class GeneralPostingSetup extends Model
         return $this->getAccountByType('PURCHASE_VARIANCE');
     }
 
+    public function getOverheadAppliedAccount(): ?ChartOfAccount
+    {
+        return $this->getAccountByType('OVERHEAD_APPLIED');
+    }
+
     private function getAccountByType(string $type): ?ChartOfAccount
     {
         $line = $this->lines()->where('line_type', $type)->first();
+
         return $line?->chartOfAccount;
     }
 
@@ -89,7 +96,7 @@ class GeneralPostingSetup extends Model
         $requiredTypes = ['SALES', 'COGS', 'PURCHASE', 'INVENTORY_ADJUSTMENT'];
 
         foreach ($requiredTypes as $type) {
-            if (!$this->getAccountByType($type)) {
+            if (! $this->getAccountByType($type)) {
                 return false;
             }
         }
@@ -104,7 +111,7 @@ class GeneralPostingSetup extends Model
         $missing = [];
 
         foreach ($requiredTypes as $type) {
-            if (!$this->getAccountByType($type)) {
+            if (! $this->getAccountByType($type)) {
                 $missing[] = $type;
             }
         }

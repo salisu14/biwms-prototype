@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/GlEntry.php
 
 namespace App\Models;
@@ -36,10 +37,12 @@ class GlEntry extends Model
         'item_ledger_entry_id',
         'cust_ledger_entry_id',
         'vendor_ledger_entry_id',
+        'sourceable_id',
+        'sourceable_type',
     ];
 
     protected $casts = [
-        'source_type'=> SourceType::class,
+        'source_type' => SourceType::class,
         'debit_amount' => 'decimal:2',
         'credit_amount' => 'decimal:2',
         'amount' => 'decimal:2',
@@ -59,6 +62,11 @@ class GlEntry extends Model
     public function itemLedgerEntry(): BelongsTo
     {
         return $this->belongsTo(ItemLedgerEntry::class);
+    }
+
+    public function sourceable()
+    {
+        return $this->morphTo();
     }
 
     // Is debit entry

@@ -5,6 +5,7 @@ namespace App\Models\Manufacturing;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
+use App\Models\Manufacturing\CapExProject;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
@@ -62,6 +63,7 @@ class ProductionOrder extends Model
         'shortcut_dimension_1_code',
         'shortcut_dimension_2_code',
         'dimension_set_id',
+        'capex_project_id',
 
         // Costing
         'costing_method', // STANDARD, FIFO, LIFO, AVERAGE, SPECIFIC
@@ -137,6 +139,11 @@ class ProductionOrder extends Model
         return $this->belongsTo(Routing::class);
     }
 
+    public function capexProject(): BelongsTo
+    {
+        return $this->belongsTo(CapExProject::class, 'capex_project_id');
+    }
+
     public function routingVersion(): BelongsTo
     {
         return $this->belongsTo(RoutingVersion::class, 'routing_version_id');
@@ -179,7 +186,7 @@ class ProductionOrder extends Model
 
     public function glEntries(): MorphMany
     {
-        return $this->morphMany(GlEntry::class, 'source', 'source_type', 'source_id');
+        return $this->morphMany(GlEntry::class, 'sourceable');
     }
 
     public function creator(): BelongsTo

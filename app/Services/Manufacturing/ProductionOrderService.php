@@ -3,15 +3,25 @@
 namespace App\Services\Manufacturing;
 
 use App\Enums\ItemLedgerEntryType;
+use App\Enums\LineType;
 use App\Enums\ProductionOrderStatus;
 use App\Events\ProductionOrderStatusChanged;
+use App\Models\GlEntry;
+use App\Models\InventoryPostingSetup;
+use App\Models\Item;
 use App\Models\ItemLedgerEntry;
+use App\Models\Location;
 use App\Models\Manufacturing\CapacityLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Services\PostingService;
 use Illuminate\Support\Facades\DB;
 
 class ProductionOrderService
 {
+    public function __construct(
+        protected PostingService $postingService
+    ) {}
+
     /**
      * Refresh production order (safe wrapper)
      */
@@ -128,9 +138,16 @@ class ProductionOrderService
                 $component->actual_quantity_consumed += $qty;
                 $component->actual_scrap_quantity += $scrapQty;
                 $component->save();
-            }
 
-            $this->createWipGlEntries($order, $postingDate);
+                // G/L Integration: Dr. WIP, Cr. Inventory
+                $this->createWipGlEntries(
+                    $order,
+                    $component->item,
+                    $qty * $component->item->unit_cost,
+                    $postingDate,
+                    "Consumption: {$component->item->description}"
+                );
+            }
         });
     }
 
@@ -196,6 +213,17 @@ class ProductionOrderService
         }
 
         DB::transaction(function () use ($order, $routingLineId, $routingLine, $setupTime, $runTime, $cost) {
+            $workCenter = $routingLine->workCenter;
+            $totalTime = $setupTime + $runTime;
+
+            // Calculate Indirect Cost (Overhead)
+            $indirectCost = 0;
+            if ($workCenter) {
+                $indirectCost = ($cost * ($workCenter->indirect_cost_percent / 100)) + ($workCenter->overhead_rate * $totalTime);
+            }
+
+            $totalCost = $cost + $indirectCost;
+
             CapacityLedgerEntry::create([
                 'production_order_id' => $order->id,
                 'routing_line_id' => $routingLineId,
@@ -207,10 +235,19 @@ class ProductionOrderService
                 'setup_time_unit' => $routingLine->setup_time_unit,
                 'run_time_unit' => $routingLine->run_time_unit,
                 'direct_cost' => $cost,
-                'overhead_cost' => $cost * 0.25,
-                'total_cost' => $cost * 1.25,
+                'overhead_cost' => $indirectCost,
+                'total_cost' => $totalCost,
                 'document_number' => $order->document_number,
             ]);
+
+            // G/L Integration: Dr. WIP, Cr. Direct Cost Applied, Cr. Overhead Applied
+            $this->createCapacityGlEntries(
+                $order,
+                $cost,
+                $indirectCost,
+                now(),
+                "Capacity: {$routingLine->description}"
+            );
         });
     }
 
@@ -228,30 +265,37 @@ class ProductionOrderService
                 $this->backwardFlushComponents($order, $postingDate, $userId);
             }
 
-            $totalCost = $order->total_actual_cost;
+            $totalActualCost = $order->total_actual_cost;
             $totalOutput = $order->itemLedgerEntries()
                 ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                 ->sum('quantity');
 
-            $unitCost = $totalOutput > 0 ? $totalCost / $totalOutput : 0;
+            // Determine the cost to record in Inventory
+            $inventoryUnitCost = ($order->costing_method === 'STANDARD')
+                ? $order->unit_cost
+                : ($totalOutput > 0 ? $totalActualCost / $totalOutput : 0);
 
+            $totalInventoryCost = $totalOutput * $inventoryUnitCost;
+
+            // Update Output entries with the determined cost
             $order->itemLedgerEntries()
                 ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                 ->update([
-                    'unit_cost' => $unitCost,
-                    'cost_amount_actual' => DB::raw("quantity * {$unitCost}"),
+                    'unit_cost' => $inventoryUnitCost,
+                    'cost_amount_actual' => $totalInventoryCost,
                 ]);
 
-            $this->createFinishGlEntries($order, $totalCost, $postingDate);
+            // G/L Integration:
+            // 1. Move from WIP to Inventory (at the cost we recorded in Inventory)
+            $this->createFinishGlEntries($order, $totalInventoryCost, $postingDate);
+
+            // 2. Clear remaining WIP by posting to Variance (if any)
+            $variance = $totalActualCost - $totalInventoryCost;
+            if (abs($variance) > 0.01) {
+                $this->createVarianceGlEntries($order, $variance, $postingDate);
+            }
 
             $this->changeStatus($order, ProductionOrderStatus::FINISHED, $userId);
-
-            if ($order->costing_method === 'STANDARD') {
-                $variance = $totalCost - ($order->unit_cost * $totalOutput);
-                if (abs($variance) > 0.01) {
-                    $this->createVarianceGlEntries($order, $variance, $postingDate);
-                }
-            }
         });
 
         return $order->fresh();
@@ -506,22 +550,257 @@ class ProductionOrderService
         }
     }
 
-    /**
-     * G/L Entries Logic (Placeholders)
-     */
-    protected function createWipGlEntries(ProductionOrder $order, \DateTime $postingDate): void
+    protected function createWipGlEntries(ProductionOrder $order, Item $item, float $amount, \DateTime $postingDate, string $description): void
     {
-        // Placeholder for WIP G/L entries
+        $location = Location::where('location_code', $order->location_code)->first();
+        $locationId = $location?->id;
+
+        // 1. Inventory Account (Credit) - for the component being consumed
+        $inventorySetup = InventoryPostingSetup::getFor($item->inventory_posting_group_id, $locationId);
+        if (! $inventorySetup || ! $inventorySetup->inventory_account_id) {
+            throw new \Exception("Inventory account missing for component {$item->item_number}");
+        }
+
+        // 2. WIP Account (Debit) - for the parent production order item
+        $parentSetup = InventoryPostingSetup::getFor($order->inventory_posting_group_id, $locationId);
+        if (! $parentSetup || ! $parentSetup->wip_account_id) {
+            throw new \Exception("WIP account missing for production order {$order->document_number}");
+        }
+
+        $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
+
+        // WIP Entry (Debit)
+        GlEntry::create([
+            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+            'transaction_number' => $transactionNumber,
+            'chart_of_account_id' => $parentSetup->wip_account_id,
+            'debit_amount' => $amount,
+            'credit_amount' => 0,
+            'amount' => $amount,
+            'posting_date' => $postingDate,
+            'document_date' => $postingDate,
+            'document_number' => $order->document_number,
+            'description' => $description,
+            'sourceable_type' => ProductionOrder::class,
+            'sourceable_id' => $order->id,
+            'user_id' => auth()->id(),
+        ]);
+
+        // Inventory Entry (Credit)
+        GlEntry::create([
+            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+            'transaction_number' => $transactionNumber,
+            'chart_of_account_id' => $inventorySetup->inventory_account_id,
+            'debit_amount' => 0,
+            'credit_amount' => $amount,
+            'amount' => -$amount,
+            'posting_date' => $postingDate,
+            'document_date' => $postingDate,
+            'document_number' => $order->document_number,
+            'description' => $description,
+            'sourceable_type' => ProductionOrder::class,
+            'sourceable_id' => $order->id,
+            'user_id' => auth()->id(),
+        ]);
     }
 
-    protected function createFinishGlEntries(ProductionOrder $order, float $totalCost, \DateTime $postingDate): void
+    protected function createCapacityGlEntries(ProductionOrder $order, float $directCost, float $indirectCost, \DateTime $postingDate, string $description): void
     {
-        // Placeholder for Finished Goods G/L entries
+        $location = Location::where('location_code', $order->location_code)->first();
+        $locationId = $location?->id;
+
+        // 1. WIP Account (Debit)
+        $parentSetup = InventoryPostingSetup::getFor($order->inventory_posting_group_id, $locationId);
+        if (! $parentSetup || ! $parentSetup->wip_account_id) {
+            throw new \Exception("WIP account missing for production order {$order->document_number}");
+        }
+
+        // 2. Direct Cost Applied (Credit)
+        $genSetup = $order->getPostingSetup();
+        if (! $genSetup) {
+            throw new \Exception("General Posting Setup missing for item {$order->item->item_number}");
+        }
+
+        $appliedAccount = $genSetup->getDirectCostAppliedAccount();
+        if (! $appliedAccount) {
+            throw new \Exception('Direct Cost Applied account missing in General Posting Setup');
+        }
+
+        $overheadAccount = $genSetup->getOverheadAppliedAccount();
+
+        $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
+        $totalCost = $directCost + $indirectCost;
+
+        // WIP Entry (Debit)
+        GlEntry::create([
+            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+            'transaction_number' => $transactionNumber,
+            'chart_of_account_id' => $parentSetup->wip_account_id,
+            'debit_amount' => $totalCost,
+            'credit_amount' => 0,
+            'amount' => $totalCost,
+            'posting_date' => $postingDate,
+            'document_date' => $postingDate,
+            'document_number' => $order->document_number,
+            'description' => $description,
+            'sourceable_type' => ProductionOrder::class,
+            'sourceable_id' => $order->id,
+            'user_id' => auth()->id(),
+        ]);
+
+        // Direct Applied Entry (Credit)
+        GlEntry::create([
+            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+            'transaction_number' => $transactionNumber,
+            'chart_of_account_id' => $appliedAccount->id,
+            'debit_amount' => 0,
+            'credit_amount' => $directCost,
+            'amount' => -$directCost,
+            'posting_date' => $postingDate,
+            'document_date' => $postingDate,
+            'document_number' => $order->document_number,
+            'description' => $description.' (Direct)',
+            'sourceable_type' => ProductionOrder::class,
+            'sourceable_id' => $order->id,
+            'user_id' => auth()->id(),
+        ]);
+
+        // Overhead Applied Entry (Credit)
+        if ($indirectCost > 0 && $overheadAccount) {
+            GlEntry::create([
+                'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+                'transaction_number' => $transactionNumber,
+                'chart_of_account_id' => $overheadAccount->id,
+                'debit_amount' => 0,
+                'credit_amount' => $indirectCost,
+                'amount' => -$indirectCost,
+                'posting_date' => $postingDate,
+                'document_date' => $postingDate,
+                'document_number' => $order->document_number,
+                'description' => $description.' (Overhead)',
+                'sourceable_type' => ProductionOrder::class,
+                'sourceable_id' => $order->id,
+                'user_id' => auth()->id(),
+            ]);
+        }
+    }
+
+    protected function createFinishGlEntries(ProductionOrder $order, float $totalWip, \DateTime $postingDate): void
+    {
+        $location = Location::where('location_code', $order->location_code)->first();
+        $locationId = $location?->id;
+
+        // 1. Inventory Account (Debit) - for the finished good
+        $parentSetup = InventoryPostingSetup::getFor($order->inventory_posting_group_id, $locationId);
+        if (! $parentSetup || ! $parentSetup->inventory_account_id) {
+            throw new \Exception("Inventory account missing for finished item {$order->item->item_number}");
+        }
+
+        if (! $parentSetup->wip_account_id) {
+            throw new \Exception("WIP account missing for finished item {$order->item->item_number}");
+        }
+
+        $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
+
+        // Inventory Entry (Debit)
+        GlEntry::create([
+            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+            'transaction_number' => $transactionNumber,
+            'chart_of_account_id' => $parentSetup->inventory_account_id,
+            'debit_amount' => $totalWip,
+            'credit_amount' => 0,
+            'amount' => $totalWip,
+            'posting_date' => $postingDate,
+            'document_date' => $postingDate,
+            'document_number' => $order->document_number,
+            'description' => "Finish Production: {$order->document_number}",
+            'sourceable_type' => ProductionOrder::class,
+            'sourceable_id' => $order->id,
+            'user_id' => auth()->id(),
+        ]);
+
+        // WIP Entry (Credit)
+        GlEntry::create([
+            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+            'transaction_number' => $transactionNumber,
+            'chart_of_account_id' => $parentSetup->wip_account_id,
+            'debit_amount' => 0,
+            'credit_amount' => $totalWip,
+            'amount' => -$totalWip,
+            'posting_date' => $postingDate,
+            'document_date' => $postingDate,
+            'document_number' => $order->document_number,
+            'description' => "Finish Production: {$order->document_number}",
+            'sourceable_type' => ProductionOrder::class,
+            'sourceable_id' => $order->id,
+            'user_id' => auth()->id(),
+        ]);
     }
 
     protected function createVarianceGlEntries(ProductionOrder $order, float $variance, \DateTime $postingDate): void
     {
-        // Placeholder for Variance G/L entries
+        if ($variance == 0) {
+            return;
+        }
+
+        $location = Location::where('location_code', $order->location_code)->first();
+        $locationId = $location?->id;
+
+        // 1. WIP Account (to clear remaining WIP)
+        $parentSetup = InventoryPostingSetup::getFor($order->inventory_posting_group_id, $locationId);
+        if (! $parentSetup || ! $parentSetup->wip_account_id) {
+            throw new \Exception('WIP account missing for production order variance');
+        }
+
+        // 2. Production Variance Account
+        $genSetup = $order->getPostingSetup();
+        $varianceAccountLine = $genSetup?->lines()->where('line_type', LineType::PRODUCTION_VARIANCE)->first();
+        if (! $varianceAccountLine) {
+            // Fallback to COGS or Adjustment if no specific variance account
+            $varianceAccount = $genSetup?->getInventoryAdjustmentAccount();
+        } else {
+            $varianceAccount = $varianceAccountLine->chartOfAccount;
+        }
+
+        if (! $varianceAccount) {
+            throw new \Exception('Production Variance account missing in General Posting Setup');
+        }
+
+        $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
+
+        // WIP Adjustment
+        GlEntry::create([
+            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+            'transaction_number' => $transactionNumber,
+            'chart_of_account_id' => $parentSetup->wip_account_id,
+            'debit_amount' => $variance < 0 ? abs($variance) : 0,
+            'credit_amount' => $variance > 0 ? $variance : 0,
+            'amount' => -$variance,
+            'posting_date' => $postingDate,
+            'document_date' => $postingDate,
+            'document_number' => $order->document_number,
+            'description' => "Production Variance: {$order->document_number}",
+            'sourceable_type' => ProductionOrder::class,
+            'sourceable_id' => $order->id,
+            'user_id' => auth()->id(),
+        ]);
+
+        // Variance Entry
+        GlEntry::create([
+            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
+            'transaction_number' => $transactionNumber,
+            'chart_of_account_id' => $varianceAccount->id,
+            'debit_amount' => $variance > 0 ? $variance : 0,
+            'credit_amount' => $variance < 0 ? abs($variance) : 0,
+            'amount' => $variance,
+            'posting_date' => $postingDate,
+            'document_date' => $postingDate,
+            'document_number' => $order->document_number,
+            'description' => "Production Variance: {$order->document_number}",
+            'sourceable_type' => ProductionOrder::class,
+            'sourceable_id' => $order->id,
+            'user_id' => auth()->id(),
+        ]);
     }
 
     /**

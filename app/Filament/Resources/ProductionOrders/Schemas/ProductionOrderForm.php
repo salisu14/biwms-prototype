@@ -53,6 +53,13 @@ class ProductionOrderForm
                             ->label('Source No.')
                             ->maxLength(50),
 
+                        Select::make('capex_project_id')
+                            ->label('CapEx Project')
+                            ->relationship('capexProject', 'project_number')
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('None (Operational)'),
+
                         Select::make('item_id')
                             ->label('Item')
                             ->relationship('item', 'description')

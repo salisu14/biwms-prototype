@@ -73,8 +73,6 @@ class AdminPanelProvider extends PanelProvider
                                         request()->is('admin/customer-posting-groups*') ||
                                         request()->is('admin/vat-posting-groups*')),
 
-
-
                                 // Posting Setups
                                 NavigationItem::make('Posting Setups')
                                     ->icon('heroicon-o-adjustments-horizontal')
@@ -307,6 +305,16 @@ class AdminPanelProvider extends PanelProvider
                                 NavigationItem::make('Production Bom Version')
                                     ->icon('heroicon-o-list-bullet')
                                     ->url('/admin/production-bom-versions'),
+
+                                NavigationItem::make('Production Performance')
+                                    ->icon('heroicon-o-presentation-chart-line')
+                                    ->url('/admin/production-performance-report')
+                                    ->isActiveWhen(fn () => request()->is('admin/production-performance-report*')),
+
+                                NavigationItem::make('WIP Valuation')
+                                    ->icon('heroicon-o-currency-dollar')
+                                    ->url('/admin/wip-valuation-report')
+                                    ->isActiveWhen(fn () => request()->is('admin/wip-valuation-report*')),
                             ])
                     )
                     // Setup & Administration

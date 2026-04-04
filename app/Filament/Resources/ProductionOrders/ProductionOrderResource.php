@@ -42,6 +42,8 @@ class ProductionOrderResource extends Resource
         return [
             RelationManagers\ProductionOrderLineRelationManager::class,
             RelationManagers\ComponentsRelationManager::class,
+            RelationManagers\RoutingRelationManager::class,
+            RelationManagers\GlEntriesRelationManager::class,
         ];
     }
 
