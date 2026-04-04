@@ -4,8 +4,8 @@ namespace App\Services\Finance;
 
 use App\Models\ChartOfAccount;
 use App\Models\GlEntry;
-use Illuminate\Support\Facades\DB;
 use DomainException;
+use Illuminate\Support\Facades\DB;
 
 class GeneralLedgerService
 {
@@ -31,7 +31,12 @@ class GeneralLedgerService
                     'amount' => $line['debit'] - $line['credit'],
                     'posting_date' => $meta['posting_date'] ?? now(),
                     'document_number' => $meta['document_number'] ?? null,
-                    'description' => $line['description'] ?? null,
+                    'document_date' => $meta['document_date'] ?? null,
+                    'source_type' => $meta['source_type'] ?? null,
+                    'source_number' => $meta['source_number'] ?? null,
+                    'document_type' => $meta['document_type'] ?? null,
+                    'description' => $line['description'] ?? $meta['description'] ?? null,
+                    'dimensions' => array_merge($meta['dimensions'] ?? [], $line['dimensions'] ?? []),
                     'user_id' => auth()->id(),
                 ]);
             }
@@ -49,39 +54,39 @@ class GeneralLedgerService
             ->get();
     }
 
-//    public function post(array $entries, string $reference, string $description): void
-//    {
-//        DB::transaction(function () use ($entries, $reference, $description) {
-//
-//            $totalDebit = 0;
-//            $totalCredit = 0;
-//
-//            foreach ($entries as $entry) {
-//                $totalDebit += $entry['debit'] ?? 0;
-//                $totalCredit += $entry['credit'] ?? 0;
-//            }
-//
-//            // 🚨 CRITICAL: enforce double-entry balance
-//            if (round($totalDebit, 2) !== round($totalCredit, 2)) {
-//                throw new DomainException('GL not balanced: Debit != Credit');
-//            }
-//
-//            $transactionNumber = $this->generateTransactionNumber();
-//
-//            foreach ($entries as $entry) {
-//                DB::table('gl_entries')->insert([
-//                    'transaction_number' => $transactionNumber,
-//                    'account_id' => $entry['account_id'],
-//                    'debit' => $entry['debit'] ?? 0,
-//                    'credit' => $entry['credit'] ?? 0,
-//                    'reference' => $reference,
-//                    'description' => $description,
-//                    'created_at' => now(),
-//                    'updated_at' => now(),
-//                ]);
-//            }
-//        });
-//    }
+    //    public function post(array $entries, string $reference, string $description): void
+    //    {
+    //        DB::transaction(function () use ($entries, $reference, $description) {
+    //
+    //            $totalDebit = 0;
+    //            $totalCredit = 0;
+    //
+    //            foreach ($entries as $entry) {
+    //                $totalDebit += $entry['debit'] ?? 0;
+    //                $totalCredit += $entry['credit'] ?? 0;
+    //            }
+    //
+    //            // 🚨 CRITICAL: enforce double-entry balance
+    //            if (round($totalDebit, 2) !== round($totalCredit, 2)) {
+    //                throw new DomainException('GL not balanced: Debit != Credit');
+    //            }
+    //
+    //            $transactionNumber = $this->generateTransactionNumber();
+    //
+    //            foreach ($entries as $entry) {
+    //                DB::table('gl_entries')->insert([
+    //                    'transaction_number' => $transactionNumber,
+    //                    'account_id' => $entry['account_id'],
+    //                    'debit' => $entry['debit'] ?? 0,
+    //                    'credit' => $entry['credit'] ?? 0,
+    //                    'reference' => $reference,
+    //                    'description' => $description,
+    //                    'created_at' => now(),
+    //                    'updated_at' => now(),
+    //                ]);
+    //            }
+    //        });
+    //    }
 
     protected function generateTransactionNumber(): int
     {

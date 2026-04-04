@@ -4,11 +4,11 @@ namespace App\Services\Manufacturing;
 
 use App\Models\Manufacturing\CapExProject;
 use App\Models\Manufacturing\CapExProjectLine;
-use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\FixedAsset;
-use Illuminate\Support\Facades\DB;
-use DomainException;
+use App\Models\Manufacturing\ProductionOrder;
 use App\Services\Finance\GeneralLedgerService;
+use DomainException;
+use Illuminate\Support\Facades\DB;
 
 class CapExProjectService
 {
@@ -132,7 +132,7 @@ class CapExProjectService
     {
         $project = CapExProject::findOrFail($projectId);
 
-        if (!in_array($project->status, ['IN_PROGRESS'])) {
+        if (! in_array($project->status, ['IN_PROGRESS'])) {
             throw new DomainException('Project must be active to capture costs.');
         }
 
@@ -145,7 +145,7 @@ class CapExProjectService
             $captureOverhead = $options['capture_overhead'] ?? $project->capitalize_overhead;
 
             foreach ($order->components as $component) {
-                if (!$captureMaterials) {
+                if (! $captureMaterials) {
                     continue;
                 }
 
@@ -153,6 +153,9 @@ class CapExProjectService
 
                 $this->createLineIfEligible($project, $cost, 'MATERIAL', [
                     'description' => "PO {$order->document_number} - {$component->item->description}",
+                    'source_document_type' => 'PRODUCTION_ORDER',
+                    'source_document_id' => $order->id,
+                    'source_document_no' => $order->document_number,
                     'production_order_id' => $order->id,
                     'production_order_component_id' => $component->id,
                 ]);
@@ -162,12 +165,20 @@ class CapExProjectService
                 foreach ($routingLine->capacityEntries as $entry) {
                     if ($captureLabor) {
                         $this->createLineIfEligible($project, $entry->direct_cost, 'LABOR', [
+                            'source_document_type' => 'PRODUCTION_ORDER',
+                            'source_document_id' => $order->id,
+                            'source_document_no' => $order->document_number,
+                            'production_order_id' => $order->id,
                             'capacity_ledger_entry_id' => $entry->id,
                         ]);
                     }
 
                     if ($captureOverhead) {
                         $this->createLineIfEligible($project, $entry->overhead_cost, 'OVERHEAD', [
+                            'source_document_type' => 'PRODUCTION_ORDER',
+                            'source_document_id' => $order->id,
+                            'source_document_no' => $order->document_number,
+                            'production_order_id' => $order->id,
                             'capacity_ledger_entry_id' => $entry->id,
                         ]);
                     }
@@ -217,6 +228,20 @@ class CapExProjectService
         });
     }
 
+    public function capitalizeInterest(CapExProject $project, float $amount, \DateTime $periodEnd): void
+    {
+        if ($project->status !== 'IN_PROGRESS') {
+            throw new DomainException('Interest can only be capitalized during active construction.');
+        }
+
+        $this->createLineIfEligible($project, $amount, 'INTEREST', [
+            'description' => "Capitalized interest - {$periodEnd->format('M Y')}",
+            'source_document_date' => $periodEnd,
+        ]);
+
+        $this->recalculateProjectTotals($project);
+    }
+
     /*
     |--------------------------------------------------------------------------
     | EXPENSE COSTS
@@ -260,10 +285,12 @@ class CapExProjectService
                             'credit' => $line->actual_amount,
                         ],
                     ],
-                    reference: $project->project_number,
-                    description: "CapEx Expense - Line {$line->id}",
-                    dimensions: [
-                        'project_id' => $project->id,
+                    [
+                        'document_number' => $project->project_number,
+                        'description' => "CapEx Expense - Line {$line->id}",
+                        'dimensions' => [
+                            'project_id' => $project->id,
+                        ],
                     ]
                 );
             }
@@ -311,7 +338,7 @@ class CapExProjectService
 
     protected function validateBeforeCapitalization(CapExProject $project): void
     {
-        if (!in_array($project->status, ['IN_PROGRESS', 'ON_HOLD'])) {
+        if (! in_array($project->status, ['IN_PROGRESS', 'ON_HOLD'])) {
             throw new DomainException('Project must be active before capitalization.');
         }
 
@@ -325,12 +352,16 @@ class CapExProjectService
         $asset = FixedAsset::create([
             'code' => $data['asset_code'] ?? $project->project_number,
             'description' => $data['description'] ?? $project->description,
+            'asset_type' => $data['asset_type'] ?? 'MACHINERY',
             'capex_project_id' => $project->id,
             'acquisition_date' => now(),
             'acquisition_cost' => $project->actual_amount,
             'net_book_value' => $project->actual_amount,
             'useful_life_years' => $data['useful_life_years'] ?? 10,
+            'depreciation_method' => $data['depreciation_method'] ?? 'STRAIGHT_LINE',
             'salvage_value' => $data['salvage_value'] ?? 0,
+            'annual_capacity_minutes' => $data['annual_capacity_minutes'] ?? null,
+            'efficiency_percent' => $data['efficiency_percent'] ?? 100,
         ]);
 
         $asset->annual_depreciation_amount =
@@ -338,17 +369,24 @@ class CapExProjectService
 
         $asset->save();
 
+        if (! empty($data['work_center_id'])) {
+            $asset->workCenters()->attach($data['work_center_id'], [
+                'allocation_percentage' => 100,
+                'installation_date' => now(),
+            ]);
+        }
+
         return $asset;
     }
 
     protected function generateProjectNumber(): string
     {
-        return 'CPX-' . now()->format('Y') . '-' . str_pad(
-                CapExProject::whereYear('created_at', now()->year)->count() + 1,
-                4,
-                '0',
-                STR_PAD_LEFT
-            );
+        return 'CPX-'.now()->format('Y').'-'.str_pad(
+            CapExProject::whereYear('created_at', now()->year)->count() + 1,
+            4,
+            '0',
+            STR_PAD_LEFT
+        );
     }
 
     protected function getNextLineNumber(CapExProject $project): int
@@ -358,7 +396,7 @@ class CapExProjectService
 
     protected function isEligibleForCapitalization(string $type): bool
     {
-        return in_array($type, ['MATERIAL', 'LABOR', 'OVERHEAD', 'INTEREST']);
+        return in_array($type, ['MATERIAL', 'LABOR', 'OVERHEAD', 'INTEREST', 'EXTERNAL_SERVICE', 'TOOLING']);
     }
 
     protected function createCapitalizationJournalEntries(
@@ -384,10 +422,12 @@ class CapExProjectService
                     'credit' => $amount,
                 ],
             ],
-            reference: $asset->code,
-            description: "CapEx Capitalization - {$project->project_number}",
-            dimensions: [
-                'project_id' => $project->id,
+            [
+                'document_number' => $asset->code,
+                'description' => "CapEx Capitalization - {$project->project_number}",
+                'dimensions' => [
+                    'project_id' => $project->id,
+                ],
             ]
         );
     }
@@ -416,10 +456,12 @@ class CapExProjectService
                     'credit' => $amount,
                 ],
             ],
-            reference: $project->project_number,
-            description: "WIP Cost Capture",
-            dimensions: [
-                'project_id' => $project->id,
+            [
+                'document_number' => $project->project_number,
+                'description' => 'WIP Cost Capture',
+                'dimensions' => [
+                    'project_id' => $project->id,
+                ],
             ]
         );
     }
