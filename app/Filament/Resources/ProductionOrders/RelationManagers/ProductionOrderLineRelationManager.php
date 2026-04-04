@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ProductionOrders\RelationManagers;
 
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
+use App\Models\Item;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -32,11 +33,12 @@ use Filament\Tables\Table;
 class ProductionOrderLineRelationManager extends RelationManager
 {
     protected static string $relationship = 'lines';
+
     protected static ?string $relatedResource = ProductionOrderResource::class;
 
     protected static ?string $recordTitleAttribute = 'description';
 
-    protected static ?string $title = 'Material BOM (Lines)';
+    protected static ?string $title = 'Product Order Lines';
 
     public function form(Schema $schema): Schema
     {
@@ -53,9 +55,11 @@ class ProductionOrderLineRelationManager extends RelationManager
                             ->required()
                             ->live()
                             ->afterStateUpdated(function ($state, Set $set) {
-                                if (!$state) return;
+                                if (! $state) {
+                                    return;
+                                }
 
-                                $item = \App\Models\Item::find($state);
+                                $item = Item::find($state);
                                 if ($item) {
                                     $set('description', $item->description);
                                     $set('unit_of_measure_code', $item->base_unit_of_measure);
@@ -88,8 +92,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                             ->default(1)
                             ->required()
                             ->live()
-                            ->afterStateUpdated(fn ($state, Set $set, Get $get) =>
-                            $set('cost_amount', $state * ($get('unit_cost') ?? 0))
+                            ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', $state * ($get('unit_cost') ?? 0))
                             ),
 
                         TextInput::make('unit_of_measure_code')
@@ -100,8 +103,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                             ->numeric()
                             ->prefix('$')
                             ->live()
-                            ->afterStateUpdated(fn ($state, Set $set, Get $get) =>
-                            $set('cost_amount', $state * ($get('quantity') ?? 0))
+                            ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', $state * ($get('quantity') ?? 0))
                             ),
                     ]),
 
@@ -147,7 +149,7 @@ class ProductionOrderLineRelationManager extends RelationManager
 
                 TextColumn::make('description')
                     ->weight(FontWeight::Bold)
-                    ->description(fn ($record) => "BOM: " . ($record->productionBom?->description ?? 'None'))
+                    ->description(fn ($record) => 'BOM: '.($record->productionBom?->description ?? 'None'))
                     ->searchable(),
 
                 TextColumn::make('quantity')
@@ -157,7 +159,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                 TextColumn::make('due_date')
                     ->date()
                     ->sortable()
-                    ->color(fn ($record) => $record->due_date->isPast() && !$record->finished ? 'danger' : 'gray'),
+                    ->color(fn ($record) => $record->due_date->isPast() && ! $record->finished ? 'danger' : 'gray'),
 
                 TextColumn::make('location_code')
                     ->label('Location')
@@ -179,6 +181,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                 CreateAction::make()
                     ->mutateDataUsing(function (array $data): array {
                         $data['created_by'] = auth()->id();
+
                         return $data;
                     }),
             ])
@@ -187,6 +190,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                     EditAction::make()
                         ->mutateDataUsing(function (array $data): array {
                             $data['last_modified_by'] = auth()->id();
+
                             return $data;
                         }),
 

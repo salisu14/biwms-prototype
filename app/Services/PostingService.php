@@ -1,4 +1,5 @@
 <?php
+
 // app/Services/PostingService.php
 
 namespace App\Services;
@@ -6,7 +7,6 @@ namespace App\Services;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
-use App\Models\GeneralPostingSetup;
 use App\Models\GlEntry;
 use App\Models\Item;
 use App\Models\Vendor;
@@ -35,7 +35,7 @@ class PostingService
     ): array {
         $setup = $customer->getPostingSetupFor($item);
 
-        if (!$setup) {
+        if (! $setup) {
             throw new \Exception("General Posting Setup missing for customer {$customer->customer_number} and item {$item->item_number}");
         }
 
@@ -122,7 +122,7 @@ class PostingService
     ): array {
         $setup = $vendor->getPostingSetupFor($item);
 
-        if (!$setup) {
+        if (! $setup) {
             throw new \Exception("General Posting Setup missing for vendor {$vendor->vendor_number} and item {$item->item_number}");
         }
 
@@ -269,7 +269,7 @@ class PostingService
                 'document_type' => 'PAYMENT_RECEIPT',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
-                'description' => "Early payment discount",
+                'description' => 'Early payment discount',
             ]);
         }
 
@@ -339,7 +339,7 @@ class PostingService
                 'document_type' => 'PAYMENT_DISBURSEMENT',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
-                'description' => "Early payment discount received",
+                'description' => 'Early payment discount received',
             ]);
         }
 
@@ -358,7 +358,7 @@ class PostingService
     ): array {
         $setup = $vendor->getPostingSetupFor($item);
 
-        if (!$setup) {
+        if (! $setup) {
             throw new \Exception("Posting setup missing for vendor {$vendor->vendor_number} and item {$item->item_number}");
         }
 
@@ -368,7 +368,7 @@ class PostingService
         if ($item->isInventoryItem()) {
             $inventoryAccount = $item->getInventoryAccount();
 
-            if (!$inventoryAccount) {
+            if (! $inventoryAccount) {
                 throw new \Exception("Inventory account missing for item {$item->item_number}");
             }
 
@@ -422,5 +422,51 @@ class PostingService
         ]);
 
         return $entries;
+    }
+
+    public function post(array $lines, array $dimensions = [], $source = null)
+    {
+        return DB::transaction(function () use ($lines, $dimensions, $source) {
+
+            $entries = [];
+
+            foreach ($lines as $line) {
+                $entry = GlEntry::create([
+                    'account_id' => $line['account_id'],
+                    'debit' => $line['debit'] ?? 0,
+                    'credit' => $line['credit'] ?? 0,
+                    'posting_date' => now(),
+                    'reference' => $line['reference'] ?? null,
+                    'source_type' => $source ? get_class($source) : null,
+                    'source_id' => $source?->id,
+                ]);
+
+                $entries[] = $entry;
+
+                // Attach dimensions
+                foreach ($dimensions as $dim) {
+                    $entry->dimensions()->attach([
+                        $dim['dimension_id'] => [
+                            'dimension_value_id' => $dim['dimension_value_id'],
+                        ],
+                    ]);
+                }
+            }
+
+            // Validate double entry
+            $this->validateBalanced($entries);
+
+            return $entries;
+        });
+    }
+
+    private function validateBalanced($entries)
+    {
+        $totalDebit = collect($entries)->sum('debit');
+        $totalCredit = collect($entries)->sum('credit');
+
+        if ($totalDebit !== $totalCredit) {
+            throw new \Exception('Journal is not balanced');
+        }
     }
 }

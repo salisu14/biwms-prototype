@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\SalesOrderStatus;
+use App\Enums\SalesOrderType;
+use App\Enums\ShippingMethod;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -19,12 +22,9 @@ return new class extends Migration
             $table->string('external_document_number', 50)->nullable(); // Customer PO number
 
             // Order Type
-            $table->enum('order_type', [
-                'SALES_ORDER',
-                'RETURN_ORDER',
-                'REPLACEMENT',
-                'CONTRACT',
-            ])->default('SALES_ORDER');
+
+            $table->enum('order_type', array_column(SalesOrderType::cases(), 'value'))
+                ->default('SALES_ORDER');
 
             // Customer Information
             $table->foreignId('customer_id')->constrained('customers');
@@ -53,13 +53,9 @@ return new class extends Migration
             // Shipping
             $table->string('shipping_agent_code', 20)->nullable();
             $table->string('shipping_agent_service_code', 20)->nullable();
-            $table->enum('shipping_method', [
-                'GROUND',
-                'EXPRESS',
-                'OVERNIGHT',
-                'PICKUP',
-                'FREIGHT',
-            ])->nullable();
+
+            $table->enum('shipping_method', array_column(ShippingMethod::cases(), 'value'))
+                ->nullable();
 
             // Dates
             $table->date('order_date');
@@ -85,20 +81,8 @@ return new class extends Migration
             $table->string('currency_code', 3)->default('USD');
             $table->decimal('currency_factor', 15, 6)->default(1);
 
-            // Status
-            $table->enum('status', [
-                'DRAFT',
-                'PENDING_APPROVAL',
-                'APPROVED',
-                'RELEASED',
-                'PICKING',
-                'PACKED',
-                'SHIPPED',
-                'INVOICED',
-                'PARTIALLY_INVOICED',
-                'CLOSED',
-                'CANCELLED',
-            ])->default('DRAFT');
+            $table->enum('status', array_column(SalesOrderStatus::cases(), 'value'))
+                ->default('DRAFT');
 
             // Tracking Progress
             $table->decimal('quantity_shipped', 15, 4)->default(0);
