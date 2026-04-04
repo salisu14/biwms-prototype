@@ -4,6 +4,8 @@ namespace App\Filament\Resources\Customers\Schemas;
 
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class CustomerInfolist
@@ -12,53 +14,57 @@ class CustomerInfolist
     {
         return $schema
             ->components([
-                TextEntry::make('customer_number'),
-                TextEntry::make('name'),
-                TextEntry::make('address')
-                    ->placeholder('-')
-                    ->columnSpanFull(),
-                TextEntry::make('email')
-                    ->label('Email address')
-                    ->placeholder('-'),
-                TextEntry::make('phone')
-                    ->placeholder('-'),
-                TextEntry::make('generalBusinessPostingGroup.id')
-                    ->label('General business posting group'),
-                TextEntry::make('customerPostingGroup.id')
-                    ->label('Customer posting group'),
-                TextEntry::make('vat_bus_posting_group')
-                    ->placeholder('-'),
-                TextEntry::make('location.name')
-                    ->label('Location')
-                    ->placeholder('-'),
-                TextEntry::make('shipping_agent_code')
-                    ->placeholder('-'),
-                TextEntry::make('payment_terms_code')
-                    ->placeholder('-'),
-                TextEntry::make('credit_limit')
-                    ->numeric()
-                    ->placeholder('-'),
-                IconEntry::make('blocked')
-                    ->boolean(),
-                TextEntry::make('blocked_reason'),
-                TextEntry::make('pricing_group_id')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('price_list_code')
-                    ->placeholder('-'),
-                IconEntry::make('allow_discounts')
-                    ->boolean(),
-                TextEntry::make('maximum_discount_percent')
-                    ->numeric()
-                    ->placeholder('-'),
-                IconEntry::make('price_includes_vat')
-                    ->boolean(),
-                TextEntry::make('created_at')
-                    ->dateTime()
-                    ->placeholder('-'),
-                TextEntry::make('updated_at')
-                    ->dateTime()
-                    ->placeholder('-'),
+                Grid::make(3)->schema([
+                    Section::make('Customer Profile')
+                        ->schema([
+                            TextEntry::make('customer_number')->label('Account #')->weight('bold'),
+                            TextEntry::make('name')->size('lg')->weight('bold'),
+                            TextEntry::make('email')->icon('heroicon-m-envelope')->copyable(),
+                            TextEntry::make('phone')->icon('heroicon-m-phone'),
+                            TextEntry::make('address')->columnSpanFull(),
+                        ])->columnSpan(2)->columns(2),
+
+                    Section::make('Financial Status')
+                        ->schema([
+                            TextEntry::make('balance')
+                                ->money()
+                                ->weight('bold')
+                                ->color(fn ($record) => $record->isOverCreditLimit() ? 'danger' : 'success'),
+                            TextEntry::make('open_balance')
+                                ->label('Open Balance')
+                                ->money(),
+                            TextEntry::make('overdue_balance')
+                                ->label('Overdue')
+                                ->money()
+                                ->color('danger'),
+                            TextEntry::make('available_credit')
+                                ->label('Available Credit')
+                                ->money()
+                                ->placeholder('Unlimited'),
+                        ])->columnSpan(1),
+                ]),
+
+                Grid::make(3)->schema([
+                    Section::make('Account Setup')
+                        ->schema([
+                            TextEntry::make('generalBusinessPostingGroup.id')->label('Gen. Bus. Posting'),
+                            TextEntry::make('customerPostingGroup.id')->label('Customer Posting'),
+                            TextEntry::make('vat_bus_posting_group')->label('VAT Group'),
+                            TextEntry::make('payment_terms_code')->label('Payment Terms'),
+                        ])->columnSpan(2)->columns(2),
+
+                    Section::make('Status Details')
+                        ->schema([
+                            IconEntry::make('blocked')
+                                ->boolean()
+                                ->label('Blocked'),
+                            TextEntry::make('blocked_reason')
+                                ->badge()
+                                ->visible(fn ($record) => $record->blocked)
+                                ->color('danger'),
+                            TextEntry::make('location.name')->label('Preferred Location'),
+                        ])->columnSpan(1),
+                ]),
             ]);
     }
 }

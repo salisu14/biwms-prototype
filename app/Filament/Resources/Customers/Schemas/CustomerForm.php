@@ -6,6 +6,8 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class CustomerForm
@@ -14,44 +16,86 @@ class CustomerForm
     {
         return $schema
             ->components([
-                TextInput::make('customer_number')
-                    ->required(),
-                TextInput::make('name')
-                    ->required(),
-                Textarea::make('address')
-                    ->columnSpanFull(),
-                TextInput::make('email')
-                    ->label('Email address')
-                    ->email(),
-                TextInput::make('phone')
-                    ->tel(),
-                Select::make('general_business_posting_group_id')
-                    ->relationship('generalBusinessPostingGroup', 'id')
-                    ->required(),
-                Select::make('customer_posting_group_id')
-                    ->relationship('customerPostingGroup', 'id')
-                    ->required(),
-                TextInput::make('vat_bus_posting_group'),
-                Select::make('location_id')
-                    ->relationship('location', 'name'),
-                TextInput::make('shipping_agent_code'),
-                TextInput::make('payment_terms_code'),
-                TextInput::make('credit_limit')
-                    ->numeric(),
-                Toggle::make('blocked')
-                    ->required(),
-                TextInput::make('blocked_reason')
-                    ->required()
-                    ->default('NONE'),
-                TextInput::make('pricing_group_id')
-                    ->numeric(),
-                TextInput::make('price_list_code'),
-                Toggle::make('allow_discounts')
-                    ->required(),
-                TextInput::make('maximum_discount_percent')
-                    ->numeric(),
-                Toggle::make('price_includes_vat')
-                    ->required(),
+                Grid::make(3)
+                    ->schema([
+                        Section::make('General Information')
+                            ->schema([
+                                TextInput::make('customer_number')
+                                    ->label('Customer No.')
+                                    ->required()
+                                    ->unique(ignoreRecord: true),
+                                TextInput::make('name')
+                                    ->required()
+                                    ->maxLength(255),
+                                Grid::make(2)->schema([
+                                    TextInput::make('email')
+                                        ->email()
+                                        ->prefixIcon('heroicon-m-envelope'),
+                                    TextInput::make('phone')
+                                        ->tel()
+                                        ->prefixIcon('heroicon-m-phone'),
+                                ]),
+                                Textarea::make('address')
+                                    ->rows(3),
+                            ])->columnSpan(2),
+
+                        Section::make('Status & Credit')
+                            ->schema([
+                                Toggle::make('blocked')
+                                    ->live(),
+//                                    ->color('danger'),
+
+                                Select::make('blocked_reason')
+                                    ->options([
+                                        'NONE' => 'None',
+                                        'SHIP' => 'Shipping Blocked',
+                                        'INVOICE' => 'Invoice Blocked',
+                                        'ALL' => 'Fully Blocked',
+                                    ])
+                                    ->visible(fn ($get) => $get('blocked'))
+                                    ->required(fn ($get) => $get('blocked')),
+                                TextInput::make('credit_limit')
+                                    ->numeric()
+                                    ->prefix('$')
+                                    ->default(0),
+                                Select::make('location_id')
+                                    ->relationship('location', 'name')
+                                    ->searchable()
+                                    ->preload(),
+                            ])->columnSpan(1),
+                    ]),
+
+                Section::make('Posting Setup')
+                    ->description('Define how transactions are recorded in the general ledger')
+                    ->columns(3)
+                    ->schema([
+                        Select::make('general_business_posting_group_id')
+                            ->label('Gen. Bus. Posting Group')
+                            ->relationship('generalBusinessPostingGroup', 'id')
+                            ->required(),
+                        Select::make('customer_posting_group_id')
+                            ->label('Customer Posting Group')
+                            ->relationship('customerPostingGroup', 'id')
+                            ->required(),
+                        TextInput::make('vat_bus_posting_group')
+                            ->label('VAT Bus. Posting Group'),
+                    ]),
+
+                Section::make('Shipping & Payments')
+                    ->columns(2)
+                    ->collapsed()
+                    ->schema([
+                        TextInput::make('shipping_agent_code'),
+                        TextInput::make('payment_terms_code'),
+                        Grid::make(3)->schema([
+                            Toggle::make('allow_discounts')
+                                ->default(true),
+                            TextInput::make('maximum_discount_percent')
+                                ->numeric()
+                                ->suffix('%'),
+                            Toggle::make('price_includes_vat'),
+                        ]),
+                    ]),
             ]);
     }
 }

@@ -8,6 +8,8 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
 class CustomersTable
@@ -17,56 +19,43 @@ class CustomersTable
         return $table
             ->columns([
                 TextColumn::make('customer_number')
+                    ->label('No.')
+                    ->sortable()
                     ->searchable(),
                 TextColumn::make('name')
+                    ->weight('bold')
                     ->searchable(),
                 TextColumn::make('email')
-                    ->label('Email address')
-                    ->searchable(),
-                TextColumn::make('phone')
-                    ->searchable(),
-                TextColumn::make('generalBusinessPostingGroup.id')
-                    ->searchable(),
-                TextColumn::make('customerPostingGroup.id')
-                    ->searchable(),
-                TextColumn::make('vat_bus_posting_group')
-                    ->searchable(),
-                TextColumn::make('location.name')
-                    ->searchable(),
-                TextColumn::make('shipping_agent_code')
-                    ->searchable(),
-                TextColumn::make('payment_terms_code')
-                    ->searchable(),
+                    ->icon('heroicon-m-envelope')
+                    ->toggleable(),
+                TextColumn::make('balance')
+                    ->money()
+                    ->sortable()
+                    ->getStateUsing(fn ($record) => $record->balance)
+                    ->color(fn ($record) => $record->isOverCreditLimit() ? 'danger' : 'gray'),
                 TextColumn::make('credit_limit')
-                    ->numeric()
-                    ->sortable(),
-                IconColumn::make('blocked')
-                    ->boolean(),
-                TextColumn::make('blocked_reason')
-                    ->searchable(),
-                TextColumn::make('pricing_group_id')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('price_list_code')
-                    ->searchable(),
-                IconColumn::make('allow_discounts')
-                    ->boolean(),
-                TextColumn::make('maximum_discount_percent')
-                    ->numeric()
-                    ->sortable(),
-                IconColumn::make('price_includes_vat')
-                    ->boolean(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
+                    ->money()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('blocked')
+                    ->badge()
+                    ->getStateUsing(fn ($record) => $record->blocked ? ($record->blocked_reason ?? 'Blocked') : 'Active')
+                    ->color(fn ($record) => $record->blocked ? 'danger' : 'success')
+                    ->formatStateUsing(fn ($state) => ucfirst(strtolower($state))),
+                TextColumn::make('customerPostingGroup.id')
+                    ->label('Group')
+                    ->toggleable(),
+                TextColumn::make('location.name')
+                    ->placeholder('N/A'),
             ])
             ->filters([
-                //
+                TernaryFilter::make('blocked')
+                    ->label('Blocked Status'),
+                SelectFilter::make('customer_posting_group_id')
+                    ->label('Posting Group')
+                    ->relationship('customerPostingGroup', 'id'),
+                SelectFilter::make('location_id')
+                    ->label('Location')
+                    ->relationship('location', 'name'),
             ])
             ->recordActions([
                 ViewAction::make(),
