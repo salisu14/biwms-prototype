@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\ProductionOrders\RelationManagers;
 
-use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
 use App\Models\Item;
 use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Actions\Action;
@@ -27,8 +26,6 @@ use Filament\Tables\Table;
 class ComponentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'components';
-
-    protected static ?string $relatedResource = ProductionOrderResource::class;
 
     protected static ?string $recordTitleAttribute = 'description';
 

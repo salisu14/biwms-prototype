@@ -571,7 +571,6 @@ class ProductionOrderService
 
         // WIP Entry (Debit)
         GlEntry::create([
-            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
             'transaction_number' => $transactionNumber,
             'chart_of_account_id' => $parentSetup->wip_account_id,
             'debit_amount' => $amount,
@@ -588,7 +587,6 @@ class ProductionOrderService
 
         // Inventory Entry (Credit)
         GlEntry::create([
-            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
             'transaction_number' => $transactionNumber,
             'chart_of_account_id' => $inventorySetup->inventory_account_id,
             'debit_amount' => 0,
@@ -633,7 +631,6 @@ class ProductionOrderService
 
         // WIP Entry (Debit)
         GlEntry::create([
-            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
             'transaction_number' => $transactionNumber,
             'chart_of_account_id' => $parentSetup->wip_account_id,
             'debit_amount' => $totalCost,
@@ -650,7 +647,6 @@ class ProductionOrderService
 
         // Direct Applied Entry (Credit)
         GlEntry::create([
-            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
             'transaction_number' => $transactionNumber,
             'chart_of_account_id' => $appliedAccount->id,
             'debit_amount' => 0,
@@ -668,7 +664,6 @@ class ProductionOrderService
         // Overhead Applied Entry (Credit)
         if ($indirectCost > 0 && $overheadAccount) {
             GlEntry::create([
-                'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
                 'transaction_number' => $transactionNumber,
                 'chart_of_account_id' => $overheadAccount->id,
                 'debit_amount' => 0,
@@ -704,7 +699,6 @@ class ProductionOrderService
 
         // Inventory Entry (Debit)
         GlEntry::create([
-            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
             'transaction_number' => $transactionNumber,
             'chart_of_account_id' => $parentSetup->inventory_account_id,
             'debit_amount' => $totalWip,
@@ -721,7 +715,6 @@ class ProductionOrderService
 
         // WIP Entry (Credit)
         GlEntry::create([
-            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
             'transaction_number' => $transactionNumber,
             'chart_of_account_id' => $parentSetup->wip_account_id,
             'debit_amount' => 0,
@@ -770,7 +763,6 @@ class ProductionOrderService
 
         // WIP Adjustment
         GlEntry::create([
-            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
             'transaction_number' => $transactionNumber,
             'chart_of_account_id' => $parentSetup->wip_account_id,
             'debit_amount' => $variance < 0 ? abs($variance) : 0,
@@ -787,7 +779,6 @@ class ProductionOrderService
 
         // Variance Entry
         GlEntry::create([
-            'entry_number' => (GlEntry::max('entry_number') ?? 0) + 1,
             'transaction_number' => $transactionNumber,
             'chart_of_account_id' => $varianceAccount->id,
             'debit_amount' => $variance > 0 ? $variance : 0,

@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\ProductionOrders\RelationManagers;
 
-use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
 use App\Models\Item;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -33,8 +32,6 @@ use Filament\Tables\Table;
 class ProductionOrderLineRelationManager extends RelationManager
 {
     protected static string $relationship = 'lines';
-
-    protected static ?string $relatedResource = ProductionOrderResource::class;
 
     protected static ?string $recordTitleAttribute = 'description';
 

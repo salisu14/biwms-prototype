@@ -77,6 +77,7 @@ class ProductionOrderForm
                                 if ($item) {
                                     $set('description', $item->description);
                                     $set('unit_of_measure_code', $item->base_unit_of_measure);
+                                    $set('conversion_factor', 1.0); // Reset to base
                                     $set('production_bom_id', $item->production_bom_id);
                                     $set('routing_id', $item->routing_id);
                                     $set('inventory_posting_group_id', $item->inventory_posting_group_id);
@@ -84,6 +85,10 @@ class ProductionOrderForm
                                     $set('flushing_method', $item->flushing_method ?? 'MANUAL');
                                     $set('costing_method', $item->costing_method ?? 'STANDARD');
                                     $set('unit_cost', $item->unit_cost ?? 0);
+
+                                    // Recalculate base quantity
+                                    $qty = (float) ($get('quantity') ?? 1);
+                                    $set('quantity_base', $qty * 1.0);
                                 }
                             }),
 
@@ -120,16 +125,48 @@ class ProductionOrderForm
                                     return [];
                                 }
 
-                                return $item->uoms()
+                                $uoms = $item->uoms()
                                     ->get()
                                     ->mapWithKeys(fn ($uom) => [
                                         $uom->uom_code => $uom->uom_code.($uom->description ? " ({$uom->description})" : ''),
-                                    ])
-                                    ->toArray();
+                                    ]);
+
+                                // BCR Fallback: If no pivot entries, always allow the base_unit_of_measure
+                                if ($uoms->isEmpty() && $item->base_unit_of_measure) {
+                                    return [$item->base_unit_of_measure => $item->base_unit_of_measure];
+                                }
+
+                                return $uoms->toArray();
                             })
                             ->live()
                             ->required()
-                            ->searchable(),
+                            ->searchable()
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                $itemId = $get('item_id');
+                                if (! $itemId || ! $state) {
+                                    return;
+                                }
+
+                                $item = Item::find($itemId);
+                                if (! $item) {
+                                    return;
+                                }
+
+                                // Fetch conversion factor from pivot
+                                $uom = $item->uoms()->where('uom_code', $state)->first();
+                                $factor = (float) ($uom?->pivot?->conversion_factor ?? 1.0);
+
+                                $set('conversion_factor', $factor);
+
+                                $qty = (float) ($get('quantity') ?? 0);
+                                $set('quantity_base', $qty * $factor);
+                            }),
+
+                        TextInput::make('conversion_factor')
+                            ->numeric()
+                            ->hidden()
+                            ->default(1.0)
+                            ->dehydrated(),
 
                         TextInput::make('quantity_base')
                             ->label('Base Quantity')

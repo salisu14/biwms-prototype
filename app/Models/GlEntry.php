@@ -116,4 +116,13 @@ class GlEntry extends Model
     {
         return $query->where('transaction_number', $transactionNumber);
     }
+
+    protected static function booted(): void
+    {
+        static::creating(function ($entry) {
+            if (! $entry->entry_number) {
+                $entry->entry_number = (static::max('entry_number') ?? 0) + 1;
+            }
+        });
+    }
 }

@@ -159,37 +159,49 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/customers')
                                     ->isActiveWhen(fn () => request()->is('admin/customers*')),
 
-                                NavigationItem::make('Sales Quotes')
+                                NavigationItem::make('Contact')
                                     ->icon('heroicon-o-document')
-                                    ->url('/admin/sales-quotes'),
+                                    ->url('/admin/contacts'),
+
+                                NavigationItem::make('Price Change Templates')
+                                    ->icon('heroicon-o-document')
+                                    ->url('/admin/price-change-templates'),
 
                                 NavigationItem::make('Sales Orders')
                                     ->icon('heroicon-o-clipboard-document-list')
                                     ->url('/admin/sales-orders'),
 
+                                NavigationItem::make('Sales Quotes')
+                                    ->icon('heroicon-o-document')
+                                    ->url('/admin/sales-quotes'),
+
+                                NavigationItem::make('Sales Quote Revisions')
+                                    ->icon('heroicon-o-document')
+                                    ->url('/admin/sales-quote-revisions'),
+
                                 NavigationItem::make('Sales Invoices')
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/sales-invoices'),
-
-                                NavigationItem::make('Sales Credit Memos')
-                                    ->icon('heroicon-o-arrow-uturn-left')
-                                    ->url('/admin/sales-credit-memos'),
 
                                 NavigationItem::make('Sales Shipments')
                                     ->icon('heroicon-o-truck')
                                     ->url('/admin/sales-shipments'),
 
-                                NavigationItem::make('Blanket Sales Orders')
+                                NavigationItem::make('Sales Credit Memos')
+                                    ->icon('heroicon-o-arrow-uturn-left')
+                                    ->url('/admin/sales-credit-memos'),
+
+                                NavigationItem::make('History')
                                     ->icon('heroicon-o-document-check')
-                                    ->url('/admin/blanket-sales-orders'),
+                                    ->url('/admin/history'),
 
-                                NavigationItem::make('Customer Ledger Entries')
-                                    ->icon('heroicon-o-book-open')
-                                    ->url('/admin/customer-ledger-entries'),
+//                                NavigationItem::make('Customer Ledger Entries')
+//                                    ->icon('heroicon-o-book-open')
+//                                    ->url('/admin/customer-ledger-entries'),
 
-                                NavigationItem::make('Cash Receipt Journals')
-                                    ->icon('heroicon-o-banknotes')
-                                    ->url('/admin/cash-receipt-journals'),
+//                                NavigationItem::make('Cash Receipt Journals')
+//                                    ->icon('heroicon-o-banknotes')
+//                                    ->url('/admin/cash-receipt-journals'),
                             ])
                     )
 

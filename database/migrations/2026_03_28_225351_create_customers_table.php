@@ -27,6 +27,8 @@ return new class extends Migration
                 ->constrained('customer_posting_groups');
             $table->string('vat_bus_posting_group', 20)->nullable();
 
+            $table->foreignId('customer_group_id')->nullable()->constrained()->nullOnDelete();
+
             // Shipping
             $table->foreignId('location_id')
                 ->nullable()

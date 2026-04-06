@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/ItemLedgerEntry.php
 
 namespace App\Models;
@@ -148,5 +149,14 @@ class ItemLedgerEntry extends Model
     public function scopeInDateRange($query, $startDate, $endDate)
     {
         return $query->whereBetween('posting_date', [$startDate, $endDate]);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function ($entry) {
+            if (! $entry->entry_number) {
+                $entry->entry_number = (static::max('entry_number') ?? 0) + 1;
+            }
+        });
     }
 }

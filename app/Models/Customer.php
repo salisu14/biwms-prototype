@@ -35,6 +35,11 @@ class Customer extends Model
     ];
 
     // Relationships
+    public function group()
+    {
+        return $this->belongsTo(CustomerGroup::class, 'customer_group_id');
+    }
+
     public function generalBusinessPostingGroup(): BelongsTo
     {
         return $this->belongsTo(GeneralBusinessPostingGroup::class);
