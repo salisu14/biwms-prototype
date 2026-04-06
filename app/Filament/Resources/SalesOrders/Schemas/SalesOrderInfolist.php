@@ -5,6 +5,9 @@ namespace App\Filament\Resources\SalesOrders\Schemas;
 use App\Models\SalesOrder;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class SalesOrderInfolist
@@ -13,124 +16,56 @@ class SalesOrderInfolist
     {
         return $schema
             ->components([
-                TextEntry::make('order_number'),
-                TextEntry::make('external_document_number')
-                    ->placeholder('-'),
-                TextEntry::make('order_type')
-                    ->badge(),
-                TextEntry::make('customer.name')
-                    ->label('Customer'),
-                TextEntry::make('customer_name'),
-                TextEntry::make('customer_address')
-                    ->placeholder('-'),
-                TextEntry::make('ship_to_name')
-                    ->placeholder('-'),
-                TextEntry::make('ship_to_address')
-                    ->placeholder('-'),
-                TextEntry::make('generalBusinessPostingGroup.id')
-                    ->label('General business posting group')
-                    ->placeholder('-'),
-                TextEntry::make('customerPostingGroup.id')
-                    ->label('Customer posting group')
-                    ->placeholder('-'),
-                TextEntry::make('vat_bus_posting_group')
-                    ->placeholder('-'),
-                TextEntry::make('pricingGroup.name')
-                    ->label('Pricing group')
-                    ->placeholder('-'),
-                TextEntry::make('location.name')
-                    ->label('Location')
-                    ->placeholder('-'),
-                TextEntry::make('shipping_agent_code')
-                    ->placeholder('-'),
-                TextEntry::make('shipping_agent_service_code')
-                    ->placeholder('-'),
-                TextEntry::make('shipping_method')
-                    ->badge()
-                    ->placeholder('-'),
-                TextEntry::make('order_date')
-                    ->date(),
-                TextEntry::make('posting_date')
-                    ->date()
-                    ->placeholder('-'),
-                TextEntry::make('requested_delivery_date')
-                    ->date()
-                    ->placeholder('-'),
-                TextEntry::make('promised_delivery_date')
-                    ->date()
-                    ->placeholder('-'),
-                TextEntry::make('shipment_date')
-                    ->date()
-                    ->placeholder('-'),
-                TextEntry::make('payment_terms_code')
-                    ->placeholder('-'),
-                TextEntry::make('payment_method_code')
-                    ->placeholder('-'),
-                TextEntry::make('subtotal')
-                    ->numeric(),
-                TextEntry::make('line_discount_total')
-                    ->numeric(),
-                TextEntry::make('invoice_discount_percent')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('invoice_discount_amount')
-                    ->numeric(),
-                TextEntry::make('total_amount')
-                    ->numeric(),
-                TextEntry::make('total_vat')
-                    ->numeric(),
-                TextEntry::make('grand_total')
-                    ->numeric(),
-                TextEntry::make('currency_code'),
-                TextEntry::make('currency_factor')
-                    ->numeric(),
-                TextEntry::make('status')
-                    ->badge(),
-                TextEntry::make('quantity_shipped')
-                    ->numeric(),
-                TextEntry::make('quantity_invoiced')
-                    ->numeric(),
-                IconEntry::make('fully_shipped')
-                    ->boolean(),
-                IconEntry::make('fully_invoiced')
-                    ->boolean(),
-                TextEntry::make('salesperson.name')
-                    ->label('Salesperson')
-                    ->placeholder('-'),
-                TextEntry::make('assigned_warehouse_worker_id')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('approved_by')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('approved_at')
-                    ->dateTime()
-                    ->placeholder('-'),
-                TextEntry::make('created_by')
-                    ->numeric(),
-                TextEntry::make('cancelled_at')
-                    ->dateTime()
-                    ->placeholder('-'),
-                TextEntry::make('cancelled_by')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('cancellation_reason')
-                    ->placeholder('-'),
-                TextEntry::make('internal_comment')
-                    ->placeholder('-')
-                    ->columnSpanFull(),
-                TextEntry::make('customer_comment')
-                    ->placeholder('-')
-                    ->columnSpanFull(),
-                TextEntry::make('created_at')
-                    ->dateTime()
-                    ->placeholder('-'),
-                TextEntry::make('updated_at')
-                    ->dateTime()
-                    ->placeholder('-'),
-                TextEntry::make('deleted_at')
-                    ->dateTime()
-                    ->visible(fn (SalesOrder $record): bool => $record->trashed()),
+                Grid::make(3)
+                    ->schema([
+                        Group::make([
+                            Section::make('Header')
+                                ->schema([
+                                    TextEntry::make('order_number')->weight('bold')->size('lg'),
+                                    TextEntry::make('order_type')->badge(),
+                                    TextEntry::make('status')->badge(),
+                                    TextEntry::make('external_document_number')->label('External Ref'),
+                                ])->columns(2),
+
+                            Section::make('Customer & Shipping')
+                                ->schema([
+                                    TextEntry::make('customer.name')->label('Billing Customer'),
+                                    TextEntry::make('customer_address')->label('Billing Address')->markdown(),
+                                    TextEntry::make('ship_to_name')->label('Shipping Recipient'),
+                                    TextEntry::make('ship_to_address')->label('Shipping Address')->markdown(),
+                                ])->columns(2),
+                        ])->columnSpan(2),
+
+                        Group::make([
+                            Section::make('Dates')
+                                ->schema([
+                                    TextEntry::make('order_date')->date(),
+                                    TextEntry::make('requested_delivery_date')->date(),
+                                    TextEntry::make('shipment_date')->date()->color('primary'),
+                                ]),
+
+                            Section::make('Financials')
+                                ->schema([
+                                    TextEntry::make('grand_total')
+                                        ->numeric()
+                                        ->weight('bold')
+                                        ->size('xl')
+                                        ->color('success'),
+                                    TextEntry::make('currency_code')->label('Currency'),
+                                    Grid::make(2)
+                                        ->schema([
+                                            IconEntry::make('fully_shipped')->boolean(),
+                                            IconEntry::make('fully_invoiced')->boolean(),
+                                        ]),
+                                ]),
+                        ])->columnSpan(1),
+                    ]),
+
+                Section::make('Notes')
+                    ->schema([
+                        TextEntry::make('customer_comment')->label('Customer Comment'),
+                        TextEntry::make('internal_comment')->label('Internal Staff Notes'),
+                    ])->columns(2),
             ]);
     }
 }

@@ -9,6 +9,8 @@ use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\GlEntry;
 use App\Models\Item;
+use App\Models\SalesCreditMemo;
+use App\Models\SalesInvoice;
 use App\Models\Vendor;
 use Illuminate\Support\Facades\DB;
 
@@ -468,5 +470,148 @@ class PostingService
         if ($totalDebit !== $totalCredit) {
             throw new \Exception('Journal is not balanced');
         }
+    }
+
+    /**
+     * @throws \Throwable
+     */
+    public function postSalesInvoice(SalesInvoice $invoice): array
+    {
+        return DB::transaction(function () use ($invoice) {
+
+            $invoice->load('items', 'customer');
+
+            $entries = [];
+
+            foreach ($invoice->items as $line) {
+
+                $item = Item::find($line->item_id);
+                $setup = $invoice->customer->getPostingSetupFor($item);
+
+                $lineRevenue = $line->quantity * $line->unit_price;
+                $lineCost = $line->quantity * ($item->unit_cost ?? 0);
+
+                // 1. A/R (Debit)
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $invoice->customer->getReceivablesAccount()->id,
+                    'debit_amount' => $lineRevenue,
+                    'credit_amount' => 0,
+                    'document_type' => 'SALES_INVOICE',
+                    'document_number' => $invoice->invoice_number,
+                    'posting_date' => $invoice->posting_date,
+                    'description' => "Invoice {$invoice->invoice_number}",
+                ]);
+
+                // 2. Revenue (Credit)
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $setup->getSalesAccount()->id,
+                    'debit_amount' => 0,
+                    'credit_amount' => $lineRevenue,
+                    'document_type' => 'SALES_INVOICE',
+                    'document_number' => $invoice->invoice_number,
+                    'posting_date' => $invoice->posting_date,
+                    'description' => "Revenue {$item->description}",
+                ]);
+
+                // Inventory postings
+                if ($item->isInventoryItem()) {
+
+                    // 3. COGS (Debit)
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $setup->getCogsAccount()->id,
+                        'debit_amount' => $lineCost,
+                        'credit_amount' => 0,
+                        'document_type' => 'SALES_INVOICE',
+                        'document_number' => $invoice->invoice_number,
+                        'posting_date' => $invoice->posting_date,
+                        'description' => "COGS {$item->description}",
+                    ]);
+
+                    // 4. Inventory (Credit)
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $item->getInventoryAccount()->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $lineCost,
+                        'document_type' => 'SALES_INVOICE',
+                        'document_number' => $invoice->invoice_number,
+                        'posting_date' => $invoice->posting_date,
+                        'description' => "Inventory decrease {$item->description}",
+                    ]);
+                }
+            }
+
+            return $entries;
+        });
+    }
+
+    /**
+     * @throws \Throwable
+     */
+    public function postSalesCreditMemo(SalesCreditMemo $memo): array
+    {
+        return DB::transaction(function () use ($memo) {
+
+            $memo->load('items', 'customer');
+
+            $entries = [];
+
+            foreach ($memo->items as $line) {
+
+                $item = Item::find($line->item_id);
+                $setup = $memo->customer->getPostingSetupFor($item);
+
+                $lineAmount = $line->quantity * $line->price;
+                $lineCost = $line->quantity * ($item->unit_cost ?? 0);
+
+                // 1. Revenue Reversal (Debit)
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $setup->getSalesAccount()->id,
+                    'debit_amount' => $lineAmount,
+                    'credit_amount' => 0,
+                    'document_type' => 'SALES_CREDIT_MEMO',
+                    'document_number' => $memo->memo_number,
+                    'posting_date' => $memo->effective_date,
+                    'description' => "Credit Memo Revenue Reversal",
+                ]);
+
+                // 2. A/R Reduction (Credit)
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $memo->customer->getReceivablesAccount()->id,
+                    'debit_amount' => 0,
+                    'credit_amount' => $lineAmount,
+                    'document_type' => 'SALES_CREDIT_MEMO',
+                    'document_number' => $memo->memo_number,
+                    'posting_date' => $memo->effective_date,
+                    'description' => "Reduce receivable",
+                ]);
+
+                if ($item->isInventoryItem()) {
+
+                    // 3. Inventory Increase (Debit)
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $item->getInventoryAccount()->id,
+                        'debit_amount' => $lineCost,
+                        'credit_amount' => 0,
+                        'document_type' => 'SALES_CREDIT_MEMO',
+                        'document_number' => $memo->memo_number,
+                        'posting_date' => $memo->effective_date,
+                        'description' => "Inventory return",
+                    ]);
+
+                    // 4. Reverse COGS (Credit)
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $setup->getCogsAccount()->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $lineCost,
+                        'document_type' => 'SALES_CREDIT_MEMO',
+                        'document_number' => $memo->memo_number,
+                        'posting_date' => $memo->effective_date,
+                        'description' => "Reverse COGS",
+                    ]);
+                }
+            }
+
+            return $entries;
+        });
     }
 }

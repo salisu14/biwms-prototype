@@ -59,11 +59,6 @@ class PriceChangeTemplateForm
                                 'decrease' => 'Decrease (%)',
                                 'fixed' => 'Fixed Price (Set Value)',
                             ])
-                            ->icons([
-                                'increase' => 'heroicon-m-arrow-trending-up',
-                                'decrease' => 'heroicon-m-arrow-trending-down',
-                                'fixed' => 'heroicon-m-banknotes',
-                            ])
                             ->required()
                             ->live()
                             ->native(false)

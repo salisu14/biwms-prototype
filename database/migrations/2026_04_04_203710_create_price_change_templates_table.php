@@ -14,17 +14,11 @@ return new class extends Migration
         Schema::create('price_change_templates', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-
             $table->enum('adjustment_type', ['increase', 'decrease', 'fixed']);
-
             $table->decimal('value', 10, 2);
-
             $table->enum('status', [ 'draft', 'approved', 'applied'])->default('draft');
-
             $table->timestamp('effective_from')->nullable();
-
             $table->timestamp('effective_to')->nullable();
-
             $table->enum('base', ['cost', 'price']);
             $table->decimal('rounding', 10, 2)->nullable();
 

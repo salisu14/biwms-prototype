@@ -45,6 +45,7 @@ class Item extends Model
     ];
 
     protected $casts = [
+        'item_type' => ItemType::class,
         'unit_cost' => 'decimal:4',
         'standard_cost' => 'decimal:4',
         'last_direct_cost' => 'decimal:4',
