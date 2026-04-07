@@ -4,6 +4,8 @@ namespace App\Filament\Resources\SalesOrders\Tables;
 
 use App\Enums\SalesOrderStatus;
 use App\Models\Item;
+use App\Models\SalesInvoice;
+use App\Models\SalesOrder;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -71,8 +73,21 @@ class SalesOrdersTable
                     ->relationship('location', 'name'),
             ])
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
+                ViewAction::make()
+                    ->visible(fn (SalesOrder $record): bool => !$record->isPosted()),
+
+                EditAction::make()
+                    ->visible(fn (SalesOrder $record): bool => !$record->isPosted())
+                    ->disabled(fn (SalesOrder $record): bool => $record->isPosted()),
+
+                // Custom "Reverse" action for posted invoices
+                Action::make('reverse')
+                    ->label('Reverse')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('danger')
+                    ->visible(fn (SalesOrder $record): bool => $record->isPosted())
+                    ->requiresConfirmation()
+                    ->action(fn (SalesOrder $record) => $record->reverse()),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

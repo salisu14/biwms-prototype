@@ -51,6 +51,8 @@ class SalesShipmentHeaderResource extends Resource
             'create' => CreateSalesShipmentHeader::route('/create'),
             'view' => ViewSalesShipmentHeader::route('/{record}'),
             'edit' => EditSalesShipmentHeader::route('/{record}/edit'),
+
+            'posted' => Pages\PostedShipments::route('/history/posted-shipments'),
         ];
     }
 }

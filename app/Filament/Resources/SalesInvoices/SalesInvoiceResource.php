@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class SalesInvoiceResource extends Resource
 {
@@ -44,6 +45,16 @@ class SalesInvoiceResource extends Resource
         ];
     }
 
+    public static function canEdit(Model $record): bool
+    {
+        return $record->status !== 'posted';
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return $record->status !== 'posted';
+    }
+
     public static function getPages(): array
     {
         return [
@@ -51,6 +62,8 @@ class SalesInvoiceResource extends Resource
             'create' => CreateSalesInvoice::route('/create'),
             'view' => ViewSalesInvoice::route('/{record}'),
             'edit' => EditSalesInvoice::route('/{record}/edit'),
+
+            'posted' => Pages\PostedSalesInvoices::route('/history/posted'),
         ];
     }
 }

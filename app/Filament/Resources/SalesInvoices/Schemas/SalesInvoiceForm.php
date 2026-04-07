@@ -66,7 +66,8 @@ class SalesInvoiceForm
                 Section::make('Invoice Lines')
                     ->schema([
                         Repeater::make('lines')
-                            ->relationship()
+                            ->relationship('lines') // <-- important! Must match hasMany in SalesInvoice model
+                            ->dehydrated()
                             ->schema([
                                 Select::make('item_id')
                                     ->label('Item')
@@ -82,7 +83,6 @@ class SalesInvoiceForm
                                         if ($item) {
                                             $set('description', $item->description);
                                             $set('unit_price', $item->unit_price);
-                                            // Trigger calculation after item selection
                                         }
                                     })
                                     ->columnSpan(2),
@@ -96,21 +96,21 @@ class SalesInvoiceForm
                                     ->default(1)
                                     ->required()
                                     ->live(onBlur: true)
-                                    ->afterStateUpdated(fn (Set $set, Get $get) => self::updateLineTotal($set, $get)),
+                                    ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateLineTotal($set, $get)),
 
                                 TextInput::make('unit_price')
                                     ->numeric()
                                     ->prefix('$')
                                     ->required()
                                     ->live(onBlur: true)
-                                    ->afterStateUpdated(fn (Set $set, Get $get) => self::updateLineTotal($set, $get)),
+                                    ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateLineTotal($set, $get)),
 
                                 TextInput::make('vat_percent')
                                     ->label('VAT %')
                                     ->numeric()
                                     ->default(0)
                                     ->live(onBlur: true)
-                                    ->afterStateUpdated(fn (Set $set, Get $get) => self::updateLineTotal($set, $get)),
+                                    ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateLineTotal($set, $get)),
 
                                 TextInput::make('line_total')
                                     ->numeric()
@@ -122,7 +122,7 @@ class SalesInvoiceForm
                             ->itemLabel(fn (array $state): ?string => $state['description'] ?? 'New Line')
                             ->reorderableWithButtons()
                             ->live()
-                            ->afterStateUpdated(fn (Set $set, Get $get) => self::updateGrandTotal($set, $get)),
+                            ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateGrandTotal($set, $get)),
                     ]),
 
                 Section::make('Summary')

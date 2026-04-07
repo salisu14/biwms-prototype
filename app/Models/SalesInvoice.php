@@ -44,7 +44,12 @@ class SalesInvoice extends Model
 
     public function isPosted(): bool
     {
-        return $this->status === 'posted';
+        return $this->status === ApprovalStatus::POSTED || $this->posted_at === null;
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole('super_admin');
     }
 
     public function refreshTotal(): void

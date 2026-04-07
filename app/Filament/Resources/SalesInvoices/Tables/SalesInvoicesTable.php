@@ -9,6 +9,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\SelectColumn;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
@@ -68,6 +69,27 @@ class SalesInvoicesTable
                     ->options(ApprovalStatus::class),
                 Filter::make('overdue')
                     ->query(fn(Builder $query) => $query->where('due_date', '<', now())->where('status', '!=', 'posted')),
+
+                SelectFilter::make('status')
+                    ->options([
+                        'draft' => 'Draft',
+                        'posted' => 'Posted',
+                    ]),
+
+                SelectFilter::make('customer_id')
+                    ->relationship('customer', 'name')
+                    ->searchable(),
+
+                Filter::make('date')
+                    ->schema([
+                        DatePicker::make('from'),
+                        DatePicker::make('until'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['from'], fn ($q) => $q->whereDate('posting_date', '>=', $data['from']))
+                            ->when($data['until'], fn ($q) => $q->whereDate('posting_date', '<=', $data['until']));
+                    }),
             ])
             ->recordActions([
 
@@ -108,7 +130,8 @@ class SalesInvoicesTable
                             ->postSalesInvoice($record);
                     }),
 
-                ViewAction::make(),
+                ViewAction::make()
+                ->visible(fn($record) => !$record->isPosted()),
 
                 EditAction::make()
                     ->visible(fn($record) => !$record->isPosted()),

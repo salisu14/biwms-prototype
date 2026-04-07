@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ApprovalStatus;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
@@ -125,6 +126,13 @@ class SalesOrder extends Model
             }
         });
     }
+
+    public function isPosted(): bool
+    {
+        // An order is considered posted if the status is POSTED or there is a posting date
+        return $this->status === SalesOrderStatus::SHIPPED || !is_null($this->posting_date);
+    }
+
 
     /**
      * Populate posting groups and default customer info

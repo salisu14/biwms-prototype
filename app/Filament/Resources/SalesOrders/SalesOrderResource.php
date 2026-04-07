@@ -51,6 +51,8 @@ class SalesOrderResource extends Resource
             'create' => CreateSalesOrder::route('/create'),
             'view' => ViewSalesOrder::route('/{record}'),
             'edit' => EditSalesOrder::route('/{record}/edit'),
+
+            'archived' => Pages\ArchivedSalesOrders::route('/history/archived-orders'), // Add
         ];
     }
 }
