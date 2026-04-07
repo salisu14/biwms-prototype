@@ -85,7 +85,7 @@ class LinesRelationManager extends RelationManager
 
                                     TextInput::make('unit_price')
                                         ->numeric()
-                                        ->prefix('$')
+                                        ->prefix('₦')
                                         ->required()
                                         ->live(onBlur: true)
                                         ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::calculateLine($set, $get)),
@@ -106,19 +106,19 @@ class LinesRelationManager extends RelationManager
                                         ->label('Net Amount')
                                         ->readOnly()
                                         ->numeric()
-                                        ->prefix('$'),
+                                        ->prefix('₦'),
 
                                     TextInput::make('vat_amount')
                                         ->label('VAT')
                                         ->readOnly()
                                         ->numeric()
-                                        ->prefix('$'),
+                                        ->prefix('₦'),
 
                                     TextInput::make('amount_including_vat')
                                         ->label('Total Incl. VAT')
                                         ->readOnly()
                                         ->numeric()
-                                        ->prefix('$')
+                                        ->prefix('₦')
                                         ->extraInputAttributes(['class' => 'font-bold text-primary-600']),
                                 ]),
 
