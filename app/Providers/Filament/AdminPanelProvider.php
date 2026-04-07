@@ -121,6 +121,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/vendors')
                                     ->isActiveWhen(fn() => request()->is('admin/vendors*')),
 
+                                NavigationItem::make('Raw Materials')
+                                    ->icon('heroicon-o-document')
+                                    ->url('/admin/items/rm/raw-materials'),
+
                                 NavigationItem::make('Purchase Quotes')
                                     ->icon('heroicon-o-document')
                                     ->url('/admin/purchase-quotes'),
@@ -168,6 +172,10 @@ class AdminPanelProvider extends PanelProvider
                                 NavigationItem::make('Contact')
                                     ->icon('heroicon-o-document')
                                     ->url('/admin/contacts'),
+
+                                NavigationItem::make('Finished Goods')
+                                    ->icon('heroicon-o-document')
+                                    ->url('/admin/items/fg/finished-goods'),
 
                                 NavigationItem::make('Price Change Templates')
                                     ->icon('heroicon-o-document')
