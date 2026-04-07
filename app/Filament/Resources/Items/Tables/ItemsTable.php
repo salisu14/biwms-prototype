@@ -2,12 +2,16 @@
 
 namespace App\Filament\Resources\Items\Tables;
 
+use App\Enums\ItemType;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Enums\ColumnManagerLayout;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
 class ItemsTable
@@ -17,87 +21,70 @@ class ItemsTable
         return $table
             ->columns([
                 TextColumn::make('item_number')
-                    ->searchable(),
+                    ->label('Number')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
+
                 TextColumn::make('description')
-                    ->searchable(),
-                TextColumn::make('generalProductPostingGroup.id')
-                    ->searchable(),
-                TextColumn::make('inventoryPostingGroup.id')
-                    ->searchable(),
-                TextColumn::make('vat_prod_posting_group')
-                    ->searchable(),
+                    ->searchable()
+                    ->limit(30),
+
                 TextColumn::make('item_type')
-                    ->searchable(),
-                TextColumn::make('costing_method')
-                    ->searchable(),
-                TextColumn::make('unit_cost')
-                    ->money()
+                    ->badge()
+                    ->formatStateUsing(fn (ItemType $state): string => $state->label())
+                    ->color(fn (ItemType $state): string => $state->color())
+                    ->icon(fn (ItemType $state): string => $state->icon())
                     ->sortable(),
-                TextColumn::make('standard_cost')
-                    ->money()
+
+                TextColumn::make('inventory')
+                    ->numeric(decimalPlaces: 2)
+                    ->label('Stock')
+                    ->alignRight()
+                    ->color(fn ($state) => $state <= 0 ? 'danger' : 'success')
                     ->sortable(),
-                TextColumn::make('last_direct_cost')
-                    ->money()
-                    ->sortable(),
-                TextColumn::make('price_calculation_method')
-                    ->searchable(),
-                TextColumn::make('profit_percent')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('default_price_list_code')
-                    ->searchable(),
-                IconColumn::make('allow_negative_price')
-                    ->boolean(),
+
                 TextColumn::make('unit_price')
                     ->money()
+                    ->alignRight()
                     ->sortable(),
-                TextColumn::make('inventory')
-                    ->numeric()
+
+                TextColumn::make('unit_cost')
+                    ->money()
+                    ->alignRight()
+                    ->toggleable(isToggledHiddenByDefault: true)
                     ->sortable(),
-                TextColumn::make('reorder_point')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('reorder_quantity')
-                    ->numeric()
-                    ->sortable(),
+
                 TextColumn::make('location.name')
-                    ->searchable(),
-                TextColumn::make('bin_code')
-                    ->searchable(),
+                    ->label('Main Location')
+                    ->placeholder('N/A')
+                    ->toggleable(),
+
                 TextColumn::make('base_unit_of_measure')
-                    ->searchable(),
-                TextColumn::make('weight')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('volume')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('shelf_no')
-                    ->searchable(),
-                TextColumn::make('item_tracking_code')
-                    ->searchable(),
-                TextColumn::make('shelf_life_days')
-                    ->numeric()
-                    ->sortable(),
-                IconColumn::make('is_active')
-                    ->boolean(),
+                    ->label('UoM')
+                    ->toggleable(),
+
                 IconColumn::make('blocked')
-                    ->boolean(),
-                IconColumn::make('sales_blocked')
-                    ->boolean(),
-                IconColumn::make('purchasing_blocked')
-                    ->boolean(),
+                    ->boolean()
+                    ->label('Blocked')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->columnManagerLayout(ColumnManagerLayout::Modal)
+//            ->columnManagerTriggerAction(
+//                fn (Action $action) => $action->slideOver()
+//            )
             ->filters([
-                //
+                SelectFilter::make('item_type')
+                    ->options(ItemType::options()),
+                SelectFilter::make('location_id')
+                    ->relationship('location', 'name'),
+                TernaryFilter::make('blocked')
+                    ->label('Is Blocked'),
             ])
             ->recordActions([
                 ViewAction::make(),

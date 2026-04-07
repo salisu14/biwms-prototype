@@ -2,9 +2,14 @@
 
 namespace App\Filament\Resources\Items\Schemas;
 
+use App\Enums\ItemType;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\TextSize;
 
 class ItemInfolist
 {
@@ -12,78 +17,69 @@ class ItemInfolist
     {
         return $schema
             ->components([
-                TextEntry::make('item_number'),
-                TextEntry::make('description'),
-                TextEntry::make('description_2')
-                    ->placeholder('-')
-                    ->columnSpanFull(),
-                TextEntry::make('generalProductPostingGroup.id')
-                    ->label('General product posting group'),
-                TextEntry::make('inventoryPostingGroup.id')
-                    ->label('Inventory posting group'),
-                TextEntry::make('vat_prod_posting_group')
-                    ->placeholder('-'),
-                TextEntry::make('item_type'),
-                TextEntry::make('costing_method'),
-                TextEntry::make('unit_cost')
-                    ->money(),
-                TextEntry::make('standard_cost')
-                    ->money()
-                    ->placeholder('-'),
-                TextEntry::make('last_direct_cost')
-                    ->money()
-                    ->placeholder('-'),
-                TextEntry::make('price_calculation_method'),
-                TextEntry::make('profit_percent')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('default_price_list_code')
-                    ->placeholder('-'),
-                IconEntry::make('allow_negative_price')
-                    ->boolean(),
-                TextEntry::make('unit_price')
-                    ->money(),
-                TextEntry::make('inventory')
-                    ->numeric(),
-                TextEntry::make('reorder_point')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('reorder_quantity')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('location.name')
-                    ->label('Location')
-                    ->placeholder('-'),
-                TextEntry::make('bin_code')
-                    ->placeholder('-'),
-                TextEntry::make('base_unit_of_measure'),
-                TextEntry::make('weight')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('volume')
-                    ->numeric()
-                    ->placeholder('-'),
-                TextEntry::make('shelf_no')
-                    ->placeholder('-'),
-                TextEntry::make('item_tracking_code')
-                    ->placeholder('-'),
-                TextEntry::make('shelf_life_days')
-                    ->numeric()
-                    ->placeholder('-'),
-                IconEntry::make('is_active')
-                    ->boolean(),
-                IconEntry::make('blocked')
-                    ->boolean(),
-                IconEntry::make('sales_blocked')
-                    ->boolean(),
-                IconEntry::make('purchasing_blocked')
-                    ->boolean(),
-                TextEntry::make('created_at')
-                    ->dateTime()
-                    ->placeholder('-'),
-                TextEntry::make('updated_at')
-                    ->dateTime()
-                    ->placeholder('-'),
+                Section::make('Item Overview')
+                    ->schema([
+                        Grid::make(3)->schema([
+                            Group::make([
+                                TextEntry::make('item_number')
+                                    ->label('SKU / Number')
+                                    ->weight('bold')
+                                    ->copyable(),
+                                TextEntry::make('description')
+                                    ->size(TextSize::Large),
+                            ])->columnSpan(2),
+
+                            TextEntry::make('item_type')
+                                ->badge()
+                                ->formatStateUsing(fn (ItemType $state): string => $state->label())
+                                ->color(fn (ItemType $state): string => $state->color())
+                                ->icon(fn (ItemType $state): string => $state->icon()),
+                        ]),
+                    ]),
+
+                Grid::make(3)->schema([
+                    Section::make('Financials')
+                        ->columnSpan(1)
+                        ->schema([
+                            TextEntry::make('unit_price')->money(),
+                            TextEntry::make('unit_cost')->money(),
+                            TextEntry::make('profit_percent')
+                                ->label('Profit Margin')
+                                ->suffix('%')
+                                ->placeholder('0'),
+                        ]),
+
+                    Section::make('Inventory Status')
+                        ->columnSpan(1)
+                        ->schema([
+                            TextEntry::make('inventory')
+                                ->label('Current Stock')
+                                ->weight('bold')
+                                ->color(fn ($state) => $state <= 0 ? 'danger' : 'success'),
+                            TextEntry::make('base_unit_of_measure')
+                                ->label('Unit of Measure'),
+                            TextEntry::make('location.name')
+                                ->label('Location')
+                                ->placeholder('No Location Assigned'),
+                        ]),
+
+                    Section::make('Restrictions')
+                        ->columnSpan(1)
+                        ->schema([
+                            IconEntry::make('blocked')->boolean()->label('Fully Blocked'),
+                            IconEntry::make('sales_blocked')->boolean()->label('Sales Blocked'),
+                            IconEntry::make('purchasing_blocked')->boolean()->label('Purchasing Blocked'),
+                        ]),
+                ]),
+
+                Section::make('System Information')
+                    ->collapsed()
+                    ->schema([
+                        Grid::make(2)->schema([
+                            TextEntry::make('created_at')->dateTime(),
+                            TextEntry::make('updated_at')->dateTime(),
+                        ]),
+                    ]),
             ]);
     }
 }
