@@ -49,7 +49,7 @@ class SalesShipmentHeader extends Model
 
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(Customer::class, 'sell_to_customer_no', 'customer_no');
+        return $this->belongsTo(Customer::class, 'sell_to_customer_no', 'customer_number');
     }
 
     public function dimensionSet(): BelongsTo
@@ -81,10 +81,10 @@ class SalesShipmentHeader extends Model
         $hasOutstanding = $this->lines->contains(fn($line) => $line->qty_shipped_not_invoiced > 0);
 
         if ($hasOutstanding) {
-            return ShipmentStatus::PartiallyInvoiced;
+            return ShipmentStatus::PARTIALLY_SHIPPED;
         }
 
-        return ShipmentStatus::Shipped;
+        return ShipmentStatus::SHIPPED;
     }
 
     // Business logic methods mirroring BC

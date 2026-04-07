@@ -185,7 +185,7 @@ class AdminPanelProvider extends PanelProvider
 
                                 NavigationItem::make('Sales Shipments')
                                     ->icon('heroicon-o-truck')
-                                    ->url('/admin/sales-shipments'),
+                                    ->url('/admin/sales-shipment-headers'),
 
                                 NavigationItem::make('Sales Credit Memos')
                                     ->icon('heroicon-o-arrow-uturn-left')
