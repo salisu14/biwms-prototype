@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/Payment.php
 
 namespace App\Models;
@@ -188,7 +189,7 @@ class Payment extends Model
 
     public function getIsPartiallyAppliedAttribute(): bool
     {
-        return $this->applied_amount > 0 && !$this->is_fully_applied;
+        return $this->applied_amount > 0 && ! $this->is_fully_applied;
     }
 
     public function getIsOnAccountAttribute(): bool
@@ -249,7 +250,7 @@ class Payment extends Model
             $applicationData['document_id']
         );
 
-        if (!$document) {
+        if (! $document) {
             throw new \Exception('Document not found');
         }
 
@@ -310,7 +311,9 @@ class Payment extends Model
             ->sortBy('due_date'); // FIFO by due date
 
         foreach ($openDocuments as $doc) {
-            if ($this->unapplied_amount <= 0) break;
+            if ($this->unapplied_amount <= 0) {
+                break;
+            }
 
             $amount = min($this->unapplied_amount, $doc->remaining_amount);
 
@@ -447,7 +450,7 @@ class Payment extends Model
 
     protected function postGlEntries(): void
     {
-        $postingService = new PostingService();
+        $postingService = new PostingService;
 
         if ($this->payment_direction === 'RECEIPT') {
             // CUSTOMER PAYMENT
@@ -483,10 +486,10 @@ class Payment extends Model
 
     protected function findDocument(string $type, int $id): ?Model
     {
-        return match($type) {
+        return match ($type) {
             'SALES_INVOICE' => PostedSalesInvoice::find($id),
             'SALES_CREDIT_MEMO' => PostedSalesCreditMemo::find($id),
-            'PURCHASE_INVOICE' => PostedPurchaseInvoice::find($id),
+            'PURCHASE_INVOICE' => PurchaseInvoice::find($id),
             'PURCHASE_CREDIT_MEMO' => PostedPurchaseCreditMemo::find($id),
             default => null,
         };
@@ -494,10 +497,10 @@ class Payment extends Model
 
     protected function getDocumentType(Model $document): string
     {
-        return match($document::class) {
+        return match ($document::class) {
             PostedSalesInvoice::class => 'SALES_INVOICE',
             PostedSalesCreditMemo::class => 'SALES_CREDIT_MEMO',
-            PostedPurchaseInvoice::class => 'PURCHASE_INVOICE',
+            PurchaseInvoice::class => 'PURCHASE_INVOICE',
             PostedPurchaseCreditMemo::class => 'PURCHASE_CREDIT_MEMO',
             default => 'UNKNOWN',
         };
@@ -510,7 +513,7 @@ class Payment extends Model
                 ->where('paid_in_full', false)
                 ->get();
         } else {
-            return PostedPurchaseInvoice::forVendor($this->party_id)
+            return PurchaseInvoice::forVendor($this->party_id)
                 ->where('paid_in_full', false)
                 ->get();
         }
@@ -521,7 +524,9 @@ class Payment extends Model
         // Early payment discount logic
         // Example: 2% 10 Net 30 (2% discount if paid in 10 days, net due in 30)
 
-        if (!$document->payment_terms_code) return 0;
+        if (! $document->payment_terms_code) {
+            return 0;
+        }
 
         // Parse terms (simplified - you'd have a PaymentTerms model)
         if (str_contains($document->payment_terms_code, '2%10')) {
@@ -542,8 +547,9 @@ class Payment extends Model
         $prefix = $direction === 'RECEIPT' ? 'REC' : 'DIS';
         $year = date('Y');
         $count = self::where('payment_direction', $direction)
-                ->whereYear('created_at', $year)
-                ->count() + 1;
+            ->whereYear('created_at', $year)
+            ->count() + 1;
+
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
     }
 }

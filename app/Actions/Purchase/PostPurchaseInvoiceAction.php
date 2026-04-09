@@ -3,21 +3,21 @@
 namespace App\Actions\Purchase;
 
 use App\Data\Purchase\PostInvoiceData;
-use App\Models\PostedPurchaseInvoice;
+use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\DB;
 
 class PostPurchaseInvoiceAction
 {
-    public function execute(PostInvoiceData $data): PostedPurchaseInvoice
+    public function execute(PostInvoiceData $data): PurchaseInvoice
     {
         $order = PurchaseOrder::with(['lines', 'vendor'])->findOrFail($data->purchaseOrderId);
 
         return DB::transaction(function () use ($order, $data) {
 
-            $invoice = PostedPurchaseInvoice::create([
-                'document_number' => $data->documentNumber ?? PostedPurchaseInvoice::generateNumber(),
+            $invoice = PurchaseInvoice::create([
+                'document_number' => $data->documentNumber ?? PurchaseInvoice::generateNumber(),
                 'order_id' => $order->id,
                 'vendor_id' => $order->vendor_id,
                 'posting_date' => $data->postingDate,

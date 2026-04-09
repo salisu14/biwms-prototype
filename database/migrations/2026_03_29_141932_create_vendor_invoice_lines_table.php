@@ -22,7 +22,7 @@ return new class extends Migration
 
             // Item/Account reference
             $table->foreignId('item_id')->nullable()->constrained('items');
-            $table->foreignId('gl_account_id')->nullable()->constrained('gl_accounts');
+            $table->foreignId('gl_account_id')->nullable()->constrained('chart_of_accounts');
             $table->foreignId('fixed_asset_id')->nullable()->constrained('fixed_assets');
 
             // Description

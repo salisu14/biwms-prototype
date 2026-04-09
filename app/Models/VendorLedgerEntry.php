@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/VendorLedgerEntry.php
 
 namespace App\Models;
@@ -207,19 +208,20 @@ class VendorLedgerEntry extends Model
 
     public function getDaysOverdueAttribute(): ?int
     {
-        if (!$this->open || !$this->due_date || $this->due_date >= now()) {
+        if (! $this->open || ! $this->due_date || $this->due_date >= now()) {
             return null;
         }
+
         return $this->due_date->diffInDays(now());
     }
 
     public function getAgingCategoryAttribute(): string
     {
-        if (!$this->days_overdue) {
+        if (! $this->days_overdue) {
             return 'CURRENT';
         }
 
-        return match(true) {
+        return match (true) {
             $this->days_overdue <= 30 => '1-30',
             $this->days_overdue <= 60 => '31-60',
             $this->days_overdue <= 90 => '61-90',
@@ -229,7 +231,7 @@ class VendorLedgerEntry extends Model
 
     public function getDiscountAvailableAttribute(): ?float
     {
-        if (!$this->is_invoice || !$this->open || !$this->payment_discount_due_date) {
+        if (! $this->is_invoice || ! $this->open || ! $this->payment_discount_due_date) {
             return null;
         }
 
@@ -242,7 +244,7 @@ class VendorLedgerEntry extends Model
 
     public function getDaysUntilDiscountExpiresAttribute(): ?int
     {
-        if (!$this->payment_discount_due_date) {
+        if (! $this->payment_discount_due_date) {
             return null;
         }
 
@@ -262,7 +264,7 @@ class VendorLedgerEntry extends Model
     {
         // $applications = [['entry_id' => 123, 'amount' => 500.00], ...]
 
-        if (!$this->is_credit_entry) {
+        if (! $this->is_credit_entry) {
             throw new \Exception('Only credit entries can be applied');
         }
 
@@ -272,7 +274,7 @@ class VendorLedgerEntry extends Model
         foreach ($applications as $app) {
             $invoiceEntry = self::find($app['entry_id']);
 
-            if (!$invoiceEntry || !$invoiceEntry->is_invoice || !$invoiceEntry->open) {
+            if (! $invoiceEntry || ! $invoiceEntry->is_invoice || ! $invoiceEntry->open) {
                 continue;
             }
 
@@ -282,7 +284,9 @@ class VendorLedgerEntry extends Model
                 $invoiceEntry->remaining_amount
             );
 
-            if ($applyAmount <= 0) continue;
+            if ($applyAmount <= 0) {
+                continue;
+            }
 
             // Update invoice entry
             $invoiceEntry->remaining_amount -= $applyAmount;
@@ -304,7 +308,7 @@ class VendorLedgerEntry extends Model
         $this->remaining_amount -= $totalApplied;
         $this->applied_to_entries = $appliedEntries;
         $this->fully_applied = $this->remaining_amount <= 0.01;
-        $this->open = !$this->fully_applied;
+        $this->open = ! $this->fully_applied;
 
         if ($this->fully_applied) {
             $this->remaining_amount = 0;
@@ -316,9 +320,9 @@ class VendorLedgerEntry extends Model
     /**
      * Apply this credit memo to a specific invoice
      */
-    public function applyToInvoice(PostedPurchaseInvoice $invoice, ?float $amount = null): void
+    public function applyToInvoice(PurchaseInvoice $invoice, ?float $amount = null): void
     {
-        if (!$this->is_credit_memo && !$this->is_payment) {
+        if (! $this->is_credit_memo && ! $this->is_payment) {
             throw new \Exception('Entry must be a credit memo or payment');
         }
 
@@ -328,7 +332,7 @@ class VendorLedgerEntry extends Model
             ->where('vendor_id', $this->vendor_id)
             ->first();
 
-        if (!$invoiceEntry) {
+        if (! $invoiceEntry) {
             throw new \Exception('Invoice ledger entry not found');
         }
 
@@ -367,7 +371,7 @@ class VendorLedgerEntry extends Model
                 'entry_number' => $this->getNextEntryNumber($this->vendor_id),
                 'vendor_id' => $this->vendor_id,
                 'document_type' => 'ADJUSTMENT',
-                'document_number' => 'REV-' . $this->document_number,
+                'document_number' => 'REV-'.$this->document_number,
                 'description' => "Reversal of {$this->document_number}: {$reason}",
                 'posting_date' => now(),
                 'document_date' => now(),
@@ -449,9 +453,9 @@ class VendorLedgerEntry extends Model
     // ==================== STATIC FACTORY METHODS ====================
 
     /**
-     * Create from PostedPurchaseInvoice
+     * Create from PurchaseInvoice
      */
-    public static function createFromInvoice(PostedPurchaseInvoice $invoice): self
+    public static function createFromInvoice(PurchaseInvoice $invoice): self
     {
         $amount = $invoice->grand_total; // Debit (we owe vendor)
 
@@ -492,7 +496,7 @@ class VendorLedgerEntry extends Model
             'vendor_posting_group_id' => $invoice->vendor_posting_group_id,
             'gl_entry_id' => $invoice->glEntries()->first()?->id,
             'source_id' => $invoice->id,
-            'source_type' => PostedPurchaseInvoice::class,
+            'source_type' => PurchaseInvoice::class,
             'payment_terms_code' => $invoice->payment_terms_code,
             'payment_discount_percent' => $discountPercent,
             'payment_discount_due_date' => $discountDueDate,
@@ -587,7 +591,7 @@ class VendorLedgerEntry extends Model
         $entry = self::create([
             'entry_number' => self::getNextEntryNumber($vendorId),
             'vendor_id' => $vendorId,
-            'document_type' => match($paymentMethod) {
+            'document_type' => match ($paymentMethod) {
                 'BANK_TRANSFER' => 'BANK_TRANSFER',
                 default => 'PAYMENT',
             },
@@ -620,8 +624,9 @@ class VendorLedgerEntry extends Model
         $prefix = 'PAY';
         $year = date('Y');
         $count = self::whereYear('created_at', $year)
-                ->whereIn('document_type', ['PAYMENT', 'BANK_TRANSFER'])
-                ->count() + 1;
+            ->whereIn('document_type', ['PAYMENT', 'BANK_TRANSFER'])
+            ->count() + 1;
+
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
     }
 
@@ -682,12 +687,12 @@ class VendorLedgerEntry extends Model
             ->where('payment_discount_due_date', '>=', now())
             ->where('payment_discount_due_date', '<=', now()->addDays(7)) // Due within week
             ->get()
-            ->map(fn($entry) => [
+            ->map(fn ($entry) => [
                 'entry' => $entry,
                 'discount_amount' => $entry->discount_available,
                 'expires_in_days' => $entry->days_until_discount_expires,
             ])
-            ->filter(fn($item) => $item['discount_amount'] > 0)
+            ->filter(fn ($item) => $item['discount_amount'] > 0)
             ->toArray();
     }
 }

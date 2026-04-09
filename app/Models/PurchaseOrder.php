@@ -76,7 +76,7 @@ class PurchaseOrder extends Model
 
         // Auto-set posting groups from vendor as a fallback safeguard
         static::saving(function ($order) {
-            if ($order->vendor_id && !$order->general_business_posting_group_id) {
+            if ($order->vendor_id && ! $order->general_business_posting_group_id) {
                 $vendor = Vendor::find($order->vendor_id);
                 if ($vendor) {
                     $order->general_business_posting_group_id = $vendor->general_business_posting_group_id;
@@ -132,7 +132,7 @@ class PurchaseOrder extends Model
 
     public function postedInvoices(): HasMany
     {
-        return $this->hasMany(PostedPurchaseInvoice::class, 'order_id');
+        return $this->hasMany(PurchaseInvoice::class, 'order_id');
     }
 
     // ==================== HELPERS & ACCESORS ====================
@@ -146,7 +146,7 @@ class PurchaseOrder extends Model
         static::withoutEvents(function () {
             $this->total_amount = $this->lines()->sum('line_total');
             $this->total_vat = $this->lines()->sum('vat_amount');
-            $this->grand_total = (float)$this->total_amount + (float)$this->total_vat;
+            $this->grand_total = (float) $this->total_amount + (float) $this->total_vat;
             $this->save();
         });
     }

@@ -31,7 +31,11 @@ class SalesInvoiceForm
                             ->disabled(fn (?SalesInvoice $record) => $record?->isPosted()),
 
                         Select::make('customer_id')
-                            ->relationship('customer', 'name')
+                            ->relationship(
+                                name: 'customer',
+                                titleAttribute: 'name',
+                                modifyQueryUsing: fn ($query) => $query->whereNotNull('name')
+                            )
                             ->searchable()
                             ->preload()
                             ->required()
@@ -71,7 +75,7 @@ class SalesInvoiceForm
                             ->schema([
                                 Select::make('item_id')
                                     ->label('Item')
-                                    ->options(Item::query()->pluck('item_number', 'id'))
+                                    ->options(Item::query()->whereNotNull('item_number')->pluck('item_number', 'id'))
                                     ->searchable()
                                     ->preload()
                                     ->required()

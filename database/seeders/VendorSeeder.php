@@ -314,17 +314,25 @@ class VendorSeeder extends Seeder
             ],
         ];
 
+        $contactSeeder = new ContactSeeder;
+
         foreach ($vendors as $vendor) {
+
+            $contact = $contactSeeder->createFromVendor($vendor);
+
             Vendor::firstOrCreate(
                 ['vendor_code' => $vendor['vendor_code']],
-                $vendor
+                [
+                    ...$vendor,
+                    'contact_id' => $contact->id, // 🔥 KEY LINK
+                ]
             );
         }
 
         $this->command->info('Vendors seeded successfully!');
-        $this->command->info('Total: ' . count($vendors) . ' vendors');
-        $this->command->info('Active: ' . collect($vendors)->where('is_active', true)->count());
-        $this->command->info('Inactive: ' . collect($vendors)->where('is_active', false)->count());
+        $this->command->info('Total: '.count($vendors).' vendors');
+        $this->command->info('Active: '.collect($vendors)->where('is_active', true)->count());
+        $this->command->info('Inactive: '.collect($vendors)->where('is_active', false)->count());
     }
 
     private function ensurePostingGroupsExist(): void
@@ -371,7 +379,7 @@ class VendorSeeder extends Seeder
             [
                 'name' => 'Invoice Rounding',
                 'account_type' => 'EXPENSE',
-                'account_category' => AccountCategory::OPERATING_EXPENSE
+                'account_category' => AccountCategory::OPERATING_EXPENSE,
             ]
         );
 

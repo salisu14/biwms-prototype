@@ -43,34 +43,58 @@ class ItemInfolist
                         ->schema([
                             TextEntry::make('unit_price')->money(),
                             TextEntry::make('unit_cost')->money(),
-                            TextEntry::make('profit_percent')
-                                ->label('Profit Margin')
-                                ->suffix('%')
-                                ->placeholder('0'),
+                            TextEntry::make('inventory_method')
+                                ->label('Inventory Method')
+                                ->badge(),
                         ]),
 
-                    Section::make('Inventory Status')
+                    Section::make('Logistics')
+                        ->columnSpan(1)
+                        ->schema([
+                            TextEntry::make('uom.uom_code')
+                                ->label('Base Unit of Measure'),
+                            TextEntry::make('sku.sku_code')
+                                ->label('Default SKU/Variant'),
+                            TextEntry::make('location.name')
+                                ->label('Default Location')
+                                ->placeholder('No Location Assigned'),
+                        ]),
+
+                    Section::make('Stock Status')
                         ->columnSpan(1)
                         ->schema([
                             TextEntry::make('inventory')
                                 ->label('Current Stock')
                                 ->weight('bold')
                                 ->color(fn ($state) => $state <= 0 ? 'danger' : 'success'),
-                            TextEntry::make('base_unit_of_measure')
-                                ->label('Unit of Measure'),
-                            TextEntry::make('location.name')
-                                ->label('Location')
-                                ->placeholder('No Location Assigned'),
+                            TextEntry::make('reorder_point')
+                                ->label('Reorder Point'),
+                            TextEntry::make('bin_code')
+                                ->label('Bin Code'),
                         ]),
+                ]),
 
-                    Section::make('Restrictions')
-                        ->columnSpan(1)
-                        ->schema([
+                Section::make('Posting Groups & Configuration')
+                    ->schema([
+                        Grid::make(3)->schema([
+                            TextEntry::make('generalProductPostingGroup.code')
+                                ->label('Gen. Prod. Posting Group'),
+                            TextEntry::make('inventoryPostingGroup.code')
+                                ->label('Inventory Posting Group'),
+                            TextEntry::make('vat.code')
+                                ->label('VAT Configuration'),
+                        ]),
+                    ]),
+
+                Section::make('Restrictions')
+                    ->collapsed()
+                    ->schema([
+                        Grid::make(3)->schema([
                             IconEntry::make('blocked')->boolean()->label('Fully Blocked'),
                             IconEntry::make('sales_blocked')->boolean()->label('Sales Blocked'),
                             IconEntry::make('purchasing_blocked')->boolean()->label('Purchasing Blocked'),
                         ]),
-                ]),
+                    ]),
 
                 Section::make('System Information')
                     ->collapsed()

@@ -82,7 +82,7 @@ return new class extends Migration
             $table->unsignedBigInteger('gl_entry_id')->nullable();
 
             // Source Document Reference
-            $table->unsignedBigInteger('source_id')->nullable(); // PostedPurchaseInvoice, PostedPurchaseCreditMemo, Payment, etc.
+            $table->unsignedBigInteger('source_id')->nullable(); // PurchaseInvoice, PostedPurchaseCreditMemo, Payment, etc.
             $table->string('source_type', 50)->nullable(); // Model class name
 
             // User

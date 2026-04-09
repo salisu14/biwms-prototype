@@ -51,6 +51,8 @@ class PurchaseOrderResource extends Resource
             'create' => CreatePurchaseOrder::route('/create'),
             'view' => ViewPurchaseOrder::route('/{record}'),
             'edit' => EditPurchaseOrder::route('/{record}/edit'),
+
+            'archived' => Pages\ArchivedPurchaseOrders::route('/history/archived-pos'),
         ];
     }
 }

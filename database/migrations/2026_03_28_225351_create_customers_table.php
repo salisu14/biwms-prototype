@@ -44,6 +44,10 @@ return new class extends Migration
             $table->enum('blocked_reason', array_column(BlockedReason::cases(), 'value'))
                 ->default('NONE');
 
+            $table->foreignId('contact_id')
+                ->constrained()
+                ->cascadeOnDelete();
+
             $table->foreignId('pricing_group_id')
                 ->nullable()
                 ->after('customer_posting_group_id')

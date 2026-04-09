@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PaymentApplication.php
 
 namespace App\Models;
@@ -52,10 +53,10 @@ class PaymentApplication extends Model
 
     public function document()
     {
-        return match($this->document_type) {
+        return match ($this->document_type) {
             'SALES_INVOICE' => $this->belongsTo(PostedSalesInvoice::class, 'document_id'),
             'SALES_CREDIT_MEMO' => $this->belongsTo(PostedSalesCreditMemo::class, 'document_id'),
-            'PURCHASE_INVOICE' => $this->belongsTo(PostedPurchaseInvoice::class, 'document_id'),
+            'PURCHASE_INVOICE' => $this->belongsTo(PurchaseInvoice::class, 'document_id'),
             'PURCHASE_CREDIT_MEMO' => $this->belongsTo(PostedPurchaseCreditMemo::class, 'document_id'),
             default => null,
         };

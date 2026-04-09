@@ -2,12 +2,18 @@
 
 namespace Database\Seeders;
 
-use App\Models\Item;
-use App\Models\Location;
+use App\Enums\CostingMethod;
+use App\Enums\InventoryMethod;
+use App\Enums\ItemType;
+use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
-use App\Enums\ItemType;
-use App\Enums\CostingMethod;
+use App\Models\InventoryPostingSetup;
+use App\Models\Item;
+use App\Models\ItemSku;
+use App\Models\Location;
+use App\Models\UnitOfMeasure;
+use App\Models\VatMaster;
 use Illuminate\Database\Seeder;
 
 class ItemSeeder extends Seeder
@@ -17,6 +23,11 @@ class ItemSeeder extends Seeder
      */
     public function run(): void
     {
+        \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
+        Item::truncate();
+        ItemSku::truncate();
+        \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+
         // Ensure we have supporting data
         $mainLocation = Location::first() ?? Location::create(['name' => 'Main Warehouse', 'code' => 'MAIN']);
 
@@ -26,13 +37,15 @@ class ItemSeeder extends Seeder
         $serviceGroup = GeneralProductPostingGroup::where('code', 'SERVICE')->first()
             ?? GeneralProductPostingGroup::create(['code' => 'SERVICE', 'description' => 'Service Items']);
 
-        // Aligning with InventoryPostingGroupSeeder codes
         $finishedInvGroup = InventoryPostingGroup::where('code', 'FINISHED')->first()
             ?? InventoryPostingGroup::create(['code' => 'FINISHED', 'description' => 'Finished Goods']);
 
-        // Creating a fallback group for services since the column is NOT NULL
         $serviceInvGroup = InventoryPostingGroup::where('code', 'SERVICE')->first()
             ?? InventoryPostingGroup::create(['code' => 'SERVICE', 'description' => 'Service Posting Group']);
+
+        // Cache some common lookups
+        $vats = VatMaster::all()->pluck('id', 'code');
+        $uoms = UnitOfMeasure::all()->pluck('id', 'uom_code');
 
         $items = [
             [
@@ -44,6 +57,7 @@ class ItemSeeder extends Seeder
                 'vat_prod_posting_group' => 'VAT20',
                 'item_type' => ItemType::FINISHED_GOOD->value,
                 'costing_method' => CostingMethod::FIFO->value,
+                'inventory_method' => InventoryMethod::FIFO,
                 'unit_cost' => 850.0000,
                 'standard_cost' => 850.0000,
                 'last_direct_cost' => 845.0000,
@@ -53,7 +67,7 @@ class ItemSeeder extends Seeder
                 'reorder_quantity' => 25.0000,
                 'location_id' => $mainLocation->id,
                 'bin_code' => 'A-01-01',
-                'base_unit_of_measure' => 'PCS',
+                'base_unit_of_measure' => 'EA',
                 'weight' => 2.5000,
                 'blocked' => false,
             ],
@@ -66,6 +80,7 @@ class ItemSeeder extends Seeder
                 'vat_prod_posting_group' => 'VAT20',
                 'item_type' => ItemType::FINISHED_GOOD->value,
                 'costing_method' => CostingMethod::AVERAGE->value,
+                'inventory_method' => InventoryMethod::AVERAGE,
                 'unit_cost' => 25.5000,
                 'standard_cost' => 25.0000,
                 'last_direct_cost' => 26.0000,
@@ -75,7 +90,7 @@ class ItemSeeder extends Seeder
                 'reorder_quantity' => 100.0000,
                 'location_id' => $mainLocation->id,
                 'bin_code' => 'B-02-15',
-                'base_unit_of_measure' => 'PCS',
+                'base_unit_of_measure' => 'EA',
                 'weight' => 0.1500,
                 'blocked' => false,
             ],
@@ -84,10 +99,11 @@ class ItemSeeder extends Seeder
                 'description' => 'On-Site Technical Support',
                 'description_2' => 'Hourly rate for hardware repair',
                 'general_product_posting_group_id' => $serviceGroup->id,
-                'inventory_posting_group_id' => $serviceInvGroup->id, // Fixed: Cannot be null due to DB constraint
+                'inventory_posting_group_id' => $serviceInvGroup->id,
                 'vat_prod_posting_group' => 'VAT20',
                 'item_type' => ItemType::SERVICE->value,
                 'costing_method' => CostingMethod::STANDARD->value,
+                'inventory_method' => InventoryMethod::FIFO,
                 'unit_cost' => 45.0000,
                 'standard_cost' => 45.0000,
                 'last_direct_cost' => 0.0000,
@@ -95,34 +111,42 @@ class ItemSeeder extends Seeder
                 'inventory' => 0.0000,
                 'reorder_point' => 0.0000,
                 'reorder_quantity' => 0.0000,
-                'base_unit_of_measure' => 'HOUR',
+                'base_unit_of_measure' => 'EA',
                 'blocked' => false,
-            ],
-            [
-                'item_number' => '9000',
-                'description' => 'Discontinued Monitor X2',
-                'description_2' => 'Legacy Model 24-inch',
-                'general_product_posting_group_id' => $retailGroup->id,
-                'inventory_posting_group_id' => $finishedInvGroup->id,
-                'vat_prod_posting_group' => 'VAT20',
-                'item_type' => ItemType::FINISHED_GOOD->value,
-                'costing_method' => CostingMethod::FIFO->value,
-                'unit_cost' => 110.0000,
-                'unit_price' => 199.0000,
-                'inventory' => 5.0000,
-                'location_id' => $mainLocation->id,
-                'base_unit_of_measure' => 'PCS',
-                'blocked' => true,
-                'sales_blocked' => true,
-                'purchasing_blocked' => true,
             ],
         ];
 
         foreach ($items as $itemData) {
-            Item::updateOrCreate(
+            // Resolve UOM ID
+            $itemData['uom_id'] = $uoms[$itemData['base_unit_of_measure']] ?? null;
+            
+            // Resolve VAT ID
+            $itemData['vat_id'] = $vats[$itemData['vat_prod_posting_group']] ?? null;
+
+            // Resolve Posting Setups (Best effort)
+            $itemData['general_posting_setup_id'] = GeneralPostingSetup::where('general_product_posting_group_id', $itemData['general_product_posting_group_id'])->first()?->id;
+            $itemData['inventory_posting_setup_id'] = InventoryPostingSetup::where([
+                'inventory_posting_group_id' => $itemData['inventory_posting_group_id'],
+                'location_id' => $itemData['location_id'] ?? $mainLocation->id,
+            ])->first()?->id;
+
+            $item = Item::updateOrCreate(
                 ['item_number' => $itemData['item_number']],
                 $itemData
             );
+
+            // Create/Sync SKU for this item at main location
+            if ($item->location_id) {
+                $sku = ItemSku::updateOrCreate([
+                    'item_id' => $item->id,
+                    'location_id' => $item->location_id,
+                ], [
+                    'sku_code' => $item->item_number . '-' . $mainLocation->code,
+                    'is_active' => true,
+                ]);
+
+                $item->update(['sku_id' => $sku->id]);
+            }
         }
     }
 }

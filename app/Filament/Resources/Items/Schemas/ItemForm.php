@@ -60,12 +60,14 @@ class ItemForm
                                         ->numeric()
                                         ->prefix('$'),
 
+                                    Select::make('inventory_method')
+                                        ->label('Inventory Method')
+                                        ->options(\App\Enums\InventoryMethod::class)
+                                        ->required()
+                                        ->native(false),
                                     TextInput::make('costing_method')
                                         ->default('AVERAGE')
-                                        ->required(),
-                                    TextInput::make('price_calculation_method')
-                                        ->default('STANDARD')
-                                        ->required(),
+                                        ->hidden(), // Deprecated in favor of inventory_method
                                     TextInput::make('profit_percent')
                                         ->label('Profit %')
                                         ->numeric()
@@ -77,20 +79,30 @@ class ItemForm
                             ->icon('heroicon-m-cube')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('inventory')
-                                        ->label('Initial Inventory')
-                                        ->numeric()
-                                        ->default(0)
+                                    Select::make('uom_id')
+                                        ->label('Base Unit of Measure')
+                                        ->relationship('uom', 'uom_code')
+                                        ->searchable()
+                                        ->preload()
                                         ->required(),
-                                    TextInput::make('base_unit_of_measure')
-                                        ->label('Base UoM')
-                                        ->placeholder('e.g. PCS, KG')
-                                        ->required(),
+                                    
+                                    Select::make('sku_id')
+                                        ->label('Default SKU/Variant')
+                                        ->relationship('sku', 'sku_code')
+                                        ->searchable()
+                                        ->placeholder('Auto-generated if blank'),
+
                                     Select::make('location_id')
                                         ->label('Default Location')
                                         ->relationship('location', 'name')
                                         ->searchable(),
 
+                                    TextInput::make('inventory')
+                                        ->label('Initial Inventory')
+                                        ->numeric()
+                                        ->default(0)
+                                        ->disabledOn('edit'),
+                                    
                                     TextInput::make('reorder_point')
                                         ->numeric(),
                                     TextInput::make('reorder_quantity')
@@ -106,7 +118,7 @@ class ItemForm
                                     ])->columns(3),
                             ]),
 
-                        Tab::make('Posting Groups')
+                        Tab::make('Posting & VAT')
                             ->icon('heroicon-m-arrows-right-left')
                             ->schema([
                                 Grid::make(2)->schema([
@@ -114,12 +126,27 @@ class ItemForm
                                         ->label('Gen. Prod. Posting Group')
                                         ->relationship('generalProductPostingGroup', 'id')
                                         ->required(),
+                                    
                                     Select::make('inventory_posting_group_id')
                                         ->label('Inventory Posting Group')
                                         ->relationship('inventoryPostingGroup', 'id')
                                         ->required(),
-                                    TextInput::make('vat_prod_posting_group')
-                                        ->label('VAT Prod. Posting Group'),
+
+                                    Select::make('vat_id')
+                                        ->label('VAT Configuration')
+                                        ->relationship('vat', 'code')
+                                        ->searchable()
+                                        ->preload(),
+
+                                    Select::make('general_posting_setup_id')
+                                        ->label('Default Gen. Posting Setup')
+                                        ->relationship('generalPostingSetup', 'id')
+                                        ->placeholder('System Resolved'),
+                                    
+                                    Select::make('inventory_posting_setup_id')
+                                        ->label('Default Inv. Posting Setup')
+                                        ->relationship('inventoryPostingSetup', 'id')
+                                        ->placeholder('Location Resolved'),
                                 ]),
                             ]),
 

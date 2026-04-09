@@ -8,11 +8,11 @@ use App\Enums\ShippingMethod;
 use App\Models\Customer;
 use App\Models\Item;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
@@ -53,7 +53,7 @@ class SalesOrderForm
                                             $set('customer_address', $customer->address);
                                             $set('ship_to_name', $customer->name);
                                             $set('ship_to_address', $customer->address);
-                                            $set('currency_code', $customer->currency_code ?? 'USD');
+                                            $set('currency_code', $customer->currency_code ?? 'NGN');
                                             $set('payment_terms_code', $customer->payment_terms_code);
                                             $set('general_business_posting_group_id', $customer->general_business_posting_group_id);
                                         }

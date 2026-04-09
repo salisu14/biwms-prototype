@@ -2,12 +2,14 @@
 
 namespace App\Enums;
 
+use Filament\Support\Contracts\HasLabel;
+
 /**
  * Enhanced ApprovalStatus Enum
  * * Provides utility methods for labels, UI colors, and
  * collection formatting for frontend components.
  */
-enum ApprovalStatus: string
+enum ApprovalStatus: string implements HasLabel
 {
     case DRAFT     = 'draft';
     case PENDING   = 'pending';
@@ -33,7 +35,7 @@ enum ApprovalStatus: string
 //        };
 //    }
 
-    public function getLabel(): ?string
+    public function getLabel(): string
     {
         return match ($this) {
             self::DRAFT => 'Draft',
@@ -94,7 +96,7 @@ enum ApprovalStatus: string
     public static function options(): array
     {
         return array_map(fn($status) => [
-            'label' => $status->label(),
+            'label' => $status->getLabel(),
             'value' => $status->value,
             'color' => $status->color(),
             'icon'  => $status->icon(),

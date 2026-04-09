@@ -42,6 +42,12 @@ class Item extends Model
         'blocked',
         'sales_blocked',
         'purchasing_blocked',
+        'uom_id',
+        'sku_id',
+        'vat_id',
+        'general_posting_setup_id',
+        'inventory_posting_setup_id',
+        'inventory_method',
     ];
 
     protected $casts = [
@@ -58,6 +64,7 @@ class Item extends Model
         'blocked' => 'boolean',
         'sales_blocked' => 'boolean',
         'purchasing_blocked' => 'boolean',
+        'inventory_method' => InventoryMethod::class,
     ];
 
     /**
@@ -150,6 +157,31 @@ class Item extends Model
     public function itemLedgerEntries(): HasMany
     {
         return $this->hasMany(ItemLedgerEntry::class);
+    }
+
+    public function uom(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'uom_id');
+    }
+
+    public function sku(): BelongsTo
+    {
+        return $this->belongsTo(ItemSku::class, 'sku_id');
+    }
+
+    public function vat(): BelongsTo
+    {
+        return $this->belongsTo(VatMaster::class, 'vat_id');
+    }
+
+    public function generalPostingSetup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralPostingSetup::class, 'general_posting_setup_id');
+    }
+
+    public function inventoryPostingSetup(): BelongsTo
+    {
+        return $this->belongsTo(InventoryPostingSetup::class, 'inventory_posting_setup_id');
     }
 
     // Get inventory account for location

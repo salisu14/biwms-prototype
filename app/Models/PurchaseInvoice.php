@@ -1,5 +1,5 @@
 <?php
-// app/Models/PostedPurchaseInvoice.php
+// app/Models/PurchaseInvoice.php
 
 namespace App\Models;
 
@@ -8,10 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class PostedPurchaseInvoice extends Model
+class PurchaseInvoice extends Model
 {
     use HasFactory;
-
     protected $table = 'posted_purchase_invoices';
 
     protected $fillable = [
@@ -87,7 +86,7 @@ class PostedPurchaseInvoice extends Model
 
     public function lines(): HasMany
     {
-        return $this->hasMany(PostedPurchaseInvoiceLine::class, 'posted_purchase_invoice_id')
+        return $this->hasMany(PurchaseInvoiceLine::class, 'posted_purchase_invoice_id')
             ->orderBy('line_number');
     }
 
@@ -263,5 +262,18 @@ class PostedPurchaseInvoice extends Model
         $count = self::whereYear('posted_at', $year)->count() + 1;
 
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
+    }
+
+     protected static function booted(): void
+    {
+        static::creating(function (PurchaseInvoice $invoice) {
+            if (empty($invoice->posted_at)) {
+                $invoice->posted_at = now();
+            }
+
+            if (empty($invoice->posted_by) && auth()->check()) {
+                $invoice->posted_by = auth()->id();
+            }
+        });
     }
 }

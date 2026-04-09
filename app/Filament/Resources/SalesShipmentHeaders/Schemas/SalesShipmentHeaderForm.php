@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\SalesShipmentHeaders\Schemas;
 
+use App\Models\Customer;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -24,9 +25,9 @@ class SalesShipmentHeaderForm
                             ->schema([
                                 Grid::make(3)->schema([
                                     TextInput::make('document_no')
-                                        ->label('No.')
-                                        ->required()
-                                        ->disabled(),
+                                        ->label('Document No.')
+                                        ->required(),
+                                    //                                        ->disabled(),
                                     // ... inside the General tab schema grid ...
                                     Select::make('sell_to_customer_no')
                                         ->label('Sell-to Customer No.')
@@ -35,14 +36,15 @@ class SalesShipmentHeaderForm
                                         ->preload()
                                         ->live() // Essential to trigger reactivity
                                         ->required()
-                                        ->afterStateUpdated(function (string|null $state, $set) {
+                                        ->afterStateUpdated(function (?string $state, $set) {
                                             if (blank($state)) {
                                                 $set('sell_to_customer_name', null);
+
                                                 return;
                                             }
 
                                             // Fetch the customer and populate the name
-                                            $customer = \App\Models\Customer::where('customer_number', $state)->first();
+                                            $customer = Customer::where('customer_number', $state)->first();
 
                                             if ($customer) {
                                                 $set('sell_to_customer_name', $customer->name);
@@ -113,7 +115,7 @@ class SalesShipmentHeaderForm
                                     TextInput::make('package_tracking_no'),
                                 ]),
                             ]),
-                    ])->columnSpanFull()
+                    ])->columnSpanFull(),
             ]);
     }
 }

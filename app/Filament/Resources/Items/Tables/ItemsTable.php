@@ -49,20 +49,20 @@ class ItemsTable
                     ->alignRight()
                     ->sortable(),
 
-                TextColumn::make('unit_cost')
-                    ->money()
-                    ->alignRight()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->sortable(),
+                TextColumn::make('uom.uom_code')
+                    ->label('Base UoM')
+                    ->sortable()
+                    ->toggleable(),
 
                 TextColumn::make('location.name')
-                    ->label('Main Location')
+                    ->label('Default Location')
                     ->placeholder('N/A')
                     ->toggleable(),
 
-                TextColumn::make('base_unit_of_measure')
-                    ->label('UoM')
-                    ->toggleable(),
+                TextColumn::make('sku.sku_code')
+                    ->label('Default SKU')
+                    ->placeholder('N/A')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 IconColumn::make('blocked')
                     ->boolean()
@@ -75,14 +75,14 @@ class ItemsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->columnManagerLayout(ColumnManagerLayout::Modal)
-//            ->columnManagerTriggerAction(
-//                fn (Action $action) => $action->slideOver()
-//            )
             ->filters([
                 SelectFilter::make('item_type')
                     ->options(ItemType::options()),
                 SelectFilter::make('location_id')
                     ->relationship('location', 'name'),
+                SelectFilter::make('uom_id')
+                    ->label('Unit of Measure')
+                    ->relationship('uom', 'uom_code'),
                 TernaryFilter::make('blocked')
                     ->label('Is Blocked'),
             ])

@@ -9,7 +9,6 @@ use App\Filament\Resources\PostedShipments\Pages\ViewPostedShipment;
 use App\Filament\Resources\PostedShipments\Schemas\PostedShipmentForm;
 use App\Filament\Resources\PostedShipments\Schemas\PostedShipmentInfolist;
 use App\Filament\Resources\PostedShipments\Tables\PostedShipmentsTable;
-use App\Models\PostedShipment;
 use App\Models\SalesShipmentHeader;
 use BackedEnum;
 use Filament\Resources\Resource;

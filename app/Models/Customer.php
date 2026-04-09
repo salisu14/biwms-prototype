@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/Customer.php
 
 namespace App\Models;
@@ -55,6 +56,19 @@ class Customer extends Model
         return $this->belongsTo(Location::class);
     }
 
+    public function contact(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class);
+    }
+
+    public function getNameAttribute(): string
+    {
+        return $this->contact?->name 
+            ?? $this->attributes['name'] 
+            ?? $this->customer_number 
+            ?? 'Unnamed Customer';
+    }
+
     public function warehouseShipments(): HasMany
     {
         return $this->hasMany(WarehouseShipment::class);
@@ -73,6 +87,7 @@ class Customer extends Model
     public function getSalesAccountFor(Item $item): ?ChartOfAccount
     {
         $setup = $this->getPostingSetupFor($item);
+
         return $setup?->getSalesAccount();
     }
 
@@ -80,6 +95,7 @@ class Customer extends Model
     public function getCogsAccountFor(Item $item): ?ChartOfAccount
     {
         $setup = $this->getPostingSetupFor($item);
+
         return $setup?->getCogsAccount();
     }
 
@@ -120,7 +136,7 @@ class Customer extends Model
             ->orderBy('due_date');
     }
 
-// Balance calculations
+    // Balance calculations
     public function getBalanceAttribute(): float
     {
         return CustomerLedgerEntry::getBalance($this->id);
@@ -145,16 +161,22 @@ class Customer extends Model
         return CustomerLedgerEntry::getAging($this->id);
     }
 
-   // Credit limit check
+    // Credit limit check
     public function isOverCreditLimit(): bool
     {
-        if (!$this->credit_limit) return false;
+        if (! $this->credit_limit) {
+            return false;
+        }
+
         return $this->balance > $this->credit_limit;
     }
 
     public function getAvailableCreditAttribute(): ?float
     {
-        if (!$this->credit_limit) return null;
+        if (! $this->credit_limit) {
+            return null;
+        }
+
         return max(0, $this->credit_limit - $this->balance);
     }
 

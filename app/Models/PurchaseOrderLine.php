@@ -59,14 +59,14 @@ class PurchaseOrderLine extends Model
          * Filament RelationManager hooks to ensure UI/UX consistency.
          */
         static::saving(function ($line) {
-            $line->line_total = (float)$line->quantity * (float)$line->unit_cost;
-            $line->vat_amount = (float)$line->line_total * ((float)$line->vat_percentage / 100);
-            $line->total_amount = (float)$line->line_total + (float)$line->vat_amount;
+            $line->line_total = (float) $line->quantity * (float) $line->unit_cost;
+            $line->vat_amount = (float) $line->line_total * ((float) $line->vat_percentage / 100);
+            $line->total_amount = (float) $line->line_total + (float) $line->vat_amount;
         });
 
         // Auto-set posting group from item if not already set
         static::creating(function ($line) {
-            if ($line->item_id && !$line->general_product_posting_group_id) {
+            if ($line->item_id && ! $line->general_product_posting_group_id) {
                 $item = Item::find($line->item_id);
                 if ($item) {
                     $line->general_product_posting_group_id = $item->general_product_posting_group_id;
@@ -100,34 +100,34 @@ class PurchaseOrderLine extends Model
 
     public function postedInvoiceLines(): HasMany
     {
-        return $this->hasMany(PostedPurchaseInvoiceLine::class, 'po_line_id');
+        return $this->hasMany(PurchaseInvoiceLine::class, 'po_line_id');
     }
 
     // ==================== CALCULATED ATTRIBUTES ====================
 
     public function getRemainingQuantityAttribute(): float
     {
-        return max(0, (float)$this->quantity - (float)$this->received_quantity);
+        return max(0, (float) $this->quantity - (float) $this->received_quantity);
     }
 
     public function getRemainingToInvoiceAttribute(): float
     {
-        return max(0, (float)$this->received_quantity - (float)$this->invoiced_quantity);
+        return max(0, (float) $this->received_quantity - (float) $this->invoiced_quantity);
     }
 
     public function getIsFullyReceivedAttribute(): bool
     {
-        return (float)$this->received_quantity >= (float)$this->quantity;
+        return (float) $this->received_quantity >= (float) $this->quantity;
     }
 
     public function getIsPartiallyReceivedAttribute(): bool
     {
-        return (float)$this->received_quantity > 0 && (float)$this->received_quantity < (float)$this->quantity;
+        return (float) $this->received_quantity > 0 && (float) $this->received_quantity < (float) $this->quantity;
     }
 
     public function getIsFullyInvoicedAttribute(): bool
     {
-        return (float)$this->invoiced_quantity >= (float)$this->quantity;
+        return (float) $this->invoiced_quantity >= (float) $this->quantity;
     }
 
     // ==================== POSTING HELPERS ====================
@@ -141,7 +141,7 @@ class PurchaseOrderLine extends Model
         $businessGroupId = $this->purchaseOrder?->general_business_posting_group_id;
         $productGroupId = $this->general_product_posting_group_id;
 
-        if (!$businessGroupId || !$productGroupId) {
+        if (! $businessGroupId || ! $productGroupId) {
             return null;
         }
 

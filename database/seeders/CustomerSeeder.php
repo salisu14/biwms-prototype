@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerPostingGroup;
 use App\Models\GeneralBusinessPostingGroup;
@@ -339,17 +338,25 @@ class CustomerSeeder extends Seeder
             ],
         ];
 
+        $contactSeeder = new ContactSeeder;
+
         foreach ($customers as $customer) {
+
+            $contact = $contactSeeder->createFromCustomer($customer);
+
             Customer::firstOrCreate(
                 ['customer_number' => $customer['customer_number']],
-                $customer
+                [
+                    ...$customer,
+                    'contact_id' => $contact->id, // 🔥 KEY LINK
+                ]
             );
         }
 
         $this->command->info('Customers seeded successfully!');
-        $this->command->info('Total: ' . count($customers) . ' customers');
-        $this->command->info('Active: ' . collect($customers)->where('blocked', false)->count());
-        $this->command->info('Blocked: ' . collect($customers)->where('blocked', true)->count());
+        $this->command->info('Total: '.count($customers).' customers');
+        $this->command->info('Active: '.collect($customers)->where('blocked', false)->count());
+        $this->command->info('Blocked: '.collect($customers)->where('blocked', true)->count());
     }
 
     private function ensureDependenciesExist(): void
@@ -376,7 +383,7 @@ class CustomerSeeder extends Seeder
         );
 
         // Create default location if not exist
-        if (!Location::exists()) {
+        if (! Location::exists()) {
             Location::create([
                 'code' => 'MAIN',
                 'name' => 'Main Warehouse',

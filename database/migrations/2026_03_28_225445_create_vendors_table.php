@@ -48,7 +48,10 @@ return new class extends Migration
                 ->constrained('general_business_posting_groups');
             $table->foreignId('vendor_posting_group_id')
                 ->constrained('vendor_posting_groups');
-//            $table->string('vat_bus_posting_group', 20)->nullable();
+
+            $table->foreignId('contact_id')
+                ->constrained()
+                ->cascadeOnDelete();
 
             // Payment Terms
             $table->string('payment_terms_code', 20)->nullable();

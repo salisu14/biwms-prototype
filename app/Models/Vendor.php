@@ -57,6 +57,11 @@ class Vendor extends Model
     ];
 
     // Relationships
+    public function contact(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class);
+    }
+
     public function generalBusinessPostingGroup(): BelongsTo
     {
         return $this->belongsTo(GeneralBusinessPostingGroup::class);
@@ -76,6 +81,11 @@ class Vendor extends Model
     {
         return $this->hasMany(VendorLedgerEntry::class)
             ->orderBy('entry_number');
+    }
+
+    public function getNameAttribute(): ?string
+    {
+        return $this->contact?->name;
     }
 
     public function openLedgerEntries(): HasMany
@@ -98,6 +108,7 @@ class Vendor extends Model
     public function getPurchaseAccountFor(Item $item): ?ChartOfAccount
     {
         $setup = $this->getPostingSetupFor($item);
+
         return $setup?->getPurchaseAccount();
     }
 

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class PostedPurchaseInvoiceLine extends Model
+class PurchaseInvoiceLine extends Model
 {
     use HasFactory;
 
@@ -74,7 +74,7 @@ class PostedPurchaseInvoiceLine extends Model
 
     public function postedPurchaseInvoice(): BelongsTo
     {
-        return $this->belongsTo(PostedPurchaseInvoice::class, 'posted_purchase_invoice_id');
+        return $this->belongsTo(PurchaseInvoice::class, 'posted_purchase_invoice_id');
     }
 
     public function purchaseOrderLine(): BelongsTo

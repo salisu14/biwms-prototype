@@ -30,7 +30,7 @@ class ItemCategoryAssignment extends Pivot
 
     public function item(): BelongsTo
     {
-        return $this->belongsTo(ItemMaster::class);
+        return $this->belongsTo(Item::class);
     }
 
     public function category(): BelongsTo

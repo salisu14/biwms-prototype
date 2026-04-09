@@ -136,7 +136,7 @@ class PostedPurchaseCreditMemo extends Model
      */
     public function correctedInvoice(): BelongsTo
     {
-        return $this->belongsTo(PostedPurchaseInvoice::class, 'corrects_invoice_id');
+        return $this->belongsTo(PurchaseInvoice::class, 'corrects_invoice_id');
     }
 
     // ==================== SCOPES ====================
@@ -283,7 +283,7 @@ class PostedPurchaseCreditMemo extends Model
      */
     public function applyToInvoices(array $applications): void
     {
-        if (!$this->posted) {
+        if (! $this->posted) {
             throw new \Exception('Credit memo must be posted before applying');
         }
 
@@ -291,7 +291,7 @@ class PostedPurchaseCreditMemo extends Model
             ->where('source_type', self::class)
             ->first();
 
-        if (!$ledgerEntry) {
+        if (! $ledgerEntry) {
             throw new \Exception('Vendor ledger entry not found');
         }
 

@@ -2,6 +2,10 @@
 
 namespace App\Models;
 
+use App\Models\Manufacturing\CapExProject;
+use App\Models\Manufacturing\CapExProjectLine;
+use App\Models\Manufacturing\FixedAsset;
+use App\Models\Manufacturing\ProductionOrder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -59,17 +63,17 @@ class VendorInvoiceLine extends Model
 
     public function item(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Item::class);
+        return $this->belongsTo(Item::class);
     }
 
     public function glAccount(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Accounting\GlAccount::class, 'gl_account_id');
+        return $this->belongsTo(ChartOfAccount::class, 'gl_account_id');
     }
 
     public function fixedAsset(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Manufacturing\FixedAsset::class);
+        return $this->belongsTo(FixedAsset::class);
     }
 
     public function purchaseOrder(): BelongsTo
@@ -79,22 +83,22 @@ class VendorInvoiceLine extends Model
 
     public function purchaseReceipt(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\PurchaseReceipt::class);
+        return $this->belongsTo(PurchaseReceipt::class);
     }
 
     public function capExProject(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Manufacturing\CapExProject::class, 'capex_project_id');
+        return $this->belongsTo(CapExProject::class, 'capex_project_id');
     }
 
     public function capExProjectLine(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Manufacturing\CapExProjectLine::class, 'capex_project_line_id');
+        return $this->belongsTo(CapExProjectLine::class, 'capex_project_line_id');
     }
 
     public function productionOrder(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Manufacturing\ProductionOrder::class);
+        return $this->belongsTo(ProductionOrder::class);
     }
 
     // Business Logic
@@ -139,15 +143,16 @@ class VendorInvoiceLine extends Model
      */
     public function getMatchStatus(): string
     {
-        if (!$this->purchase_order_id) {
+        if (! $this->purchase_order_id) {
             return 'NO_PO';
         }
-        if (!$this->purchase_receipt_id) {
+        if (! $this->purchase_receipt_id) {
             return 'NO_RECEIPT';
         }
         if ($this->quantityMatches() && $this->amountMatches()) {
             return 'MATCHED';
         }
+
         return 'MISMATCH';
     }
 
