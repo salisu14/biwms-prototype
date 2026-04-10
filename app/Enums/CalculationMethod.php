@@ -6,33 +6,14 @@ use Filament\Support\Contracts\HasLabel;
 
 enum CalculationMethod: string implements HasLabel
 {
-    case Fixed = 'fixed';
-    case Percentage = 'percentage';
+    case FIXED_AMOUNT = 'FIXED_AMOUNT';
+    case PERCENTAGE = 'PERCENTAGE';
 
-    public function getLabel(): string
+    public function getLabel(): ?string
     {
         return match ($this) {
-            self::Fixed => 'Fixed Amount',
-            self::Percentage => 'Percentage (%)',
-        };
-    }
-
-    public function getSymbol(): string
-    {
-        return match ($this) {
-            self::Fixed => '$',
-            self::Percentage => '%',
-        };
-    }
-
-    /**
-     * Apply the calculation to a base value
-     */
-    public function calculate(float $base, float $value): float
-    {
-        return match ($this) {
-            self::Fixed => $value,
-            self::Percentage => ($base * ($value / 100)),
+            self::FIXED_AMOUNT => 'Fixed Amount',
+            self::PERCENTAGE => 'Percentage of Base Salary',
         };
     }
 }

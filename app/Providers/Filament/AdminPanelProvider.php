@@ -358,12 +358,17 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/departments'),
 
                                 NavigationItem::make('Employees')
-                                    ->icon('heroicon-o-play')
+                                    ->icon('heroicon-o-user-group')
                                     ->url('/admin/employees'),
 
-                                NavigationItem::make('Sales Shipments')
-                                    ->icon('heroicon-o-truck')
-                                    ->url('/admin/sales-shipment-headers'),
+                                NavigationItem::make('Pay Codes')
+                                    ->icon('heroicon-o-banknotes')
+                                    ->url('/admin/pay-codes'),
+
+                                NavigationItem::make('Payroll Documents')
+                                    ->icon('heroicon-o-document-currency-dollar')
+                                    ->url('/admin/payroll-documents')
+                                    ->isActiveWhen(fn() => request()->is('admin/payroll-documents*')),
 
                                 NavigationItem::make('Purchase Receipts')
                                     ->icon('heroicon-o-archive-box')

@@ -66,4 +66,17 @@ class Employee extends Model
     {
         return $this->belongsTo(EmployeePostingGroup::class);
     }
+
+    public function compensations()
+    {
+        return $this->hasMany(EmployeeCompensation::class);
+    }
+
+    public function getCurrentBaseSalary()
+    {
+        return $this->compensations()
+            ->where('effective_date', '<=', today())
+            ->orderBy('effective_date', 'desc')
+            ->value('base_salary') ?? 0;
+    }
 }
