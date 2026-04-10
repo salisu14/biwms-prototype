@@ -47,6 +47,7 @@ class PurchaseQuote extends Model
         'released_at',
         'released_by',
         'quote_no',
+        'is_price_inclusive',
     ];
 
     protected function casts(): array

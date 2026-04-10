@@ -31,12 +31,14 @@ class Customer extends Model
         'blocked',
         'blocked_reason',
         'contact_id',
+        'is_price_inclusive',
     ];
 
     protected $casts = [
         'credit_limit' => 'decimal:2',
         'blocked' => 'boolean',
         'customer_type' => CustomerType::class,
+        'is_price_inclusive' => 'boolean',
     ];
 
     // Relationships

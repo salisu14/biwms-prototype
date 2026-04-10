@@ -19,6 +19,7 @@ class SalesQuote extends Model
         'approval_status',
         'approved_by',
         'approved_at',
+        'is_price_inclusive',
     ];
 
     protected $casts = [

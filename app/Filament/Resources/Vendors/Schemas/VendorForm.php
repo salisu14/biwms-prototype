@@ -41,6 +41,8 @@ class VendorForm
                     ->numeric(),
                 Toggle::make('is_active')
                     ->required(),
+                Toggle::make('is_price_inclusive')
+                    ->label('Prices Include VAT'),
                 Textarea::make('notes')
                     ->columnSpanFull(),
             ]);

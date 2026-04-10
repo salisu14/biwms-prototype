@@ -37,6 +37,7 @@ class Vendor extends Model
         'blocked_reason',
         'contact_id',
         'notes',
+        'is_price_inclusive',
     ];
 
     protected $casts = [
@@ -44,6 +45,7 @@ class Vendor extends Model
         'minimum_order_amount' => 'decimal:4',
         'is_active' => 'boolean',
         'blocked' => 'boolean',
+        'is_price_inclusive' => 'boolean',
     ];
 
     protected $appends = [

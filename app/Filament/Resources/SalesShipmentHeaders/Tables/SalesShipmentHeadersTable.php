@@ -63,6 +63,12 @@ class SalesShipmentHeadersTable
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
+                \Filament\Tables\Actions\Action::make('print_waybill')
+                    ->label('Print Waybill')
+                    ->icon('heroicon-o-printer')
+                    ->color('success')
+                    ->url(fn (\App\Models\SalesShipmentHeader $record) => route('waybill.print', $record))
+                    ->openUrlInNewTab(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

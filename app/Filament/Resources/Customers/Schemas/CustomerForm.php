@@ -93,7 +93,8 @@ class CustomerForm
                             TextInput::make('maximum_discount_percent')
                                 ->numeric()
                                 ->suffix('%'),
-                            Toggle::make('price_includes_vat'),
+                            Toggle::make('is_price_inclusive')
+                                ->label('Prices Include VAT'),
                         ]),
                     ]),
             ]);

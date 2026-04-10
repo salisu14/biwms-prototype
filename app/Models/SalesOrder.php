@@ -64,6 +64,7 @@ class SalesOrder extends Model
         'dimensions',
         'internal_comment',
         'customer_comment',
+        'is_price_inclusive',
     ];
 
     protected $casts = [
@@ -84,6 +85,7 @@ class SalesOrder extends Model
         'quantity_invoiced' => 'decimal:4',
         'fully_shipped' => 'boolean',
         'fully_invoiced' => 'boolean',
+        'is_price_inclusive' => 'boolean',
         'approved_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'dimensions' => 'array',
@@ -98,6 +100,7 @@ class SalesOrder extends Model
         'currency_factor' => 1,
         'subtotal' => 0,
         'grand_total' => 0,
+        'is_price_inclusive' => false,
     ];
 
     protected static function boot(): void
@@ -146,6 +149,7 @@ class SalesOrder extends Model
                 $this->customer_posting_group_id = $customer->customer_posting_group_id;
                 $this->vat_bus_posting_group = $customer->vat_bus_posting_group;
                 $this->pricing_group_id = $customer->pricing_group_id;
+                $this->is_price_inclusive = $customer->is_price_inclusive;
                 $this->customer_name ??= $customer->name;
             }
         }

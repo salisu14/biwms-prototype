@@ -38,6 +38,7 @@ class PurchaseOrder extends Model
         'general_business_posting_group_id',
         'vendor_posting_group_id',
         'vat_bus_posting_group',
+        'is_price_inclusive',
     ];
 
     protected $casts = [
@@ -50,12 +51,14 @@ class PurchaseOrder extends Model
         'total_amount' => 'decimal:4',
         'total_vat' => 'decimal:4',
         'grand_total' => 'decimal:4',
+        'is_price_inclusive' => 'boolean',
         'approved_at' => 'datetime',
     ];
 
     protected $attributes = [
         'status' => PurchaseOrderStatus::PENDING,
         'order_type' => PurchaseOrderType::PURCHASE_ORDER,
+        'is_price_inclusive' => false,
     ];
 
     protected static function boot(): void
@@ -82,6 +85,7 @@ class PurchaseOrder extends Model
                     $order->general_business_posting_group_id = $vendor->general_business_posting_group_id;
                     $order->vendor_posting_group_id = $vendor->vendor_posting_group_id;
                     $order->vat_bus_posting_group = $vendor->vat_bus_posting_group;
+                    $order->is_price_inclusive = $vendor->is_price_inclusive;
                 }
             }
         });
