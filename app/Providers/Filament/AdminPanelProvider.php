@@ -435,6 +435,10 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-currency-dollar')
                                         ->url('/admin/currencies'),
 
+                                    NavigationItem::make('Currency Adjustments')
+                                        ->icon('heroicon-o-currency-dollar')
+                                        ->url('/admin/currency-adjustment-ledgers'),
+
                                     // Number Series
                                     NavigationItem::make('Number Series')
                                         ->icon('heroicon-o-hashtag')
