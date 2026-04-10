@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Enums\CustomerType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,17 +23,20 @@ class Customer extends Model
         'general_business_posting_group_id',
         'customer_posting_group_id',
         'vat_bus_posting_group',
+        'customer_type',
         'location_id',
         'shipping_agent_code',
         'payment_terms_code',
         'credit_limit',
         'blocked',
         'blocked_reason',
+        'contact_id',
     ];
 
     protected $casts = [
         'credit_limit' => 'decimal:2',
         'blocked' => 'boolean',
+        'customer_type' => CustomerType::class,
     ];
 
     // Relationships
@@ -63,9 +67,9 @@ class Customer extends Model
 
     public function getNameAttribute(): string
     {
-        return $this->contact?->name 
-            ?? $this->attributes['name'] 
-            ?? $this->customer_number 
+        return $this->contact?->name
+            ?? $this->attributes['name']
+            ?? $this->customer_number
             ?? 'Unnamed Customer';
     }
 

@@ -43,6 +43,26 @@ class NumberSeriesSeeder extends Seeder
                 'year' => 2026,
                 'module' => 'purchase',
             ],
+            [
+                'code' => 'CUSTOMER',
+                'description' => 'Customer Series',
+                'prefix' => 'CUS',
+                'starting_number' => 1000,
+                'ending_number' => 99999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'sales',
+            ],
+            [
+                'code' => 'VENDOR',
+                'description' => 'Vendor Series',
+                'prefix' => 'VEN',
+                'starting_number' => 1000,
+                'ending_number' => 99999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'purchase',
+            ],
         ];
 
         foreach ($series as $s) {

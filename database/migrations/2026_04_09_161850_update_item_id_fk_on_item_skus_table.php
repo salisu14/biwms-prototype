@@ -14,9 +14,10 @@ return new class extends Migration
         Schema::table('item_skus', function (Blueprint $table) {
             // Fix item_id FK
             try {
-                $table->dropForeign('item_skus_item_id_foreign');
-            } catch (\Exception $e) {}
-            
+                $table->dropForeign(['item_id']);
+            } catch (Exception $e) {
+            }
+
             $table->foreign('item_id')
                 ->references('id')
                 ->on('items')
@@ -24,8 +25,9 @@ return new class extends Migration
 
             // Fix location_id FK
             try {
-                $table->dropForeign('item_skus_location_id_foreign');
-            } catch (\Exception $e) {}
+                $table->dropForeign(['location_id']);
+            } catch (Exception $e) {
+            }
 
             $table->foreign('location_id')
                 ->references('id')

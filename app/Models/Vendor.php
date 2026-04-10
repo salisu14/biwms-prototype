@@ -35,6 +35,7 @@ class Vendor extends Model
         'payment_terms_code',
         'blocked',
         'blocked_reason',
+        'contact_id',
         'notes',
     ];
 
