@@ -95,8 +95,10 @@ class BlanketOrderLine extends Model
         'qty_to_invoice',
         'qty_to_assign',
         'qty_assigned',
-        'quantity_received_base',
-        'quantity_invoiced_base',
+        'unit_price',
+        'quantity_shipped',
+        'sales_order_id',
+        'sales_order_line_id',
     ];
 
     protected $casts = [
@@ -104,6 +106,8 @@ class BlanketOrderLine extends Model
         'quantity_received' => 'decimal:4',
         'quantity_invoiced' => 'decimal:4',
         'direct_unit_cost' => 'decimal:4',
+        'unit_price' => 'decimal:4',
+        'quantity_shipped' => 'decimal:4',
         'unit_cost_lcy' => 'decimal:4',
         'line_amount' => 'decimal:4',
         'line_discount_percent' => 'decimal:2',
@@ -159,14 +163,29 @@ class BlanketOrderLine extends Model
         return $this->belongsTo(PurchaseOrder::class);
     }
 
+    public function salesOrder(): BelongsTo
+    {
+        return $this->belongsTo(SalesOrder::class);
+    }
+
     public function purchaseOrderLine(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrderLine::class, 'purchase_order_line_id');
     }
 
+    public function salesOrderLine(): BelongsTo
+    {
+        return $this->belongsTo(SalesOrderLine::class, 'sales_order_line_id');
+    }
+
     public function purchaseOrderLines(): HasMany
     {
         return $this->hasMany(PurchaseOrderLine::class, 'blanket_order_line_id');
+    }
+
+    public function salesOrderLines(): HasMany
+    {
+        return $this->hasMany(SalesOrderLine::class, 'blanket_order_line_id');
     }
 
     public function item(): BelongsTo
@@ -208,13 +227,20 @@ class BlanketOrderLine extends Model
 
     public function scopeHasRemainingQuantity($query)
     {
-        return $query->whereColumn('quantity_received', '<', 'quantity');
+        return $query->where(function ($q) {
+            $q->where('quantity_received', '<', 'quantity')
+                ->orWhere('quantity_shipped', '<', 'quantity');
+        });
     }
 
     // Business Logic
     public function getRemainingQuantity(): float
     {
-        return max(0, $this->quantity - $this->quantity_received);
+        $fulfilled = $this->blanketOrder && $this->blanketOrder->order_type === 'Sales'
+            ? $this->quantity_shipped
+            : $this->quantity_received;
+
+        return max(0, $this->quantity - $fulfilled);
     }
 
     public function getRemainingQuantityToInvoice(): float
@@ -244,9 +270,18 @@ class BlanketOrderLine extends Model
 
     public function canCreatePurchaseOrder(): bool
     {
-        return $this->getRemainingQuantity() > 0 &&
+        return $this->blanketOrder && $this->blanketOrder->order_type === 'Purchase' &&
+            $this->getRemainingQuantity() > 0 &&
             $this->blanketOrder->released &&
-            !$this->blanketOrder->isExpired();
+            ! $this->blanketOrder->isExpired();
+    }
+
+    public function canCreateSalesOrder(): bool
+    {
+        return $this->blanketOrder && $this->blanketOrder->order_type === 'Sales' &&
+            $this->getRemainingQuantity() > 0 &&
+            $this->blanketOrder->released &&
+            ! $this->blanketOrder->isExpired();
     }
 
     public function calculateLineAmount(): float
@@ -274,15 +309,19 @@ class BlanketOrderLine extends Model
     }
 
     /**
-     * Get total quantity ordered through purchase orders
+     * Get total quantity ordered through purchase or sales orders
      */
     public function getOrderedQuantity(): float
     {
+        if ($this->blanketOrder && $this->blanketOrder->order_type === 'Sales') {
+            return $this->salesOrderLines()->sum('quantity');
+        }
+
         return $this->purchaseOrderLines()->sum('quantity');
     }
 
     /**
-     * Get remaining quantity available for new purchase orders
+     * Get remaining quantity available for new orders
      */
     public function getAvailableQuantity(): float
     {
@@ -290,7 +329,7 @@ class BlanketOrderLine extends Model
     }
 
     /**
-     * Check if line is completely processed through purchase orders
+     * Check if line is completely processed through child orders
      */
     public function isCompletelyOrdered(): bool
     {

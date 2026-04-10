@@ -7,12 +7,13 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'salesperson_code', 'employee_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -46,5 +47,21 @@ class User extends Authenticatable
     public function ledgerEntries(): HasMany
     {
         return $this->hasMany(ItemLedger::class, 'created_by', 'user_id');
+    }
+
+    /**
+     * The Employee record linked to this system user.
+     */
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * The default Salesperson/Purchaser code assigned to this user (BC User Setup).
+     */
+    public function defaultSalesperson(): BelongsTo
+    {
+        return $this->belongsTo(SalespersonPurchaser::class, 'salesperson_code', 'code');
     }
 }

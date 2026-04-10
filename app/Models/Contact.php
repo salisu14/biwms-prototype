@@ -97,4 +97,20 @@ class Contact extends Model
     {
         return $this->type === ContactType::PERSON;
     }
+
+    public function scopeCustomers($query)
+    {
+        return $query->whereIn('role', [
+            ContactRole::CUSTOMER,
+            ContactRole::BOTH,
+        ]);
+    }
+
+    public function scopeVendors($query)
+    {
+        return $query->whereIn('role', [
+            ContactRole::VENDOR,
+            ContactRole::BOTH,
+        ]);
+    }
 }

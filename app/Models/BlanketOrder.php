@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SalesOrderStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,8 +16,10 @@ class BlanketOrder extends Model
 
     protected $fillable = [
         'document_number',
+        'order_type',
         'external_document_no',
         'vendor_id',
+        'customer_id',
         'document_type',
         'status',
         'posting_date',
@@ -55,6 +58,24 @@ class BlanketOrder extends Model
         'buy_from_county',
         'buy_from_country_region_code',
         'buy_from_contact',
+        'sell_to_customer_no',
+        'sell_to_customer_name',
+        'sell_to_address',
+        'sell_to_address_2',
+        'sell_to_city',
+        'sell_to_post_code',
+        'sell_to_county',
+        'sell_to_country_region_code',
+        'sell_to_contact',
+        'bill_to_customer_no',
+        'bill_to_name',
+        'bill_to_address',
+        'bill_to_address_2',
+        'bill_to_city',
+        'bill_to_post_code',
+        'bill_to_county',
+        'bill_to_country_region_code',
+        'bill_to_contact',
         'pay_to_vendor_no',
         'pay_to_name',
         'pay_to_address',
@@ -88,6 +109,7 @@ class BlanketOrder extends Model
         'released_by',
         'created_by',
         'last_modified_by',
+        'salesperson_code',
     ];
 
     protected $casts = [
@@ -108,6 +130,11 @@ class BlanketOrder extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function lines(): HasMany
@@ -140,9 +167,19 @@ class BlanketOrder extends Model
         return $this->belongsTo(User::class, 'last_modified_by');
     }
 
+    public function salesperson(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'salesperson_code', 'id');
+    }
+
     public function purchaseOrders(): HasMany
     {
         return $this->hasMany(PurchaseOrder::class, 'blanket_order_id');
+    }
+
+    public function salesOrders(): HasMany
+    {
+        return $this->hasMany(SalesOrder::class, 'blanket_order_id');
     }
 
     public function vendorInvoices(): HasMany
@@ -151,35 +188,14 @@ class BlanketOrder extends Model
             ->where('source_document_type', 'BLANKET_ORDER');
     }
 
-    // Scopes
-    public function scopeReleased($query)
+    public function scopePurchase($query)
     {
-        return $query->where('released', true);
+        return $query->where('order_type', 'Purchase');
     }
 
-    public function scopeUnreleased($query)
+    public function scopeSales($query)
     {
-        return $query->where('released', false);
-    }
-
-    public function scopeActive($query)
-    {
-        return $query->where('status', 'ACTIVE')
-            ->where(function ($q) {
-                $q->whereNull('ending_date')
-                    ->orWhere('ending_date', '>=', now());
-            });
-    }
-
-    public function scopeExpired($query)
-    {
-        return $query->whereNotNull('ending_date')
-            ->where('ending_date', '<', now());
-    }
-
-    public function scopeByVendor($query, int $vendorId)
-    {
-        return $query->where('vendor_id', $vendorId);
+        return $query->where('order_type', 'Sales');
     }
 
     // Business Logic
@@ -199,7 +215,7 @@ class BlanketOrder extends Model
 
     public function reopen(): void
     {
-        if (!$this->released) {
+        if (! $this->released) {
             throw new \Exception('Blanket Order is not released');
         }
 
@@ -220,36 +236,46 @@ class BlanketOrder extends Model
     {
         return $this->released &&
             $this->status === 'ACTIVE' &&
-            (!$this->ending_date || $this->ending_date >= now());
+            (! $this->ending_date || $this->ending_date >= now());
     }
 
     public function getTotalAmount(): float
     {
         return $this->lines->sum(function ($line) {
-            return $line->quantity * $line->direct_unit_cost;
+            $price = $this->order_type === 'Sales' ? ($line->unit_price ?? 0) : ($line->direct_unit_cost ?? 0);
+
+            return $line->quantity * $price;
         });
     }
 
     public function getRemainingAmount(): float
     {
         return $this->lines->sum(function ($line) {
-            $remainingQty = $line->quantity - $line->quantity_received;
-            return max(0, $remainingQty * $line->direct_unit_cost);
+            $fulfilledQty = $this->order_type === 'Sales' ? $line->quantity_shipped : $line->quantity_received;
+            $remainingQty = $line->quantity - $fulfilledQty;
+            $price = $this->order_type === 'Sales' ? ($line->unit_price ?? 0) : ($line->direct_unit_cost ?? 0);
+
+            return max(0, $remainingQty * $price);
         });
     }
 
     public function generateDocumentNumber(): string
     {
-        $prefix = 'BO';
+        $prefix = $this->order_type === 'Sales' ? 'SBO' : 'PBO';
         $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
+        $sequence = static::whereYear('created_at', $year)
+            ->where('order_type', $this->order_type)
+            ->count() + 1;
 
-        return "{$prefix}-{$year}-" . str_pad($sequence, 6, '0', STR_PAD_LEFT);
+        return "{$prefix}-{$year}-".str_pad($sequence, 6, '0', STR_PAD_LEFT);
     }
 
     public function createPurchaseOrder(): PurchaseOrder
     {
-        if (!$this->released) {
+        if ($this->order_type !== 'Purchase') {
+            throw new \Exception('Cannot create Purchase Order from a Sales Blanket Order');
+        }
+        if (! $this->released) {
             throw new \Exception('Blanket Order must be released before creating Purchase Orders');
         }
 
@@ -277,27 +303,79 @@ class BlanketOrder extends Model
 
             // Copy lines from blanket order
             foreach ($this->lines as $blanketLine) {
-                $purchaseOrder->lines()->create([
-                    'blanket_order_line_id' => $blanketLine->id,
-                    'type' => $blanketLine->type,
-                    'no' => $blanketLine->no,
-                    'description' => $blanketLine->description,
-                    'description_2' => $blanketLine->description_2,
-                    'unit_of_measure' => $blanketLine->unit_of_measure,
-                    'quantity' => $blanketLine->quantity - $blanketLine->quantity_received,
-                    'direct_unit_cost' => $blanketLine->direct_unit_cost,
-                    'line_discount_percent' => $blanketLine->line_discount_percent,
-                    'line_discount_amount' => $blanketLine->line_discount_amount,
-                    'shortcut_dimension_1_code' => $blanketLine->shortcut_dimension_1_code,
-                    'shortcut_dimension_2_code' => $blanketLine->shortcut_dimension_2_code,
-                    'dimension_set_id' => $blanketLine->dimension_set_id,
-                    'planned_receipt_date' => $blanketLine->planned_receipt_date,
-                    'requested_receipt_date' => $blanketLine->requested_receipt_date,
-                    'promised_receipt_date' => $blanketLine->promised_receipt_date,
-                ]);
+                if ($blanketLine->getRemainingQuantity() > 0) {
+                    $purchaseOrder->lines()->create([
+                        'blanket_order_line_id' => $blanketLine->id,
+                        'type' => $blanketLine->type,
+                        'no' => $blanketLine->no,
+                        'description' => $blanketLine->description,
+                        'description_2' => $blanketLine->description_2,
+                        'unit_of_measure' => $blanketLine->unit_of_measure,
+                        'quantity' => $blanketLine->getRemainingQuantity(),
+                        'direct_unit_cost' => $blanketLine->direct_unit_cost,
+                        'line_discount_percent' => $blanketLine->line_discount_percent,
+                        'line_discount_amount' => $blanketLine->line_discount_amount,
+                        'shortcut_dimension_1_code' => $blanketLine->shortcut_dimension_1_code,
+                        'shortcut_dimension_2_code' => $blanketLine->shortcut_dimension_2_code,
+                        'dimension_set_id' => $blanketLine->dimension_set_id,
+                        'planned_receipt_date' => $blanketLine->planned_receipt_date,
+                        'requested_receipt_date' => $blanketLine->requested_receipt_date,
+                        'promised_receipt_date' => $blanketLine->promised_receipt_date,
+                    ]);
+                }
             }
 
             return $purchaseOrder;
+        });
+    }
+
+    public function createSalesOrder(): SalesOrder
+    {
+        if ($this->order_type !== 'Sales') {
+            throw new \Exception('Cannot create Sales Order from a Purchase Blanket Order');
+        }
+        if (! $this->released) {
+            throw new \Exception('Blanket Order must be released before creating Sales Orders');
+        }
+
+        return DB::transaction(function () {
+            $salesOrder = SalesOrder::create([
+                'blanket_order_id' => $this->id,
+                'customer_id' => $this->customer_id,
+                'currency_code' => $this->currency_code,
+                'payment_terms_code' => $this->payment_terms_code,
+                'payment_method_code' => $this->payment_method_code,
+                'shortcut_dimension_1_code' => $this->shortcut_dimension_1_code,
+                'shortcut_dimension_2_code' => $this->shortcut_dimension_2_code,
+                'dimension_set_id' => $this->dimension_set_id,
+                'customer_name' => $this->sell_to_customer_name,
+                'customer_address' => $this->sell_to_address,
+                'ship_to_name' => $this->ship_to_name,
+                'ship_to_address' => $this->ship_to_address,
+                'location_id' => Location::where('code', $this->location_code)->first()?->id,
+                'status' => SalesOrderStatus::DRAFT,
+            ]);
+
+            // Copy lines from blanket order
+            foreach ($this->lines as $blanketLine) {
+                if ($blanketLine->getRemainingQuantity() > 0) {
+                    $salesOrder->lines()->create([
+                        'blanket_order_line_id' => $blanketLine->id,
+                        'type' => $blanketLine->type,
+                        'no' => $blanketLine->no,
+                        'description' => $blanketLine->description,
+                        'quantity' => $blanketLine->getRemainingQuantity(),
+                        'unit_price' => $blanketLine->unit_price,
+                        'line_discount_percent' => $blanketLine->line_discount_percent,
+                        'line_discount_amount' => $blanketLine->line_discount_amount,
+                        'shortcut_dimension_1_code' => $blanketLine->shortcut_dimension_1_code,
+                        'shortcut_dimension_2_code' => $blanketLine->shortcut_dimension_2_code,
+                        'dimension_set_id' => $blanketLine->dimension_set_id,
+                    ]);
+                }
+            }
+
+            return $salesOrder;
         });
     }
 }
