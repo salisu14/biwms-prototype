@@ -23,6 +23,11 @@ class SalesCreditMemo extends Model
         'posted_at',
         'posted_by',
 
+        // Approval
+        'rejection_reason',
+        'approver_id',
+        'approved_at',
+
         // Business logic
         'reason',
         'effective_date',
@@ -80,7 +85,42 @@ class SalesCreditMemo extends Model
 
     public function isPosted(): bool
     {
-        return $this->status === 'posted';
+        return $this->status === ApprovalStatus::POSTED;
+    }
+
+    public function submitForApproval(): void
+    {
+        if ($this->status !== ApprovalStatus::DRAFT) {
+            throw new \Exception('Only draft credit memos can be submitted for approval.');
+        }
+
+        $this->update(['status' => ApprovalStatus::PENDING]);
+    }
+
+    public function approve(int $userId): void
+    {
+        if ($this->status !== ApprovalStatus::PENDING) {
+            throw new \Exception('Only pending credit memos can be approved.');
+        }
+
+        $this->update([
+            'status' => ApprovalStatus::APPROVED,
+            'approver_id' => $userId,
+            'approved_at' => now(),
+        ]);
+    }
+
+    public function reject(int $userId, string $reason): void
+    {
+        if ($this->status !== ApprovalStatus::PENDING) {
+            throw new \Exception('Only pending credit memos can be rejected.');
+        }
+
+        $this->update([
+            'status' => ApprovalStatus::REJECTED,
+            'approver_id' => $userId,
+            'rejection_reason' => $reason,
+        ]);
     }
 
     public function refreshTotal(): void

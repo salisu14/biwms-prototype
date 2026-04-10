@@ -106,8 +106,9 @@ class PurchaseOrdersTable
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->visible(fn ($record) => $record->status === PurchaseOrderStatus::PENDING)
+                        ->visible(fn ($record) => $record instanceof \App\Models\PurchaseOrder && $record->status === PurchaseOrderStatus::PENDING)
                         ->action(function ($record, PurchaseOrderService $service) {
+                            if (! $record instanceof \App\Models\PurchaseOrder) return;
                             $service->approve(new ApprovePurchaseOrderData(
                                 purchaseOrderId: $record->id,
                                 approvedBy: auth()->id()
@@ -121,8 +122,9 @@ class PurchaseOrdersTable
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
                         ->requiresConfirmation()
-                        ->visible(fn ($record) => $record->can_edit && $record->status !== PurchaseOrderStatus::CANCELLED)
+                        ->visible(fn ($record) => $record instanceof \App\Models\PurchaseOrder && $record->can_edit && $record->status !== PurchaseOrderStatus::CANCELLED)
                         ->action(function ($record, PurchaseOrderService $service) {
+                            if (! $record instanceof \App\Models\PurchaseOrder) return;
                             try {
                                 $service->cancel(new CancelPurchaseOrderData(
                                     purchaseOrderId: $record->id
@@ -137,10 +139,22 @@ class PurchaseOrdersTable
                     Action::make('recalculate')
                         ->label('Refresh Totals')
                         ->icon('heroicon-o-calculator')
+                        ->visible(fn ($record) => $record instanceof \App\Models\PurchaseOrder)
                         ->action(function ($record, PurchaseOrderService $service) {
+                            if (! $record instanceof \App\Models\PurchaseOrder) return;
                             $record->recalculateTotals();
                             Notification::make()->title('Totals Recalculated')->success()->send();
                         }),
+
+                    Action::make('printProforma')
+                        ->label('Proforma Invoice')
+                        ->icon('heroicon-o-printer')
+                        ->color('info')
+                        ->visible(fn ($record) => $record instanceof \App\Models\PurchaseOrder)
+                        ->action(fn ($record) => $record instanceof \App\Models\PurchaseOrder ? response()->streamDownload(
+                            fn () => print(app(\App\Services\Print\ProformaInvoiceService::class)->generatePurchaseProforma($record->refresh()->load(['lines']))->output()),
+                            $record->order_number . '_Proforma.pdf'
+                        ) : null),
                 ])
             ])
             ->filters([

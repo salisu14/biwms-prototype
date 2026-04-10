@@ -3,52 +3,50 @@
 namespace App\Services\Sales;
 
 use App\Data\Sales\SalesCreditMemoData;
+use App\Enums\ApprovalStatus;
 use App\Models\Item;
 use App\Models\SalesCreditMemo;
+use App\Models\User;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
 class SalesCreditMemoService
 {
+    public function __construct(
+        protected PostingService $postingService
+    ) {}
+
     /**
      * @throws \Throwable
      */
     public function create(SalesCreditMemoData $data): SalesCreditMemo
     {
         return DB::transaction(function () use ($data) {
-
-            $this->validateData($data);
-
             $creditMemo = SalesCreditMemo::create([
-                'customer_id'   => $data->customer_id,
-                'memo_number'   => $data->memo_number ?? $this->generateNumber(),
-                'status'        => 'draft',
-                'reason'        => $data->reason,
-                'effective_date'=> $data->effective_date,
+                'customer_id'      => $data->customer_id,
+                'sales_invoice_id' => $data->sales_invoice_id,
+                'memo_number'      => $data->memo_number,
+                'status'           => ApprovalStatus::DRAFT,
+                'reason'           => $data->reason,
+                'effective_date'   => $data->effective_date ?? now(),
+                'currency_code'    => $data->currency_code,
             ]);
-
-            $total = 0;
 
             foreach ($data->items as $line) {
-
-                $item = Item::findOrFail($line['item_id']);
-
-                $lineTotal = $line['quantity'] * $line['price'];
-
+                $item = Item::findOrFail($line->item_id);
+                
                 $creditMemo->items()->create([
-                    'item_id'  => $item->id, // FIXED naming
-                    'quantity' => $line['quantity'],
-                    'price'    => $line['price'],
-                    'total'    => $lineTotal,
+                    'item_id'     => $item->id,
+                    'quantity'    => $line->quantity,
+                    'unit_price'  => $line->unit_price,
+                    'vat_percent' => $line->vat_percent,
+                    'description' => $line->description ?? $item->description,
                 ]);
-
-                $total += $lineTotal;
             }
 
-            $creditMemo->update([
-                'total_amount' => $total,
-            ]);
+            $creditMemo->refreshTotal();
 
             return $creditMemo;
         });
@@ -59,122 +57,86 @@ class SalesCreditMemoService
      */
     public function update(SalesCreditMemo $creditMemo, SalesCreditMemoData $data): SalesCreditMemo
     {
-        if ($creditMemo->status === 'posted') {
+        if ($creditMemo->status !== ApprovalStatus::DRAFT) {
             throw ValidationException::withMessages([
-                'status' => 'Posted credit memo cannot be modified.',
+                'status' => 'Only draft credit memos can be modified.',
             ]);
-        }
-
-        if ($creditMemo->status !== 'approved') {
-            throw new \Exception('Credit Memo must be approved before posting.');
         }
 
         return DB::transaction(function () use ($creditMemo, $data) {
-
             $creditMemo->update([
-                'reason'         => $data->reason,
-                'effective_date' => $data->effective_date,
+                'customer_id'      => $data->customer_id,
+                'sales_invoice_id' => $data->sales_invoice_id,
+                'reason'           => $data->reason,
+                'effective_date'   => $data->effective_date ?? now(),
+                'currency_code'    => $data->currency_code,
             ]);
 
-            // 🔥 Replace lines (BC behavior)
             $creditMemo->items()->delete();
 
-            $total = 0;
-
             foreach ($data->items as $line) {
-
-                $lineTotal = $line['quantity'] * $line['price'];
-
+                $item = Item::findOrFail($line->item_id);
+                
                 $creditMemo->items()->create([
-                    'item_id'  => $line['item_id'],
-                    'quantity' => $line['quantity'],
-                    'price'    => $line['price'],
-                    'total'    => $lineTotal,
+                    'item_id'     => $item->id,
+                    'quantity'    => $line->quantity,
+                    'unit_price'  => $line->unit_price,
+                    'vat_percent' => $line->vat_percent,
+                    'description' => $line->description ?? $item->description,
                 ]);
-
-                $total += $lineTotal;
             }
 
-            $creditMemo->update([
-                'total_amount' => $total,
-            ]);
+            $creditMemo->refreshTotal();
 
             return $creditMemo;
         });
     }
 
-    public function requestApproval(SalesCreditMemo $creditMemo): SalesCreditMemo
+    public function submitForApproval(SalesCreditMemo $creditMemo): void
     {
-        if ($creditMemo->status !== 'draft') {
-            throw ValidationException::withMessages([
-                'status' => 'Only draft credit memos can be sent for approval.',
-            ]);
-        }
-
-        if ($creditMemo->items()->count() === 0) {
-            throw ValidationException::withMessages([
-                'items' => 'Cannot request approval without lines.',
-            ]);
-        }
-
-        $creditMemo->update([
-            'status' => 'pending',
-        ]);
-
-        return $creditMemo;
+        $creditMemo->submitForApproval();
     }
 
+    public function approve(SalesCreditMemo $creditMemo, int $userId): void
+    {
+        $creditMemo->approve($userId);
+    }
+
+    public function reject(SalesCreditMemo $creditMemo, int $userId, string $reason): void
+    {
+        $creditMemo->reject($userId, $reason);
+    }
+
+    /**
+     * @throws \Throwable
+     */
     public function post(SalesCreditMemo $creditMemo): void
     {
-        if ($creditMemo->status === 'posted') {
+        if ($creditMemo->status !== ApprovalStatus::APPROVED) {
             throw ValidationException::withMessages([
-                'status' => 'Already posted.',
+                'status' => 'Only approved credit memos can be posted.',
             ]);
         }
 
         DB::transaction(function () use ($creditMemo) {
-
-            $creditMemo->load('items');
-
-            if ($creditMemo->items->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'items' => 'Cannot post without lines.',
-                ]);
-            }
-
-            // 🔥 1. Reverse Inventory (if applicable)
+            // 1. Stock Adjustment (Automatic via Item ledger logic elsewhere or manual here)
             foreach ($creditMemo->items as $line) {
-
-                $item = Item::find($line->item_id);
-
-                if ($item && $item->isInventoryItem()) {
+                $item = $line->item;
+                if ($item->isInventoryItem()) {
                     $item->increment('inventory', $line->quantity);
+                    // Note: In a full system, you would create an Item Ledger Entry here
                 }
             }
 
-            // 🔥 2. Financial Posting (DOUBLE ENTRY)
-            app(PostingService::class)
-                ->postSalesCreditMemo($creditMemo);
+            // 2. Financial Posting
+            $this->postingService->postSalesCreditMemo($creditMemo);
 
-            // 🔥 3. Mark as posted
+            // 3. Mark as posted
             $creditMemo->update([
-                'status' => 'posted',
+                'status' => ApprovalStatus::POSTED,
                 'posted_at' => now(),
+                'posted_by' => Auth::id(),
             ]);
         });
-    }
-
-    private function validateData(SalesCreditMemoData $data): void
-    {
-        if (empty($data->items)) {
-            throw ValidationException::withMessages([
-                'items' => 'At least one line is required.',
-            ]);
-        }
-    }
-
-    private function generateNumber(): string
-    {
-        return 'SCM-' . now()->format('YmdHis');
     }
 }

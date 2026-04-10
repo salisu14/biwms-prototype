@@ -2,145 +2,168 @@
 
 namespace App\Filament\Pages;
 
-use AllowDynamicProperties;
+use App\Models\Item;
+use App\Models\Location;
+use App\Services\InventoryReportService;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Schemas\Schema;
 use Filament\Pages\Page;
+use Filament\Tables\Columns\ColumnGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 
-#[AllowDynamicProperties]
-class InventoryValuationReport extends Page implements HasTable, HasForms
+class InventoryValuationReport extends Page implements HasForms, HasTable
 {
-    use InteractsWithTable, InteractsWithForms;
+    use InteractsWithForms;
+    use InteractsWithTable;
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-currency-dollar';
-
-    protected static string|\UnitEnum|null $navigationGroup = 'Inventory Valuation Reports';
-
-    protected static ?string $title = 'Inventory Valuation Report';
-
+    protected static string|null|\BackedEnum $navigationIcon = 'heroicon-o-presentation-chart-line';
+    protected static ?string $title = 'Inventory Movement & Valuation';
     protected string $view = 'filament.pages.inventory-valuation-report';
 
-    public $data = [];
+    public ?string $startDate = null;
+    public ?string $endDate = null;
+    public ?int $locationId = null;
 
     public function mount(): void
     {
-        $this->data = [
-            'start_date' => now()->startOfMonth(),
-            'end_date' => now(),
-        ];
+        $this->startDate = now()->startOfMonth()->toDateString();
+        $this->endDate = now()->toDateString();
+        $this->form->fill([
+            'startDate' => $this->startDate,
+            'endDate' => $this->endDate,
+        ]);
     }
 
-    protected function getFormSchema(): array
+    public function form(Schema $schema): Schema
     {
-        return [
-            DatePicker::make('start_date')->required(),
-            DatePicker::make('end_date')->required(),
-        ];
+        return $schema
+            ->schema([
+                DatePicker::make('startDate')
+                    ->label('Start Date')
+                    ->required()
+                    ->live(),
+                DatePicker::make('endDate')
+                    ->label('End Date')
+                    ->required()
+                    ->live(),
+                Select::make('locationId')
+                    ->label('Location')
+                    ->options(Location::pluck('name', 'id'))
+                    ->placeholder('All Locations')
+                    ->live(),
+            ])
+            ->columns(3);
     }
 
     public function table(Table $table): Table
     {
+        $service = app(InventoryReportService::class);
+        $start = Carbon::parse($this->startDate);
+        $end = Carbon::parse($this->endDate);
+
         return $table
-            ->query($this->getQuery())
+            ->query($service->getMovementSummary($start, $end, $this->locationId))
             ->columns([
+                TextColumn::make('item_number')
+                    ->label('Item No.')
+                    ->searchable()
+                    ->sortable()
+                    ->description(fn (Item $record): string => $record->description),
 
-                TextColumn::make('description')->label('Item')->searchable(),
+                TextColumn::make('uom.uom_code')
+                    ->label('UoM'),
 
-                // OPENING
-                TextColumn::make('opening_qty')->label('Opening Qty')->numeric(2),
-                TextColumn::make('opening_value')->money('NGN'),
+                // Opening
+                ColumnGroup::make('Opening Balance')
+                    ->columns([
+                        TextColumn::make('opening_qty')
+                            ->label('Qty')
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('opening_value')
+                            ->label('Value')
+                            ->money()
+                            ->alignRight(),
+                    ]),
 
-                // PURCHASE
-                TextColumn::make('purchase_in_qty')->label('Purchase In'),
-                TextColumn::make('purchase_out_qty')->label('Purchase Out'),
+                // Purchase In
+                ColumnGroup::make('Purchase In')
+                    ->columns([
+                        TextColumn::make('purchase_in_qty')
+                            ->label('Qty')
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('purchase_in_value')
+                            ->label('Value')
+                            ->money()
+                            ->alignRight(),
+                    ]),
 
-                // TRANSFER
-                TextColumn::make('transfer_in_qty'),
-                TextColumn::make('transfer_out_qty'),
+                // Positive Adjustment
+                ColumnGroup::make('Pos. Adj.')
+                    ->columns([
+                        TextColumn::make('pos_adj_qty')
+                            ->label('Qty')
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('pos_adj_value')
+                            ->label('Value')
+                            ->money()
+                            ->alignRight(),
+                    ]),
 
-                // ADJUSTMENT
-                TextColumn::make('positive_adj_qty'),
-                TextColumn::make('negative_adj_qty'),
+                // Sales
+                ColumnGroup::make('Sales')
+                    ->columns([
+                        TextColumn::make('sale_out_qty')
+                            ->label('Qty')
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('sale_out_value')
+                            ->label('Value')
+                            ->money()
+                            ->alignRight(),
+                    ]),
 
-                // SALES
-                TextColumn::make('sales_qty'),
-                TextColumn::make('sales_value')->money('NGN'),
-
-                TextColumn::make('sales_return_qty'),
-
-                // CLOSING
-                TextColumn::make('closing_qty')->weight('bold'),
-                TextColumn::make('closing_value')->money('NGN')->weight('bold'),
-            ]);
+                // Closing
+                ColumnGroup::make('Closing Balance')
+                    ->columns([
+                        TextColumn::make('closing_qty')
+                            ->label('Qty')
+                            ->getStateUsing(fn ($record) =>
+                                $record->opening_qty +
+                                $record->purchase_in_qty + $record->purchase_out_qty +
+                                $record->pos_adj_qty + $record->neg_adj_qty +
+                                $record->sale_out_qty + $record->sale_in_qty +
+                                $record->transfer_qty
+                            )
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('closing_value')
+                            ->label('Value')
+                            ->getStateUsing(fn ($record) =>
+                                $record->opening_value +
+                                $record->purchase_in_value + $record->purchase_out_value +
+                                $record->pos_adj_value + $record->neg_adj_value +
+                                $record->sale_out_value + $record->sale_in_value +
+                                $record->transfer_value
+                            )
+                            ->money()
+                            ->alignRight(),
+                    ]),
+            ])
+            ->paginated([50, 100, 200, 'all']);
     }
 
-    protected function getQuery()
+    protected function getHeaderWidgets(): array
     {
-        $start = $this->data['start_date'];
-        $end = $this->data['end_date'];
-
-        return DB::table('inventory_ledgers as il')
-            ->join('items as i', 'i.id', '=', 'il.item_id')
-
-            ->select([
-                'i.id as item_id',
-                'i.name as description',
-                'i.uom',
-            ])
-
-            // OPENING
-            ->selectRaw("
-            SUM(CASE WHEN il.posting_date < ? THEN il.quantity ELSE 0 END) as opening_qty,
-            SUM(CASE WHEN il.posting_date < ? THEN il.cost_amount ELSE 0 END) as opening_value
-        ", [$start, $start])
-
-            // PURCHASE IN
-            ->selectRaw("
-            SUM(CASE WHEN il.entry_type = 'purchase' AND il.posting_date BETWEEN ? AND ? THEN il.quantity ELSE 0 END) as purchase_in_qty,
-            SUM(CASE WHEN il.entry_type = 'purchase' AND il.posting_date BETWEEN ? AND ? THEN il.cost_amount ELSE 0 END) as purchase_in_value
-        ", [$start, $end, $start, $end])
-
-            // PURCHASE OUT
-            ->selectRaw("
-            SUM(CASE WHEN il.entry_type = 'purchase_return' AND il.posting_date BETWEEN ? AND ? THEN il.quantity ELSE 0 END) as purchase_out_qty,
-            SUM(CASE WHEN il.entry_type = 'purchase_return' AND il.posting_date BETWEEN ? AND ? THEN il.cost_amount ELSE 0 END) as purchase_out_value
-        ", [$start, $end, $start, $end])
-
-            // TRANSFERS
-            ->selectRaw("
-            SUM(CASE WHEN il.entry_type = 'transfer_in' AND il.posting_date BETWEEN ? AND ? THEN il.quantity ELSE 0 END) as transfer_in_qty,
-            SUM(CASE WHEN il.entry_type = 'transfer_out' AND il.posting_date BETWEEN ? AND ? THEN il.quantity ELSE 0 END) as transfer_out_qty
-        ", [$start, $end, $start, $end])
-
-            // ADJUSTMENTS
-            ->selectRaw("
-            SUM(CASE WHEN il.entry_type = 'positive_adjustment' AND il.posting_date BETWEEN ? AND ? THEN il.quantity ELSE 0 END) as positive_adj_qty,
-            SUM(CASE WHEN il.entry_type = 'negative_adjustment' AND il.posting_date BETWEEN ? AND ? THEN il.quantity ELSE 0 END) as negative_adj_qty
-        ", [$start, $end, $start, $end])
-
-            // SALES
-            ->selectRaw("
-            SUM(CASE WHEN il.entry_type = 'sale' AND il.posting_date BETWEEN ? AND ? THEN il.quantity ELSE 0 END) as sales_qty,
-            SUM(CASE WHEN il.entry_type = 'sale' AND il.posting_date BETWEEN ? AND ? THEN il.cost_amount ELSE 0 END) as sales_value
-        ", [$start, $end, $start, $end])
-
-            // SALES RETURN
-            ->selectRaw("
-            SUM(CASE WHEN il.entry_type = 'sales_return' AND il.posting_date BETWEEN ? AND ? THEN il.quantity ELSE 0 END) as sales_return_qty
-        ", [$start, $end])
-
-            // CLOSING
-            ->selectRaw("
-            SUM(il.quantity) as closing_qty,
-            SUM(il.cost_amount) as closing_value
-        ")
-
-            ->groupBy('i.id', 'i.name', 'i.uom');
+        return [];
     }
 }

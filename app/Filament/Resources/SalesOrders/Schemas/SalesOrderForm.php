@@ -16,6 +16,8 @@ use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
@@ -27,108 +29,158 @@ class SalesOrderForm
             ->components([
                 Group::make()
                     ->schema([
-                        Section::make('General Information')
-                            ->schema([
-                                TextInput::make('order_number')
-                                    ->default(fn () => 'Draft')
-                                    ->disabled()
-                                    ->dehydrated(false),
-
-                                Select::make('order_type')
-                                    ->options(SalesOrderType::class)
-                                    ->default(SalesOrderType::SalesOrder)
-                                    ->required()
-                                    ->native(false),
-
-                                Select::make('customer_id')
-                                    ->relationship('customer', 'name')
-                                    ->searchable()
-                                    ->preload()
-                                    ->required()
-                                    ->live()
-                                    ->afterStateUpdated(function ($state, Set $set) {
-                                        if ($state) {
-                                            $customer = Customer::find($state);
-                                            $set('customer_name', $customer->name);
-                                            $set('customer_address', $customer->address);
-                                            $set('ship_to_name', $customer->name);
-                                            $set('ship_to_address', $customer->address);
-                                            $set('currency_code', $customer->currency_code ?? 'NGN');
-                                            $set('payment_terms_code', $customer->payment_terms_code);
-                                            $set('general_business_posting_group_id', $customer->general_business_posting_group_id);
-                                        }
-                                    }),
-
-                                TextInput::make('external_document_number')
-                                    ->label('PO / External Ref'),
-                            ])->columns(2),
-
-                        Section::make('Order Lines')
-                            ->headerActions([
-                                // Optional: You could add custom actions here
-                            ])
-                            ->schema([
-                                Repeater::make('lines')
-                                    ->relationship()
-                                    ->live()
+                        Tabs::make('Order Tabs')
+                            ->tabs([
+                                Tab::make('General & Items')
                                     ->schema([
-                                        Select::make('item_id')
-                                            ->relationship('item', 'description', fn ($query) => $query->where('item_type', 'FINISHED_GOOD'))
-                                            ->searchable()
-                                            ->required()
-                                            ->live()
-                                            // Fetches the unit price from the Item model when selected
-                                            ->afterStateUpdated(function ($state, Set $set) {
-                                                if ($state) {
-                                                    $item = Item::find($state);
-                                                    $set('unit_price', $item?->price ?? 0);
-                                                }
-                                            }),
+                                        Section::make('General Information')
+                                            ->schema([
+                                                TextInput::make('order_number')
+                                                    ->default(fn () => 'Draft')
+                                                    ->disabled()
+                                                    ->dehydrated(false),
 
-                                        TextInput::make('quantity')
-                                            ->numeric()
-                                            ->default(1)
-                                            ->required(),
+                                                Select::make('order_type')
+                                                    ->options(SalesOrderType::class)
+                                                    ->default(SalesOrderType::SalesOrder)
+                                                    ->required()
+                                                    ->native(false),
 
-                                        TextInput::make('unit_price')
-                                            ->numeric()
-                                            ->required()
-                                            ->prefix(fn ($get) => $get('../../currency_code') ?? 'NGN'),
-                                    ])
-                                    ->columns(3)
-                                    ->defaultItems(1)
-                                    ->reorderableWithButtons()
-                                    ->addActionLabel('Add Item Line'),
-                            ]),
+                                                Select::make('customer_id')
+                                                    ->relationship('customer', 'name')
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function ($state, Set $set) {
+                                                        if ($state) {
+                                                            $customer = Customer::find($state);
+                                                            $set('customer_name', $customer->name);
+                                                            $set('customer_address', $customer->address);
+                                                            $set('ship_to_name', $customer->name);
+                                                            $set('ship_to_address', $customer->address);
+                                                            $set('currency_code', $customer->currency_code ?? 'NGN');
+                                                            $set('payment_terms_code', $customer->payment_terms_code);
+                                                            $set('general_business_posting_group_id', $customer->general_business_posting_group_id);
+                                                        }
+                                                    }),
 
-                        Section::make('Addresses')
-                            ->schema([
-                                Grid::make(2)
-                                    ->schema([
-                                        Group::make([
-                                            TextInput::make('customer_name')->required(),
-                                            Textarea::make('customer_address')->rows(2),
-                                        ]),
-                                        Group::make([
-                                            TextInput::make('ship_to_name'),
-                                            Textarea::make('ship_to_address')->rows(2),
-                                        ]),
+                                                TextInput::make('external_document_number')
+                                                    ->label('PO / External Ref'),
+                                            ])->columns(2),
+
+                                        Section::make('Order Lines')
+                                            ->schema([
+                                                Repeater::make('lines')
+                                                    ->relationship()
+                                                    ->live()
+                                                    ->schema([
+                                                        Grid::make(12)
+                                                            ->schema([
+                                                                Select::make('item_id')
+                                                                    ->label('Item No.')
+                                                                    ->relationship('item', 'item_number', fn ($query) => $query->where('item_type', 'FINISHED_GOOD'))
+                                                                    ->searchable()
+                                                                    ->preload()
+                                                                    ->required()
+                                                                    ->live()
+                                                                    ->columnSpan(3)
+                                                                    ->afterStateUpdated(function ($state, Set $set) {
+                                                                        if ($state) {
+                                                                            $item = Item::find($state);
+                                                                            $set('description', $item?->description);
+                                                                            $set('item_code', $item?->item_number);
+                                                                            $set('unit_price', $item?->unit_price ?? 0);
+                                                                            $set('unit_of_measure_code', $item?->base_unit_of_measure);
+                                                                        }
+                                                                    }),
+
+                                                                TextInput::make('description')
+                                                                    ->label('Description')
+                                                                    ->columnSpan(5)
+                                                                    ->placeholder('Select an item to see description')
+                                                                    ->readOnly(),
+
+                                                                TextInput::make('quantity')
+                                                                    ->numeric()
+                                                                    ->default(1)
+                                                                    ->required()
+                                                                    ->columnSpan(2)
+                                                                    ->live(onBlur: true),
+
+                                                                TextInput::make('unit_price')
+                                                                    ->label('Price')
+                                                                    ->numeric()
+                                                                    ->required()
+                                                                    ->columnSpan(2)
+                                                                    ->live(onBlur: true)
+                                                                    ->prefix(fn ($get) => $get('../../currency_code') ?? 'NGN'),
+
+                                                                // Hidden/Technical Row
+                                                                TextInput::make('item_code')
+                                                                    ->label('Code')
+                                                                    ->disabled()
+                                                                    ->dehydrated()
+                                                                    ->columnSpan(2),
+
+                                                                TextInput::make('unit_of_measure_code')
+                                                                    ->label('UOM')
+                                                                    ->disabled()
+                                                                    ->dehydrated()
+                                                                    ->columnSpan(2),
+                                                            ]),
+                                                    ])
+                                                    ->reorderableWithButtons()
+                                                    ->addActionLabel('Add Item Line')
+                                                    ->itemLabel(fn (array $state): ?string => $state['item_code'] ?? null),
+                                            ]),
                                     ]),
-                            ])->collapsed(),
 
-                        Section::make('Logistics & Shipping')
-                            ->schema([
-                                Select::make('location_id')
-                                    ->relationship('location', 'name')
-                                    ->searchable(),
-                                Select::make('shipping_method')
-                                    ->options(ShippingMethod::class)
-                                    ->native(false),
-                                TextInput::make('shipping_agent_code'),
-                                TextInput::make('shipping_agent_service_code'),
-                                DatePicker::make('requested_delivery_date'),
-                                DatePicker::make('promised_delivery_date'),
-                            ])->columns(2)->collapsed(),
+                                Tabs\Tab::make('Logistics & Shipping')
+                                    ->schema([
+                                        Section::make('Shipping Details')
+                                            ->schema([
+                                                Select::make('location_id')
+                                                    ->relationship('location', 'name')
+                                                    ->searchable(),
+                                                Select::make('shipping_method')
+                                                    ->options(ShippingMethod::class)
+                                                    ->native(false),
+                                                TextInput::make('shipping_agent_code'),
+                                                TextInput::make('shipping_agent_service_code'),
+                                                DatePicker::make('requested_delivery_date'),
+                                                DatePicker::make('promised_delivery_date'),
+                                            ])->columns(2),
+
+                                        Section::make('Addresses')
+                                            ->schema([
+                                                Grid::make(2)
+                                                    ->schema([
+                                                        Group::make([
+                                                            TextInput::make('customer_name')->required(),
+                                                            Textarea::make('customer_address')->rows(2),
+                                                        ]),
+                                                        Group::make([
+                                                            TextInput::make('ship_to_name'),
+                                                            Textarea::make('ship_to_address')->rows(2),
+                                                        ]),
+                                                    ]),
+                                            ]),
+                                    ]),
+
+                                Tabs\Tab::make('Notes')
+                                    ->schema([
+                                        Section::make('Additional Information')
+                                            ->schema([
+                                                Textarea::make('customer_comment')
+                                                    ->label('Customer Notes (Visible on Invoice)')
+                                                    ->rows(4),
+                                                Textarea::make('internal_comment')
+                                                    ->label('Internal Notes (Hidden from Customer)')
+                                                    ->rows(4),
+                                            ])->columns(1),
+                                    ]),
+                            ])->persistTabInQueryString(),
                     ])->columnSpan(['lg' => 2]),
 
                 Group::make()
@@ -159,6 +211,15 @@ class SalesOrderForm
                                     ->numeric()
                                     ->prefix(fn ($get) => $get('currency_code'))
                                     ->readOnly()
+                                    ->placeholder(function ($get) {
+                                        $lines = $get('lines') ?? [];
+                                        $total = collect($lines)->sum(function ($line) {
+                                            $qty = (float)($line['quantity'] ?? 0);
+                                            $price = (float)($line['unit_price'] ?? 0);
+                                            return $qty * $price;
+                                        });
+                                        return number_format($total, 2);
+                                    })
                                     ->extraInputAttributes(['class' => 'font-bold text-lg']),
 
                                 Grid::make(2)
@@ -168,16 +229,6 @@ class SalesOrderForm
                                     ]),
                             ]),
                     ])->columnSpan(['lg' => 1]),
-
-                Section::make('Additional Details')
-                    ->schema([
-                        Textarea::make('customer_comment')
-                            ->label('Customer Notes (Visible on Invoice)')
-                            ->columnSpan(1),
-                        Textarea::make('internal_comment')
-                            ->label('Internal Notes (Hidden from Customer)')
-                            ->columnSpan(1),
-                    ])->columns(2)->collapsed(),
             ])->columns(3);
     }
 }

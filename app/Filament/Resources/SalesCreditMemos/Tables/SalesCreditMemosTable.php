@@ -4,11 +4,13 @@ namespace App\Filament\Resources\SalesCreditMemos\Tables;
 
 use App\Enums\ApprovalStatus;
 use App\Models\SalesCreditMemo;
-use Filament\Actions\Action;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\ViewAction;
+use App\Services\Sales\SalesCreditMemoService;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Actions\BulkActionGroup;
+use Filament\Tables\Actions\DeleteBulkAction;
+use Filament\Tables\Actions\EditAction;
+use Filament\Tables\Actions\ViewAction;
+use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -52,23 +54,51 @@ class SalesCreditMemosTable
                 SelectFilter::make('customer_id')
                     ->relationship('customer', 'name'),
             ])
-            ->recordActions([
+            ->actions([
                 ViewAction::make(),
                 EditAction::make()
                     ->hidden(fn (SalesCreditMemo $record) => $record->isPosted()),
+
+                Action::make('submit')
+                    ->label('Submit')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->color('info')
+                    ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::DRAFT)
+                    ->action(function (SalesCreditMemo $record) {
+                        app(SalesCreditMemoService::class)->submitForApproval($record);
+                        Notification::make()->title('Credit memo submitted for approval')->success()->send();
+                    }),
+
+                Action::make('approve')
+                    ->label('Approve')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::PENDING && auth()->user()->hasRole('super_admin'))
+                    ->action(function (SalesCreditMemo $record) {
+                        app(SalesCreditMemoService::class)->approve($record, auth()->id());
+                        Notification::make()->title('Credit memo approved')->success()->send();
+                    }),
+
+                Action::make('reject')
+                    ->label('Reject')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::PENDING && auth()->user()->hasRole('super_admin'))
+                    ->form([
+                        Textarea::make('reason')->required(),
+                    ])
+                    ->action(function (SalesCreditMemo $record, array $data) {
+                        app(SalesCreditMemoService::class)->reject($record, auth()->id(), $data['reason']);
+                        Notification::make()->title('Credit memo rejected')->danger()->send();
+                    }),
 
                 Action::make('post')
                     ->icon('heroicon-m-check-badge')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::DRAFT)
+                    ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::APPROVED)
                     ->action(function (SalesCreditMemo $record) {
-                        $record->update([
-                            'status' => ApprovalStatus::APPROVED,
-                            'posted_at' => now(),
-                            'posted_by' => auth()->id(),
-                        ]);
-
+                        app(SalesCreditMemoService::class)->post($record);
                         Notification::make()
                             ->title('Credit Memo Posted')
                             ->success()

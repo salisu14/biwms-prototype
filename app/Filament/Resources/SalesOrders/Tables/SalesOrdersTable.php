@@ -44,7 +44,7 @@ class SalesOrdersTable
                     ->sortable(),
 
                 TextColumn::make('grand_total')
-                    ->money(fn ($record) => $record->currency_code)
+                    ->money(fn ($record) => $record instanceof SalesOrder ? $record->currency_code : 'NGN')
                     ->sortable()
                     ->alignment('right'),
 
@@ -74,20 +74,50 @@ class SalesOrdersTable
             ])
             ->recordActions([
                 ViewAction::make()
-                    ->visible(fn (SalesOrder $record): bool => !$record->isPosted()),
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder && !$record->isPosted()),
 
                 EditAction::make()
-                    ->visible(fn (SalesOrder $record): bool => !$record->isPosted())
-                    ->disabled(fn (SalesOrder $record): bool => $record->isPosted()),
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder && !$record->isPosted())
+                    ->disabled(fn ($record): bool => $record instanceof SalesOrder && $record->isPosted()),
 
                 // Custom "Reverse" action for posted invoices
                 Action::make('reverse')
                     ->label('Reverse')
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->color('danger')
-                    ->visible(fn (SalesOrder $record): bool => $record->isPosted())
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder && $record->isPosted())
                     ->requiresConfirmation()
                     ->action(fn (SalesOrder $record) => $record->reverse()),
+
+                Action::make('printProforma')
+                    ->label('Proforma Invoice')
+                    ->icon('heroicon-o-printer')
+                    ->color('info')
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder)
+                    ->action(fn (SalesOrder $record) => response()->streamDownload(
+                        fn () => print(app(\App\Services\Print\ProformaInvoiceService::class)->generateSalesProforma($record->refresh()->load(['lines']))->output()),
+                        $record->order_number . '_Proforma.pdf'
+                    )),
+
+                // Super Admin Status Override
+                Action::make('changeStatus')
+                    ->label('Change Status')
+                    ->icon('heroicon-o-shield-check')
+                    ->color('warning')
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder && auth()->user()?->hasRole('super_admin'))
+                    ->form([
+                        Select::make('status')
+                            ->options(SalesOrderStatus::class)
+                            ->required()
+                            ->native(false),
+                    ])
+                    ->action(function (SalesOrder $record, array $data) {
+                        $record->update(['status' => $data['status']]);
+                        \Filament\Notifications\Notification::make()
+                            ->title('Status Updated')
+                            ->success()
+                            ->send();
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

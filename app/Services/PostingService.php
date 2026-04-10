@@ -10,6 +10,7 @@ use App\Models\Customer;
 use App\Models\GeneralPostingSetup;
 use App\Models\GlEntry;
 use App\Models\Item;
+use App\Models\PurchaseCreditMemo;
 use App\Models\SalesCreditMemo;
 use App\Models\SalesInvoice;
 use App\Models\Vendor;
@@ -588,6 +589,62 @@ class PostingService
                         'posting_date' => $invoice->posting_date,
                         'document_date' => $invoice->posting_date,
                         'description' => "Inventory decrease {$item->description}",
+                    ]);
+                }
+            }
+
+            return $entries;
+        });
+    }
+
+    /**
+     * @throws \Throwable
+     */
+    public function postPurchaseCreditMemo(PurchaseCreditMemo $memo): array
+    {
+        return DB::transaction(function () use ($memo) {
+            $memo->load('lines', 'vendor');
+            $entries = [];
+
+            foreach ($memo->lines as $line) {
+                $item = Item::find($line->item_id);
+                $setup = $memo->vendor->getPostingSetupFor($item);
+
+                $lineAmount = $line->quantity * $line->unit_cost;
+                // Note: We use unit_cost for both inventory and expense reversal in purchase context
+
+                // 1. A/P Reduction (Debit)
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $memo->vendor->getPayablesAccount()->id,
+                    'debit_amount' => $lineAmount,
+                    'credit_amount' => 0,
+                    'document_type' => 'PURCHASE_CREDIT_MEMO',
+                    'document_number' => $memo->document_number,
+                    'posting_date' => $memo->posting_date ?? now(),
+                    'description' => "Reduce payable: {$memo->document_number}",
+                ]);
+
+                if ($item->isInventoryItem()) {
+                    // 2. Inventory Reduction (Credit)
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $item->getInventoryAccount()->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $lineAmount,
+                        'document_type' => 'PURCHASE_CREDIT_MEMO',
+                        'document_number' => $memo->document_number,
+                        'posting_date' => $memo->posting_date ?? now(),
+                        'description' => "Inventory return: {$item->description}",
+                    ]);
+                } else {
+                    // 2. Expense/Purchase Reversal (Credit)
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $setup->getPurchaseAccount()->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $lineAmount,
+                        'document_type' => 'PURCHASE_CREDIT_MEMO',
+                        'document_number' => $memo->document_number,
+                        'posting_date' => $memo->posting_date ?? now(),
+                        'description' => "Purchase reversal: {$item->description}",
                     ]);
                 }
             }

@@ -88,8 +88,19 @@ class SalesOrderLine extends Model
         parent::boot();
 
         static::creating(function ($line) {
+            // Auto-calculate line number if not set
+            if (empty($line->line_number)) {
+                $maxLineNumber = self::where('sales_order_id', $line->sales_order_id)->max('line_number');
+                $line->line_number = ($maxLineNumber ?? 0) + 10;
+            }
+
+            // Calculation safety
+            $line->qty_per_unit_of_measure = (float)($line->qty_per_unit_of_measure ?: 1.0);
+            $line->quantity_base = (float)$line->quantity * $line->qty_per_unit_of_measure;
+            $line->vat_percentage = (float)($line->vat_percentage ?: 0);
+
             // Calculate derived fields
-            $line->line_total = $line->quantity * $line->unit_price;
+            $line->line_total = (float)$line->quantity * (float)$line->unit_price;
             $line->line_discount_amount = $line->line_total * ($line->line_discount_percent / 100);
             $line->line_amount = $line->line_total - $line->line_discount_amount;
             $line->vat_amount = $line->line_amount * ($line->vat_percentage / 100);
@@ -109,8 +120,11 @@ class SalesOrderLine extends Model
 
         static::updating(function ($line) {
             // Recalculate if price or quantity changed
-            if ($line->isDirty(['quantity', 'unit_price', 'line_discount_percent', 'vat_percentage'])) {
-                $line->line_total = $line->quantity * $line->unit_price;
+            if ($line->isDirty(['quantity', 'unit_price', 'line_discount_percent', 'vat_percentage', 'qty_per_unit_of_measure'])) {
+                $line->qty_per_unit_of_measure = (float)($line->qty_per_unit_of_measure ?: 1.0);
+                $line->quantity_base = (float)$line->quantity * $line->qty_per_unit_of_measure;
+
+                $line->line_total = (float)$line->quantity * (float)$line->unit_price;
                 $line->line_discount_amount = $line->line_total * ($line->line_discount_percent / 100);
                 $line->line_amount = $line->line_total - $line->line_discount_amount;
                 $line->vat_amount = $line->line_amount * ($line->vat_percentage / 100);
