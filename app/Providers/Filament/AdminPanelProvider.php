@@ -150,10 +150,6 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-arrow-uturn-left')
                                     ->url('/admin/posted-purchase-credit-memos'),
 
-                                NavigationItem::make('Purchase Receipts')
-                                    ->icon('heroicon-o-archive-box')
-                                    ->url('/admin/purchase-receipts'),
-
                                 NavigationItem::make('Purchases History')
                                     ->icon('heroicon-o-document-check')
                                     ->url(PurchaseHistory::getUrl())
@@ -198,10 +194,6 @@ class AdminPanelProvider extends PanelProvider
                                 NavigationItem::make('Sales Invoices')
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/sales-invoices'),
-
-                                NavigationItem::make('Sales Shipments')
-                                    ->icon('heroicon-o-truck')
-                                    ->url('/admin/sales-shipment-headers'),
 
                                 NavigationItem::make('Sales Credit Memos')
                                     ->icon('heroicon-o-arrow-uturn-left')
@@ -347,6 +339,43 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn() => request()->is('admin/wip-valuation-report*')),
                             ])
                     )
+
+                    // Manufacturing
+                    ->group(
+                        NavigationGroup::make('Human Resources')
+//                            ->icon('heroicon-o-cog-6-tooth')
+                            ->items([
+                                NavigationItem::make('Business Units')
+                                    ->icon('heroicon-o-wrench')
+                                    ->url('/admin/businesses'),
+
+                                NavigationItem::make('Factories')
+                                    ->icon('heroicon-o-wrench')
+                                    ->url('/admin/factories'),
+
+                                NavigationItem::make('Departments')
+                                    ->icon('heroicon-o-wrench')
+                                    ->url('/admin/departments'),
+
+                                NavigationItem::make('Employees')
+                                    ->icon('heroicon-o-play')
+                                    ->url('/admin/employees'),
+
+                                NavigationItem::make('Sales Shipments')
+                                    ->icon('heroicon-o-truck')
+                                    ->url('/admin/sales-shipment-headers'),
+
+                                NavigationItem::make('Purchase Receipts')
+                                    ->icon('heroicon-o-archive-box')
+                                    ->url('/admin/purchase-receipts'),
+
+                                NavigationItem::make('WIP Valuation')
+                                    ->icon('heroicon-o-currency-dollar')
+                                    ->url('/admin/wip-valuation-report')
+                                    ->isActiveWhen(fn() => request()->is('admin/wip-valuation-report*')),
+                            ])
+                    )
+
                     // Setup & Administration
                     ->group(
                         NavigationGroup::make('Setup')
