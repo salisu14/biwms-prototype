@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\BankAccountType;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
+use App\Models\Currency;
 use Illuminate\Database\Seeder;
 
 class BankAccountSeeder extends Seeder
@@ -26,6 +27,12 @@ class BankAccountSeeder extends Seeder
         $foreignEurGl = ChartOfAccount::where('account_number', '10510')->first()?->id;
         $foreignGbpGl = ChartOfAccount::where('account_number', '10520')->first()?->id;
 
+        $usd = Currency::where('code', 'USD')->first()?->id;
+        $eur = Currency::where('code', 'EUR')->first()?->id;
+        $gbp = Currency::where('code', 'GBP')->first()?->id;
+        $cad = Currency::where('code', 'CAD')->first()?->id; // CAD might be missing from my previous seeder, I'll add it to CurrencySeeder if needed.
+        $ngn = Currency::where('code', 'NGN')->first()?->id;
+
         $bankAccounts = [
             // Primary Operating Account - USD Checking
             [
@@ -38,7 +45,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'CHASUS33',
                 'iban' => null,
                 'gl_account_id' => $checkingGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::CHECKING,
                 'current_balance' => 125000.00,
                 'available_balance' => 115000.00,
@@ -61,7 +68,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'BOFAUS3N',
                 'iban' => null,
                 'gl_account_id' => $checkingGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::CHECKING,
                 'current_balance' => 75000.00,
                 'available_balance' => 75000.00,
@@ -84,7 +91,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'WFBIUS6S',
                 'iban' => null,
                 'gl_account_id' => $checkingGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::CHECKING,
                 'current_balance' => 45000.00,
                 'available_balance' => 45000.00,
@@ -107,7 +114,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'NFBKUSF1',
                 'iban' => null,
                 'gl_account_id' => $savingsGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::SAVINGS,
                 'current_balance' => 250000.00,
                 'available_balance' => 250000.00,
@@ -130,7 +137,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => null,
                 'iban' => null,
                 'gl_account_id' => $savingsGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::SAVINGS,
                 'current_balance' => 500000.00,
                 'available_balance' => 500000.00,
@@ -153,7 +160,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'GSCMUS33',
                 'iban' => null,
                 'gl_account_id' => $moneyMarketGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::MONEY_MARKET,
                 'current_balance' => 750000.00,
                 'available_balance' => 750000.00,
@@ -176,7 +183,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'CITIUS33',
                 'iban' => null,
                 'gl_account_id' => $cdGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::CERTIFICATE_OF_DEPOSIT,
                 'current_balance' => 100000.00,
                 'available_balance' => 0.00, // Locked until maturity
@@ -199,7 +206,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => null,
                 'iban' => null,
                 'gl_account_id' => $cdGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::CERTIFICATE_OF_DEPOSIT,
                 'current_balance' => 50000.00,
                 'available_balance' => 0.00,
@@ -222,7 +229,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'DEUTDEFF',
                 'iban' => 'DE89370400440532013000',
                 'gl_account_id' => $foreignEurGl,
-                'currency_code' => 'EUR',
+                'currency_id' => $eur,
                 'account_type' => BankAccountType::FOREIGN_CURRENCY,
                 'current_balance' => 185000.00,
                 'available_balance' => 185000.00,
@@ -245,7 +252,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'HBUKGB4B',
                 'iban' => 'GB29NWBK60161331926819',
                 'gl_account_id' => $foreignGbpGl,
-                'currency_code' => 'GBP',
+                'currency_id' => $gbp,
                 'account_type' => BankAccountType::FOREIGN_CURRENCY,
                 'current_balance' => 95000.00,
                 'available_balance' => 95000.00,
@@ -268,7 +275,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'ROYCCAT2',
                 'iban' => null,
                 'gl_account_id' => $foreignUsdGl,
-                'currency_code' => 'CAD',
+                'currency_id' => $cad ?? $usd, // Fallback if CAD is not seeded
                 'account_type' => BankAccountType::FOREIGN_CURRENCY,
                 'current_balance' => 75000.00,
                 'available_balance' => 75000.00,
@@ -291,7 +298,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => null,
                 'iban' => null,
                 'gl_account_id' => $checkingGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::CHECKING,
                 'current_balance' => 2500.00,
                 'available_balance' => 2500.00,
@@ -314,7 +321,7 @@ class BankAccountSeeder extends Seeder
                 'swift_code' => 'SIVBUS66',
                 'iban' => null,
                 'gl_account_id' => $checkingGl,
-                'currency_code' => 'USD',
+                'currency_id' => $usd,
                 'account_type' => BankAccountType::CHECKING,
                 'current_balance' => 0.00,
                 'available_balance' => 0.00,

@@ -5,7 +5,9 @@ namespace App\Filament\Resources\BankAccounts;
 use App\Filament\Resources\BankAccounts\Pages\CreateBankAccount;
 use App\Filament\Resources\BankAccounts\Pages\EditBankAccount;
 use App\Filament\Resources\BankAccounts\Pages\ListBankAccounts;
+use App\Filament\Resources\BankAccounts\Pages\ViewBankAccount;
 use App\Filament\Resources\BankAccounts\Schemas\BankAccountForm;
+use App\Filament\Resources\BankAccounts\Schemas\BankAccountInfolist;
 use App\Filament\Resources\BankAccounts\Tables\BankAccountsTable;
 use App\Models\BankAccount;
 use BackedEnum;
@@ -32,6 +34,11 @@ class BankAccountResource extends Resource
         return BankAccountsTable::configure($table);
     }
 
+    public static function infolist(Schema $schema): Schema
+    {
+        return BankAccountInfolist::configure($schema);
+    }
+
     public static function getRelations(): array
     {
         return [
@@ -44,6 +51,7 @@ class BankAccountResource extends Resource
         return [
             'index' => ListBankAccounts::route('/'),
             'create' => CreateBankAccount::route('/create'),
+            'view' => ViewBankAccount::route('/{record}'),
             'edit' => EditBankAccount::route('/{record}/edit'),
         ];
     }

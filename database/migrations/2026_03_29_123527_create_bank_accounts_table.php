@@ -28,7 +28,7 @@ return new class extends Migration
             $table->foreignId('gl_account_id')->constrained('chart_of_accounts');
 
             // Currency
-            $table->string('currency_code', 3)->default('USD');
+            $table->foreignId('currency_id')->nullable()->constrained('currencies');
 
             // Account Type
             $table->enum('account_type', array_column(BankAccountType::cases(), 'value'))

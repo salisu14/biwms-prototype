@@ -14,6 +14,7 @@ enum AccountCategory: string
     case COGS = 'COGS';
     case OPERATING_EXPENSE = 'OPERATING_EXPENSE';
     case NON_OPERATING = 'NON_OPERATING';
+    case OTHER_INCOME_EXPENSE = 'OTHER_INCOME_EXPENSE';
 
     case CURRENT_ASSET = 'CURRENT_ASSET';
     case FIXED_ASSET_LIABILITIES = 'FIXED_ASSET_LIABILITIES';
@@ -33,6 +34,7 @@ enum AccountCategory: string
             self::COGS => 'COGS Category',
             self::OPERATING_EXPENSE => 'Operating Expense',
             self::NON_OPERATING => 'Non-Operating Items',
+            self::OTHER_INCOME_EXPENSE => 'Other Income & Expenses',
             self::CURRENT_ASSET => 'Current Assets',
             self::FIXED_ASSET_LIABILITIES => 'Fixed Asset Liabilities',
             self::NON_CURRENT_ASSET => 'Non-Current Assets',
@@ -48,7 +50,7 @@ enum AccountCategory: string
             self::PAYABLE, self::ACCRUAL => 'bg-red-100 text-red-800',
             self::REVENUE => 'bg-blue-100 text-blue-800',
             self::COGS, self::OPERATING_EXPENSE => 'bg-orange-100 text-orange-800',
-            self::NON_OPERATING => 'bg-gray-100 text-gray-800',
+            self::NON_OPERATING, self::OTHER_INCOME_EXPENSE => 'bg-gray-100 text-gray-800',
         };
     }
 
@@ -65,6 +67,7 @@ enum AccountCategory: string
             self::COGS => 'heroicon-o-truck',
             self::OPERATING_EXPENSE => 'heroicon-o-briefcase',
             self::NON_OPERATING => 'heroicon-o-no-symbol',
+            self::OTHER_INCOME_EXPENSE => 'heroicon-o-presentation-chart-bar',
             self::CURRENT_ASSET => 'heroicon-o-banknotes',
             self::FIXED_ASSET_LIABILITIES => 'heroicon-o-building-library',
             self::NON_CURRENT_ASSET => 'heroicon-o-cube',
@@ -86,6 +89,7 @@ enum AccountCategory: string
             self::COGS => 'Direct manufacturing and purchase costs',
             self::OPERATING_EXPENSE => 'Standard day-to-day business costs',
             self::NON_OPERATING => 'Gains/losses outside core business',
+            self::OTHER_INCOME_EXPENSE => 'Incidental items such as exchange gains/losses',
         };
     }
 

@@ -231,6 +231,42 @@ class ChartOfAccountSeeder extends Seeder
                 'direct_posting' => true,
                 'parent_account_number' => '60000',
             ],
+
+            // ============================================
+            // Other Income/Expense (70000-79999)
+            // ============================================
+            [
+                'account_number' => '72100',
+                'name' => 'Unrealized Foreign Exchange Gains',
+                'account_type' => AccountType::REVENUE,
+                'account_category' => AccountCategory::OTHER_INCOME_EXPENSE,
+                'direct_posting' => true,
+                'parent_account_number' => '70000',
+            ],
+            [
+                'account_number' => '72200',
+                'name' => 'Unrealized Foreign Exchange Losses',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::OTHER_INCOME_EXPENSE,
+                'direct_posting' => true,
+                'parent_account_number' => '70000',
+            ],
+            [
+                'account_number' => '72300',
+                'name' => 'Realized Foreign Exchange Gains',
+                'account_type' => AccountType::REVENUE,
+                'account_category' => AccountCategory::OTHER_INCOME_EXPENSE,
+                'direct_posting' => true,
+                'parent_account_number' => '70000',
+            ],
+            [
+                'account_number' => '72400',
+                'name' => 'Realized Foreign Exchange Losses',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::OTHER_INCOME_EXPENSE,
+                'direct_posting' => true,
+                'parent_account_number' => '70000',
+            ],
         ];
 
         foreach ($accounts as $accountData) {
@@ -282,6 +318,13 @@ class ChartOfAccountSeeder extends Seeder
                 'name' => 'Operating Expenses',
                 'account_type' => AccountType::EXPENSE,
                 'account_category' => AccountCategory::OPERATING_EXPENSE,
+                'direct_posting' => false, // Control account - no direct posting
+            ],
+            [
+                'account_number' => '70000',
+                'name' => 'Other Income & Expenses',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::OTHER_INCOME_EXPENSE,
                 'direct_posting' => false, // Control account - no direct posting
             ],
             [

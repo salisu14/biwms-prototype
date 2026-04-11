@@ -24,7 +24,7 @@ class BankAccount extends Model
         'swift_code',
         'iban',
         'gl_account_id',
-        'currency_code',
+        'currency_id',
         'account_type',
         'current_balance',
         'available_balance',
@@ -51,6 +51,11 @@ class BankAccount extends Model
     public function glAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class, 'gl_account_id');
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'currency_id');
     }
 
     public function payments(): HasMany
