@@ -105,6 +105,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/bank-accounts'),
 
+                                NavigationItem::make('Payments')
+                                    ->icon('heroicon-o-document-currency-dollar')
+                                    ->url('/admin/payments'),
+
                                 NavigationItem::make('FA Posting Groups')
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/f-a-posting-groups'),

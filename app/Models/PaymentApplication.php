@@ -20,10 +20,13 @@ class PaymentApplication extends Model
         'document_original_amount',
         'document_remaining_before',
         'amount_applied',
+        'amount_applied_lcy',
+        'gain_loss_amount',
         'discount_applied',
         'write_off_amount',
         'document_remaining_after',
         'full_payment',
+        'currency_id',
         'applied_by',
         'applied_at',
         'reversed',
@@ -35,6 +38,8 @@ class PaymentApplication extends Model
         'document_original_amount' => 'decimal:4',
         'document_remaining_before' => 'decimal:4',
         'amount_applied' => 'decimal:4',
+        'amount_applied_lcy' => 'decimal:4',
+        'gain_loss_amount' => 'decimal:4',
         'discount_applied' => 'decimal:4',
         'write_off_amount' => 'decimal:4',
         'document_remaining_after' => 'decimal:4',
@@ -42,6 +47,7 @@ class PaymentApplication extends Model
         'applied_at' => 'datetime',
         'reversed' => 'boolean',
         'reversed_at' => 'datetime',
+        'currency_id' => 'integer',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -49,6 +55,11 @@ class PaymentApplication extends Model
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 
     public function document()

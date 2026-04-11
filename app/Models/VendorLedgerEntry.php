@@ -33,6 +33,7 @@ class VendorLedgerEntry extends Model
         'open',
         'applied_to_entries',
         'fully_applied',
+        'currency_id',
         'currency_code',
         'original_debit_amount',
         'original_credit_amount',
@@ -77,6 +78,7 @@ class VendorLedgerEntry extends Model
         'retainage_amount' => 'decimal:4',
         'retainage_due_date' => 'date',
         'dimensions' => 'array',
+        'currency_id' => 'integer',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -84,6 +86,11 @@ class VendorLedgerEntry extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 
     public function generalBusinessPostingGroup(): BelongsTo

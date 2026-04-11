@@ -12,6 +12,7 @@ use App\Models\Customer;
 use App\Models\GeneralPostingSetup;
 use App\Models\GlEntry;
 use App\Models\Item;
+use App\Models\PaymentApplication;
 use App\Models\PurchaseCreditMemo;
 use App\Models\SalesCreditMemo;
 use App\Models\SalesInvoice;
@@ -254,8 +255,19 @@ class PostingService
     /**
      * Post a customer payment receipt
      */
-    public function postPaymentReceipt(Customer $customer, float $amount, BankAccount $bankAccount, float $discount, \DateTime $postingDate, string $documentNumber): array
-    {
+    /**
+     * Post a customer payment receipt
+     */
+    public function postPaymentReceipt(
+        Customer $customer,
+        float $amount,
+        BankAccount $bankAccount,
+        float $discount,
+        \DateTime $postingDate,
+        string $documentNumber,
+        ?int $currencyId = null,
+        ?float $exchangeRate = null
+    ): array {
         $arAccount = $customer->customerPostingGroup?->receivablesAccount;
         $bankGlAccount = $bankAccount->glAccount;
 
@@ -263,7 +275,7 @@ class PostingService
             throw new \Exception('Missing account setup for payment receipt.');
         }
 
-        return DB::transaction(function () use ($customer, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $arAccount, $bankGlAccount) {
+        return DB::transaction(function () use ($customer, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $arAccount, $bankGlAccount, $currencyId, $exchangeRate) {
             $entries = [];
 
             // Debit Bank
@@ -273,9 +285,11 @@ class PostingService
                 'credit_amount' => 0,
                 'source_type' => 'BANK',
                 'source_number' => $bankAccount->account_code,
-                'document_type' => 'PAYMENT_RECEIPT',
+                'document_type' => 'PAYMENT',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
+                'currency_id' => $currencyId,
+                'exchange_rate' => $exchangeRate,
                 'description' => "Payment from {$customer->name}",
             ]);
 
@@ -286,9 +300,11 @@ class PostingService
                 'credit_amount' => $amount + $discount,
                 'source_type' => 'CUSTOMER',
                 'source_number' => $customer->customer_number,
-                'document_type' => 'PAYMENT_RECEIPT',
+                'document_type' => 'PAYMENT',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
+                'currency_id' => $currencyId,
+                'exchange_rate' => $exchangeRate,
                 'description' => "Payment received - {$documentNumber}",
             ]);
 
@@ -300,9 +316,11 @@ class PostingService
                     'credit_amount' => 0,
                     'source_type' => 'CUSTOMER',
                     'source_number' => $customer->customer_number,
-                    'document_type' => 'PAYMENT_RECEIPT',
+                    'document_type' => 'PAYMENT',
                     'document_number' => $documentNumber,
                     'posting_date' => $postingDate,
+                    'currency_id' => $currencyId,
+                    'exchange_rate' => $exchangeRate,
                     'description' => 'Early payment discount',
                 ]);
             }
@@ -314,71 +332,239 @@ class PostingService
     /**
      * Post vendor payment disbursement
      */
+    /**
+     * Post vendor payment disbursement
+     */
     public function postPaymentDisbursement(
         Vendor $vendor,
         float $amount,
         BankAccount $bankAccount,
         float $discount,
         \DateTime $postingDate,
-        string $documentNumber
+        string $documentNumber,
+        ?int $currencyId = null,
+        ?float $exchangeRate = null
     ): array {
-        $entries = [];
-        $apAccount = $vendor->vendorPostingGroup->payablesAccount;
+        $apAccount = $vendor->vendorPostingGroup?->payablesAccount;
         $bankGlAccount = $bankAccount->glAccount;
 
-        // 1. Debit: A/P (decrease payable)
-        $entries[] = GlEntry::create([
-            'entry_number' => $this->getNextEntryNumber(),
-            'transaction_number' => $this->transactionNumber,
-            'chart_of_account_id' => $apAccount->id,
-            'debit_amount' => $amount + $discount,
-            'credit_amount' => 0,
-            'amount' => $amount + $discount,
-            'source_type' => 'VENDOR',
-            'source_number' => $vendor->vendor_number,
-            'document_type' => 'PAYMENT_DISBURSEMENT',
-            'document_number' => $documentNumber,
-            'posting_date' => $postingDate,
-            'description' => "Payment to {$vendor->name}",
-        ]);
-
-        // 2. Credit: Bank (decrease cash)
-        $entries[] = GlEntry::create([
-            'entry_number' => $this->getNextEntryNumber(),
-            'transaction_number' => $this->transactionNumber,
-            'chart_of_account_id' => $bankGlAccount->id,
-            'debit_amount' => 0,
-            'credit_amount' => $amount,
-            'amount' => -$amount,
-            'source_type' => 'BANK',
-            'source_number' => $bankAccount->account_code,
-            'document_type' => 'PAYMENT_DISBURSEMENT',
-            'document_number' => $documentNumber,
-            'posting_date' => $postingDate,
-            'description' => "Payment to {$vendor->name}",
-        ]);
-
-        // 3. Credit: Discount Received (if applicable)
-        if ($discount > 0) {
-            $discountAccount = ChartOfAccount::where('account_number', '70400')->first(); // Discount Received
-
-            $entries[] = GlEntry::create([
-                'entry_number' => $this->getNextEntryNumber(),
-                'transaction_number' => $this->transactionNumber,
-                'chart_of_account_id' => $discountAccount->id,
-                'debit_amount' => 0,
-                'credit_amount' => $discount,
-                'amount' => -$discount,
-                'source_type' => 'VENDOR',
-                'source_number' => $vendor->vendor_number,
-                'document_type' => 'PAYMENT_DISBURSEMENT',
-                'document_number' => $documentNumber,
-                'posting_date' => $postingDate,
-                'description' => 'Early payment discount received',
-            ]);
+        if (! $apAccount || ! $bankGlAccount) {
+            throw new \Exception('Missing account setup for payment disbursement.');
         }
 
-        return $entries;
+        return DB::transaction(function () use ($vendor, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $apAccount, $bankGlAccount, $currencyId, $exchangeRate) {
+            $entries = [];
+
+            // 1. Debit: A/P (decrease payable)
+            $entries[] = $this->createGlEntry([
+                'chart_of_account_id' => $apAccount->id,
+                'debit_amount' => $amount + $discount,
+                'credit_amount' => 0,
+                'source_type' => 'VENDOR',
+                'source_number' => $vendor->vendor_number,
+                'document_type' => 'PAYMENT',
+                'document_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'currency_id' => $currencyId,
+                'exchange_rate' => $exchangeRate,
+                'description' => "Payment to {$vendor->name}",
+            ]);
+
+            // 2. Credit: Bank (decrease cash)
+            $entries[] = $this->createGlEntry([
+                'chart_of_account_id' => $bankGlAccount->id,
+                'debit_amount' => 0,
+                'credit_amount' => $amount,
+                'source_type' => 'BANK',
+                'source_number' => $bankAccount->account_code,
+                'document_type' => 'PAYMENT',
+                'document_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'currency_id' => $currencyId,
+                'exchange_rate' => $exchangeRate,
+                'description' => "Payment to {$vendor->name}",
+            ]);
+
+            // 3. Credit: Discount Received (if applicable - 70400 matches ChartOfAccountSeeder)
+            if ($discount > 0) {
+                $discountAccount = ChartOfAccount::where('account_number', '70400')->first();
+                if ($discountAccount) {
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $discountAccount->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $discount,
+                        'source_type' => 'VENDOR',
+                        'source_number' => $vendor->vendor_number,
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $documentNumber,
+                        'posting_date' => $postingDate,
+                        'currency_id' => $currencyId,
+                        'exchange_rate' => $exchangeRate,
+                        'description' => 'Early payment discount received',
+                    ]);
+                }
+            }
+
+            return $entries;
+        });
+    }
+
+    /**
+     * Post Realized Exchange Gain or Loss
+     */
+    public function postRealizedGainLoss(PaymentApplication $application): array
+    {
+        $currency = $application->currency;
+        if (! $currency) {
+            return [];
+        }
+
+        $gainLossAmount = $application->gain_loss_amount; // LCY amount
+        if (abs($gainLossAmount) < 0.001) {
+            return [];
+        }
+
+        $payment = $application->payment;
+        $party = $payment->party;
+
+        return DB::transaction(function () use ($application, $currency, $gainLossAmount, $payment, $party) {
+            $entries = [];
+
+            // 1. Adjust the Accounts Receivable/Payable (Debit or Credit)
+            // If it's a Loss (gainLossAmount > 0 for Receipt? No, let's logic it out)
+            // Receipt: Pay 150 NGN (1.5) for 140 NGN (1.4) Invoice.
+            // Gain of 10 NGN.
+            // entry to adjust AR: we credited AR for 150 NGN, but invoice was only 140.
+            // So we need to DEBIT AR for 10 NGN and CREDIT Realized Gain for 10 NGN.
+
+            // Disbursement: Pay 150 NGN (1.5) for 140 NGN (1.4) Invoice.
+            // Loss of 10 NGN.
+            // entry to adjust AP: we debited AP for 150 NGN, but invoice was only 140.
+            // So we need to CREDIT AP for 10 NGN and DEBIT Realized Loss for 10 NGN.
+
+            $isReceipt = $payment->payment_direction === 'RECEIPT';
+            $adjustAccount = $isReceipt
+                ? $party->getReceivablesAccount()
+                : $party->getPayablesAccount();
+
+            if ($gainLossAmount > 0) {
+                // Realized GAIN (Positive for Receipt, Negative for Disbursement usually, but let's check my formula)
+                // My formula in PaymentService: gainLossAmount = appliedLCYPayment - appliedLCYDocument
+                // Receipt POSITIVE -> Pay more LCY for same FCY -> GAIN
+                // Disbursement POSITIVE -> Pay more LCY for same FCY -> LOSS
+
+                if ($isReceipt) {
+                    // GAIN
+                    $gainAccount = $currency->realizedGainsAccount;
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $adjustAccount->id,
+                        'debit_amount' => $gainLossAmount, // Debit AR (decrease cumulative credit)
+                        'credit_amount' => 0,
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $payment->payment_number,
+                        'description' => "Realized Gain on {$application->document_number}",
+                    ]);
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $gainAccount->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $gainLossAmount, // Credit Gain
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $payment->payment_number,
+                        'description' => "Realized Gain on {$application->document_number}",
+                    ]);
+                } else {
+                    // LOSS (for Disbursement)
+                    $lossAccount = $currency->realizedLossesAccount;
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $lossAccount->id,
+                        'debit_amount' => $gainLossAmount, // Debit Loss
+                        'credit_amount' => 0,
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $payment->payment_number,
+                        'description' => "Realized Loss on {$application->document_number}",
+                    ]);
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $adjustAccount->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $gainLossAmount, // Credit AP
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $payment->payment_number,
+                        'description' => "Realized Loss on {$application->document_number}",
+                    ]);
+                }
+            } else {
+                // Negative -> Realized LOSS for Receipt, GAIN for Disbursement
+                $absAmount = abs($gainLossAmount);
+                if ($isReceipt) {
+                    // LOSS (Receipt)
+                    $lossAccount = $currency->realizedLossesAccount;
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $lossAccount->id,
+                        'debit_amount' => $absAmount,
+                        'credit_amount' => 0,
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $payment->payment_number,
+                        'description' => "Realized Loss on {$application->document_number}",
+                    ]);
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $adjustAccount->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $absAmount,
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $payment->payment_number,
+                        'description' => "Realized Loss on {$application->document_number}",
+                    ]);
+                } else {
+                    // GAIN (Disbursement)
+                    $gainAccount = $currency->realizedGainsAccount;
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $adjustAccount->id,
+                        'debit_amount' => $absAmount,
+                        'credit_amount' => 0,
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $payment->payment_number,
+                        'description' => "Realized Gain on {$application->document_number}",
+                    ]);
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $gainAccount->id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $absAmount,
+                        'document_type' => 'PAYMENT',
+                        'document_number' => $payment->payment_number,
+                        'description' => "Realized Gain on {$application->document_number}",
+                    ]);
+                }
+            }
+
+            return $entries;
+        });
+    }
+
+    /**
+     * Reverse Realized Gain/Loss G/L entries
+     */
+    public function reverseRealizedGainLoss(PaymentApplication $application): void
+    {
+        // Simple implementation: Reverse the G/L entries associated with this application
+        // In a full BC implementation, we'd look for specific G/L entries by document and source.
+        // For now, let's assume we can find them by payment number and description.
+        $payment = $application->payment;
+        $entries = GlEntry::where('document_number', $payment->payment_number)
+            ->where('description', 'like', "%{$application->document_number}%")
+            ->get();
+
+        foreach ($entries as $entry) {
+            $this->createGlEntry([
+                'chart_of_account_id' => $entry->chart_of_account_id,
+                'debit_amount' => $entry->credit_amount,
+                'credit_amount' => $entry->debit_amount,
+                'document_type' => $entry->document_type,
+                'document_number' => "REV-{$entry->document_number}",
+                'description' => "Reversal: {$entry->description}",
+                'source_type' => $entry->source_type,
+                'source_number' => $entry->source_number,
+            ]);
+        }
     }
 
     public function postPurchaseLine(

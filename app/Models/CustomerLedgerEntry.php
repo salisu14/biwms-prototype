@@ -33,6 +33,7 @@ class CustomerLedgerEntry extends Model
         'open',
         'applied_to_entries',
         'fully_applied',
+        'currency_id',
         'currency_code',
         'original_debit_amount',
         'original_credit_amount',
@@ -68,6 +69,7 @@ class CustomerLedgerEntry extends Model
         'reversed' => 'boolean',
         'reversed_at' => 'datetime',
         'dimensions' => 'array',
+        'currency_id' => 'integer',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -75,6 +77,11 @@ class CustomerLedgerEntry extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 
     public function generalBusinessPostingGroup(): BelongsTo
