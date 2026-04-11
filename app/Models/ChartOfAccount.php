@@ -13,11 +13,38 @@ class ChartOfAccount extends Model
 {
     use HasFactory;
 
+    protected static function booted()
+    {
+        static::saving(function ($account) {
+            // Automatically classify Income Statement vs Balance Sheet based on Account Type
+            if ($account->account_type) {
+                $incomeBalanceTypes = [
+                    AccountType::REVENUE->value,
+                    AccountType::COGS->value,
+                    AccountType::EXPENSE->value,
+                ];
+
+                if (in_array($account->account_type->value, $incomeBalanceTypes)) {
+                    $account->income_balance = \App\Enums\IncomeBalanceType::INCOME_STATEMENT;
+                } else {
+                    $account->income_balance = \App\Enums\IncomeBalanceType::BALANCE_SHEET;
+                }
+            }
+        });
+    }
+
     protected $fillable = [
         'account_number',
         'name',
         'account_type',
         'account_category',
+        'income_balance',
+        'gl_account_type',
+        'totaling',
+        'indentation',
+        'bold',
+        'show_opposite_sign',
+        'new_page',
         'balance',
         'direct_posting',
         'blocked',
@@ -28,8 +55,13 @@ class ChartOfAccount extends Model
         'balance' => 'decimal:2',
         'direct_posting' => 'boolean',
         'blocked' => 'boolean',
+        'bold' => 'boolean',
+        'show_opposite_sign' => 'boolean',
+        'new_page' => 'boolean',
         'account_type' => AccountType::class,
         'account_category' => AccountCategory::class,
+        'gl_account_type' => \App\Enums\GlAccountType::class,
+        'income_balance' => \App\Enums\IncomeBalanceType::class,
     ];
 
     // Parent account (for hierarchical COA)
@@ -84,5 +116,18 @@ class ChartOfAccount extends Model
     public function scopeInventory($query)
     {
         return $query->where('account_category', 'INVENTORY');
+    }
+
+    public function isTotalAccount(): bool
+    {
+        return in_array($this->gl_account_type, [
+            \App\Enums\GlAccountType::TOTAL,
+            \App\Enums\GlAccountType::END_TOTAL,
+        ]);
+    }
+
+    public function isIncomeStatement(): bool
+    {
+        return $this->income_balance === \App\Enums\IncomeBalanceType::INCOME_STATEMENT;
     }
 }

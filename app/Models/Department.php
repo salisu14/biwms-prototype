@@ -86,7 +86,7 @@ class Department extends Model
                         'dimension_id' => $dimension->id,
                         'code' => $department->department_code,
                         'name' => $department->name,
-                        'dimension_value_type' => 'Standard',
+                        'dimension_value_type' => 'standard',
                         'blocked' => !$department->status->canPost(),
                     ]);
                     $department->updateQuietly(['dimension_value_id' => $dimValue->id]);

@@ -28,6 +28,7 @@ class Employee extends Model
         'business_code',
         'factory_code',
         'department_code',
+        'department_id',
         'is_active',
     ];
 
@@ -41,10 +42,13 @@ class Employee extends Model
      */
     public function syncDefaultDimensions(): void
     {
+        // Prioritize code from the linked department if available
+        $deptCode = $this->department?->department_code ?? $this->department_code;
+
         app(DimensionService::class)->syncDimensions($this, 'employees', [
             'BUSINESS' => $this->business_code,
             'FACTORY' => $this->factory_code,
-            'DEPARTMENT' => $this->department_code,
+            'DEPARTMENT' => $deptCode,
         ]);
     }
 
@@ -54,6 +58,11 @@ class Employee extends Model
             if ($employee->assignment_type === EmployeeAssignmentType::Corporate) {
                 $employee->business_code = null;
                 $employee->factory_code = null;
+            }
+
+            // Sync department_code from department_id if changed
+            if ($employee->isDirty('department_id') && $employee->department_id) {
+                $employee->department_code = $employee->department->department_code;
             }
         });
 
@@ -68,6 +77,11 @@ class Employee extends Model
     public function employeePostingGroup(): BelongsTo
     {
         return $this->belongsTo(EmployeePostingGroup::class);
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
     }
 
     public function compensations()

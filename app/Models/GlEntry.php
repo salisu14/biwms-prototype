@@ -44,6 +44,8 @@ class GlEntry extends Model
         'vendor_ledger_entry_id',
         'sourceable_id',
         'sourceable_type',
+        'shortcut_dimension_1_code',
+        'shortcut_dimension_2_code',
     ];
 
     protected $casts = [

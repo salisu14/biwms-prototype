@@ -88,12 +88,11 @@ class EmployeeForm
                         ->required()
                         ->visible(fn (Get $get) => $get('assignment_type') === EmployeeAssignmentType::Factory->value),
 
-                    Select::make('department_code')
+                    Select::make('department_id')
                         ->label('Department')
-                        ->options(function () {
-                            $dim = Dimension::where('code', 'DEPARTMENT')->first();
-                            return $dim ? $dim->values()->pluck('name', 'code') : [];
-                        })
+                        ->relationship('department', 'name')
+                        ->searchable()
+                        ->preload()
                         ->required(),
                 ])->columns(3),
 
