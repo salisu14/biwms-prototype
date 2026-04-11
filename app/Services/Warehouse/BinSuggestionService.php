@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Warehouse;
 
 use App\Enums\BinType;
+use App\Enums\ZoneType;
 use App\Models\Bin;
 use App\Models\Item;
 use App\Models\Location;
@@ -19,10 +20,11 @@ class BinSuggestionService
         Item $item,
         Location $location,
         float $quantity,
-        ?BinType $preferredZoneType = null,
+        ?BinType $preferredBinType = null,
+        ?ZoneType $preferredZoneType = null,
         ?string $preferredZoneCode = null
     ): Collection {
-        $query = Bin::with(['contents'])
+        $query = Bin::with(['contents', 'zone'])
             ->where('location_id', $location->id)
             ->where('is_active', true)
             ->where('block_movement_in', false)
@@ -31,8 +33,20 @@ class BinSuggestionService
                     ->orWhere('dedicated_item_id', $item->id);
             });
 
+        if ($preferredBinType) {
+            $query->where('bin_type', $preferredBinType);
+        }
+
         if ($preferredZoneType) {
-            $query->where('bin_type', $preferredZoneType);
+            $query->whereHas('zone', function ($q) use ($preferredZoneType) {
+                $q->where('zone_type', $preferredZoneType);
+            });
+        }
+
+        if ($preferredZoneCode) {
+            $query->whereHas('zone', function ($q) use ($preferredZoneCode) {
+                $q->where('zone_code', $preferredZoneCode);
+            });
         }
 
         if ($item->warehouse_class) {
@@ -84,17 +98,20 @@ class BinSuggestionService
         return true;
     }
 
-    private function scoreBinForPutAway(Bin $bin, Item $item): int
+    private function scoreBinForPutAway(Bin $bin, int|Item $item): int
     {
+        $itemModel = $item instanceof Item ? $item : Item::find($item);
+        if (!$itemModel) return 0;
+
         $score = 0;
 
         // Dedicated bin for this item = highest priority
-        if ($bin->dedicated && $bin->dedicated_item_id === $item->id) {
+        if ($bin->dedicated && $bin->dedicated_item_id === $itemModel->id) {
             $score += 100;
         }
 
         // Existing inventory of same item (consolidation)
-        if ($bin->contents->contains('item_id', $item->id)) {
+        if ($bin->contents->contains('item_id', $itemModel->id)) {
             $score += 50;
         }
 
@@ -104,7 +121,7 @@ class BinSuggestionService
         }
 
         // Proximity to receiving (for fast-moving items)
-        if ($item->is_fast_moving && $bin->zone?->zone_type === 'receiving') {
+        if ($itemModel->is_fast_moving && $bin->zone?->zone_type === ZoneType::RECEIVING) {
             $score += 10;
         }
 
@@ -117,6 +134,6 @@ class BinSuggestionService
         $currentQty = $bin->contents->sum('quantity_base');
         $maxQty = $bin->maximum_items ?? PHP_INT_MAX;
 
-        return max(0, $maxQty - $currentQty);
+        return max(0, (float)$maxQty - $currentQty);
     }
 }

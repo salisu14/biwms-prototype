@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Enums\ItemLedgerEntryType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -43,6 +44,7 @@ class ItemLedgerEntry extends Model
     ];
 
     protected $casts = [
+        'entry_type' => ItemLedgerEntryType::class,
         'quantity' => 'decimal:4',
         'remaining_quantity' => 'decimal:4',
         'cost_amount_actual' => 'decimal:4',
@@ -95,10 +97,11 @@ class ItemLedgerEntry extends Model
     public function isPositiveEntry(): bool
     {
         return in_array($this->entry_type, [
-            'PURCHASE',
-            'POSITIVE_ADJUSTMENT',
-            'TRANSFER', // Depends on location context
-            'OUTPUT',
+            ItemLedgerEntryType::PURCHASE,
+            ItemLedgerEntryType::POSITIVE_ADJUSTMENT,
+            ItemLedgerEntryType::TRANSFER, // Depends on location context
+            ItemLedgerEntryType::OUTPUT,
+            ItemLedgerEntryType::ASSEMBLY_OUTPUT,
         ]);
     }
 
@@ -106,9 +109,10 @@ class ItemLedgerEntry extends Model
     public function isNegativeEntry(): bool
     {
         return in_array($this->entry_type, [
-            'SALE',
-            'NEGATIVE_ADJUSTMENT',
-            'CONSUMPTION',
+            ItemLedgerEntryType::SALE,
+            ItemLedgerEntryType::NEGATIVE_ADJUSTMENT,
+            ItemLedgerEntryType::CONSUMPTION,
+            ItemLedgerEntryType::ASSEMBLY_CONSUMPTION,
         ]);
     }
 

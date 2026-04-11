@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Warehouse;
 
 use App\Enums\BinType;
+use App\Enums\ZoneType;
 use App\Enums\WarehouseActivityType;
 use App\Enums\WarehouseDocumentStatus;
 use App\Models\Bin;
@@ -43,7 +44,8 @@ class PutAwayWorksheetService
                 item: $item,
                 location: $location,
                 quantity: $quantity,
-                zoneType: BinType::BULK
+                preferredBinType: BinType::STORAGE,
+                preferredZoneType: ZoneType::STORAGE
             );
 
             $activity = WarehouseActivity::create([
@@ -115,7 +117,8 @@ class PutAwayWorksheetService
                 item: $item,
                 location: $location,
                 quantity: $receivedQty,
-                zoneType: BinType::BULK
+                preferredBinType: BinType::STORAGE,
+                preferredZoneType: ZoneType::STORAGE
             );
 
             $activity = WarehouseActivity::create([

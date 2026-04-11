@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ItemLedgerEntries\Tables;
 
+use App\Enums\ItemLedgerEntryType;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -25,13 +26,6 @@ class ItemLedgerEntriesTable
                     ->sortable(),
                 TextColumn::make('entry_type')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'PURCHASE' => 'success',
-                        'SALE' => 'warning',
-                        'POSITIVE_ADJUSTMENT' => 'info',
-                        'NEGATIVE_ADJUSTMENT' => 'danger',
-                        default => 'gray',
-                    })
                     ->searchable(),
                 TextColumn::make('document_number')
                     ->label('Doc No.')
@@ -67,12 +61,7 @@ class ItemLedgerEntriesTable
             ])
             ->filters([
                 SelectFilter::make('entry_type')
-                    ->options([
-                        'PURCHASE' => 'Purchase',
-                        'SALE' => 'Sale',
-                        'POSITIVE_ADJUSTMENT' => 'Positive Adjustment',
-                        'NEGATIVE_ADJUSTMENT' => 'Negative Adjustment',
-                    ]),
+                    ->options(ItemLedgerEntryType::class),
                 SelectFilter::make('open')
                     ->label('Entry Status')
                     ->options([

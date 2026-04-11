@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\JournalEntryType;
+use App\Enums\ItemLedgerEntryType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -17,7 +17,7 @@ return new class extends Migration
             $table->unsignedBigInteger('entry_number')->unique(); // Sequential
 
             // Source
-            $table->enum('entry_type', array_column(JournalEntryType::cases(), 'value'));
+            $table->enum('entry_type', array_map(fn($case) => $case->value, ItemLedgerEntryType::cases()));
 
             $table->string('document_type', 30)->nullable();
             $table->string('document_number', 20);

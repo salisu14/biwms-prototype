@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
-use App\Models\ItemTrackingEntry;
 use App\Models\ItemTrackingLine;
 use App\Models\ReservationEntry;
 use App\Models\SalesOrderLine;
@@ -45,21 +44,20 @@ class ItemTrackingManagementService
 
             $shipQty = min($tracking->quantity, $remainingToShip);
 
-            ItemTrackingEntry::create([
-                'trackable_type' => SalesShipmentLine::class,
-                'trackable_id' => $shipmentLine->id,
+            ReservationEntry::create([
+                'source_type' => SalesShipmentLine::class,
+                'source_id' => $shipmentLine->id,
                 'item_no' => $shipmentLine->no,
                 'variant_code' => $shipmentLine->variant_code,
                 'serial_no' => $tracking->serial_no,
                 'lot_no' => $tracking->lot_no,
                 'expiration_date' => $tracking->expiration_date,
                 'warranty_date' => $tracking->warranty_date,
-                'quantity' => $shipQty,
-                'quantity_base' => $shipQty * $shipmentLine->qty_per_unit_of_measure,
-                'entry_type' => 'negative', // Outbound
-                'document_type' => 'sales_shipment',
-                'document_no' => $shipmentLine->document_no,
-                'document_line_no' => $shipmentLine->line_no,
+                'quantity' => -$shipQty,
+                'quantity_base' => -($shipQty * $shipmentLine->qty_per_unit_of_measure),
+                'reservation_status' => 'tracking',
+                'source_subtype' => 'sales_shipment',
+                'source_ref_no' => $shipmentLine->line_no,
             ]);
 
             // Update order tracking quantity handled
@@ -273,7 +271,7 @@ class ItemTrackingManagementService
                 ->where('lot_no', $lotNo)
                 ->update(['expiration_date' => $newExpirationDate]);
 
-            ItemTrackingEntry::where('item_no', $itemNo)
+            ReservationEntry::where('item_no', $itemNo)
                 ->where('lot_no', $lotNo)
                 ->update(['expiration_date' => $newExpirationDate]);
         });
@@ -324,8 +322,9 @@ class ItemTrackingManagementService
      */
     public function getTrackingSpecification($line): Collection
     {
-        return ItemTrackingEntry::where('trackable_type', get_class($line))
-            ->where('trackable_id', $line->id)
+        return ReservationEntry::where('source_type', get_class($line))
+            ->where('source_id', $line->id)
+            ->where('reservation_status', 'tracking')
             ->get()
             ->map(fn ($entry) => [
                 'lot_no' => $entry->lot_no,

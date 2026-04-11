@@ -321,11 +321,11 @@ class Item extends Model
     }
 
     /**
-     * Ledger entries
+     * Ledger entries (Physical movements)
      */
     public function ledgerEntries(): HasMany
     {
-        return $this->hasMany(ItemLedger::class, 'item_id');
+        return $this->hasMany(ItemLedgerEntry::class, 'item_id');
     }
 
     /**
@@ -334,14 +334,7 @@ class Item extends Model
     public function getTotalQuantityAttribute(): float
     {
         return $this->ledgerEntries()
-            ->selectRaw('
-                SUM(CASE
-                    WHEN entry_type IN (\'RECEIPT\', \'TRANSFER_IN\', \'ADJUSTMENT_POS\') THEN quantity
-                    WHEN entry_type IN (\'ISSUE\', \'TRANSFER_OUT\', \'SALE\', \'ADJUSTMENT_NEG\') THEN -quantity
-                    ELSE 0
-                END) as total
-            ')
-            ->value('total') ?? 0;
+            ->sum('quantity') ?? 0;
     }
 
     /**
@@ -351,14 +344,7 @@ class Item extends Model
     {
         return $this->ledgerEntries()
             ->where('location_id', $locationId)
-            ->selectRaw('
-                SUM(CASE
-                    WHEN entry_type IN (\'RECEIPT\', \'TRANSFER_IN\', \'ADJUSTMENT_POS\') THEN quantity
-                    WHEN entry_type IN (\'ISSUE\', \'TRANSFER_OUT\', \'SALE\', \'ADJUSTMENT_NEG\') THEN -quantity
-                    ELSE 0
-                END) as total
-            ')
-            ->value('total') ?? 0;
+            ->sum('quantity') ?? 0;
     }
 
     /**

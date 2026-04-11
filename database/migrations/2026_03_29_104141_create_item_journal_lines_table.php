@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\JournalEntryType;
+use App\Enums\ItemLedgerEntryType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -20,7 +20,7 @@ return new class extends Migration
             $table->integer('line_number');
 
             // Entry Type
-            $table->enum('entry_type', array_column(JournalEntryType::cases(), 'value'));
+            $table->enum('entry_type', array_map(fn($case) => $case->value, ItemLedgerEntryType::cases()));
 
             // Document
             $table->string('document_number', 20);

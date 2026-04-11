@@ -2,15 +2,16 @@
 
 namespace App\Services\Sales;
 
-use App\Models\InventoryItem;
+use App\Models\ItemLedgerEntry;
 
 class InventoryService
 {
     public function consume($itemId, $qty)
     {
-        $layers = InventoryItem::where('item_id', $itemId)
-            ->where('quantity', '>', 0)
-            ->orderBy('created_at') // FIFO
+        $layers = ItemLedgerEntry::where('item_id', $itemId)
+            ->where('open', true)
+            ->where('remaining_quantity', '>', 0)
+            ->orderBy('posting_date') // FIFO
             ->get();
 
         $remaining = $qty;
@@ -21,11 +22,14 @@ class InventoryService
                 break;
             }
 
-            $take = min($layer->quantity, $remaining);
+            $take = min($layer->remaining_quantity, $remaining);
 
-            $totalCost += $take * $layer->unit_cost;
+            $totalCost += $take * $layer->cost_amount_actual / $layer->quantity;
 
-            $layer->decrement('quantity', $take);
+            $layer->decrement('remaining_quantity', $take);
+            if ($layer->remaining_quantity <= 0) {
+                $layer->update(['open' => false]);
+            }
 
             $remaining -= $take;
         }
