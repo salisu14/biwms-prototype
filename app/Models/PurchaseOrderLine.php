@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PurchaseLineType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,9 +35,13 @@ class PurchaseOrderLine extends Model
         'expected_delivery_date',
         'comment',
         'general_product_posting_group_id',
+        'type',
+        'asset_id',
+        'fa_posting_type',
     ];
 
     protected $casts = [
+        'type' => PurchaseLineType::class,
         'quantity' => 'decimal:4',
         'unit_cost' => 'decimal:4',
         'line_total' => 'decimal:4',
@@ -86,6 +91,11 @@ class PurchaseOrderLine extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class, 'item_id');
+    }
+
+    public function asset(): BelongsTo
+    {
+        return $this->belongsTo(Asset::class);
     }
 
     public function generalProductPostingGroup(): BelongsTo

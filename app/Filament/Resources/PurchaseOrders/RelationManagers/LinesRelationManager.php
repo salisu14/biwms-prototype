@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\PurchaseOrders\RelationManagers;
 
+use App\Enums\PurchaseLineType;
+use App\Enums\UomType;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
+use App\Models\Asset;
 use App\Models\Item;
 use App\Models\PurchaseOrder;
 use Filament\Actions\BulkActionGroup;
@@ -33,17 +36,25 @@ class LinesRelationManager extends RelationManager
     {
         return $schema
             ->schema([
+                Select::make('type')
+                    ->label('Type')
+                    ->options(PurchaseLineType::class)
+                    ->required()
+                    ->default(PurchaseLineType::ITEM)
+                    ->live()
+                    ->afterStateUpdated(fn ($set) => $set('item_id', null) && $set('asset_id', null)),
+
                 Grid::make(4)->schema([
                     Select::make('item_id')
                         ->label('Item')
-                        // Ensure this relationship points to the correct Model
-                        ->relationship('item', 'item_number', fn($query) => $query->where('blocked', false))
+                        ->relationship('item', 'item_number', fn ($query) => $query->where('blocked', false))
                         ->searchable()
                         ->preload()
-                        ->required()
+                        ->required(fn ($get) => $get('type') === PurchaseLineType::ITEM->value)
+                        ->visible(fn ($get) => $get('type') === PurchaseLineType::ITEM->value)
                         ->lazy()
                         ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                            if (!$state) {
+                            if (! $state) {
                                 return;
                             }
 
@@ -53,11 +64,33 @@ class LinesRelationManager extends RelationManager
                                 $set('item_code', $item->item_number);
 
                                 // Logic to set the ACTIVE unit_of_measure field using Item model method
-                                $baseUom = $item->getDefaultUom(\App\Enums\UomType::BASE);
+                                $baseUom = $item->getDefaultUom(UomType::BASE);
                                 $set('unit_of_measure', $baseUom?->uom_code ?? '');
 
                                 // Using the accessor from Item model
                                 $set('unit_cost', $item->current_standard_cost ?? 0);
+                            }
+                        }),
+
+                    Select::make('asset_id')
+                        ->label('Asset')
+                        ->relationship('asset', 'asset_no')
+                        ->searchable()
+                        ->preload()
+                        ->required(fn ($get) => $get('type') === PurchaseLineType::FIXED_ASSET->value)
+                        ->visible(fn ($get) => $get('type') === PurchaseLineType::FIXED_ASSET->value)
+                        ->lazy()
+                        ->afterStateUpdated(function ($state, callable $set) {
+                            if (! $state) {
+                                return;
+                            }
+
+                            $asset = Asset::find($state);
+                            if ($asset) {
+                                $set('description', $asset->description);
+                                $set('item_code', $asset->asset_no);
+                                $set('unit_of_measure', 'pcs'); // Default for assets
+                                $set('unit_cost', 0); // User likely input cost on PO
                             }
                         }),
 
@@ -119,7 +152,8 @@ class LinesRelationManager extends RelationManager
                         ->content(function (callable $get) {
                             $qty = (float) ($get('quantity') ?? 0);
                             $cost = (float) ($get('unit_cost') ?? 0);
-                            return '$' . number_format($qty * $cost, 2);
+
+                            return '$'.number_format($qty * $cost, 2);
                         }),
 
                     Placeholder::make('vat_amount_preview')
@@ -130,7 +164,8 @@ class LinesRelationManager extends RelationManager
                             $vatRate = (float) ($get('vat_percentage') ?? 0);
                             $lineTotal = $qty * $cost;
                             $vatAmount = $lineTotal * ($vatRate / 100);
-                            return '$' . number_format($vatAmount, 2);
+
+                            return '$'.number_format($vatAmount, 2);
                         }),
 
                     Placeholder::make('total_amount_preview')
@@ -142,7 +177,8 @@ class LinesRelationManager extends RelationManager
                             $lineTotal = $qty * $cost;
                             $vatAmount = $lineTotal * ($vatRate / 100);
                             $grandTotal = $lineTotal + $vatAmount;
-                            return '$' . number_format($grandTotal, 2);
+
+                            return '$'.number_format($grandTotal, 2);
                         })
                         ->extraAttributes(['class' => 'font-bold text-lg text-primary-600']),
                 ]),
@@ -171,7 +207,7 @@ class LinesRelationManager extends RelationManager
 
                 TextColumn::make('quantity')
                     ->numeric()
-                    ->suffix(fn($record) => ' ' . ($record->unit_of_measure ?? '')),
+                    ->suffix(fn ($record) => ' '.($record->unit_of_measure ?? '')),
 
                 TextColumn::make('unit_cost')
                     ->money('USD')
@@ -200,7 +236,7 @@ class LinesRelationManager extends RelationManager
                     ->falseIcon('heroicon-o-clock')
                     ->trueColor('success')
                     ->falseColor('warning')
-                    ->tooltip(fn($record): string => $record->is_fully_received ? 'Fully Received' : ($record->is_partially_received ? 'Partially Received' : 'Pending')),
+                    ->tooltip(fn ($record): string => $record->is_fully_received ? 'Fully Received' : ($record->is_partially_received ? 'Partially Received' : 'Pending')),
             ])
             ->filters([
                 //
@@ -215,12 +251,17 @@ class LinesRelationManager extends RelationManager
                         $maxLineNumber = $purchaseOrder->lines()->max('line_number') ?? 0;
                         $data['line_number'] = $maxLineNumber + 1;
 
-                        // 2. Mirroring Service Logic: Ensure item metadata and Posting Groups are set
-                        if (isset($data['item_id'])) {
+                        // 2. Mirroring Service Logic: Ensure item/asset metadata and Posting Groups are set
+                        if ($data['type'] === PurchaseLineType::ITEM->value && isset($data['item_id'])) {
                             $item = Item::find($data['item_id']);
                             if ($item) {
                                 $data['item_code'] = $item->item_number;
                                 $data['general_product_posting_group_id'] = $item->general_product_posting_group_id;
+                            }
+                        } elseif ($data['type'] === PurchaseLineType::FIXED_ASSET->value && isset($data['asset_id'])) {
+                            $asset = Asset::find($data['asset_id']);
+                            if ($asset) {
+                                $data['item_code'] = $asset->asset_no;
                             }
                         }
 

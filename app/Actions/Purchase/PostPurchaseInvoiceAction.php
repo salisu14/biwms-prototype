@@ -3,6 +3,7 @@
 namespace App\Actions\Purchase;
 
 use App\Data\Purchase\PostInvoiceData;
+use App\Enums\PurchaseLineType;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Services\PostingService;
@@ -40,24 +41,49 @@ class PostPurchaseInvoiceAction
 
                 $invoice->lines()->create([
                     'po_line_id' => $poLine->id,
+                    'type' => $poLine->type,
+                    'asset_id' => $poLine->asset_id,
                     'quantity' => $lineData['quantity'],
+                    'item_id' => $poLine->item_id,
+                    'item_code' => $poLine->item_code,
+                    'item_description' => $poLine->description,
                     'unit_cost' => $poLine->unit_cost,
-                    'unit_of_measure' => $poLine->unit_of_measure,
+                    'unit_of_measure_code' => $poLine->unit_of_measure,
                     'line_total' => $lineTotal,
                     'vat_amount' => $vat,
                     'total_amount' => $lineTotal + $vat,
+                    'general_product_posting_group_id' => $poLine->general_product_posting_group_id,
+                    'line_number' => $poLine->line_number,
+                    'po_line_number' => $poLine->line_number,
+                    'quantity_base' => $lineData['quantity'], // Simplified
+                    'unit_cost_lcy' => $poLine->unit_cost, // Simplified
+                    'amount_including_vat' => $lineTotal + $vat,
+                    'amount_including_vat_lcy' => $lineTotal + $vat, // Simplified
                 ]);
 
-                $postingService->postPurchaseLine(
-                    vendor: $order->vendor,
-                    item: $poLine->item,
-                    quantity: $lineData['quantity'],
-                    unitCost: $poLine->unit_cost,
-                    lineTotal: $lineTotal,
-                    postingDate: $data->postingDate,
-                    documentNumber: $invoice->document_number,
-                    description: $poLine->description
-                );
+                if ($poLine->type === PurchaseLineType::FIXED_ASSET) {
+                    $postingService->postFixedAssetPurchase(
+                        vendor: $order->vendor,
+                        asset: $poLine->asset,
+                        quantity: $lineData['quantity'],
+                        unitCost: $poLine->unit_cost,
+                        lineTotal: $lineTotal,
+                        postingDate: $data->postingDate,
+                        documentNumber: $invoice->document_number,
+                        description: $poLine->description
+                    );
+                } else {
+                    $postingService->postPurchaseLine(
+                        vendor: $order->vendor,
+                        item: $poLine->item,
+                        quantity: $lineData['quantity'],
+                        unitCost: $poLine->unit_cost,
+                        lineTotal: $lineTotal,
+                        postingDate: $data->postingDate,
+                        documentNumber: $invoice->document_number,
+                        description: $poLine->description
+                    );
+                }
 
                 $totalAmount += $lineTotal;
                 $totalVat += $vat;

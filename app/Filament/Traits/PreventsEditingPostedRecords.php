@@ -10,7 +10,7 @@ trait PreventsEditingPostedRecords
     {
         parent::mount($record);
 
-        if ($this->isPosted()) {
+        if ($this->isPosted() && ! auth()->user()?->hasRole('SUPER_ADMIN')) {
             Notification::make()
                 ->warning()
                 ->title('Read-Only Record')
@@ -28,7 +28,7 @@ trait PreventsEditingPostedRecords
 
         // Check various "posted" conditions
         return method_exists($record, 'isPosted') && $record->isPosted()
-            || !is_null($record->posted_at ?? null)
+            || ! is_null($record->posted_at ?? null)
             || ($record->status ?? null) === 'posted'
             || ($record->completely_shipped ?? false);
     }
@@ -37,7 +37,7 @@ trait PreventsEditingPostedRecords
     {
         return [
             $this->getSaveFormAction()
-                ->visible(fn (): bool => !$this->isPosted()),
+                ->visible(fn (): bool => ! $this->isPosted() || (auth()->user()?->hasRole('SUPER_ADMIN') ?? false)),
             $this->getCancelFormAction(),
         ];
     }

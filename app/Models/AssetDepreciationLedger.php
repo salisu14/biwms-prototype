@@ -1,19 +1,19 @@
 <?php
 
-namespace App\Models\Manufacturing;
+namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class FixedAssetDepreciationLedger extends Model
+class AssetDepreciationLedger extends Model
 {
     use HasFactory;
 
-    protected $table = 'fixed_asset_depreciation_ledger';
+    protected $table = 'asset_depreciation_ledger';
 
     protected $fillable = [
-        'fixed_asset_id',
+        'asset_id',
         'depreciation_date',
         'depreciation_period',
         'depreciation_amount',
@@ -25,14 +25,14 @@ class FixedAssetDepreciationLedger extends Model
 
     protected $casts = [
         'depreciation_date' => 'date',
-        'depreciation_amount' => 'decimal:2',
-        'accumulated_depreciation' => 'decimal:2',
-        'net_book_value' => 'decimal:2',
+        'depreciation_amount' => 'decimal:4',
+        'accumulated_depreciation' => 'decimal:4',
+        'net_book_value' => 'decimal:4',
         'posted' => 'boolean',
     ];
 
-    public function fixedAsset(): BelongsTo
+    public function asset(): BelongsTo
     {
-        return $this->belongsTo(FixedAsset::class);
+        return $this->belongsTo(Asset::class);
     }
 }

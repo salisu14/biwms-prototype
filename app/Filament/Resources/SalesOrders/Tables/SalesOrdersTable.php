@@ -3,16 +3,15 @@
 namespace App\Filament\Resources\SalesOrders\Tables;
 
 use App\Enums\SalesOrderStatus;
-use App\Models\Item;
-use App\Models\SalesInvoice;
 use App\Models\SalesOrder;
+use App\Services\Print\ProformaInvoiceService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -74,11 +73,14 @@ class SalesOrdersTable
             ])
             ->recordActions([
                 ViewAction::make()
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder && !$record->isPosted()),
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder && ! $record->isPosted()),
 
                 EditAction::make()
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder && !$record->isPosted())
-                    ->disabled(fn ($record): bool => $record instanceof SalesOrder && $record->isPosted()),
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder && ! $record->isPosted())
+                    ->disabled(fn ($record): bool => $record instanceof SalesOrder &&
+                        ! auth()->user()?->hasRole('SUPER_ADMIN') &&
+                        ($record->isPosted() || $record->status === SalesOrderStatus::APPROVED)
+                    ),
 
                 // Custom "Reverse" action for posted invoices
                 Action::make('reverse')
@@ -95,9 +97,39 @@ class SalesOrdersTable
                     ->color('info')
                     ->visible(fn ($record): bool => $record instanceof SalesOrder)
                     ->action(fn (SalesOrder $record) => response()->streamDownload(
-                        fn () => print(app(\App\Services\Print\ProformaInvoiceService::class)->generateSalesProforma($record->refresh()->load(['lines']))->output()),
-                        $record->order_number . '_Proforma.pdf'
+                        fn () => print (app(ProformaInvoiceService::class)->generateSalesProforma($record->refresh()->load(['lines']))->output()),
+                        $record->order_number.'_Proforma.pdf'
                     )),
+
+                Action::make('submit_approval')
+                    ->label('Submit for Approval')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->color('info')
+                    ->visible(fn ($record) => $record instanceof SalesOrder && $record->status === SalesOrderStatus::DRAFT)
+                    ->action(function (SalesOrder $record) {
+                        $record->submitForApproval();
+                        Notification::make()
+                            ->title('Submitted for Approval')
+                            ->success()
+                            ->send();
+                    }),
+
+                Action::make('approve')
+                    ->label('Approve')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->visible(fn ($record) => $record instanceof SalesOrder &&
+                        $record->status === SalesOrderStatus::PENDING_APPROVAL &&
+                        (auth()->user()?->can('approve:order') || auth()->user()?->hasRole('SUPER_ADMIN'))
+                    )
+                    ->requiresConfirmation()
+                    ->action(function (SalesOrder $record) {
+                        $record->approve(auth()->id());
+                        Notification::make()
+                            ->title('Order Approved')
+                            ->success()
+                            ->send();
+                    }),
 
                 // Super Admin Status Override
                 Action::make('changeStatus')
@@ -113,7 +145,7 @@ class SalesOrdersTable
                     ])
                     ->action(function (SalesOrder $record, array $data) {
                         $record->update(['status' => $data['status']]);
-                        \Filament\Notifications\Notification::make()
+                        Notification::make()
                             ->title('Status Updated')
                             ->success()
                             ->send();

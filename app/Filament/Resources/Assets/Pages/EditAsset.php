@@ -1,17 +1,17 @@
 <?php
 
-namespace App\Filament\Resources\FixedAssets\Pages;
+namespace App\Filament\Resources\Assets\Pages;
 
-use App\Filament\Resources\FixedAssets\FixedAssetResource;
+use App\Filament\Resources\Assets\AssetResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
 
-class EditFixedAsset extends EditRecord
+class EditAsset extends EditRecord
 {
-    protected static string $resource = FixedAssetResource::class;
+    protected static string $resource = AssetResource::class;
 
     protected function getHeaderActions(): array
     {

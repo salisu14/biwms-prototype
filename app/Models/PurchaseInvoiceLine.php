@@ -1,8 +1,10 @@
 <?php
+
 // app/Models/PostedPurchaseInvoiceLine.php
 
 namespace App\Models;
 
+use App\Enums\PurchaseLineType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -50,9 +52,13 @@ class PurchaseInvoiceLine extends Model
         'item_ledger_entry_id',
         'gl_entry_id',
         'line_number',
+        'type',
+        'asset_id',
+        'fa_posting_type',
     ];
 
     protected $casts = [
+        'type' => PurchaseLineType::class,
         'quantity' => 'decimal:4',
         'qty_per_unit_of_measure' => 'decimal:4',
         'quantity_base' => 'decimal:4',
@@ -85,6 +91,11 @@ class PurchaseInvoiceLine extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function asset(): BelongsTo
+    {
+        return $this->belongsTo(Asset::class);
     }
 
     public function generalProductPostingGroup(): BelongsTo

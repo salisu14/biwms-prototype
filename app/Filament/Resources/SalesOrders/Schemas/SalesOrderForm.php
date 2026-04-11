@@ -136,7 +136,7 @@ class SalesOrderForm
                                             ]),
                                     ]),
 
-                                Tabs\Tab::make('Logistics & Shipping')
+                                Tab::make('Logistics & Shipping')
                                     ->schema([
                                         Section::make('Shipping Details')
                                             ->schema([
@@ -168,7 +168,7 @@ class SalesOrderForm
                                             ]),
                                     ]),
 
-                                Tabs\Tab::make('Notes')
+                                Tab::make('Notes')
                                     ->schema([
                                         Section::make('Additional Information')
                                             ->schema([
@@ -181,7 +181,11 @@ class SalesOrderForm
                                             ])->columns(1),
                                     ]),
                             ])->persistTabInQueryString(),
-                    ])->columnSpan(['lg' => 2]),
+                    ])->columnSpan(['lg' => 2])
+                    ->disabled(fn ($record) => $record &&
+                        $record->status === SalesOrderStatus::APPROVED &&
+                        ! auth()->user()?->hasRole('SUPER_ADMIN')
+                    ),
 
                 Group::make()
                     ->schema([
@@ -214,10 +218,12 @@ class SalesOrderForm
                                     ->placeholder(function ($get) {
                                         $lines = $get('lines') ?? [];
                                         $total = collect($lines)->sum(function ($line) {
-                                            $qty = (float)($line['quantity'] ?? 0);
-                                            $price = (float)($line['unit_price'] ?? 0);
+                                            $qty = (float) ($line['quantity'] ?? 0);
+                                            $price = (float) ($line['unit_price'] ?? 0);
+
                                             return $qty * $price;
                                         });
+
                                         return number_format($total, 2);
                                     })
                                     ->extraInputAttributes(['class' => 'font-bold text-lg']),
@@ -228,7 +234,11 @@ class SalesOrderForm
                                         Toggle::make('fully_invoiced')->disabled(),
                                     ]),
                             ]),
-                    ])->columnSpan(['lg' => 1]),
+                    ])->columnSpan(['lg' => 1])
+                    ->disabled(fn ($record) => $record &&
+                        $record->status === SalesOrderStatus::APPROVED &&
+                        ! auth()->user()?->hasRole('SUPER_ADMIN')
+                    ),
             ])->columns(3);
     }
 }

@@ -73,7 +73,7 @@ class CapExProjectForm
                                     ->helperText('Minimum amount to trigger capitalization.')
                                     ->default(0),
 
-                                Select::make('fixed_asset_id')
+                                Select::make('asset_id')
                                     ->label('Target Asset')
                                     ->relationship('targetAsset', 'description')
                                     ->searchable()

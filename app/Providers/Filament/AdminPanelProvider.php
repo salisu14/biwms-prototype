@@ -105,6 +105,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/bank-accounts'),
 
+                                NavigationItem::make('FA Posting Groups')
+                                    ->icon('heroicon-o-document-currency-dollar')
+                                    ->url('/admin/f-a-posting-groups'),
+
                                 NavigationItem::make('Inventory Valuation Report')
                                     ->icon('heroicon-o-presentation-chart-line')
                                     ->url('/admin/inventory-valuation-report'),
@@ -114,7 +118,30 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/financial-reports'),
                             ])
                     )
+                    // Finance Module
+                    ->group(
+                        NavigationGroup::make('Finance')
+                            ->items([
+                                // Expense Categories
+                                NavigationItem::make('Expenses')
+                                    ->icon('heroicon-o-list-bullet')
+                                    ->url('/admin/expense-categories')
+                                    ->isActiveWhen(fn () => request()->is('admin/expense-categories*')),
 
+                                // Currencies
+                                NavigationItem::make('Currencies')
+                                    ->icon('heroicon-o-currency-dollar')
+                                    ->url('/admin/currencies'),
+
+                                NavigationItem::make('Currency Adjustments')
+                                    ->icon('heroicon-o-currency-dollar')
+                                    ->url('/admin/currency-adjustment-ledgers'),
+
+                                NavigationItem::make('Financial Reports')
+                                    ->icon('heroicon-o-chart-bar')
+                                    ->url('/admin/financial-reports'),
+                            ])
+                    )
                     // Purchasing Module
                     ->group(
                         NavigationGroup::make('Purchasing')
@@ -306,9 +333,9 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-building-office')
                                         ->url('/admin/capex-projects'),
 
-                                    NavigationItem::make('Fixed Assets')
+                                    NavigationItem::make('Assets')
                                         ->icon('heroicon-o-building-office')
-                                        ->url('/admin/fixed-assets'),
+                                        ->url('/admin/assets'),
 
                                     NavigationItem::make('Machine Centers')
                                         ->icon('heroicon-o-cpu-chip')
@@ -429,15 +456,6 @@ class AdminPanelProvider extends PanelProvider
                                     NavigationItem::make('Units of Measure')
                                         ->icon('heroicon-o-scale')
                                         ->url('/admin/unit-of-measures'),
-
-                                    // Currencies
-                                    NavigationItem::make('Currencies')
-                                        ->icon('heroicon-o-currency-dollar')
-                                        ->url('/admin/currencies'),
-
-                                    NavigationItem::make('Currency Adjustments')
-                                        ->icon('heroicon-o-currency-dollar')
-                                        ->url('/admin/currency-adjustment-ledgers'),
 
                                     // Number Series
                                     NavigationItem::make('Number Series')

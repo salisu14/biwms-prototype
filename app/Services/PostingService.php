@@ -4,8 +4,10 @@
 
 namespace App\Services;
 
+use App\Models\Asset;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
+use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\GeneralPostingSetup;
 use App\Models\GlEntry;
@@ -28,11 +30,32 @@ class PostingService
     /**
      * Create a G/L entry
      */
-    private function createGlEntry(array $data): GlEntry
+    public function createGlEntry(array $data): GlEntry
     {
         $data['transaction_number'] = $this->transactionNumber;
         $data['entry_number'] = $this->getNextEntryNumber();
-        $data['amount'] = ($data['debit_amount'] ?? 0) - ($data['credit_amount'] ?? 0);
+
+        $debit = $data['debit_amount'] ?? 0;
+        $credit = $data['credit_amount'] ?? 0;
+        $data['amount'] = $debit - $credit;
+
+        // Handle Multi-Currency
+        if (isset($data['currency_id'])) {
+            $currency = Currency::find($data['currency_id']);
+            if ($currency) {
+                $rate = $data['exchange_rate'] ?? $currency->getExchangeRate($data['posting_date'] ?? null);
+                $data['exchange_rate'] = $rate;
+                $data['debit_amount_lcy'] = $currency->toLCY($debit, $rate);
+                $data['credit_amount_lcy'] = $currency->toLCY($credit, $rate);
+                $data['amount_lcy'] = $data['debit_amount_lcy'] - $data['credit_amount_lcy'];
+            }
+        } else {
+            // LCY defaults
+            $data['debit_amount_lcy'] = $debit;
+            $data['credit_amount_lcy'] = $credit;
+            $data['amount_lcy'] = $data['amount'];
+        }
+
         $data['user_id'] = auth()->id();
         $data['document_date'] = $data['document_date'] ?? now();
         $data['posting_date'] = $data['posting_date'] ?? now();
@@ -66,7 +89,7 @@ class PostingService
         string $documentNumber
     ): array {
         $setup = $customer->getPostingSetupFor($item);
-        if (!$setup) {
+        if (! $setup) {
             throw new \Exception("General Posting Setup missing for customer {$customer->customer_number} and item {$item->item_number}");
         }
 
@@ -150,7 +173,7 @@ class PostingService
         string $documentNumber
     ): array {
         $setup = $vendor->getPostingSetupFor($item);
-        if (!$setup) {
+        if (! $setup) {
             throw new \Exception("General Posting Setup missing for vendor {$vendor->vendor_number} and item {$item->item_number}");
         }
 
@@ -203,27 +226,27 @@ class PostingService
     /**
      * Create a G/L entry
      */
-//    private function createGlEntry(array $data): GlEntry
-//    {
-//        $data['transaction_number'] = $this->transactionNumber;
-//        $data['entry_number'] = $this->getNextEntryNumber();
-//        $data['amount'] = $data['debit_amount'] - $data['credit_amount'];
-//        $data['document_date'] = now();
-//        $data['posting_date'] = now();
-//        $data['user_id'] = auth()->id();
-//
-//        return GlEntry::create($data);
-//    }
-//
-//    private function getNextTransactionNumber(): int
-//    {
-//        return (GlEntry::max('transaction_number') ?? 0) + 1;
-//    }
-//
-//    private function getNextEntryNumber(): int
-//    {
-//        return (GlEntry::max('entry_number') ?? 0) + 1;
-//    }
+    //    private function createGlEntry(array $data): GlEntry
+    //    {
+    //        $data['transaction_number'] = $this->transactionNumber;
+    //        $data['entry_number'] = $this->getNextEntryNumber();
+    //        $data['amount'] = $data['debit_amount'] - $data['credit_amount'];
+    //        $data['document_date'] = now();
+    //        $data['posting_date'] = now();
+    //        $data['user_id'] = auth()->id();
+    //
+    //        return GlEntry::create($data);
+    //    }
+    //
+    //    private function getNextTransactionNumber(): int
+    //    {
+    //        return (GlEntry::max('transaction_number') ?? 0) + 1;
+    //    }
+    //
+    //    private function getNextEntryNumber(): int
+    //    {
+    //        return (GlEntry::max('entry_number') ?? 0) + 1;
+    //    }
 
     /**
      * Post customer payment receipt
@@ -236,8 +259,8 @@ class PostingService
         $arAccount = $customer->customerPostingGroup?->receivablesAccount;
         $bankGlAccount = $bankAccount->glAccount;
 
-        if (!$arAccount || !$bankGlAccount) {
-            throw new \Exception("Missing account setup for payment receipt.");
+        if (! $arAccount || ! $bankGlAccount) {
+            throw new \Exception('Missing account setup for payment receipt.');
         }
 
         return DB::transaction(function () use ($customer, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $arAccount, $bankGlAccount) {
@@ -287,6 +310,7 @@ class PostingService
             return $entries;
         });
     }
+
     /**
      * Post vendor payment disbursement
      */
@@ -412,6 +436,50 @@ class PostingService
         return $entries;
     }
 
+    public function postFixedAssetPurchase(
+        Vendor $vendor,
+        Asset $asset,
+        float $quantity,
+        float $unitCost,
+        float $lineTotal,
+        \DateTime $postingDate,
+        string $documentNumber,
+        string $description
+    ): array {
+        $assetAccount = $asset->assetAccount;
+
+        if (! $assetAccount) {
+            throw new \Exception("Asset G/L Account missing for fixed asset {$asset->code}. Please configure 'asset_gl_account_id' on the Fixed Asset record.");
+        }
+
+        $entries = [];
+
+        // 1. Debit Fixed Asset G/L Account
+        $entries[] = $this->createGlEntry([
+            'chart_of_account_id' => $assetAccount->id,
+            'debit_amount' => $lineTotal,
+            'credit_amount' => 0,
+            'source_type' => 'FIXED_ASSET',
+            'source_number' => $asset->asset_no,
+            'document_type' => 'PURCHASE_INVOICE',
+            'document_number' => $documentNumber,
+            'posting_date' => $postingDate,
+            'description' => "Asset Acquisition: {$description}",
+        ]);
+
+        // 2. Update Asset Model (Simplified logic as per requirement)
+        $asset->acquisition_cost = (float) $asset->acquisition_cost + $lineTotal;
+        $asset->book_value = (float) $asset->book_value + $lineTotal;
+        if (! $asset->acquisition_date) {
+            $asset->acquisition_date = $postingDate;
+        }
+        $asset->active = true;
+        $asset->acquired = true;
+        $asset->save();
+
+        return $entries;
+    }
+
     public function postVendorPayable(
         Vendor $vendor,
         float $amount,
@@ -496,14 +564,14 @@ class PostingService
             $customerGroupId = $customer->general_business_posting_group_id;
             $receivablesAccount = $customer->getReceivablesAccount();
 
-            if (!$receivablesAccount) {
+            if (! $receivablesAccount) {
                 throw new \Exception("Customer '{$customer->name}' is missing a receivables account.");
             }
 
             foreach ($invoice->lines as $line) {
 
                 $item = Item::find($line->item_id);
-                if (!$item) {
+                if (! $item) {
                     throw new \Exception("Item with ID {$line->item_id} not found.");
                 }
 
@@ -516,11 +584,11 @@ class PostingService
                 ])->first();
 
                 // In PostingService.php around line 515-520, replace:
-                if (!$postingSetup) {
+                if (! $postingSetup) {
                     throw new \Exception(
-                        "No posting setup found for customer '{$customer->name}' (Group: {$customerGroupId}) " .
-                        "and item '{$item->name}' (Group: {$productGroupId}). " .
-                        "Please configure General Posting Setup for Business Group ID {$customerGroupId} " .
+                        "No posting setup found for customer '{$customer->name}' (Group: {$customerGroupId}) ".
+                        "and item '{$item->name}' (Group: {$productGroupId}). ".
+                        "Please configure General Posting Setup for Business Group ID {$customerGroupId} ".
                         "and Product Group ID {$productGroupId}."
                     );
                 }
@@ -529,7 +597,7 @@ class PostingService
                 $cogsAccount = $postingSetup->getCogsAccount();
                 $inventoryAccount = $item->getInventoryAccount();
 
-                if (!$salesAccount) {
+                if (! $salesAccount) {
                     throw new \Exception("Missing sales account for item '{$item->name}'.");
                 }
 
@@ -563,7 +631,7 @@ class PostingService
                 // Inventory postings (only for inventory items)
                 if ($item->isInventoryItem()) {
 
-                    if (!$cogsAccount || !$inventoryAccount) {
+                    if (! $cogsAccount || ! $inventoryAccount) {
                         throw new \Exception("Missing COGS or Inventory account for item '{$item->name}'.");
                     }
 
@@ -680,7 +748,7 @@ class PostingService
                     'document_type' => 'SALES_CREDIT_MEMO',
                     'document_number' => $memo->memo_number,
                     'posting_date' => $memo->effective_date,
-                    'description' => "Credit Memo Revenue Reversal",
+                    'description' => 'Credit Memo Revenue Reversal',
                 ]);
 
                 // 2. A/R Reduction (Credit)
@@ -691,7 +759,7 @@ class PostingService
                     'document_type' => 'SALES_CREDIT_MEMO',
                     'document_number' => $memo->memo_number,
                     'posting_date' => $memo->effective_date,
-                    'description' => "Reduce receivable",
+                    'description' => 'Reduce receivable',
                 ]);
 
                 if ($item->isInventoryItem()) {
@@ -704,7 +772,7 @@ class PostingService
                         'document_type' => 'SALES_CREDIT_MEMO',
                         'document_number' => $memo->memo_number,
                         'posting_date' => $memo->effective_date,
-                        'description' => "Inventory return",
+                        'description' => 'Inventory return',
                     ]);
 
                     // 4. Reverse COGS (Credit)
@@ -715,7 +783,7 @@ class PostingService
                         'document_type' => 'SALES_CREDIT_MEMO',
                         'document_number' => $memo->memo_number,
                         'posting_date' => $memo->effective_date,
-                        'description' => "Reverse COGS",
+                        'description' => 'Reverse COGS',
                     ]);
                 }
             }
@@ -740,47 +808,241 @@ class PostingService
     /**
      * Get the next transaction number for GL entries
      */
-//    private function getNextTransactionNumber(): int
-//    {
-//        return (GlEntry::max('transaction_number') ?? 0) + 1;
-//    }
+    //    private function getNextTransactionNumber(): int
+    //    {
+    //        return (GlEntry::max('transaction_number') ?? 0) + 1;
+    //    }
 
     /**
      * Get the next entry number for GL entries
      */
-//    private function getNextEntryNumber(): int
-//    {
-//        return (GlEntry::max('entry_number') ?? 0) + 1;
-//    }
+    //    private function getNextEntryNumber(): int
+    //    {
+    //        return (GlEntry::max('entry_number') ?? 0) + 1;
+    //    }
 
     /**
      * Create a GL entry
      */
-//    private function createGlEntry(array $data): GlEntry
-//    {
-//        // Ensure required fields
-//        $data['transaction_number'] = $this->transactionNumber;
-//        $data['entry_number'] = $this->getNextEntryNumber();
-//        $data['amount'] = $data['debit_amount'] - $data['credit_amount'];
-//        $data['document_date'] = $data['document_date'] ?? now();
-//        $data['posting_date'] = $data['posting_date'] ?? now();
-//        $data['user_id'] = auth()->id() ?? null;
-//
-//        return GlEntry::create($data);
-//    }
+    //    private function createGlEntry(array $data): GlEntry
+    //    {
+    //        // Ensure required fields
+    //        $data['transaction_number'] = $this->transactionNumber;
+    //        $data['entry_number'] = $this->getNextEntryNumber();
+    //        $data['amount'] = $data['debit_amount'] - $data['credit_amount'];
+    //        $data['document_date'] = $data['document_date'] ?? now();
+    //        $data['posting_date'] = $data['posting_date'] ?? now();
+    //        $data['user_id'] = auth()->id() ?? null;
+    //
+    //        return GlEntry::create($data);
+    //    }
 
     /**
      * Validate that total debits = total credits
      */
-//    private function validateBalanced(array $entries)
-//    {
-//        $totalDebit = collect($entries)->sum('debit_amount');
-//        $totalCredit = collect($entries)->sum('credit_amount');
-//
-//        if ($totalDebit !== $totalCredit) {
-//            throw new \Exception('Journal is not balanced');
-//        }
-//    }
+    //    private function validateBalanced(array $entries)
+    //    {
+    //        $totalDebit = collect($entries)->sum('debit_amount');
+    //        $totalCredit = collect($entries)->sum('credit_amount');
+    //
+    //        if ($totalDebit !== $totalCredit) {
+    //            throw new \Exception('Journal is not balanced');
+    //        }
+    //    }
+
+    public function postAssetDisposal(Asset $asset, float $proceeds, \DateTime $postingDate, string $documentNumber): array
+    {
+        $postingGroup = $asset->postingGroup;
+        if (! $postingGroup || ! $postingGroup->disposal_proceeds_account_id) {
+            throw new \Exception("Disposal posting configuration missing for asset {$asset->asset_no}");
+        }
+
+        return DB::transaction(function () use ($asset, $proceeds, $postingDate, $documentNumber, $postingGroup) {
+            $entries = [];
+
+            // 1. Debit Cash/Bank/Receivable (Proceeds)
+            // Note: In real BC, this often comes via a Sales Invoice or Journal
+            $entries[] = $this->createGlEntry([
+                'chart_of_account_id' => $postingGroup->disposal_proceeds_account_id,
+                'debit_amount' => $proceeds,
+                'credit_amount' => 0,
+                'document_type' => 'ASSET_DISPOSAL',
+                'document_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'description' => "Disposal Proceeds: {$asset->description}",
+            ]);
+
+            // 2. Reverse Accumulated Depreciation (Debit)
+            if ($asset->accumulated_depreciation > 0) {
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $asset->accum_dep_account_id,
+                    'debit_amount' => $asset->accumulated_depreciation,
+                    'credit_amount' => 0,
+                    'document_type' => 'ASSET_DISPOSAL',
+                    'document_number' => $documentNumber,
+                    'posting_date' => $postingDate,
+                    'description' => "Reverse Accum. Depr: {$asset->description}",
+                ]);
+            }
+
+            // 3. Reverse Acquisition Cost (Credit)
+            $entries[] = $this->createGlEntry([
+                'chart_of_account_id' => $asset->asset_account_id,
+                'debit_amount' => 0,
+                'credit_amount' => $asset->acquisition_cost,
+                'document_type' => 'ASSET_DISPOSAL',
+                'document_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'description' => "Reverse Acquisition: {$asset->description}",
+            ]);
+
+            // 4. Calculate Gain/Loss
+            $gainLoss = $asset->calculateGainLossOnDisposal($proceeds);
+            $account = $gainLoss >= 0 ? $postingGroup->gain_on_disposal_account_id : $postingGroup->loss_on_disposal_account_id;
+
+            if ($gainLoss != 0 && $account) {
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $account,
+                    'debit_amount' => $gainLoss < 0 ? abs($gainLoss) : 0,
+                    'credit_amount' => $gainLoss > 0 ? $gainLoss : 0,
+                    'document_type' => 'ASSET_DISPOSAL',
+                    'document_number' => $documentNumber,
+                    'posting_date' => $postingDate,
+                    'description' => ($gainLoss > 0 ? 'Gain' : 'Loss')." on Disposal: {$asset->description}",
+                ]);
+            }
+
+            // Update Asset Status
+            $asset->update([
+                'active' => false,
+                'disposal_date' => $postingDate,
+                'disposal_proceeds' => $proceeds,
+                'gain_loss_on_disposal' => $gainLoss,
+                'book_value' => 0,
+            ]);
+
+            return $entries;
+        });
+    }
+
+    public function postAssetAppreciation(Asset $asset, float $appreciationAmount, \DateTime $postingDate, string $documentNumber): array
+    {
+        $postingGroup = $asset->postingGroup;
+        if (! $postingGroup || ! $postingGroup->appreciation_account_id) {
+            throw new \Exception("Appreciation posting configuration missing for asset {$asset->asset_no}");
+        }
+
+        return DB::transaction(function () use ($asset, $appreciationAmount, $postingDate, $documentNumber, $postingGroup) {
+            $entries = [];
+
+            // 1. Debit Asset Account
+            $entries[] = $this->createGlEntry([
+                'chart_of_account_id' => $asset->asset_account_id,
+                'debit_amount' => $appreciationAmount,
+                'credit_amount' => 0,
+                'document_type' => 'ASSET_APPRECIATION',
+                'document_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'description' => "Appreciation: {$asset->description}",
+            ]);
+
+            // 2. Credit Revaluation Gain/Reserve
+            $entries[] = $this->createGlEntry([
+                'chart_of_account_id' => $postingGroup->revaluation_gain_account_id,
+                'debit_amount' => 0,
+                'credit_amount' => $appreciationAmount,
+                'document_type' => 'ASSET_APPRECIATION',
+                'document_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'description' => "Revaluation Gain: {$asset->description}",
+            ]);
+
+            // Update Asset Value
+            $asset->update([
+                'book_value' => $asset->book_value + $appreciationAmount,
+            ]);
+
+            return $entries;
+        });
+    }
+
+    public function postForexAdjustment(Asset $asset, float $newExchangeRate, \DateTime $postingDate, string $documentNumber): array
+    {
+        if (! $asset->isLiquidityAsset() || ! $asset->currency_id) {
+            throw new \Exception("Asset {$asset->asset_no} is not a multi-currency liquidity asset.");
+        }
+
+        return DB::transaction(function () use ($asset, $newExchangeRate, $postingDate, $documentNumber) {
+            $currency = $asset->currency;
+            $diffLCY = $asset->calculateForexAdjustment($newExchangeRate);
+
+            if ($diffLCY == 0) {
+                return [];
+            }
+
+            $entries = [];
+            $assetAccount = $asset->asset_account_id;
+
+            // Determine accounts from Currency model
+            if ($diffLCY > 0) {
+                $gainAccount = $currency->unrealized_gains_account_id; // Default to unrealized for automated adjustments
+
+                // Debit Asset (Increase LCY value)
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $assetAccount,
+                    'debit_amount' => 0, // No change in FCY
+                    'debit_amount_lcy' => $diffLCY,
+                    'credit_amount' => 0,
+                    'currency_id' => $asset->currency_id,
+                    'exchange_rate' => $newExchangeRate,
+                    'document_type' => 'FOREX_ADJUSTMENT',
+                    'document_number' => $documentNumber,
+                    'posting_date' => $postingDate,
+                    'description' => "Forex Gain: {$asset->description}",
+                ]);
+
+                // Credit Gain
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $gainAccount,
+                    'debit_amount' => 0,
+                    'credit_amount_lcy' => $diffLCY,
+                    'document_type' => 'FOREX_ADJUSTMENT',
+                    'document_number' => $documentNumber,
+                    'posting_date' => $postingDate,
+                    'description' => 'Unrealized Forex Gain',
+                ]);
+            } else {
+                $lossAccount = $currency->unrealized_losses_account_id;
+                $absDiff = abs($diffLCY);
+
+                // Credit Asset (Decrease LCY value)
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $assetAccount,
+                    'debit_amount' => 0,
+                    'credit_amount_lcy' => $absDiff,
+                    'currency_id' => $asset->currency_id,
+                    'exchange_rate' => $newExchangeRate,
+                    'document_type' => 'FOREX_ADJUSTMENT',
+                    'document_number' => $documentNumber,
+                    'posting_date' => $postingDate,
+                    'description' => "Forex Loss: {$asset->description}",
+                ]);
+
+                // Debit Loss
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $lossAccount,
+                    'debit_amount_lcy' => $absDiff,
+                    'credit_amount' => 0,
+                    'document_type' => 'FOREX_ADJUSTMENT',
+                    'document_number' => $documentNumber,
+                    'posting_date' => $postingDate,
+                    'description' => 'Unrealized Forex Loss',
+                ]);
+            }
+
+            return $entries;
+        });
+    }
 
     /**
      * Helper: Get receivables account for a customer

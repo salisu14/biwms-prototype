@@ -2,12 +2,13 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\Asset;
 use App\Models\ChartOfAccount;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CapExProject extends Model
@@ -18,7 +19,7 @@ class CapExProject extends Model
         'project_number',
         'description',
         'status',
-        'fixed_asset_id',
+        'asset_id',
         'budget_amount',
         'committed_amount',
         'actual_amount',
@@ -71,14 +72,14 @@ class CapExProject extends Model
         return $this->hasMany(CapExProjectLine::class);
     }
 
-    public function fixedAsset(): HasOne
+    public function asset(): BelongsTo
     {
-        return $this->hasOne(FixedAsset::class);
+        return $this->belongsTo(Asset::class, 'asset_id');
     }
 
     public function targetAsset(): BelongsTo
     {
-        return $this->belongsTo(FixedAsset::class, 'fixed_asset_id');
+        return $this->belongsTo(Asset::class, 'asset_id');
     }
 
     /**
@@ -99,22 +100,22 @@ class CapExProject extends Model
 
     public function projectManager(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'project_manager_id');
+        return $this->belongsTo(User::class, 'project_manager_id');
     }
 
     public function approver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'approver_id');
+        return $this->belongsTo(User::class, 'approver_id');
     }
 
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function lastModifier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'last_modified_by');
+        return $this->belongsTo(User::class, 'last_modified_by');
     }
 
     // Scopes
@@ -226,7 +227,7 @@ class CapExProject extends Model
      */
     public function calculateCapitalizableInterest(\DateTime $periodStart, \DateTime $periodEnd): float
     {
-        if (!$this->capitalize_interest || !$this->interest_capitalization_rate) {
+        if (! $this->capitalize_interest || ! $this->interest_capitalization_rate) {
             return 0;
         }
 
@@ -248,9 +249,9 @@ class CapExProject extends Model
         // Simplified: Use actual amount at mid-period
         // Full implementation would weight each expenditure by time outstanding
         return $this->lines()
-                ->where('capitalized', true)
-                ->whereBetween('capitalized_at', [$periodStart, $periodEnd])
-                ->sum('actual_amount') / 2;
+            ->where('capitalized', true)
+            ->whereBetween('capitalized_at', [$periodStart, $periodEnd])
+            ->sum('actual_amount') / 2;
     }
 
     /**

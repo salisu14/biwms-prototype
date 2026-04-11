@@ -4,7 +4,6 @@ namespace App\Models;
 
 use App\Models\Manufacturing\CapExProject;
 use App\Models\Manufacturing\CapExProjectLine;
-use App\Models\Manufacturing\FixedAsset;
 use App\Models\Manufacturing\ProductionOrder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,7 +19,7 @@ class VendorInvoiceLine extends Model
         'type',
         'item_id',
         'gl_account_id',
-        'fixed_asset_id',
+        'asset_id',
         'description',
         'description_2',
         'quantity',
@@ -71,9 +70,9 @@ class VendorInvoiceLine extends Model
         return $this->belongsTo(ChartOfAccount::class, 'gl_account_id');
     }
 
-    public function fixedAsset(): BelongsTo
+    public function asset(): BelongsTo
     {
-        return $this->belongsTo(FixedAsset::class);
+        return $this->belongsTo(Asset::class);
     }
 
     public function purchaseOrder(): BelongsTo
