@@ -46,7 +46,7 @@ class RoutingsTable
                         default => 'gray',
                     }),
 
-                TextColumn::make('item.item_number')
+                TextColumn::make('item.item_code')
                     ->label('Item')
                     ->searchable()
                     ->sortable()

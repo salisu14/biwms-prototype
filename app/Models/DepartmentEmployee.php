@@ -57,10 +57,10 @@ class DepartmentEmployee extends Model
     {
         static::saved(function ($assignment) {
             // Push department assignment to Employee's native dimension handling if it's the primary/default assignment
-            if (($assignment->is_default_dimension || $assignment->assignment_type === 'primary') 
-                && (!$assignment->end_date || $assignment->end_date >= now()->toDateString())) {
-                
-                $department = \App\Models\Department::find($assignment->department_id);
+            if (($assignment->is_default_dimension || $assignment->assignment_type === 'primary')
+                && (! $assignment->end_date || $assignment->end_date >= now()->toDateString())) {
+
+                $department = Department::find($assignment->department_id);
                 if ($department) {
                     $assignment->employee->update(['department_code' => $department->department_code]);
                 }

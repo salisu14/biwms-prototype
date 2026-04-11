@@ -13,7 +13,7 @@ enum SourceCode: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ITEM_JNL => 'Item Journal Entry',
             self::TRANSFER => 'Transfer Order Entry',
             self::PHYS_INV => 'Phys. Inventory Ledger',
@@ -25,7 +25,7 @@ enum SourceCode: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ITEM_JNL, self::TRANSFER => 'bg-slate-100 text-slate-800',
             self::PHYS_INV, self::RECLASS => 'bg-zinc-100 text-zinc-800',
             self::CONSUMP, self::OUTPUT => 'bg-neutral-100 text-neutral-800',
@@ -34,7 +34,7 @@ enum SourceCode: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ITEM_JNL => 'heroicon-o-document-text',
             self::TRANSFER => 'heroicon-o-truck',
             self::PHYS_INV => 'heroicon-o-check-circle',

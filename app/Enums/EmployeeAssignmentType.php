@@ -11,7 +11,7 @@ enum EmployeeAssignmentType: string implements HasLabel
 
     public function getLabel(): ?string
     {
-        return match($this) {
+        return match ($this) {
             self::Corporate => 'Corporate staff',
             self::Factory => 'Factory based staff',
         };

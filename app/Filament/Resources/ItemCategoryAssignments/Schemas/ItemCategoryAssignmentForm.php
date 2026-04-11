@@ -21,8 +21,8 @@ class ItemCategoryAssignmentForm
                         Grid::make(2)->schema([
                             Select::make('item_id')
                                 ->label('Item')
-                                ->relationship('item', 'item_number')
-                                ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->item_number} - {$record->description}")
+                                ->relationship('item', 'item_code')
+                                ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->item_code} - {$record->description}")
                                 ->searchable()
                                 ->preload()
                                 ->required(),

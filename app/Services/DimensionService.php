@@ -30,7 +30,7 @@ class DimensionService
         $tableId = $this->resolveTableId($tableId);
 
         // Get the 'no' or 'number' from the record (BC convention)
-        $no = $record->employee_number ?? $record->customer_number ?? $record->vendor_code ?? $record->item_number ?? $record->id;
+        $no = $record->employee_number ?? $record->customer_number ?? $record->vendor_code ?? $record->item_code ?? $record->id;
 
         if ($valCode) {
             DefaultDimension::updateOrCreate(

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SalesCreditMemos\RelationManagers;
 
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
+use App\Models\Item;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -37,7 +38,7 @@ class ItemsRelationManager extends RelationManager
                     ->preload()
                     ->required()
                     ->reactive()
-                    ->afterStateUpdated(fn (Set $set, $state) => $set('unit_price', \App\Models\Item::find($state)?->unit_price ?? 0))
+                    ->afterStateUpdated(fn (Set $set, $state) => $set('unit_price', Item::find($state)?->unit_price ?? 0))
                     ->columnSpan(2),
 
                 TextInput::make('quantity')
@@ -139,6 +140,7 @@ class ItemsRelationManager extends RelationManager
                 CreateAction::make()
                     ->mutateDataUsing(function (array $data): array {
                         $data['line_no'] = self::getNextLineNo();
+
                         return $data;
                     }),
             ])

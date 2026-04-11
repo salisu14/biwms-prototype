@@ -305,11 +305,11 @@ class LocationSeeder extends Seeder
         }
 
         $this->command->info('Locations seeded successfully!');
-        $this->command->info('Total: ' . count($locations) . ' locations');
-        $this->command->info('Active: ' . collect($locations)->where('blocked', false)->count());
-        $this->command->info('Blocked: ' . collect($locations)->where('blocked', true)->count());
-        $this->command->info('Full WMS: ' . collect($locations)->where('directed_put_away_and_pick', true)->count());
-        $this->command->info('Basic Bin: ' . collect($locations)->where('bin_mandatory', true)->where('directed_put_away_and_pick', false)->count());
-        $this->command->info('No Bin Control: ' . collect($locations)->where('bin_mandatory', false)->count());
+        $this->command->info('Total: '.count($locations).' locations');
+        $this->command->info('Active: '.collect($locations)->where('blocked', false)->count());
+        $this->command->info('Blocked: '.collect($locations)->where('blocked', true)->count());
+        $this->command->info('Full WMS: '.collect($locations)->where('directed_put_away_and_pick', true)->count());
+        $this->command->info('Basic Bin: '.collect($locations)->where('bin_mandatory', true)->where('directed_put_away_and_pick', false)->count());
+        $this->command->info('No Bin Control: '.collect($locations)->where('bin_mandatory', false)->count());
     }
 }

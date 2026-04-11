@@ -16,10 +16,9 @@ enum ItemLedgerEntryType: int
     case ASSEMBLY_OUTPUT = 10;
     case OVERHEAD = 11;        // Manufacturing overhead to WIP
 
-
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE => 'Purchase',
             self::SALE => 'Sale',
             self::POSITIVE_ADJUSTMENT => 'Positive Adjustment',

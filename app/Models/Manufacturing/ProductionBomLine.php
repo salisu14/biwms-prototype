@@ -2,10 +2,10 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\Item;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Models\Item;
 
 class ProductionBomLine extends Model
 {
@@ -15,6 +15,7 @@ class ProductionBomLine extends Model
 
     // Line Types
     const TYPE_ITEM = 'ITEM';
+
     const TYPE_PRODUCTION_BOM = 'PRODUCTION_BOM';
 
     protected $fillable = [

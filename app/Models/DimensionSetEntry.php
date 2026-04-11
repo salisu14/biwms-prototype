@@ -14,7 +14,7 @@ class DimensionSetEntry extends Model
 
     protected $fillable = [
         'dimension_set_id', 'dimension_code', 'dimension_value_code',
-        'dimension_name', 'dimension_value_name'
+        'dimension_name', 'dimension_value_name',
     ];
 
     public function dimensionSet(): BelongsTo

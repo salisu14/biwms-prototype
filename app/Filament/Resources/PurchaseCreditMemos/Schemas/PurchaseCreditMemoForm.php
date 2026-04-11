@@ -2,14 +2,15 @@
 
 namespace App\Filament\Resources\PurchaseCreditMemos\Schemas;
 
+use App\Enums\ApprovalStatus;
 use App\Models\Item;
 use App\Models\PurchaseInvoice;
+use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -39,21 +40,21 @@ class PurchaseCreditMemoForm
                                     ->live()
                                     ->afterStateHydrated(function ($state, Set $set) {
                                         if ($state) {
-                                             $vendor = \App\Models\Vendor::find($state);
-                                             if ($vendor) {
-                                                 $set('vendor_name', $vendor->name);
-                                             }
+                                            $vendor = Vendor::find($state);
+                                            if ($vendor) {
+                                                $set('vendor_name', $vendor->name);
+                                            }
                                         }
                                     })
                                     ->afterStateUpdated(function ($state, Set $set) {
                                         if ($state) {
-                                             $vendor = \App\Models\Vendor::find($state);
-                                             if ($vendor) {
-                                                 $set('vendor_name', $vendor->name);
-                                             }
+                                            $vendor = Vendor::find($state);
+                                            if ($vendor) {
+                                                $set('vendor_name', $vendor->name);
+                                            }
                                         }
                                     }),
-                                
+
                                 TextInput::make('vendor_name')
                                     ->required()
                                     ->disabled(),
@@ -74,7 +75,7 @@ class PurchaseCreditMemoForm
                                             }
                                         }
                                     }),
-                                
+
                                 TextInput::make('corrects_invoice_number')
                                     ->hidden(),
                             ])->columns(2),
@@ -96,7 +97,7 @@ class PurchaseCreditMemoForm
                                                     $item = Item::find($state);
                                                     $set('unit_cost', $item?->unit_cost ?? 0);
                                                     $set('unit_of_measure_code', $item?->uom_code ?? 'EA');
-                                                    $set('item_code', $item?->item_number);
+                                                    $set('item_code', $item?->item_code);
                                                     $set('general_product_posting_group_id', $item?->general_product_posting_group_id);
                                                 }
                                             })
@@ -128,14 +129,15 @@ class PurchaseCreditMemoForm
                                             ->numeric()
                                             ->readOnly()
                                             ->placeholder(function (Get $get) {
-                                                $qty = (float)($get('quantity') ?? 0);
-                                                $cost = (float)($get('unit_cost') ?? 0);
-                                                $tax = (float)($get('tax_percent') ?? 0);
+                                                $qty = (float) ($get('quantity') ?? 0);
+                                                $cost = (float) ($get('unit_cost') ?? 0);
+                                                $tax = (float) ($get('tax_percent') ?? 0);
                                                 $net = $qty * $cost;
+
                                                 return number_format($net + ($net * ($tax / 100)), 2);
                                             })
                                             ->columnSpan(2),
-                                        
+
                                         TextInput::make('item_code')->hidden(),
                                         TextInput::make('general_product_posting_group_id')->hidden(),
                                     ])
@@ -150,11 +152,11 @@ class PurchaseCreditMemoForm
                             ->schema([
                                 Placeholder::make('status')
                                     ->content(fn ($record) => $record?->status?->getLabel() ?? 'Draft'),
-                                
+
                                 Placeholder::make('rejection_reason')
                                     ->label('Rejection Reason')
                                     ->content(fn ($record) => $record?->rejection_reason)
-                                    ->visible(fn ($record) => $record?->status === \App\Enums\ApprovalStatus::REJECTED),
+                                    ->visible(fn ($record) => $record?->status === ApprovalStatus::REJECTED),
 
                                 DatePicker::make('posting_date')
                                     ->default(now())
@@ -174,11 +176,13 @@ class PurchaseCreditMemoForm
                                     ->readOnly()
                                     ->placeholder(function (Get $get) {
                                         $lines = collect($get('lines'));
-                                        $total = $lines->reduce(function($carry, $line) {
-                                            $net = (float)($line['quantity'] ?? 0) * (float)($line['unit_cost'] ?? 0);
-                                            $tax = $net * ((float)($line['tax_percent'] ?? 0) / 100);
+                                        $total = $lines->reduce(function ($carry, $line) {
+                                            $net = (float) ($line['quantity'] ?? 0) * (float) ($line['unit_cost'] ?? 0);
+                                            $tax = $net * ((float) ($line['tax_percent'] ?? 0) / 100);
+
                                             return $carry + ($net + $tax);
                                         }, 0);
+
                                         return number_format($total, 2);
                                     }),
                                 Select::make('currency_code')

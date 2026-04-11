@@ -2,10 +2,14 @@
 
 namespace App\Filament\Resources\PayrollDocuments\Tables;
 
+use App\Enums\PayrollStatus;
+use App\Models\PayrollDocument;
+use App\Services\PayrollPostingService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -40,10 +44,10 @@ class PayrollDocumentsTable
                     ->icon('heroicon-o-paper-airplane')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (\App\Models\PayrollDocument $record) => $record->status === \App\Enums\PayrollStatus::DRAFT)
-                    ->action(function (\App\Models\PayrollDocument $record, \Filament\Notifications\Notification $notification) {
+                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::DRAFT)
+                    ->action(function (PayrollDocument $record, Notification $notification) {
                         try {
-                            app(\App\Services\PayrollPostingService::class)->post($record);
+                            app(PayrollPostingService::class)->post($record);
                             $notification->success()->title('Payroll Posted!')->send();
                         } catch (\Exception $e) {
                             $notification->danger()->title('Posting Failed')->body($e->getMessage())->send();

@@ -2,11 +2,11 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\Item;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Models\Item;
 
 class ProductionBom extends Model
 {
@@ -72,6 +72,7 @@ class ProductionBom extends Model
                 }
             }
         }
+
         return $cost;
     }
 

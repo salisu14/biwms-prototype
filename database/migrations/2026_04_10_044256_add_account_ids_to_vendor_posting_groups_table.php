@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -17,12 +17,12 @@ return new class extends Migration
                 ->nullable()
                 ->after('payables_account')
                 ->constrained('chart_of_accounts');
-            
+
             $table->foreignId('payment_disc_debit_account_id')
                 ->nullable()
                 ->after('payment_disc_debit_acc')
                 ->constrained('chart_of_accounts');
-            
+
             $table->foreignId('payment_disc_credit_account_id')
                 ->nullable()
                 ->after('payment_disc_credit_acc')
@@ -72,7 +72,7 @@ return new class extends Migration
                 }
             }
 
-            if (!empty($updates)) {
+            if (! empty($updates)) {
                 DB::table('vendor_posting_groups')->where('id', $vpg->id)->update($updates);
             }
         }
@@ -88,12 +88,12 @@ return new class extends Migration
             $table->dropForeign(['payment_disc_debit_account_id']);
             $table->dropForeign(['payment_disc_credit_account_id']);
             $table->dropForeign(['invoice_rounding_account_id']);
-            
+
             $table->dropColumn([
                 'payables_account_id',
                 'payment_disc_debit_account_id',
                 'payment_disc_credit_account_id',
-                'invoice_rounding_account_id'
+                'invoice_rounding_account_id',
             ]);
         });
     }

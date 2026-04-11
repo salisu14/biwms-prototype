@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\OrgEntityService;
 use Illuminate\Database\Eloquent\Model;
 
 class Business extends Model
@@ -20,7 +21,7 @@ class Business extends Model
     protected static function booted()
     {
         static::deleting(function ($business) {
-            app(\App\Services\OrgEntityService::class)->deleteBusinessDimension($business);
+            app(OrgEntityService::class)->deleteBusinessDimension($business);
         });
     }
 }

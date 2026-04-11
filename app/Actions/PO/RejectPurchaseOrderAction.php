@@ -1,8 +1,8 @@
 <?php
+
 // app/Actions/PO/RejectPurchaseOrder.php
 
 namespace App\Actions\PO;
-
 
 use App\Data\PO\PurchaseOrderData;
 use App\Data\PO\PurchaseOrderRejectedData;
@@ -20,7 +20,7 @@ class RejectPurchaseOrderAction
     ): PurchaseOrderRejectedData {
         return DB::transaction(function () use ($order, $data, $userId) {
             // Validate can reject
-            if (!in_array($order->status, [PurchaseOrderStatus::PENDING, PurchaseOrderStatus::APPROVED])) {
+            if (! in_array($order->status, [PurchaseOrderStatus::PENDING, PurchaseOrderStatus::APPROVED])) {
                 throw new \InvalidArgumentException(
                     "Cannot reject order with status: {$order->status->label()}"
                 );

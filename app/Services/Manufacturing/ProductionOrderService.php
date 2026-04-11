@@ -14,12 +14,16 @@ use App\Models\Location;
 use App\Models\Manufacturing\CapacityLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Services\PostingService;
+use App\Services\Warehouse\PickWorksheetService;
+use App\Services\Warehouse\PutAwayWorksheetService;
 use Illuminate\Support\Facades\DB;
 
 class ProductionOrderService
 {
     public function __construct(
-        protected PostingService $postingService
+        protected PostingService $postingService,
+        protected PickWorksheetService $pickService,
+        protected PutAwayWorksheetService $putAwayService
     ) {}
 
     /**
@@ -51,6 +55,9 @@ class ProductionOrderService
             if ($order->flushing_method === 'FORWARD') {
                 $this->forwardFlush($order, $userId);
             }
+
+            // Create Warehouse Picks for components
+            $this->pickService->createPicksForProductionOrder($order);
         });
 
         return $order->fresh();
@@ -192,6 +199,12 @@ class ProductionOrderService
                     $routingLine->actual_output_quantity += $quantity;
                     $routingLine->save();
                 }
+            }
+
+            // Create Put-away for finished goods
+            $orderLines = $order->lines()->where('item_id', $order->item_id)->get();
+            foreach ($orderLines as $orderLine) {
+                $this->putAwayService->createPutAwayFromProductionOutput($orderLine, $quantity);
             }
         });
     }
@@ -558,7 +571,7 @@ class ProductionOrderService
         // 1. Inventory Account (Credit) - for the component being consumed
         $inventorySetup = InventoryPostingSetup::getFor($item->inventory_posting_group_id, $locationId);
         if (! $inventorySetup || ! $inventorySetup->inventory_account_id) {
-            throw new \Exception("Inventory account missing for component {$item->item_number}");
+            throw new \Exception("Inventory account missing for component {$item->item_code}");
         }
 
         // 2. WIP Account (Debit) - for the parent production order item
@@ -616,7 +629,7 @@ class ProductionOrderService
         // 2. Direct Cost Applied (Credit)
         $genSetup = $order->getPostingSetup();
         if (! $genSetup) {
-            throw new \Exception("General Posting Setup missing for item {$order->item->item_number}");
+            throw new \Exception("General Posting Setup missing for item {$order->item->item_code}");
         }
 
         $appliedAccount = $genSetup->getDirectCostAppliedAccount();
@@ -688,11 +701,11 @@ class ProductionOrderService
         // 1. Inventory Account (Debit) - for the finished good
         $parentSetup = InventoryPostingSetup::getFor($order->inventory_posting_group_id, $locationId);
         if (! $parentSetup || ! $parentSetup->inventory_account_id) {
-            throw new \Exception("Inventory account missing for finished item {$order->item->item_number}");
+            throw new \Exception("Inventory account missing for finished item {$order->item->item_code}");
         }
 
         if (! $parentSetup->wip_account_id) {
-            throw new \Exception("WIP account missing for finished item {$order->item->item_number}");
+            throw new \Exception("WIP account missing for finished item {$order->item->item_code}");
         }
 
         $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;

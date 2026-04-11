@@ -8,12 +8,13 @@ use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
 use App\Services\Purchase\PurchaseOrderService;
 use Carbon\Carbon;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class CreatePurchaseOrder extends CreateRecord
 {
     protected static string $resource = PurchaseOrderResource::class;
 
-    protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
+    protected function handleRecordCreation(array $data): Model
     {
         $dto = new CreatePurchaseOrderData(
             orderType: PurchaseOrderType::from($data['order_type']), // ✅ FIX HERE

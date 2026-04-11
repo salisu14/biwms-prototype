@@ -20,15 +20,17 @@ class ItemsTable
     {
         return $table
             ->columns([
-                TextColumn::make('item_number')
-                    ->label('Number')
+                TextColumn::make('item_code')
+                    ->label('Code')
                     ->searchable()
                     ->sortable()
+                    ->copyable()
                     ->weight('bold'),
 
                 TextColumn::make('description')
                     ->searchable()
-                    ->limit(30),
+                    ->limit(40)
+                    ->tooltip(fn ($record) => $record->description),
 
                 TextColumn::make('item_type')
                     ->badge()
@@ -49,8 +51,14 @@ class ItemsTable
                     ->alignRight()
                     ->sortable(),
 
-                TextColumn::make('uom.uom_code')
-                    ->label('Base UoM')
+                TextColumn::make('unit_cost')
+                    ->money()
+                    ->alignRight()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('base_unit_of_measure')
+                    ->label('UoM')
                     ->sortable()
                     ->toggleable(),
 
@@ -59,10 +67,11 @@ class ItemsTable
                     ->placeholder('N/A')
                     ->toggleable(),
 
-                TextColumn::make('sku.sku_code')
-                    ->label('Default SKU')
-                    ->placeholder('N/A')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('is_active')
+                    ->label('Status')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => $state ? 'Active' : 'Inactive')
+                    ->color(fn ($state) => $state ? 'success' : 'gray'),
 
                 IconColumn::make('blocked')
                     ->boolean()
@@ -80,9 +89,8 @@ class ItemsTable
                     ->options(ItemType::options()),
                 SelectFilter::make('location_id')
                     ->relationship('location', 'name'),
-                SelectFilter::make('uom_id')
-                    ->label('Unit of Measure')
-                    ->relationship('uom', 'uom_code'),
+                TernaryFilter::make('is_active')
+                    ->label('Active Status'),
                 TernaryFilter::make('blocked')
                     ->label('Is Blocked'),
             ])

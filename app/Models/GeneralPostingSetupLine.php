@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/GeneralPostingSetupLine.php
 
 namespace App\Models;
@@ -21,7 +22,7 @@ class GeneralPostingSetupLine extends Model
     ];
 
     protected $casts = [
-       'line_type' => LineType::class,
+        'line_type' => LineType::class,
     ];
 
     // Relationships

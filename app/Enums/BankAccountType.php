@@ -12,7 +12,7 @@ enum BankAccountType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CHECKING => 'Checking',
             self::SAVINGS => 'Savings',
             self::MONEY_MARKET => 'Money Market',
@@ -23,7 +23,7 @@ enum BankAccountType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CHECKING => 'bg-emerald-100 text-emerald-800',
             self::SAVINGS => 'bg-rose-100 text-rose-800',
             self::MONEY_MARKET => 'bg-blue-100 text-blue-800',
@@ -34,7 +34,7 @@ enum BankAccountType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CHECKING => 'heroicon-o-banknotes',
             self::SAVINGS => 'heroicon-o-credit-card',
             self::MONEY_MARKET => 'heroicon-o-scale',
@@ -45,7 +45,7 @@ enum BankAccountType: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CHECKING => 'Operating, payroll, tax, petty cash',
             self::SAVINGS => 'General savings, emergency reserve',
             self::MONEY_MARKET => 'Investment account',

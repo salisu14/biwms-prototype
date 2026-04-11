@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Models\Manufacturing\CapExProject;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class VendorInvoice extends Model
@@ -90,51 +90,51 @@ class VendorInvoice extends Model
 
     public function capExProject(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Manufacturing\CapExProject::class, 'capex_project_id');
+        return $this->belongsTo(CapExProject::class, 'capex_project_id');
     }
 
     public function requester(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'requested_by');
+        return $this->belongsTo(User::class, 'requested_by');
     }
 
     public function approver(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'approved_by');
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function postedByUser(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'posted_by');
+        return $this->belongsTo(User::class, 'posted_by');
     }
 
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function lastModifier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'last_modified_by');
+        return $this->belongsTo(User::class, 'last_modified_by');
     }
 
     public function payableAccount(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Accounting\GlAccount::class, 'payable_gl_account_id');
+        return $this->belongsTo(Accounting\GlAccount::class, 'payable_gl_account_id');
     }
 
     public function expenseAccount(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\GlAccount::class, 'expense_gl_account_id');
+        return $this->belongsTo(GlAccount::class, 'expense_gl_account_id');
     }
 
     // Polymorphic source document
     public function sourceDocument(): ?Model
     {
-        return match($this->source_document_type) {
-            'PURCHASE_ORDER' => \App\Models\PurchaseOrder::find($this->source_document_id),
-            'PURCHASE_RECEIPT' => \App\Models\PurchaseReceipt::find($this->source_document_id),
-            'BLANKET_ORDER' => \App\Models\BlanketOrder::find($this->source_document_id),
+        return match ($this->source_document_type) {
+            'PURCHASE_ORDER' => PurchaseOrder::find($this->source_document_id),
+            'PURCHASE_RECEIPT' => PurchaseReceipt::find($this->source_document_id),
+            'BLANKET_ORDER' => BlanketOrder::find($this->source_document_id),
             default => null,
         };
     }
@@ -179,7 +179,7 @@ class VendorInvoice extends Model
      */
     public function getDaysOverdue(): ?int
     {
-        if ($this->remaining_amount <= 0 || !$this->due_date) {
+        if ($this->remaining_amount <= 0 || ! $this->due_date) {
             return null;
         }
 
@@ -205,6 +205,7 @@ class VendorInvoice extends Model
         if ($this->remaining_amount < $this->amount_including_tax) {
             return 'PARTIAL';
         }
+
         return 'UNPAID';
     }
 
@@ -231,7 +232,7 @@ class VendorInvoice extends Model
 
         DB::transaction(function () use ($userId) {
             // If linked to CapEx project, handle capitalization
-            if ($this->capex_project_id && !$this->capitalized) {
+            if ($this->capex_project_id && ! $this->capitalized) {
                 $this->capitalizeToProject();
             }
 
@@ -254,7 +255,7 @@ class VendorInvoice extends Model
     protected function capitalizeToProject(): void
     {
         $project = $this->capExProject;
-        if (!$project) {
+        if (! $project) {
             return;
         }
 
@@ -289,7 +290,7 @@ class VendorInvoice extends Model
     protected function isLineEligibleForCapitalization($line): bool
     {
         $project = $this->capExProject;
-        if (!$project) {
+        if (! $project) {
             return false;
         }
 
@@ -299,7 +300,7 @@ class VendorInvoice extends Model
         }
 
         // Check type eligibility
-        return match($line->type) {
+        return match ($line->type) {
             'ITEM', 'FIXED_ASSET' => true,
             'GL_ACCOUNT' => $this->isGlAccountCapitalizable($line->gl_account_id),
             'CHARGE' => false,
@@ -312,7 +313,7 @@ class VendorInvoice extends Model
      */
     protected function mapInvoiceTypeToCapExType(string $invoiceType): string
     {
-        return match($invoiceType) {
+        return match ($invoiceType) {
             'ITEM' => 'MATERIAL',
             'FIXED_ASSET' => 'TOOLING',
             'GL_ACCOUNT' => 'EXTERNAL_SERVICE',
@@ -326,7 +327,7 @@ class VendorInvoice extends Model
      */
     protected function isGlAccountCapitalizable(?int $glAccountId): bool
     {
-        if (!$glAccountId) {
+        if (! $glAccountId) {
             return false;
         }
 
@@ -358,6 +359,6 @@ class VendorInvoice extends Model
         $year = date('Y');
         $sequence = static::whereYear('created_at', $year)->count() + 1;
 
-        return "{$prefix}-{$year}-" . str_pad($sequence, 6, '0', STR_PAD_LEFT);
+        return "{$prefix}-{$year}-".str_pad($sequence, 6, '0', STR_PAD_LEFT);
     }
 }

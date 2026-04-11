@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Class CustomerPriceOverride
@@ -68,6 +68,7 @@ class CustomerPriceOverride extends Model
     public static function getPriceFor(int $customerId, int $itemId): ?float
     {
         $override = self::forCustomerAndItem($customerId, $itemId)->first();
+
         return $override ? (float) $override->override_price : null;
     }
 }

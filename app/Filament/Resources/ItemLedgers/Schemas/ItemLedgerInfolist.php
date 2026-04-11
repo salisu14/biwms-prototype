@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\ItemLedgers\Schemas;
 
 use Filament\Infolists\Components\TextEntry;
-use Filament\Infolists\Components\IconEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -50,10 +49,9 @@ class ItemLedgerInfolist
                     ->schema([
                         TextEntry::make('signed_quantity')
                             ->label('Quantity')
-                            ->formatStateUsing(fn ($record): string =>
-                                ($record->is_inbound ? '+' : '-') . number_format($record->quantity, 4)
+                            ->formatStateUsing(fn ($record): string => ($record->is_inbound ? '+' : '-').number_format($record->quantity, 4)
                             )
-                            ->suffix(fn ($record): string => ' ' . ($record->uom->uom_code ?? ''))
+                            ->suffix(fn ($record): string => ' '.($record->uom->uom_code ?? ''))
                             ->weight('bold')
                             ->color(fn ($record): string => $record->is_inbound ? 'success' : 'danger'),
 

@@ -43,7 +43,9 @@ class ItemsRelationManager extends RelationManager
                             ->afterStateUpdated(function (Set $set, Get $get) {
                                 $item = Item::find($get('item_id'));
 
-                                if (!$item) return;
+                                if (! $item) {
+                                    return;
+                                }
 
                                 $set('unit_price', $item->unit_price);
 
@@ -84,7 +86,8 @@ class ItemsRelationManager extends RelationManager
                                 $discount = (float) ($get('discount') ?? 0);
 
                                 $total = ($qty * $price) - $discount;
-                                return '₦ ' . number_format(max(0, $total), 2);
+
+                                return '₦ '.number_format(max(0, $total), 2);
                             }),
                     ]),
             ]);

@@ -13,7 +13,9 @@ class CampaignService
             ->whereHas('items', fn ($q) => $q->where('item_id', $item->id))
             ->first();
 
-        if (!$campaign) return $price;
+        if (! $campaign) {
+            return $price;
+        }
 
         $itemCampaign = $campaign->items
             ->where('item_id', $item->id)

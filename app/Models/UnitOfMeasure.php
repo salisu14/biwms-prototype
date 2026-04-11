@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/UnitOfMeasure.php
 
 namespace App\Models;
@@ -20,6 +21,7 @@ class UnitOfMeasure extends Model
     use HasFactory;
 
     protected $primaryKey = 'id';
+
     protected $table = 'unit_of_measures';
 
     protected $casts = [
@@ -32,7 +34,7 @@ class UnitOfMeasure extends Model
     public function items(): BelongsToMany
     {
         return $this->belongsToMany(
-            ItemMaster::class,
+            Item::class,
             'item_uom_assignments',
             'uom_id',
             'item_id'

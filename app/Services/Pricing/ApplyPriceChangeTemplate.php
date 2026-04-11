@@ -31,7 +31,7 @@ class ApplyPriceChangeTemplate
             }
 
             $item->update([
-                'selling_price' => $newPrice
+                'selling_price' => $newPrice,
             ]);
         }
     }

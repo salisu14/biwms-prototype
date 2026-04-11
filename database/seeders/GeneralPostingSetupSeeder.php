@@ -3,10 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\ChartOfAccount;
-use App\Models\GeneralPostingSetup;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class GeneralPostingSetupSeeder extends Seeder
@@ -157,7 +156,7 @@ class GeneralPostingSetupSeeder extends Seeder
 
         foreach ($codes as $code) {
             $group = GeneralBusinessPostingGroup::where('code', $code)->first();
-            if (!$group) {
+            if (! $group) {
                 throw new \Exception("GeneralBusinessPostingGroup '{$code}' not found. Run GeneralBusinessPostingGroupSeeder first.");
             }
             $groups[$code] = $group->id;
@@ -173,7 +172,7 @@ class GeneralPostingSetupSeeder extends Seeder
 
         foreach ($codes as $code) {
             $group = GeneralProductPostingGroup::where('code', $code)->first();
-            if (!$group) {
+            if (! $group) {
                 throw new \Exception("GeneralProductPostingGroup '{$code}' not found. Run GeneralProductPostingGroupSeeder first.");
             }
             $groups[$code] = $group->id;
@@ -210,7 +209,7 @@ class GeneralPostingSetupSeeder extends Seeder
 
         foreach ($accountMap as $key => $accountNumber) {
             $account = ChartOfAccount::where('account_number', $accountNumber)->first();
-            if (!$account) {
+            if (! $account) {
                 throw new \Exception("ChartOfAccount '{$accountNumber}' ({$key}) not found. Run ChartOfAccountSeeder first.");
             }
             $accounts[$key] = $account->id;

@@ -13,10 +13,10 @@ class CreateSalesQuoteAction
     {
         return DB::transaction(function () use ($data) {
             $quote = SalesQuote::create([
-                'quote_no' => 'SQ-' . now()->timestamp,
+                'quote_no' => 'SQ-'.now()->timestamp,
                 'customer_id' => $data['customer_id'],
                 'quote_date' => now(),
-                'status' => 'draft'
+                'status' => 'draft',
             ]);
 
             $pricingService = app(FinalPricingService::class);
@@ -35,16 +35,16 @@ class CreateSalesQuoteAction
                 }
 
                 $quote->items()->create([
-                    'item_id'    => $item['item_id'],
-                    'quantity'   => $item['qty'],
+                    'item_id' => $item['item_id'],
+                    'quantity' => $item['qty'],
                     'unit_price' => $unitPrice,
-                    'line_total' => $item['qty'] * $unitPrice
+                    'line_total' => $item['qty'] * $unitPrice,
                 ]);
             }
 
             // Update total after all items are added
             $quote->update([
-                'total_amount' => $quote->items()->sum('line_total')
+                'total_amount' => $quote->items()->sum('line_total'),
             ]);
 
             return $quote;

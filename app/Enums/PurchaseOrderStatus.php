@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/PurchaseOrderStatus.php
 
 namespace App\Enums;
@@ -18,7 +19,7 @@ enum PurchaseOrderStatus: string
      */
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'Pending',
             self::APPROVED => 'Approved',
             self::RECEIVED => 'Received',
@@ -34,7 +35,7 @@ enum PurchaseOrderStatus: string
      */
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'warning',
             self::APPROVED => 'success',
             self::RECEIVED => 'info',
@@ -50,7 +51,7 @@ enum PurchaseOrderStatus: string
      */
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'heroicon-m-clock',
             self::APPROVED => 'heroicon-m-check-badge',
             self::RECEIVED => 'heroicon-m-truck',
@@ -91,6 +92,7 @@ enum PurchaseOrderStatus: string
     {
         return array_reduce(self::cases(), function ($carry, $case) {
             $carry[$case->value] = $case->label();
+
             return $carry;
         }, []);
     }

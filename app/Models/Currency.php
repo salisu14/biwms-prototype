@@ -79,7 +79,7 @@ class Currency extends Model
         return $this->hasMany(CurrencyExchangeRate::class)->orderByDesc('starting_date');
     }
 
-    public function buffers() : HasMany
+    public function buffers(): HasMany
     {
         return $this->hasMany(CurrencyBuffer::class);
     }

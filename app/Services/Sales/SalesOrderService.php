@@ -23,6 +23,7 @@ class SalesOrderService
     public function submitForApproval(SalesOrder $order): SalesOrder
     {
         $order->submitForApproval(); // let model handle guards
+
         return $order;
     }
 
@@ -32,6 +33,7 @@ class SalesOrderService
     public function approve(SalesOrder $order, int $userId): SalesOrder
     {
         $order->approve($userId); // model updates status, approved_by, approved_at
+
         return $order;
     }
 
@@ -41,6 +43,7 @@ class SalesOrderService
     public function release(SalesOrder $order): SalesOrder
     {
         $order->release(); // model handles status checks
+
         return $order;
     }
 
@@ -50,6 +53,7 @@ class SalesOrderService
     public function cancel(SalesOrder $order, int $userId, string $reason): SalesOrder
     {
         $order->cancel($userId, $reason); // model handles status validation
+
         return $order;
     }
 
@@ -77,7 +81,7 @@ class SalesOrderService
         $line = $order->lines()->create([
             'line_number' => $order->nextLineNumber(),
             'item_id' => $item->id,
-            'item_code' => $item->item_number,
+            'item_code' => $item->item_code,
             'description' => $item->description,
             'variant_code' => $variantCode,
             'general_product_posting_group_id' => $item->general_product_posting_group_id,
@@ -129,7 +133,7 @@ class SalesOrderService
                     unitPrice: $soLine->unit_price,
                     unitCost: $soLine->unit_cost,
                     postingDate: $postingDate,
-                    documentNumber: $documentNumber ?? 'INV-' . $order->id
+                    documentNumber: $documentNumber ?? 'INV-'.$order->id
                 );
 
                 $soLine->updateInvoicedProgress($quantity);

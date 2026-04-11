@@ -12,7 +12,7 @@ enum BlockedReason: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::NONE => 'Not Blocked',
             self::PAYMENT => 'Payment Issue',
             self::INVOICE => 'Invoice Issue',
@@ -23,7 +23,7 @@ enum BlockedReason: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::NONE => 'bg-emerald-100 text-emerald-800',
             self::PAYMENT => 'bg-amber-100 text-amber-800',
             self::INVOICE => 'bg-blue-100 text-rose-800',
@@ -34,7 +34,7 @@ enum BlockedReason: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::NONE => 'heroicon-o-check-circle',
             self::PAYMENT => 'heroicon-o-credit-card',
             self::ALL => 'heroicon-o-no-symbol',
@@ -43,7 +43,7 @@ enum BlockedReason: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::NONE => 'Account is in good standing and not restricted.',
             self::PAYMENT => 'Restricted due to overdue payments or credit limits.',
             self::ALL => 'All transactions and interactions are currently suspended.',

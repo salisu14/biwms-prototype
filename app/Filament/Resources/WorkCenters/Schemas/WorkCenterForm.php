@@ -96,6 +96,7 @@ class WorkCenterForm
                                 $cap = (float) ($get('capacity') ?? 0);
                                 $eff = (float) ($get('efficiency') ?? 100);
                                 $effective = $cap * ($eff / 100);
+
                                 return number_format($effective, 4);
                             })
                             ->columnSpanFull()

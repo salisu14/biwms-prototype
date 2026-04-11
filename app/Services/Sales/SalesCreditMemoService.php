@@ -150,7 +150,7 @@ class SalesCreditMemoService
                     'posted_sales_credit_memo_id' => $postedMemo->id,
                     'line_number' => $line->id * 10, // simple sequence
                     'item_id' => $line->item_id,
-                    'item_code' => $item->item_number,
+                    'item_code' => $item->item_code,
                     'item_description' => $line->description ?? $item->description,
                     'general_product_posting_group_id' => $item->general_product_posting_group_id,
                     'inventory_posting_group_id' => $item->inventory_posting_group_id,

@@ -1,4 +1,5 @@
 <?php
+
 // database/seeders/VatMasterSeeder.php
 
 namespace Database\Seeders;

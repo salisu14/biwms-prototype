@@ -12,7 +12,7 @@ class PriceChangeTemplateLine extends Model
         'item_id',
         'category_id',
         'business_id',
-        'customer_group_id'
+        'customer_group_id',
     ];
 
     public function template(): BelongsTo

@@ -1,8 +1,10 @@
 <?php
+
 // app/Models/Item.php
 
 namespace App\Models;
 
+use App\Enums\CostingMethod;
 use App\Enums\InventoryMethod;
 use App\Enums\ItemType;
 use App\Enums\UomType;
@@ -17,18 +19,24 @@ class Item extends Model
     use HasFactory;
 
     protected $fillable = [
-        'item_number',
+        'item_code',
         'description',
         'description_2',
         'general_product_posting_group_id',
         'inventory_posting_group_id',
         'vat_prod_posting_group',
+        'vat_id',
         'item_type',
+        'inventory_method',
         'costing_method',
         'unit_cost',
         'standard_cost',
         'last_direct_cost',
         'unit_price',
+        'profit_percent',
+        'price_calculation_method',
+        'default_price_list_code',
+        'allow_negative_price',
         'inventory',
         'reorder_point',
         'reorder_quantity',
@@ -39,32 +47,33 @@ class Item extends Model
         'volume',
         'shelf_no',
         'item_tracking_code',
+        'shelf_life_days',
+        'is_active',
         'blocked',
         'sales_blocked',
         'purchasing_blocked',
-        'uom_id',
-        'sku_id',
-        'vat_id',
-        'general_posting_setup_id',
-        'inventory_posting_setup_id',
-        'inventory_method',
     ];
 
     protected $casts = [
         'item_type' => ItemType::class,
+        'inventory_method' => InventoryMethod::class,
+        'costing_method' => CostingMethod::class,
         'unit_cost' => 'decimal:4',
         'standard_cost' => 'decimal:4',
         'last_direct_cost' => 'decimal:4',
         'unit_price' => 'decimal:4',
+        'profit_percent' => 'decimal:2',
         'inventory' => 'decimal:4',
         'reorder_point' => 'decimal:4',
         'reorder_quantity' => 'decimal:4',
         'weight' => 'decimal:4',
         'volume' => 'decimal:4',
+        'shelf_life_days' => 'integer',
+        'is_active' => 'boolean',
         'blocked' => 'boolean',
         'sales_blocked' => 'boolean',
         'purchasing_blocked' => 'boolean',
-        'inventory_method' => InventoryMethod::class,
+        'allow_negative_price' => 'boolean',
     ];
 
     /**
@@ -86,16 +95,16 @@ class Item extends Model
             ->withTimestamps();
     }
 
-//    public function uoms(): BelongsToMany
-//    {
-//        return $this->belongsToMany(
-//            UnitOfMeasure::class,
-//            'item_uom_assignments',
-//            'item_id',
-//            'uom_id'
-//        )->withPivot('uom_type', 'conversion_factor', 'is_default', 'sort_order')
-//            ->orderByPivot('sort_order');
-//    }
+    //    public function uoms(): BelongsToMany
+    //    {
+    //        return $this->belongsToMany(
+    //            UnitOfMeasure::class,
+    //            'item_uom_assignments',
+    //            'item_id',
+    //            'uom_id'
+    //        )->withPivot('uom_type', 'conversion_factor', 'is_default', 'sort_order')
+    //            ->orderByPivot('sort_order');
+    //    }
 
     /**
      * Get UOM by type
@@ -126,7 +135,6 @@ class Item extends Model
         return $this->getUomByType($type)
             ?? $this->uoms()->wherePivot('uom_type', is_string($type) ? $type : $type->value)->first();
     }
-
 
     // Relationships
     public function generalProductPostingGroup(): BelongsTo
@@ -238,7 +246,8 @@ class Item extends Model
         return $query->where('item_type', 'INVENTORY');
     }
 
-    public function valueEntries() {
+    public function valueEntries()
+    {
         return $this->hasMany(ValueEntry::class);
     }
 
@@ -277,7 +286,7 @@ class Item extends Model
         return $this->belongsToMany(
             Category::class,           // Related model
             'item_category_assignments', // Pivot table
-            'item_id',                 // Foreign key on pivot for THIS model (ItemMaster)
+            'item_id',                 // Foreign key on pivot for THIS model (Item)
             'category_id',             // Foreign key on pivot for RELATED model (Category)
             'id',                      // Local key on THIS model
             'id'                       // Local key on RELATED model

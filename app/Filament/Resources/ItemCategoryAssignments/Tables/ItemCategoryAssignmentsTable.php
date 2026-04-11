@@ -17,7 +17,7 @@ class ItemCategoryAssignmentsTable
     {
         return $table
             ->columns([
-                TextColumn::make('item.item_number')
+                TextColumn::make('item.item_code')
                     ->label('Item No.')
                     ->description(fn ($record) => $record->item?->description)
                     ->searchable()
@@ -47,7 +47,7 @@ class ItemCategoryAssignmentsTable
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->defaultSort('item.item_number')
+            ->defaultSort('item.item_code')
             ->filters([
                 TernaryFilter::make('is_primary')
                     ->label('Primary Only'),

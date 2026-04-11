@@ -18,8 +18,8 @@ class SalesInvoice extends Model
         'posted_by',
         'invoice_date',
         'due_date',
-//        'dimension_1_id',
-//        'dimension_2_id',
+        //        'dimension_1_id',
+        //        'dimension_2_id',
         'approved_by',
         'approved_at',
     ];

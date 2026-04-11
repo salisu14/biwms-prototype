@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\SalesCreditMemos\Pages;
 
+use App\Enums\SalesOrderStatus;
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -11,7 +12,7 @@ class CreateSalesCreditMemo extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $data['status'] = \App\Enums\SalesOrderStatus::DRAFT;
+        $data['status'] = SalesOrderStatus::DRAFT;
 
         return $data;
     }

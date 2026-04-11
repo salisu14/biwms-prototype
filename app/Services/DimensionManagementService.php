@@ -2,16 +2,17 @@
 
 namespace App\Services;
 
+use App\Jobs\ChangeGlobalDimensionsJob;
+use App\Models\DefaultDimension;
 use App\Models\Dimension;
-use App\Models\DimensionValue;
 use App\Models\DimensionSet;
 use App\Models\DimensionSetEntry;
 use App\Models\DimensionSetTreeNode;
+use App\Models\DimensionValue;
 use App\Models\GeneralLedgerSetup;
-use App\Models\DefaultDimension;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class DimensionManagementService
@@ -31,8 +32,8 @@ class DimensionManagementService
     {
         // Normalize: remove empty, sort by code for consistent hashing
         $dimensions = collect($dimensions)
-            ->filter(fn($v) => !empty($v))
-            ->map(fn($v, $k) => [strtoupper($k) => $v])
+            ->filter(fn ($v) => ! empty($v))
+            ->map(fn ($v, $k) => [strtoupper($k) => $v])
             ->sortKeys()
             ->toArray();
 
@@ -40,7 +41,7 @@ class DimensionManagementService
             return 0;
         }
 
-        return DB::transaction(function() use ($dimensions) {
+        return DB::transaction(function () use ($dimensions) {
             // Generate hash for lookup
             $hash = md5(json_encode($dimensions));
 
@@ -92,10 +93,10 @@ class DimensionManagementService
             return collect();
         }
 
-        return Cache::remember("dim_set_{$dimensionSetId}", 3600, function() use ($dimensionSetId) {
+        return Cache::remember("dim_set_{$dimensionSetId}", 3600, function () use ($dimensionSetId) {
             return DimensionSetEntry::where('dimension_set_id', $dimensionSetId)
                 ->get()
-                ->mapWithKeys(function($entry) {
+                ->mapWithKeys(function ($entry) {
                     return [$entry->dimension_code => [
                         'code' => $entry->dimension_value_code,
                         'name' => $entry->dimension_value_name,
@@ -111,6 +112,7 @@ class DimensionManagementService
     {
         $current = $this->getDimensionSet($dimensionSetId)->toArray();
         $merged = array_merge($current, $changes);
+
         return $this->getDimensionSetID($merged);
     }
 
@@ -122,7 +124,7 @@ class DimensionManagementService
         return DefaultDimension::forEntity($tableId, $no)
             ->where('blocked', false)
             ->get()
-            ->mapWithKeys(function($dim) {
+            ->mapWithKeys(function ($dim) {
                 return [$dim->dimension_code => [
                     'value_code' => $dim->dimension_value_code,
                     'value_posting' => $dim->value_posting,
@@ -172,7 +174,9 @@ class DimensionManagementService
 
         foreach ($dimCodes as $code1) {
             foreach ($dimCodes as $code2) {
-                if ($code1 >= $code2) continue;
+                if ($code1 >= $code2) {
+                    continue;
+                }
 
                 $combination = DB::table('dimension_combinations')
                     ->where('dimension_1_code', $code1)
@@ -219,12 +223,12 @@ class DimensionManagementService
     {
         $currentSetup = GeneralLedgerSetup::instance();
 
-        DB::transaction(function() use ($newDim1, $newDim2, $mode, $currentSetup) {
+        DB::transaction(function () use ($newDim1, $newDim2, $mode, $currentSetup) {
             // Validate new dimensions exist
-            if ($newDim1 && !Dimension::where('code', $newDim1)->exists()) {
+            if ($newDim1 && ! Dimension::where('code', $newDim1)->exists()) {
                 throw new \RuntimeException("Dimension {$newDim1} does not exist");
             }
-            if ($newDim2 && !Dimension::where('code', $newDim2)->exists()) {
+            if ($newDim2 && ! Dimension::where('code', $newDim2)->exists()) {
                 throw new \RuntimeException("Dimension {$newDim2} does not exist");
             }
 
@@ -236,7 +240,8 @@ class DimensionManagementService
                 $this->updateGlobalDimensionsInEntries($oldDim1, $newDim1, $oldDim2, $newDim2);
             } else {
                 // Parallel mode would queue jobs
-                dispatch(new \App\Jobs\ChangeGlobalDimensionsJob($oldDim1, $newDim1, $oldDim2, $newDim2));
+                dispatch(new ChangeGlobalDimensionsJob($oldDim1, $newDim1, $oldDim2, $newDim2));
+
                 return;
             }
 
@@ -249,8 +254,12 @@ class DimensionManagementService
             // Update dimension types
             Dimension::where('code', $oldDim1)->update(['dimension_type' => 'regular', 'global_dimension_no' => null]);
             Dimension::where('code', $oldDim2)->update(['dimension_type' => 'regular', 'global_dimension_no' => null]);
-            if ($newDim1) Dimension::where('code', $newDim1)->update(['dimension_type' => 'global', 'global_dimension_no' => 1]);
-            if ($newDim2) Dimension::where('code', $newDim2)->update(['dimension_type' => 'global', 'global_dimension_no' => 2]);
+            if ($newDim1) {
+                Dimension::where('code', $newDim1)->update(['dimension_type' => 'global', 'global_dimension_no' => 1]);
+            }
+            if ($newDim2) {
+                Dimension::where('code', $newDim2)->update(['dimension_type' => 'global', 'global_dimension_no' => 2]);
+            }
         });
     }
 
@@ -260,7 +269,7 @@ class DimensionManagementService
     public function validateDimValue(string $dimensionCode, string $valueCode): void
     {
         $dimension = Dimension::where('code', $dimensionCode)->first();
-        if (!$dimension) {
+        if (! $dimension) {
             throw new \RuntimeException("Dimension {$dimensionCode} does not exist");
         }
 
@@ -268,7 +277,7 @@ class DimensionManagementService
             ->where('code', $valueCode)
             ->first();
 
-        if (!$value) {
+        if (! $value) {
             throw new \RuntimeException("Dimension Value {$valueCode} does not exist for Dimension {$dimensionCode}");
         }
 
@@ -290,7 +299,10 @@ class DimensionManagementService
      */
     public function getDimensionDescription(int $dimensionSetId): string
     {
-        if ($dimensionSetId === 0) return '';
+        if ($dimensionSetId === 0) {
+            return '';
+        }
+
         return DimensionSet::find($dimensionSetId)?->display_string ?? '';
     }
 
@@ -307,8 +319,12 @@ class DimensionManagementService
      */
     public function dimensionSetsEqual(int $setId1, int $setId2): bool
     {
-        if ($setId1 === $setId2) return true;
-        if ($setId1 === 0 || $setId2 === 0) return false;
+        if ($setId1 === $setId2) {
+            return true;
+        }
+        if ($setId1 === 0 || $setId2 === 0) {
+            return false;
+        }
 
         $hash1 = DimensionSet::find($setId1)?->dimension_hash;
         $hash2 = DimensionSet::find($setId2)?->dimension_hash;
@@ -337,7 +353,7 @@ class DimensionManagementService
             ->exists();
 
         if ($blocked) {
-            throw new \RuntimeException("This combination of dimension values is blocked");
+            throw new \RuntimeException('This combination of dimension values is blocked');
         }
     }
 
@@ -345,7 +361,7 @@ class DimensionManagementService
     {
         $parentId = 0;
         foreach ($dimensions as $code => $value) {
-            $dimValue = DimensionValue::whereHas('dimension', fn($q) => $q->where('code', $code))
+            $dimValue = DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', $code))
                 ->where('code', $value)
                 ->first();
 
@@ -364,7 +380,7 @@ class DimensionManagementService
     private function generateSetDescription(array $dimensions): string
     {
         return collect($dimensions)
-            ->map(fn($v, $k) => "{$k}:{$v}")
+            ->map(fn ($v, $k) => "{$k}:{$v}")
             ->implode(', ');
     }
 

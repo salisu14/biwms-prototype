@@ -85,7 +85,7 @@ class MachineCenterInfolist
                                 TextEntry::make('updated_at')->dateTime()->color('gray'),
                             ]),
                     ])
-                    ->compact()
+                    ->compact(),
             ]);
     }
 }

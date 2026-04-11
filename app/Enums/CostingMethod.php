@@ -12,7 +12,7 @@ enum CostingMethod: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::FIFO => 'First-In, First-Out (FIFO)',
             self::LIFO => 'Last-In, First-Out (LIFO)',
             self::AVERAGE => 'Average Cost',
@@ -23,7 +23,7 @@ enum CostingMethod: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::FIFO => 'bg-emerald-100 text-emerald-800',
             self::LIFO => 'bg-amber-100 text-amber-800',
             self::AVERAGE => 'bg-blue-100 text-blue-800',
@@ -34,7 +34,7 @@ enum CostingMethod: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::FIFO => 'heroicon-o-arrow-right-circle',
             self::LIFO => 'heroicon-o-arrow-left-circle',
             self::AVERAGE => 'heroicon-o-divide',
@@ -45,7 +45,7 @@ enum CostingMethod: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::FIFO => 'Assumes the oldest inventory items are sold first.',
             self::LIFO => 'Assumes the newest inventory items are sold first.',
             self::AVERAGE => 'Costs are calculated based on the weighted average of all units.',

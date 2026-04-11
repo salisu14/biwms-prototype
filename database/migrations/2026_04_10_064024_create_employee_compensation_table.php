@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('reason_code')->nullable();
             $table->string('job_title')->nullable();
             $table->timestamps();
-            
+
             $table->unique(['employee_id', 'effective_date']);
         });
     }

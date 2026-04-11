@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\Currencies\Schemas;
 
-use App\Models\Currency;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -50,7 +49,7 @@ class CurrencyInfolist
                         // Right Column (Rates & Rounding)
                         Group::make([
                             Section::make('Current Rates')
-                                ->hidden(fn($record) => $record?->is_lcy)
+                                ->hidden(fn ($record) => $record?->is_lcy)
                                 ->schema([
                                     TextEntry::make('exchange_rate')->numeric(6)->size('lg')->weight('bold'),
                                     TextEntry::make('exchange_rate_date')->date(),

@@ -29,7 +29,7 @@ return new class extends Migration
             // One account per type per setup
             $table->unique([
                 'general_posting_setup_id',
-                'line_type'
+                'line_type',
             ], 'unique_setup_line_type');
         });
     }

@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PricingGroup.php
 
 namespace App\Models;

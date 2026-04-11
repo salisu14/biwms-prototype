@@ -205,8 +205,8 @@ class GeneralPostingSetup extends Model
      */
     public function isSalesComplete(): bool
     {
-        return !is_null($this->sales_account_id) &&
-            !is_null($this->cogs_account_id);
+        return ! is_null($this->sales_account_id) &&
+            ! is_null($this->cogs_account_id);
     }
 
     /**
@@ -214,8 +214,8 @@ class GeneralPostingSetup extends Model
      */
     public function isInventoryComplete(): bool
     {
-        return !is_null($this->inventory_account_id) &&
-            !is_null($this->inventory_adj_account_id);
+        return ! is_null($this->inventory_account_id) &&
+            ! is_null($this->inventory_adj_account_id);
     }
 
     /**
@@ -225,16 +225,24 @@ class GeneralPostingSetup extends Model
     {
         $missing = [];
 
-        if (is_null($this->sales_account_id)) $missing[] = 'Sales Account';
-        if (is_null($this->cogs_account_id)) $missing[] = 'COGS Account';
-        if (is_null($this->inventory_account_id)) $missing[] = 'Inventory Account';
-        if (is_null($this->inventory_adj_account_id)) $missing[] = 'Inventory Adjustment Account';
+        if (is_null($this->sales_account_id)) {
+            $missing[] = 'Sales Account';
+        }
+        if (is_null($this->cogs_account_id)) {
+            $missing[] = 'COGS Account';
+        }
+        if (is_null($this->inventory_account_id)) {
+            $missing[] = 'Inventory Account';
+        }
+        if (is_null($this->inventory_adj_account_id)) {
+            $missing[] = 'Inventory Adjustment Account';
+        }
 
-        if (!empty($missing)) {
+        if (! empty($missing)) {
             $businessGroup = $this->generalBusinessPostingGroup?->code ?? 'N/A';
             $productGroup = $this->generalProductPostingGroup?->code ?? 'N/A';
             throw new \RuntimeException(
-                "General Posting Setup incomplete for {$businessGroup}/{$productGroup}. Missing: " . implode(', ', $missing)
+                "General Posting Setup incomplete for {$businessGroup}/{$productGroup}. Missing: ".implode(', ', $missing)
             );
         }
     }
@@ -246,10 +254,18 @@ class GeneralPostingSetup extends Model
     {
         $missing = [];
 
-        if (is_null($this->sales_account_id)) $missing[] = 'SALES';
-        if (is_null($this->cogs_account_id)) $missing[] = 'COGS';
-        if (is_null($this->inventory_account_id)) $missing[] = 'INVENTORY';
-        if (is_null($this->inventory_adj_account_id)) $missing[] = 'INVENTORY_ADJUSTMENT';
+        if (is_null($this->sales_account_id)) {
+            $missing[] = 'SALES';
+        }
+        if (is_null($this->cogs_account_id)) {
+            $missing[] = 'COGS';
+        }
+        if (is_null($this->inventory_account_id)) {
+            $missing[] = 'INVENTORY';
+        }
+        if (is_null($this->inventory_adj_account_id)) {
+            $missing[] = 'INVENTORY_ADJUSTMENT';
+        }
 
         return $missing;
     }

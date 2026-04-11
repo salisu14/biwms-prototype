@@ -2,9 +2,9 @@
 
 namespace App\Filament\Resources\Employees\Schemas;
 
+use App\Enums\EmployeeAssignmentType;
 use App\Models\Dimension;
 use App\Models\DimensionValue;
-use App\Enums\EmployeeAssignmentType;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
@@ -54,6 +54,7 @@ class EmployeeForm
                         ->label('Business')
                         ->options(function () {
                             $dim = Dimension::where('code', 'BUSINESS')->first();
+
                             return $dim ? $dim->values()->pluck('name', 'code') : [];
                         })
                         ->live()
@@ -69,7 +70,7 @@ class EmployeeForm
                             }
 
                             $businessValue = DimensionValue::where('code', $businessCode)
-                                ->whereHas('dimension', fn($q) => $q->where('code', 'BUSINESS'))
+                                ->whereHas('dimension', fn ($q) => $q->where('code', 'BUSINESS'))
                                 ->first();
 
                             if (! $businessValue) {

@@ -36,8 +36,8 @@ class SalesCreditMemo extends Model
         'sales_invoice_id',
 
         // Dimensions (very important for ERP)
-//        'dimension_1_id',
-//        'dimension_2_id',
+        //        'dimension_1_id',
+        //        'dimension_2_id',
         'item_id',
         'quantity',
         'price',

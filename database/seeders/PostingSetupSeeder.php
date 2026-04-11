@@ -1,4 +1,5 @@
 <?php
+
 // database/seeders/PostingSetupSeeder.php
 
 namespace Database\Seeders;
@@ -9,6 +10,7 @@ use App\Models\GeneralPostingSetup;
 use App\Models\GeneralPostingSetupLine;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
+use App\Models\InventoryPostingSetup;
 use App\Models\Location;
 use Illuminate\Database\Seeder;
 
@@ -84,7 +86,7 @@ class PostingSetupSeeder extends Seeder
             'bin_mandatory' => false,
         ]);
 
-        \App\Models\InventoryPostingSetup::create([
+        InventoryPostingSetup::create([
             'location_id' => null, // Default for all locations
             'inventory_posting_group_id' => $finished->id,
             'inventory_account_id' => $inventoryFinished->id,

@@ -9,7 +9,6 @@ use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\TextSize;
-use Filament\Tables\Columns\TextColumn;
 
 class SalesInvoiceInfolist
 {
@@ -77,8 +76,8 @@ class SalesInvoiceInfolist
                                     TextEntry::make('posted_by')
                                         ->placeholder('N/A'),
                                 ])->columns(2),
-                            ])
-                    ])
+                            ]),
+                    ]),
             ]);
     }
 }

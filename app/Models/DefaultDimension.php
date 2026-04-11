@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ValuePosting;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,12 +12,12 @@ class DefaultDimension extends Model
     use HasFactory;
 
     protected $fillable = [
-        'table_id', 'no', 'dimension_code', 'dimension_value_code', 'value_posting', 'blocked'
+        'table_id', 'no', 'dimension_code', 'dimension_value_code', 'value_posting', 'blocked',
     ];
 
     protected $casts = [
         'blocked' => 'boolean',
-        'value_posting' => \App\Enums\ValuePosting::class,
+        'value_posting' => ValuePosting::class,
     ];
 
     public function dimension(): BelongsTo

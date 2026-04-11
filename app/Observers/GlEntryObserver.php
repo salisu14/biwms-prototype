@@ -2,8 +2,8 @@
 
 namespace App\Observers;
 
-use App\Models\GlEntry;
 use App\Models\ChartOfAccount;
+use App\Models\GlEntry;
 
 class GlEntryObserver
 {
@@ -24,13 +24,13 @@ class GlEntryObserver
         if ($delta != 0) {
             $this->updateAccountBalance($entry->chart_of_account_id, $delta);
         }
-        
+
         // Handle account change
         if ($entry->wasChanged('chart_of_account_id')) {
             // Subtract from old account
             $oldAccountId = $entry->getOriginal('chart_of_account_id');
             $this->updateAccountBalance($oldAccountId, -$entry->getOriginal('amount'));
-            
+
             // Add back to new account (already handled by delta loop? No, handled manually)
             $this->updateAccountBalance($entry->chart_of_account_id, $entry->amount);
         }
@@ -49,7 +49,9 @@ class GlEntryObserver
      */
     protected function updateAccountBalance($accountId, float $amount): void
     {
-        if (!$accountId) return;
+        if (! $accountId) {
+            return;
+        }
 
         $account = ChartOfAccount::find($accountId);
         if ($account) {

@@ -14,8 +14,6 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\BadgeColumn;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
 class ItemResource extends Resource
@@ -57,7 +55,7 @@ class ItemResource extends Resource
             'edit' => EditItem::route('/{record}/edit'),
 
             // Custom filtered pages
-            'raw-materials'  => Pages\ListRawMaterials::route('rm/raw-materials'),
+            'raw-materials' => Pages\ListRawMaterials::route('rm/raw-materials'),
             'finished-goods' => Pages\ListFinishedGoods::route('fg/finished-goods'),
         ];
     }

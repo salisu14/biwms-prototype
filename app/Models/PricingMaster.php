@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PricingMaster.php
 
 namespace App\Models;
@@ -144,7 +145,7 @@ class PricingMaster extends Model
         // Day of week check
         if ($this->applicable_days) {
             $dayName = strtolower($checkDate->format('D')); // 'mon', 'tue'
-            if (!in_array($dayName, $this->applicable_days)) {
+            if (! in_array($dayName, $this->applicable_days)) {
                 return false;
             }
         }
@@ -169,7 +170,7 @@ class PricingMaster extends Model
     // Get applicable quantity break
     public function getQuantityBreak(float $quantity): ?PricingMasterQuantityBreak
     {
-        if (!$this->allow_quantity_breaks) {
+        if (! $this->allow_quantity_breaks) {
             return null;
         }
 
@@ -252,7 +253,7 @@ class PricingMaster extends Model
         $result['final_price'] = $result['base_price'] - $result['discount_amount'];
 
         // Ensure non-negative (unless allowed)
-        if ($result['final_price'] < 0 && !$this->item?->allow_negative_price) {
+        if ($result['final_price'] < 0 && ! $this->item?->allow_negative_price) {
             $result['final_price'] = 0;
         }
 

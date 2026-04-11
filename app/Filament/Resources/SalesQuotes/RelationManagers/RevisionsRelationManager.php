@@ -26,15 +26,15 @@ class RevisionsRelationManager extends RelationManager
                 // 1. Revision Version & Status Combined
                 TextColumn::make('version')
                     ->label('Revision')
-                    ->formatStateUsing(fn($state) => "v{$state}")
+                    ->formatStateUsing(fn ($state) => "v{$state}")
                     ->badge()
-                    ->color(fn($record): string => match ($record->status) {
+                    ->color(fn ($record): string => match ($record->status) {
                         'approved' => 'success',
                         'pending' => 'warning',
                         'rejected' => 'danger',
                         default => 'gray',
                     })
-                    ->icon(fn($record): string => match ($record->status) {
+                    ->icon(fn ($record): string => match ($record->status) {
                         'approved' => 'heroicon-m-check-badge',
                         'pending' => 'heroicon-m-clock',
                         'rejected' => 'heroicon-m-x-circle',
@@ -46,14 +46,14 @@ class RevisionsRelationManager extends RelationManager
                 TextColumn::make('changes')
                     ->label('Quantity Changes')
                     ->html()
-                    ->formatStateUsing(fn($state) => $this->formatChangesHtml($state))
+                    ->formatStateUsing(fn ($state) => $this->formatChangesHtml($state))
                     ->wrap(),
 
                 // 3. Activity Timestamp
                 TextColumn::make('created_at')
                     ->label('Modified')
                     ->dateTime('M d, Y')
-                    ->description(fn($record) => $record->created_at->format('H:i') . " ({$record->created_at->diffForHumans()})")
+                    ->description(fn ($record) => $record->created_at->format('H:i')." ({$record->created_at->diffForHumans()})")
                     ->color('gray')
                     ->sortable(),
 
@@ -109,8 +109,8 @@ class RevisionsRelationManager extends RelationManager
 
         $lines = collect($changesArray)->map(function ($change) {
             $itemId = $this->safe($change['item_id'] ?? '?');
-            $old = (int)($change['old_qty'] ?? 0);
-            $new = (int)($change['new_qty'] ?? 0);
+            $old = (int) ($change['old_qty'] ?? 0);
+            $new = (int) ($change['new_qty'] ?? 0);
 
             $isIncrease = $new > $old;
             $colorClass = $isIncrease ? 'text-success-600' : 'text-danger-600';
@@ -129,7 +129,7 @@ class RevisionsRelationManager extends RelationManager
         ";
         });
 
-        return new HtmlString("<div class='space-y-1'>" . $lines->implode('') . "</div>");
+        return new HtmlString("<div class='space-y-1'>".$lines->implode('').'</div>');
     }
 
     protected function safeDecodeChanges($changes): array
@@ -171,7 +171,7 @@ class RevisionsRelationManager extends RelationManager
 
     protected function safe($value): string
     {
-        return e(mb_convert_encoding((string)$value, 'UTF-8', 'UTF-8'));
+        return e(mb_convert_encoding((string) $value, 'UTF-8', 'UTF-8'));
     }
 
     protected function safeString($value): string

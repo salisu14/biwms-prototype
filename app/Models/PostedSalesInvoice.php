@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PostedSalesInvoice.php
 
 namespace App\Models;
@@ -167,20 +168,30 @@ class PostedSalesInvoice extends Model
 
     public function getIsOverdueAttribute(): bool
     {
-        return !$this->paid_in_full && $this->due_date < now();
+        return ! $this->paid_in_full && $this->due_date < now();
     }
 
     public function getDaysOverdueAttribute(): ?int
     {
-        if (!$this->is_overdue) return null;
+        if (! $this->is_overdue) {
+            return null;
+        }
+
         return $this->due_date->diffInDays(now());
     }
 
     public function getStatusAttribute(): string
     {
-        if ($this->cancelled) return 'CANCELLED';
-        if ($this->paid_in_full) return 'PAID';
-        if ($this->is_overdue) return 'OVERDUE';
+        if ($this->cancelled) {
+            return 'CANCELLED';
+        }
+        if ($this->paid_in_full) {
+            return 'PAID';
+        }
+        if ($this->is_overdue) {
+            return 'OVERDUE';
+        }
+
         return 'OPEN';
     }
 
@@ -191,8 +202,10 @@ class PostedSalesInvoice extends Model
 
     public function getProfitMarginPercentAttribute(): float
     {
-        if ($this->total_amount == 0) return 0;
+        if ($this->total_amount == 0) {
+            return 0;
+        }
+
         return ($this->total_profit / $this->total_amount) * 100;
     }
-
 }

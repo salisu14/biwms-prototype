@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/WarehouseReceipt.php
 
 namespace App\Models;
@@ -67,7 +68,7 @@ class WarehouseReceipt extends Model
     // Post the receipt (creates item ledger entries)
     public function post(): bool
     {
-        if (!$this->canPost()) {
+        if (! $this->canPost()) {
             return false;
         }
 

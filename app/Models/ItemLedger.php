@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/ItemLedger.php
 
 namespace App\Models;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'balance_after',
     'cost_after',
     'lot_number',
-    'expiry_date'
+    'expiry_date',
 ])]
 class ItemLedger extends Model
 {
@@ -98,7 +99,7 @@ class ItemLedger extends Model
             'TRANSFER_IN',
             'RETURN',
             'ADJUSTMENT_POS',
-            'PRODUCTION_OUTPUT'
+            'PRODUCTION_OUTPUT',
         ]);
     }
 
@@ -112,7 +113,7 @@ class ItemLedger extends Model
             'TRANSFER_OUT',
             'SALE',
             'ADJUSTMENT_NEG',
-            'SCRAP'
+            'SCRAP',
         ]);
     }
 
@@ -130,7 +131,7 @@ class ItemLedger extends Model
     public function scopeInbound($query)
     {
         return $query->whereIn('entry_type', [
-            'RECEIPT', 'TRANSFER_IN', 'RETURN', 'ADJUSTMENT_POS', 'PRODUCTION_OUTPUT'
+            'RECEIPT', 'TRANSFER_IN', 'RETURN', 'ADJUSTMENT_POS', 'PRODUCTION_OUTPUT',
         ]);
     }
 
@@ -140,7 +141,7 @@ class ItemLedger extends Model
     public function scopeOutbound($query)
     {
         return $query->whereIn('entry_type', [
-            'ISSUE', 'TRANSFER_OUT', 'SALE', 'ADJUSTMENT_NEG', 'SCRAP'
+            'ISSUE', 'TRANSFER_OUT', 'SALE', 'ADJUSTMENT_NEG', 'SCRAP',
         ]);
     }
 
@@ -180,7 +181,7 @@ class ItemLedger extends Model
             ->value('balance_after') ?? 0;
 
         $signedQty = in_array($data['entry_type'], [
-            'RECEIPT', 'TRANSFER_IN', 'RETURN', 'ADJUSTMENT_POS', 'PRODUCTION_OUTPUT'
+            'RECEIPT', 'TRANSFER_IN', 'RETURN', 'ADJUSTMENT_POS', 'PRODUCTION_OUTPUT',
         ]) ? $data['quantity'] : -$data['quantity'];
 
         $data['balance_after'] = $currentBalance + $signedQty;

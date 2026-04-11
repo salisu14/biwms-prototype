@@ -61,7 +61,7 @@ class SalesQuote extends Model
     public function refreshTotal(): void
     {
         $this->update([
-            'total_amount' => $this->items()->sum('line_total')
+            'total_amount' => $this->items()->sum('line_total'),
         ]);
     }
 
@@ -74,9 +74,9 @@ class SalesQuote extends Model
             // Remove timestamps from the log so it stays clean
             unset($changes['updated_at']);
 
-            if (!empty($changes)) {
+            if (! empty($changes)) {
                 $quote->revisions()->create([
-                    'revision_number' => 'REV-' . strtoupper(uniqid()),
+                    'revision_number' => 'REV-'.strtoupper(uniqid()),
                     'changes' => $changes,
                     'description' => 'System captured changes.',
                     // 'version' and 'revision_date' are handled by Revision model boot

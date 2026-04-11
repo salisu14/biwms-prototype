@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WorkCenterCalendars\Tables;
 
+use Carbon\Carbon;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -83,11 +84,12 @@ class WorkCenterCalendarsTable
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
                         if ($data['from'] ?? null) {
-                            $indicators[] = 'From ' . \Carbon\Carbon::parse($data['from'])->toFormattedDateString();
+                            $indicators[] = 'From '.Carbon::parse($data['from'])->toFormattedDateString();
                         }
                         if ($data['until'] ?? null) {
-                            $indicators[] = 'Until ' . \Carbon\Carbon::parse($data['until'])->toFormattedDateString();
+                            $indicators[] = 'Until '.Carbon::parse($data['until'])->toFormattedDateString();
                         }
+
                         return $indicators;
                     }),
             ])

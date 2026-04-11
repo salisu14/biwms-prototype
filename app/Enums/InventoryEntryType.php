@@ -5,7 +5,7 @@ namespace App\Enums;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
 
-enum InventoryEntryType: string implements HasLabel, HasColor
+enum InventoryEntryType: string implements HasColor, HasLabel
 {
     case PURCHASE = 'purchase';
     case PURCHASE_RETURN = 'purchase_return';

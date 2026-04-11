@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\ItemSkus\Schemas;
 
-use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\IconEntry;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
@@ -27,7 +27,7 @@ class ItemSkuInfolist
 
                         TextEntry::make('item.item_code')
                             ->label('Item Code'),
-//                            ->description(fn ($record): string => $record->item->description ?? '-'),
+                        //                            ->description(fn ($record): string => $record->item->description ?? '-'),
 
                         TextEntry::make('location.location_name')
                             ->label('Location')

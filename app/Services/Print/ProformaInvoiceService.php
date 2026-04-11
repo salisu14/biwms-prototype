@@ -2,10 +2,9 @@
 
 namespace App\Services\Print;
 
-use App\Models\SalesOrder;
 use App\Models\PurchaseOrder;
+use App\Models\SalesOrder;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\View;
 
 class ProformaInvoiceService
 {
@@ -27,21 +26,21 @@ class ProformaInvoiceService
                 return [
                     'item_code' => $line->item_code,
                     'description' => $line->description,
-                    'qty' => (float)$line->quantity,
+                    'qty' => (float) $line->quantity,
                     'uom' => $line->unit_of_measure_code,
-                    'price' => (float)$line->unit_price,
-                    'discount_pct' => (float)$line->line_discount_percent,
-                    'discount_amount' => (float)$line->line_discount_amount,
-                    'vat_amount' => (float)$line->vat_amount,
-                    'net_amount' => (float)$line->amount_including_vat,
+                    'price' => (float) $line->unit_price,
+                    'discount_pct' => (float) $line->line_discount_percent,
+                    'discount_amount' => (float) $line->line_discount_amount,
+                    'vat_amount' => (float) $line->vat_amount,
+                    'net_amount' => (float) $line->amount_including_vat,
                 ];
             }),
             'totals' => [
-                'subtotal' => (float)$order->total_amount,
-                'discount' => (float)$order->line_discount_total,
-                'vat' => (float)$order->total_vat,
-                'grand_total' => (float)$order->grand_total,
-                'total_qty' => (float)$order->lines->sum('quantity'),
+                'subtotal' => (float) $order->total_amount,
+                'discount' => (float) $order->line_discount_total,
+                'vat' => (float) $order->total_vat,
+                'grand_total' => (float) $order->grand_total,
+                'total_qty' => (float) $order->lines->sum('quantity'),
             ],
             'company' => $this->getCompanyInfo(),
         ];
@@ -68,21 +67,21 @@ class ProformaInvoiceService
                 return [
                     'item_code' => $line->item_code,
                     'description' => $line->description,
-                    'qty' => (float)$line->quantity,
+                    'qty' => (float) $line->quantity,
                     'uom' => $line->unit_of_measure,
-                    'price' => (float)$line->unit_cost,
+                    'price' => (float) $line->unit_cost,
                     'discount_pct' => 0, // Purchase lines in this schema don't have explicit disc %
                     'discount_amount' => 0,
-                    'vat_amount' => (float)$line->vat_amount,
-                    'net_amount' => (float)$line->total_amount,
+                    'vat_amount' => (float) $line->vat_amount,
+                    'net_amount' => (float) $line->total_amount,
                 ];
             }),
             'totals' => [
-                'subtotal' => (float)$order->total_amount,
+                'subtotal' => (float) $order->total_amount,
                 'discount' => 0,
-                'vat' => (float)$order->total_vat,
-                'grand_total' => (float)$order->grand_total,
-                'total_qty' => (float)$order->lines->sum('quantity'),
+                'vat' => (float) $order->total_vat,
+                'grand_total' => (float) $order->grand_total,
+                'total_qty' => (float) $order->lines->sum('quantity'),
             ],
             'company' => $this->getCompanyInfo(),
         ];

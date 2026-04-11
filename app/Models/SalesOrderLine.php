@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/SalesOrderLine.php
 
 namespace App\Models;
@@ -95,12 +96,12 @@ class SalesOrderLine extends Model
             }
 
             // Calculation safety
-            $line->qty_per_unit_of_measure = (float)($line->qty_per_unit_of_measure ?: 1.0);
-            $line->quantity_base = (float)$line->quantity * $line->qty_per_unit_of_measure;
-            $line->vat_percentage = (float)($line->vat_percentage ?: 0);
+            $line->qty_per_unit_of_measure = (float) ($line->qty_per_unit_of_measure ?: 1.0);
+            $line->quantity_base = (float) $line->quantity * $line->qty_per_unit_of_measure;
+            $line->vat_percentage = (float) ($line->vat_percentage ?: 0);
 
             // Calculate derived fields
-            $line->line_total = (float)$line->quantity * (float)$line->unit_price;
+            $line->line_total = (float) $line->quantity * (float) $line->unit_price;
             $line->line_discount_amount = $line->line_total * ($line->line_discount_percent / 100);
             $line->line_amount = $line->line_total - $line->line_discount_amount;
             $line->vat_amount = $line->line_amount * ($line->vat_percentage / 100);
@@ -108,7 +109,7 @@ class SalesOrderLine extends Model
             $line->quantity_to_ship = $line->quantity;
 
             // Copy posting groups from item if not set
-            if ($line->item_id && !$line->general_product_posting_group_id) {
+            if ($line->item_id && ! $line->general_product_posting_group_id) {
                 $item = Item::find($line->item_id);
                 if ($item) {
                     $line->general_product_posting_group_id = $item->general_product_posting_group_id;
@@ -121,10 +122,10 @@ class SalesOrderLine extends Model
         static::updating(function ($line) {
             // Recalculate if price or quantity changed
             if ($line->isDirty(['quantity', 'unit_price', 'line_discount_percent', 'vat_percentage', 'qty_per_unit_of_measure'])) {
-                $line->qty_per_unit_of_measure = (float)($line->qty_per_unit_of_measure ?: 1.0);
-                $line->quantity_base = (float)$line->quantity * $line->qty_per_unit_of_measure;
+                $line->qty_per_unit_of_measure = (float) ($line->qty_per_unit_of_measure ?: 1.0);
+                $line->quantity_base = (float) $line->quantity * $line->qty_per_unit_of_measure;
 
-                $line->line_total = (float)$line->quantity * (float)$line->unit_price;
+                $line->line_total = (float) $line->quantity * (float) $line->unit_price;
                 $line->line_discount_amount = $line->line_total * ($line->line_discount_percent / 100);
                 $line->line_amount = $line->line_total - $line->line_discount_amount;
                 $line->vat_amount = $line->line_amount * ($line->vat_percentage / 100);
@@ -218,12 +219,16 @@ class SalesOrderLine extends Model
     public function getProfitAmountAttribute(): float
     {
         $cost = $this->unit_cost * $this->quantity;
+
         return $this->line_amount - $cost;
     }
 
     public function getProfitPercentAttribute(): float
     {
-        if ($this->line_amount == 0) return 0;
+        if ($this->line_amount == 0) {
+            return 0;
+        }
+
         return ($this->profit_amount / $this->line_amount) * 100;
     }
 
@@ -237,7 +242,7 @@ class SalesOrderLine extends Model
         $businessGroupId = $this->salesOrder->general_business_posting_group_id;
         $productGroupId = $this->general_product_posting_group_id;
 
-        if (!$businessGroupId || !$productGroupId) {
+        if (! $businessGroupId || ! $productGroupId) {
             return null;
         }
 
@@ -270,19 +275,19 @@ class SalesOrderLine extends Model
     {
         $errors = [];
 
-        if (!$this->getPostingSetup()) {
-            $errors[] = "General Posting Setup missing for Business Group: " .
-                $this->salesOrder->generalBusinessPostingGroup?->code .
-                " and Product Group: " .
+        if (! $this->getPostingSetup()) {
+            $errors[] = 'General Posting Setup missing for Business Group: '.
+                $this->salesOrder->generalBusinessPostingGroup?->code.
+                ' and Product Group: '.
                 $this->generalProductPostingGroup?->code;
         }
 
-        if (!$this->getSalesAccount()) {
-            $errors[] = "Sales Account not configured";
+        if (! $this->getSalesAccount()) {
+            $errors[] = 'Sales Account not configured';
         }
 
-        if (!$this->getCogsAccount()) {
-            $errors[] = "COGS Account not configured";
+        if (! $this->getCogsAccount()) {
+            $errors[] = 'COGS Account not configured';
         }
 
         return $errors;

@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('customer_price_overrides', function(Blueprint $table){
+        Schema::create('customer_price_overrides', function (Blueprint $table) {
             $table->id();
             $table->foreignId('customer_id')->constrained();
             $table->foreignId('item_id')->constrained();

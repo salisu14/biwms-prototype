@@ -1,4 +1,5 @@
 <?php
+
 // app/Services/PricingService.php
 
 namespace App\Services;
@@ -85,8 +86,8 @@ class PricingService
         }
 
         // Check if discounts allowed
-        if (!$customer->allow_discounts && $proposedPrice < $listPrice) {
-            $errors[] = "Customer does not allow discounts";
+        if (! $customer->allow_discounts && $proposedPrice < $listPrice) {
+            $errors[] = 'Customer does not allow discounts';
         }
 
         // Check minimum margin if item has cost
@@ -120,6 +121,7 @@ class PricingService
 
         if ($transferPrice) {
             $calc = $transferPrice->calculatePrice($quantity, $item->unit_cost);
+
             return $calc['final_price'];
         }
 

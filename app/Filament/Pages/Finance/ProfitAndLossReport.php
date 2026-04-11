@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Finance;
 
 use App\Models\AccountSchedule;
+use App\Models\Department;
 use App\Services\IncomeStatementService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -19,11 +20,15 @@ class ProfitAndLossReport extends Page implements HasForms
     use InteractsWithForms;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-document-chart-bar';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Finance';
+
     protected static ?string $title = 'Profit & Loss Report';
+
     protected string $view = 'filament.pages.finance.profit-and-loss-report';
 
     public ?array $formData = [];
+
     public ?array $reportData = null;
 
     public function mount(): void
@@ -54,7 +59,7 @@ class ProfitAndLossReport extends Page implements HasForms
                         ->searchable(),
                     Select::make('dimension1')
                         ->label('Department')
-                        ->options(\App\Models\Department::pluck('name', 'department_code'))
+                        ->options(Department::pluck('name', 'department_code'))
                         ->placeholder('All Departments'),
                 ]),
             ])
@@ -66,7 +71,7 @@ class ProfitAndLossReport extends Page implements HasForms
         return [
             Action::make('generate')
                 ->label('Generate')
-                ->action(fn() => $this->generateReport()),
+                ->action(fn () => $this->generateReport()),
             Action::make('print')
                 ->label('Print')
                 ->icon('heroicon-o-printer')
@@ -83,7 +88,7 @@ class ProfitAndLossReport extends Page implements HasForms
         $start = Carbon::parse($this->formData['startDate']);
         $end = Carbon::parse($this->formData['endDate']);
 
-        if (!empty($this->formData['scheduleId'])) {
+        if (! empty($this->formData['scheduleId'])) {
             $rows = $service->generateFromSchedule(
                 (int) $this->formData['scheduleId'],
                 $start,

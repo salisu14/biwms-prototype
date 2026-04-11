@@ -6,6 +6,7 @@ use App\Data\Sales\SalesInvoiceData;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Services\Sales\SalesInvoiceService;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class CreateSalesInvoice extends CreateRecord
 {
@@ -14,7 +15,7 @@ class CreateSalesInvoice extends CreateRecord
     /**
      * Use the service to handle the creation logic, including transactions and lines.
      */
-    protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
+    protected function handleRecordCreation(array $data): Model
     {
         // Map form data to your DTO
         $invoiceData = SalesInvoiceData::from($data);

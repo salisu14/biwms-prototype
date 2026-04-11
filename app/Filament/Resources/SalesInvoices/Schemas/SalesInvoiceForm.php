@@ -75,13 +75,15 @@ class SalesInvoiceForm
                             ->schema([
                                 Select::make('item_id')
                                     ->label('Item')
-                                    ->options(Item::query()->whereNotNull('item_number')->pluck('item_number', 'id'))
+                                    ->options(Item::query()->whereNotNull('item_code')->pluck('item_code', 'id'))
                                     ->searchable()
                                     ->preload()
                                     ->required()
                                     ->live()
                                     ->afterStateUpdated(function ($state, Set $set) {
-                                        if (!$state) return;
+                                        if (! $state) {
+                                            return;
+                                        }
 
                                         $item = Item::find($state);
                                         if ($item) {
@@ -140,7 +142,7 @@ class SalesInvoiceForm
 
                         Placeholder::make('post_info')
                             ->label('Posting Details')
-                            ->hidden(fn (?SalesInvoice $record) => !$record?->isPosted())
+                            ->hidden(fn (?SalesInvoice $record) => ! $record?->isPosted())
                             ->content(fn (SalesInvoice $record) => "Posted by {$record->posted_by} on {$record->posted_at?->format('M d, Y H:i')}"),
                     ]),
             ]);

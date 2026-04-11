@@ -11,7 +11,7 @@ enum SourceDocument: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'Purchase Order',
             self::TRANSFER_ORDER => 'Transfer Order',
             self::RETURN_ORDER => 'Return Order',
@@ -21,7 +21,7 @@ enum SourceDocument: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'bg-blue-100 text-blue-800',
             self::TRANSFER_ORDER => 'bg-indigo-100 text-indigo-800',
             self::RETURN_ORDER => 'bg-orange-100 text-orange-800',
@@ -31,7 +31,7 @@ enum SourceDocument: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'heroicon-o-shopping-bag',
             self::TRANSFER_ORDER => 'heroicon-o-arrows-right-left',
             self::RETURN_ORDER => 'heroicon-o-arrow-path',
@@ -41,7 +41,7 @@ enum SourceDocument: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'Inventory replenishment from vendors.',
             self::TRANSFER_ORDER => 'Movement between internal locations.',
             self::RETURN_ORDER => 'Items being returned to a supplier.',

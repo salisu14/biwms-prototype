@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/ItemJournalLine.php
 
 namespace App\Models;
@@ -87,7 +88,7 @@ class ItemJournalLine extends Model
         $businessGroupId = $this->general_business_posting_group_id;
 
         // If no business group (adjustment), use blank/default
-        if (!$businessGroupId) {
+        if (! $businessGroupId) {
             $businessGroupId = GeneralBusinessPostingGroup::where('code', '')->first()?->id
                 ?? GeneralBusinessPostingGroup::first()?->id;
         }
@@ -103,11 +104,11 @@ class ItemJournalLine extends Model
     {
         $setup = $this->getPostingSetup();
 
-        if (!$setup) {
+        if (! $setup) {
             return null;
         }
 
-        return match($this->entry_type) {
+        return match ($this->entry_type) {
             'PURCHASE' => $setup->getPurchaseAccount(),
             'SALE' => $setup->getSalesAccount(),
             'POSITIVE_ADJUSTMENT', 'NEGATIVE_ADJUSTMENT' => $setup->getInventoryAdjustmentAccount(),
@@ -120,7 +121,7 @@ class ItemJournalLine extends Model
     {
         $errors = [];
 
-        if (!$this->item) {
+        if (! $this->item) {
             $errors[] = 'Item not found';
         }
 
@@ -128,11 +129,11 @@ class ItemJournalLine extends Model
             $errors[] = 'Quantity cannot be zero';
         }
 
-        if (!$this->getPostingSetup()) {
+        if (! $this->getPostingSetup()) {
             $errors[] = 'General Posting Setup missing for this combination';
         }
 
-        if (!$this->getPostingAccount()) {
+        if (! $this->getPostingAccount()) {
             $errors[] = 'Posting account not configured';
         }
 
@@ -147,7 +148,7 @@ class ItemJournalLine extends Model
         }
 
         $errors = $this->validateForPosting();
-        if (!empty($errors)) {
+        if (! empty($errors)) {
             throw new \Exception(implode(', ', $errors));
         }
 

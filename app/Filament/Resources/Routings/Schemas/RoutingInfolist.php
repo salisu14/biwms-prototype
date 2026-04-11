@@ -48,7 +48,7 @@ class RoutingInfolist
                     ->schema([
                         Grid::make(2)
                             ->schema([
-                                TextEntry::make('item.item_number')
+                                TextEntry::make('item.item_code')
                                     ->label('Item')
                                     ->badge()
                                     ->placeholder('-'),

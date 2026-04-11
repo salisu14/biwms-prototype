@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/LocationType.php
 
 namespace App\Enums;
@@ -14,7 +15,7 @@ enum LocationType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVING => 'Receiving Bay',
             self::QUARANTINE => 'Quarantine/Hold',
             self::APPROVED => 'Approved Storage',
@@ -26,7 +27,7 @@ enum LocationType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVING => 'bg-yellow-100 text-yellow-800 border-yellow-300',
             self::QUARANTINE => 'bg-red-100 text-red-800 border-red-300',
             self::APPROVED => 'bg-green-100 text-green-800 border-green-300',
@@ -38,7 +39,7 @@ enum LocationType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVING => 'truck-loading',
             self::QUARANTINE => 'ban',
             self::APPROVED => 'check-double',
@@ -77,7 +78,7 @@ enum LocationType: string
      */
     public function allowedDestinations(): array
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVING => [self::QUARANTINE],
             self::QUARANTINE => [self::APPROVED, self::RETURNS],
             self::APPROVED => [self::PRODUCTION, self::SHIPPING, self::RETURNS],
@@ -92,7 +93,7 @@ enum LocationType: string
      */
     public function gmpLevel(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PRODUCTION => 'Grade A/B',
             self::APPROVED, self::QUARANTINE => 'Grade C',
             default => 'Grade D',

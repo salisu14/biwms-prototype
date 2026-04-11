@@ -65,7 +65,7 @@ class Category extends Model
     public function items(): BelongsToMany
     {
         return $this->belongsToMany(
-            ItemMaster::class,
+            Item::class,
             'item_category_assignments',
             'category_id',      // Foreign key on pivot table for this model
             'item_id',          // Foreign key on pivot table for related model

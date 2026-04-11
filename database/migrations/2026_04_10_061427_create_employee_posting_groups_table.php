@@ -15,10 +15,10 @@ return new class extends Migration
             $table->id();
             $table->string('code', 20)->unique();
             $table->string('description')->nullable();
-            
+
             // GL Account for Payable Salary/Expenses
             $table->foreignId('payables_account_id')->nullable()->constrained('chart_of_accounts')->nullOnDelete();
-            
+
             $table->boolean('blocked')->default(false);
             $table->timestamps();
         });

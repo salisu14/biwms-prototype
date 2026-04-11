@@ -12,7 +12,7 @@ use Illuminate\Database\Query\Builder;
 
 class PostedShipments extends Page
 {
-//    use InteractsWithRecord;
+    //    use InteractsWithRecord;
 
     protected static string $resource = SalesShipmentHeaderResource::class;
 
@@ -55,27 +55,27 @@ class PostedShipments extends Page
             ->latest('updated_at');
     }
 
-//    protected function getTableQuery(): Builder
-//    {
-//        return parent::getTableQuery()
-//            // BC-style: All shipments are "posted" (created via posting)
-//            // Filter to exclude draft/unposted if you have that concept
-//            ->whereNotNull('document_no') // Has document number = posted
-//            ->latest('posting_date');
-//    }
-//    protected function getTableQuery(): Builder
-//    {
-//        return parent::getTableQuery()
-//            ->whereNotNull('posted_at') // If you have posted_at
-//            ->orWhere(function (Builder $query) {
-//                // BC-style: shipments are inherently "posted" when created
-//                // Add additional criteria if needed
-//                $query->whereHas('lines', function ($q) {
-//                    $q->whereNotNull('item_shpt_entry_no'); // Posted to item ledger
-//                });
-//            })
-//            ->latest('posting_date');
-//    }
+    //    protected function getTableQuery(): Builder
+    //    {
+    //        return parent::getTableQuery()
+    //            // BC-style: All shipments are "posted" (created via posting)
+    //            // Filter to exclude draft/unposted if you have that concept
+    //            ->whereNotNull('document_no') // Has document number = posted
+    //            ->latest('posting_date');
+    //    }
+    //    protected function getTableQuery(): Builder
+    //    {
+    //        return parent::getTableQuery()
+    //            ->whereNotNull('posted_at') // If you have posted_at
+    //            ->orWhere(function (Builder $query) {
+    //                // BC-style: shipments are inherently "posted" when created
+    //                // Add additional criteria if needed
+    //                $query->whereHas('lines', function ($q) {
+    //                    $q->whereNotNull('item_shpt_entry_no'); // Posted to item ledger
+    //                });
+    //            })
+    //            ->latest('posting_date');
+    //    }
 
     public function table(Table $table): Table
     {

@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/NumberSeries.php
 
 namespace App\Models;
@@ -17,13 +18,14 @@ use Illuminate\Database\Eloquent\Model;
     'year',
     'is_active',
     'allow_manual',
-    'module' // purchase, sales, inventory, etc.
+    'module', // purchase, sales, inventory, etc.
 ])]
 class NumberSeries extends Model
 {
     use HasFactory;
 
     protected $primaryKey = 'id';
+
     protected $table = 'number_series';
 
     protected $casts = [
@@ -40,7 +42,7 @@ class NumberSeries extends Model
      */
     public function getNextNumber(): ?string
     {
-        if (!$this->is_active) {
+        if (! $this->is_active) {
             return null;
         }
 

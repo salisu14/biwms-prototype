@@ -36,7 +36,7 @@ return new class extends Migration
             // Unique combination
             $table->unique([
                 'location_id',
-                'inventory_posting_group_id'
+                'inventory_posting_group_id',
             ], 'unique_inventory_setup');
         });
     }

@@ -199,7 +199,7 @@ class PurchaseReceipt extends Model
         $year = date('Y');
         $sequence = static::whereYear('created_at', $year)->count() + 1;
 
-        return "{$prefix}-{$year}-" . str_pad($sequence, 6, '0', STR_PAD_LEFT);
+        return "{$prefix}-{$year}-".str_pad($sequence, 6, '0', STR_PAD_LEFT);
     }
 
     public function isFullyInvoiced(): bool

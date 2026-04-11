@@ -4,11 +4,12 @@ namespace App\Filament\Resources\Departments\Schemas;
 
 use App\Enums\DepartmentStatus;
 use App\Enums\DepartmentType;
+use App\Models\Location;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -57,7 +58,7 @@ class DepartmentForm
                                         ->required()
                                         ->native(false),
                                     Select::make('location_code')
-                                        ->options(\App\Models\Location::pluck('code', 'code'))
+                                        ->options(Location::pluck('code', 'code'))
                                         ->placeholder('Select Location'),
                                 ]),
                             ]),

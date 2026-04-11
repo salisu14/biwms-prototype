@@ -13,8 +13,11 @@ return new class extends Migration
     {
         Schema::create('locations', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('parent_id')->nullable()->constrained('locations')->onDelete('set null');
             $table->string('code', 20)->unique();
             $table->string('name');
+            $table->string('location_type', 30)->default('STORAGE'); // receiving, storage, picking, shipping, production
+            $table->string('temperature_zone', 30)->default('AMBIENT'); // ambient, cool, cold, frozen
             $table->text('address')->nullable();
 
             // WMS Complexity Settings
@@ -33,8 +36,12 @@ return new class extends Migration
             $table->string('outbound_production_bin_code', 20)->nullable();
             $table->string('adjustment_bin_code', 20)->nullable();
 
+            $table->boolean('is_active')->default(true);
             $table->boolean('blocked')->default(false);
+            $table->integer('sort_order')->default(0);
             $table->timestamps();
+
+            $table->index(['code', 'is_active']);
         });
     }
 

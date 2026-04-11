@@ -37,7 +37,7 @@ class DimensionSet extends Model
      */
     public function getDisplayStringAttribute(): string
     {
-        return $this->entries->map(function($e) {
+        return $this->entries->map(function ($e) {
             return "{$e->dimension_code}: {$e->dimension_value_code}";
         })->implode(', ');
     }

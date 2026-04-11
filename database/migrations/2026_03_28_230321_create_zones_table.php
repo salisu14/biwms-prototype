@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\WarehouseClass;
 use App\Enums\ZoneType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -14,17 +15,28 @@ return new class extends Migration
     {
         Schema::create('zones', function (Blueprint $table) {
             $table->id();
-            $table->string('code', 20);
-            $table->foreignId('location_id')->constrained('locations');
-            $table->string('description');
+            $table->foreignId('location_id')->constrained('locations')->cascadeOnDelete();
+            $table->string('zone_code', 20);
+            $table->string('zone_name', 100);
+            $table->string('description')->nullable();
+
             $table->enum('zone_type', array_column(ZoneType::cases(), 'value'))
-                ->default('RECEIVING');
+                ->default('STORAGE');
+
+            $table->enum('warehouse_class', array_column(WarehouseClass::cases(), 'value'))
+                ->default('standard');
 
             $table->string('bin_type_code', 20)->nullable();
+            $table->boolean('bin_mandatory')->default(false);
+            $table->decimal('max_weight', 15, 4)->nullable();
+
             $table->boolean('blocked')->default(false);
+            $table->boolean('is_active')->default(true);
+            $table->integer('sort_order')->default(0);
+
             $table->timestamps();
 
-            $table->unique(['code', 'location_id']);
+            $table->unique(['location_id', 'zone_code']);
         });
     }
 

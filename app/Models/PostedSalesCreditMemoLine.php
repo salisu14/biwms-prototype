@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PostedSalesCreditMemoLine.php
 
 namespace App\Models;
@@ -240,7 +241,7 @@ class PostedSalesCreditMemoLine extends Model
      */
     public function getRestockingFeePercent(): float
     {
-        return match($this->return_type) {
+        return match ($this->return_type) {
             'DAMAGED' => 0.50,      // 50% fee
             'DEFECTIVE' => 0.00,     // No fee
             'WRONG_ITEM' => 0.00,    // No fee (our error)

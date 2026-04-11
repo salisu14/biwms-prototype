@@ -2,6 +2,7 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\Vendor;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -69,7 +70,7 @@ class RoutingVersionLine extends Model
 
     public function subcontractor(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vendor::class, 'subcontractor_id');
+        return $this->belongsTo(Vendor::class, 'subcontractor_id');
     }
 
     /**
@@ -98,6 +99,7 @@ class RoutingVersionLine extends Model
     public function calculateScrap(float $quantity): float
     {
         $scrapPercent = $this->scrap_factor_percent / 100;
+
         return $this->fixed_scrap_quantity + ($quantity * $scrapPercent);
     }
 }

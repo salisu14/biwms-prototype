@@ -1,17 +1,19 @@
 <?php
+
 // app/Models/ItemUomAssignment.php
 
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
 class ItemUomAssignment extends Pivot
 {
     use HasFactory;
 
     protected $table = 'item_uom_assignments';
+
     protected $primaryKey = 'assignment_id';
 
     public $incrementing = true;
@@ -46,7 +48,7 @@ class ItemUomAssignment extends Pivot
      */
     public function getUomTypeLabelAttribute(): string
     {
-        return match($this->uom_type) {
+        return match ($this->uom_type) {
             'BASE' => 'Base/Inventory',
             'SALES' => 'Sales',
             'PURCHASE' => 'Purchase',

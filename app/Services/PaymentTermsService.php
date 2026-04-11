@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Models\PurchaseOrder;
 use App\Models\PaymentTerm;
+use App\Models\PurchaseOrder;
 use App\Models\SalesOrder;
 use App\Models\VendorLedgerEntry;
 use Illuminate\Support\Facades\Cache;
@@ -32,8 +32,8 @@ class PaymentTermsService
             ? $this->getByCode($termsCode)
             : $this->getByCode($customer->payment_terms_code);
 
-        if (!$term || !$term->canUse()) {
-            throw new \InvalidArgumentException("Payment terms not available");
+        if (! $term || ! $term->canUse()) {
+            throw new \InvalidArgumentException('Payment terms not available');
         }
 
         $postingDate = $order->posting_date ?? now();
@@ -60,8 +60,8 @@ class PaymentTermsService
             ? $this->getByCode($termsCode)
             : $this->getByCode($vendor->payment_terms_code);
 
-        if (!$term || !$term->canUse()) {
-            throw new \InvalidArgumentException("Payment terms not available");
+        if (! $term || ! $term->canUse()) {
+            throw new \InvalidArgumentException('Payment terms not available');
         }
 
         $postingDate = $order->posting_date ?? now();
@@ -80,7 +80,7 @@ class PaymentTermsService
     {
         $term = $this->getByCode($entry->payment_terms_code ?? 'NET30');
 
-        if (!$term || !$term->discount_allowed) {
+        if (! $term || ! $term->discount_allowed) {
             return [
                 'eligible' => false,
                 'discount_amount' => 0,
@@ -116,7 +116,7 @@ class PaymentTermsService
     {
         $term = $this->getByCode($termsCode);
 
-        if (!$term) {
+        if (! $term) {
             return abs($paymentAmount - $expectedAmount) < 0.01;
         }
 

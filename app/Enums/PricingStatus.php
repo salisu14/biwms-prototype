@@ -12,7 +12,7 @@ enum PricingStatus: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::DRAFT => 'Draft',
             self::PENDING_APPROVAL => 'Pending Approval',
             self::ACTIVE => 'Active',
@@ -23,7 +23,7 @@ enum PricingStatus: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::DRAFT => 'bg-slate-100 text-slate-800',
             self::PENDING_APPROVAL => 'bg-amber-100 text-amber-800',
             self::ACTIVE => 'bg-emerald-100 text-emerald-800',
@@ -34,7 +34,7 @@ enum PricingStatus: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::DRAFT => 'heroicon-o-pencil-square',
             self::PENDING_APPROVAL => 'heroicon-o-clock',
             self::ACTIVE => 'heroicon-o-check-badge',

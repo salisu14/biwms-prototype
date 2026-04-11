@@ -2,12 +2,13 @@
 
 namespace App\Filament\Resources\ItemLedgers\Schemas;
 
-use Filament\Forms;
+use App\Models\DocumentHeader;
+use App\Models\Item;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -92,30 +93,31 @@ class ItemLedgerForm
                                 ->content(function ($get) {
                                     $qty = (float) $get('quantity');
                                     $cost = (float) $get('unit_cost');
-                                    return '$' . number_format($qty * $cost, 4);
+
+                                    return '$'.number_format($qty * $cost, 4);
                                 }),
                         ]),
 
                         Select::make('doc_id')
                             ->label('Reference Document')
-                            ->options(\App\Models\DocumentHeader::pluck('doc_no', 'id'))
+                            ->options(DocumentHeader::pluck('doc_no', 'id'))
                             ->searchable()
                             ->preload()
                             ->required(),
-//
-//                        Select::make('doc_id')
-//                            ->label('Reference Document')
-//                            // FIX: Changed 'doc_number' to 'doc_no' to match the Model column
-//                            ->relationship('document', 'doc_no')
-//                            ->searchable()
-//                            ->preload()
-//                            ->required()
-//                            ->createOptionForm([
-//                                // FIX: Changed field name to 'doc_no' to match Model fillable
-//                                TextInput::make('doc_no')->required()->label('Document Number'),
-//                                TextInput::make('doc_type')->required()->label('Document Type'),
-//                                DatePicker::make('doc_date')->required()->label('Document Date'),
-//                            ]),
+                        //
+                        //                        Select::make('doc_id')
+                        //                            ->label('Reference Document')
+                        //                            // FIX: Changed 'doc_number' to 'doc_no' to match the Model column
+                        //                            ->relationship('document', 'doc_no')
+                        //                            ->searchable()
+                        //                            ->preload()
+                        //                            ->required()
+                        //                            ->createOptionForm([
+                        //                                // FIX: Changed field name to 'doc_no' to match Model fillable
+                        //                                TextInput::make('doc_no')->required()->label('Document Number'),
+                        //                                TextInput::make('doc_type')->required()->label('Document Type'),
+                        //                                DatePicker::make('doc_date')->required()->label('Document Date'),
+                        //                            ]),
                     ]),
 
                 Section::make('Lot & Expiry')
@@ -149,12 +151,12 @@ class ItemLedgerForm
                                 ->disabled()
                                 ->dehydrated(false) // Don't send to DB, Model calculates it
                                 ->numeric()
-                                ->formatStateUsing(fn ($record) => $record ? '$' . number_format($record->cost_after, 4) : '-'),
+                                ->formatStateUsing(fn ($record) => $record ? '$'.number_format($record->cost_after, 4) : '-'),
                         ]),
 
                         Hidden::make('created_by')
                             ->default(auth()->id())
-                            ->dehydrated(true)
+                            ->dehydrated(true),
                     ])
                     ->collapsed()
                     ->visible(fn ($context) => $context === 'edit'), // Only show calculated values on edit
@@ -167,7 +169,7 @@ class ItemLedgerForm
     protected static function fillItemDefaults($itemId, callable $set): void
     {
         if ($itemId) {
-            $item = \App\Models\ItemMaster::find($itemId);
+            $item = Item::find($itemId);
             if ($item) {
                 // Set default cost to item's standard cost if available
                 $set('unit_cost', $item->standard_cost ?? 0);

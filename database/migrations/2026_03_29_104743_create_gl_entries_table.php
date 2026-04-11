@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\SourceType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -25,7 +26,7 @@ return new class extends Migration
             $table->decimal('amount', 15, 2); // Debit - Credit
 
             // Source
-            $table->enum('source_type', array_column(\App\Enums\SourceType::cases(), 'value'))
+            $table->enum('source_type', array_column(SourceType::cases(), 'value'))
                 ->default('CUSTOMER');
 
             $table->string('source_number', 20)->nullable();

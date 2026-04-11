@@ -1,4 +1,5 @@
 <?php
+
 // app/Actions/PO/ApprovePurchaseOrder.php
 
 namespace App\Actions\PO;
@@ -19,7 +20,7 @@ class ApprovePurchaseOrderAction
     ): PurchaseOrderApprovedData {
         return DB::transaction(function () use ($order, $data, $userId) {
             // Validate can approve
-            if (!$order->status->canEdit()) {
+            if (! $order->status->canEdit()) {
                 throw new \InvalidArgumentException(
                     "Cannot approve order with status: {$order->status->label()}"
                 );

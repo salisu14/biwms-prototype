@@ -6,7 +6,7 @@ use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasIcon;
 use Filament\Support\Contracts\HasLabel;
 
-enum QuoteStatus: string implements HasLabel, HasColor, HasIcon
+enum QuoteStatus: string implements HasColor, HasIcon, HasLabel
 {
     case DRAFT = 'draft';
     case SENT = 'sent';

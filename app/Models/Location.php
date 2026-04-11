@@ -1,10 +1,12 @@
 <?php
+
 // app/Models/Location.php
 
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Location extends Model
@@ -12,8 +14,11 @@ class Location extends Model
     use HasFactory;
 
     protected $fillable = [
+        'parent_id',
         'code',
         'name',
+        'location_type',
+        'temperature_zone',
         'address',
         'directed_put_away_and_pick',
         'bin_mandatory',
@@ -27,7 +32,9 @@ class Location extends Model
         'inbound_production_bin_code',
         'outbound_production_bin_code',
         'adjustment_bin_code',
+        'is_active',
         'blocked',
+        'sort_order',
     ];
 
     protected $casts = [
@@ -37,10 +44,22 @@ class Location extends Model
         'require_shipment' => 'boolean',
         'require_put_away' => 'boolean',
         'require_pick' => 'boolean',
+        'is_active' => 'boolean',
         'blocked' => 'boolean',
+        'sort_order' => 'integer',
     ];
 
     // Relationships
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'parent_id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(Location::class, 'parent_id');
+    }
+
     public function zones(): HasMany
     {
         return $this->hasMany(Zone::class);
@@ -101,7 +120,7 @@ class Location extends Model
     // Scope
     public function scopeActive($query)
     {
-        return $query->where('blocked', false);
+        return $query->where('is_active', true)->where('blocked', false);
     }
 
     public function scopeWithWms($query)

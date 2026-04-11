@@ -49,10 +49,12 @@ class LinesRelationManager extends RelationManager
                                         ->required()
                                         ->live()
                                         ->afterStateUpdated(function ($state, Set $set) {
-                                            if (!$state) return;
+                                            if (! $state) {
+                                                return;
+                                            }
 
                                             $item = Item::find($state);
-                                            $set('item_code', $item->item_number);
+                                            $set('item_code', $item->item_code);
                                             $set('description', $item->description);
                                             $set('unit_price', $item->unit_price);
                                             $set('unit_cost', $item->unit_cost);
@@ -126,7 +128,7 @@ class LinesRelationManager extends RelationManager
                                 ->schema([
                                     Select::make('location_id')
                                         ->relationship('location', 'name')
-                                        ->default(fn($get) => $get('../../location_id')), // Pull from parent order
+                                        ->default(fn ($get) => $get('../../location_id')), // Pull from parent order
                                     TextInput::make('bin_code'),
                                 ])->collapsed(),
                         ])->columnSpan(1),
@@ -175,6 +177,7 @@ class LinesRelationManager extends RelationManager
                 CreateAction::make()
                     ->mutateDataUsing(function (array $data) {
                         $data['line_number'] = rand(1000, 9999); // Logic to increment based on existing lines
+
                         return $data;
                     }),
             ])

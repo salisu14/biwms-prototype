@@ -16,6 +16,7 @@ class ArchivedSalesOrders extends Page
     protected string $view = 'filament.resources.sales-orders.pages.archived-sales-orders';
 
     protected static ?string $title = 'Archived Sales Orders';
+
     protected static ?string $navigationLabel = 'Archived Orders';
 
     protected static string|null|\BackedEnum $navigationIcon = 'heroicon-o-archive-box';
@@ -30,17 +31,17 @@ class ArchivedSalesOrders extends Page
             ->orWhereNotNull('fully_shipped')
             ->latest('updated_at');
     }
-//    protected function getTableQuery(): Builder
-//    {
-//        return parent::getTableQuery()
-//            ->where(function (Builder $query) {
-//                $query->where('status', 'completed')
-//                    ->orWhere('status', 'closed')
-//                    ->orWhere('status', 'cancelled')
-//                    ->orWhereNotNull('completely_shipped'); // BC style
-//            })
-//            ->latest('updated_at');
-//    }
+    //    protected function getTableQuery(): Builder
+    //    {
+    //        return parent::getTableQuery()
+    //            ->where(function (Builder $query) {
+    //                $query->where('status', 'completed')
+    //                    ->orWhere('status', 'closed')
+    //                    ->orWhere('status', 'cancelled')
+    //                    ->orWhereNotNull('completely_shipped'); // BC style
+    //            })
+    //            ->latest('updated_at');
+    //    }
 
     public function table(Table $table): Table
     {

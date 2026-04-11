@@ -5,10 +5,7 @@ namespace App\Data\Sales;
 class SalesInvoiceData
 {
     /**
-     * @param int $customer_id
-     * @param string $invoice_date
-     * @param string|null $due_date
-     * @param array $lines Array of line items (e.g., from Filament Repeater)
+     * @param  array  $lines  Array of line items (e.g., from Filament Repeater)
      */
     public function __construct(
         public int $customer_id,
@@ -19,9 +16,6 @@ class SalesInvoiceData
 
     /**
      * Create a DTO instance from an array (typically from Filament's form $data).
-     *
-     * @param array $data
-     * @return self
      */
     public static function from(array $data): self
     {

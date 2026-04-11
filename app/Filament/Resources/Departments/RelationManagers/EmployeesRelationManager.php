@@ -17,12 +17,13 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class EmployeesRelationManager extends RelationManager
 {
     protected static string $relationship = 'employeeAssignments';
-    
-    public static function getTitle(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): string
+
+    public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return 'Employees';
     }

@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Businesses\Schemas;
 
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class BusinessForm
@@ -10,14 +12,14 @@ class BusinessForm
     {
         return $schema
             ->components([
-                \Filament\Forms\Components\TextInput::make('code')
+                TextInput::make('code')
                     ->required()
                     ->maxLength(20)
                     ->unique(ignoreRecord: true),
-                \Filament\Forms\Components\TextInput::make('name')
+                TextInput::make('name')
                     ->required()
                     ->maxLength(255),
-                \Filament\Forms\Components\Toggle::make('is_active')
+                Toggle::make('is_active')
                     ->default(true)
                     ->required(),
             ]);

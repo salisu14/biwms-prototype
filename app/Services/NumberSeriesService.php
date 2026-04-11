@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -15,16 +14,17 @@ use Illuminate\Support\Facades\Log;
 class NumberSeriesService
 {
     private const CACHE_TTL = 3600; // 1 hour
+
     private bool $manualNumberingAllowed = false;
+
     private bool $warningNoGaps = false;
 
     /**
      * Get next number from series (BC: GetNextNo)
      *
-     * @param string $seriesCode e.g., 'S-SHIP', 'S-ORD', 'S-INV'
-     * @param \DateTimeInterface|null $postingDate
-     * @param bool $modifySeries Whether to actually increment the series
-     * @return string
+     * @param  string  $seriesCode  e.g., 'S-SHIP', 'S-ORD', 'S-INV'
+     * @param  bool  $modifySeries  Whether to actually increment the series
+     *
      * @throws \RuntimeException
      */
     public function getNextNo(
@@ -34,13 +34,13 @@ class NumberSeriesService
     ): string {
         $postingDate = $postingDate ?? now();
 
-        return DB::transaction(function() use ($seriesCode, $postingDate, $modifySeries) {
+        return DB::transaction(function () use ($seriesCode, $postingDate, $modifySeries) {
 
             $series = NumberSeries::where('code', $seriesCode)
                 ->lockForUpdate()
                 ->first();
 
-            if (!$series) {
+            if (! $series) {
                 throw new \RuntimeException("Number Series {$seriesCode} does not exist");
             }
 
@@ -50,7 +50,7 @@ class NumberSeriesService
             // Get appropriate line based on date
             $line = $this->getSeriesLine($series, $postingDate);
 
-            if (!$line) {
+            if (! $line) {
                 throw new \RuntimeException("No open Number Series Line exists for date {$postingDate->format('Y-m-d')}");
             }
 
@@ -61,10 +61,10 @@ class NumberSeriesService
                 $this->incrementSeries($line);
             }
 
-            Log::debug("Number Series generated", [
+            Log::debug('Number Series generated', [
                 'series' => $seriesCode,
                 'number' => $nextNo,
-                'date' => $postingDate
+                'date' => $postingDate,
             ]);
 
             return $nextNo;
@@ -106,15 +106,17 @@ class NumberSeriesService
      */
     public function validateManualNumber(string $seriesCode, string $manualNo): bool
     {
-        if (!$this->manualNumberingAllowed) {
+        if (! $this->manualNumberingAllowed) {
             throw new \RuntimeException("Manual numbering not allowed for series {$seriesCode}");
         }
 
         $series = NumberSeries::where('code', $seriesCode)->first();
-        if (!$series) return false;
+        if (! $series) {
+            return false;
+        }
 
         // Check if number matches pattern
-        if (!$this->matchesSeriesPattern($manualNo, $series)) {
+        if (! $this->matchesSeriesPattern($manualNo, $series)) {
             throw new \RuntimeException("Number {$manualNo} does not match series pattern");
         }
 
@@ -131,7 +133,7 @@ class NumberSeriesService
      */
     public function getLastNoUsed(string $seriesCode): ?string
     {
-        $line = NumberSeriesLine::whereHas('series', fn($q) => $q->where('code', $seriesCode))
+        $line = NumberSeriesLine::whereHas('series', fn ($q) => $q->where('code', $seriesCode))
             ->where('starting_date', '<=', now())
             ->orderBy('starting_date', 'desc')
             ->first();
@@ -164,7 +166,7 @@ class NumberSeriesService
     {
         return NumberSeriesLine::where('number_series_id', $series->id)
             ->where('starting_date', '<=', $date)
-            ->where(function($q) use ($date) {
+            ->where(function ($q) use ($date) {
                 $q->whereNull('ending_date')
                     ->orWhere('ending_date', '>=', $date);
             })
@@ -183,19 +185,20 @@ class NumberSeriesService
         $nextNumber = $lastNo + $increment;
 
         // Pad with zeros
-        $numberStr = str_pad((string)$nextNumber, $line->no_of_digits ?? 5, '0', STR_PAD_LEFT);
+        $numberStr = str_pad((string) $nextNumber, $line->no_of_digits ?? 5, '0', STR_PAD_LEFT);
 
-        return $prefix . $numberStr . $suffix;
+        return $prefix.$numberStr.$suffix;
     }
 
     private function formatNumberFromString(?string $lastNo, NumberSeriesLine $line): string
     {
         $prefix = $line->prefix ?? '';
         $suffix = $line->suffix ?? '';
-        $number = $lastNo ? (int)$lastNo : $this->getStartingNumber($line);
+        $number = $lastNo ? (int) $lastNo : $this->getStartingNumber($line);
 
-        $numberStr = str_pad((string)$number, $line->no_of_digits ?? 5, '0', STR_PAD_LEFT);
-        return $prefix . $numberStr . $suffix;
+        $numberStr = str_pad((string) $number, $line->no_of_digits ?? 5, '0', STR_PAD_LEFT);
+
+        return $prefix.$numberStr.$suffix;
     }
 
     private function incrementSeries(NumberSeriesLine $line): void
@@ -206,29 +209,31 @@ class NumberSeriesService
 
     private function incrementNumber(?string $lastNo, ?NumberSeriesLine $line): string
     {
-        $current = $lastNo ? (int)$lastNo : ($line ? $this->getStartingNumber($line) : 1);
-        return (string)($current + ($line->increment_by ?? 1));
+        $current = $lastNo ? (int) $lastNo : ($line ? $this->getStartingNumber($line) : 1);
+
+        return (string) ($current + ($line->increment_by ?? 1));
     }
 
     private function getStartingNumber(NumberSeriesLine $line): int
     {
-        return $line->starting_no ? (int)$line->starting_no : 1;
+        return $line->starting_no ? (int) $line->starting_no : 1;
     }
 
     private function validateDateInRange(NumberSeries $series, \DateTimeInterface $date): void
     {
         if ($series->starting_date && $date < $series->starting_date) {
-            throw new \RuntimeException("Posting date before series starting date");
+            throw new \RuntimeException('Posting date before series starting date');
         }
         if ($series->ending_date && $date > $series->ending_date) {
-            throw new \RuntimeException("Posting date after series ending date");
+            throw new \RuntimeException('Posting date after series ending date');
         }
     }
 
     private function matchesSeriesPattern(string $number, NumberSeries $series): bool
     {
         // Implement pattern matching based on series setup
-        $pattern = '/^' . preg_quote($series->default_prefix ?? '', '/') . '\d+' . preg_quote($series->default_suffix ?? '', '/') . '$/';
+        $pattern = '/^'.preg_quote($series->default_prefix ?? '', '/').'\d+'.preg_quote($series->default_suffix ?? '', '/').'$/';
+
         return preg_match($pattern, $number);
     }
 

@@ -2,10 +2,10 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Contracts\HasDescription;
+use Filament\Support\Contracts\HasLabel;
 
-enum VatCalculationType: string implements HasLabel, HasDescription
+enum VatCalculationType: string implements HasDescription, HasLabel
 {
     case Normal = 'normal';
     case ReverseCharge = 'reverse_charge';

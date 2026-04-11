@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\SourceDocument;
+use App\Enums\WarehouseReceiptStatus;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -17,7 +19,7 @@ return new class extends Migration
             $table->foreignId('location_id')->constrained('locations');
 
             // Source Document
-            $table->enum('source_document', array_column(\App\Enums\SourceDocument::cases(), 'value'));
+            $table->enum('source_document', array_column(SourceDocument::cases(), 'value'));
 
             $table->unsignedBigInteger('source_document_id');
             $table->string('source_document_number', 20);
@@ -26,7 +28,7 @@ return new class extends Migration
             $table->foreignId('vendor_id')->nullable()->constrained('vendors');
 
             // Status
-            $table->enum('status', array_column(\App\Enums\WarehouseReceiptStatus::cases(), 'value'))
+            $table->enum('status', array_column(WarehouseReceiptStatus::cases(), 'value'))
                 ->default('OPEN');
 
             // Assignment

@@ -2,9 +2,12 @@
 
 namespace App\Filament\Resources\Businesses\Pages;
 
+use App\DTOs\BusinessDTO;
 use App\Filament\Resources\Businesses\BusinessResource;
+use App\Services\OrgEntityService;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class EditBusiness extends EditRecord
 {
@@ -17,9 +20,10 @@ class EditBusiness extends EditRecord
         ];
     }
 
-    protected function handleRecordUpdate(\Illuminate\Database\Eloquent\Model $record, array $data): \Illuminate\Database\Eloquent\Model
+    protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        $dto = \App\DTOs\BusinessDTO::fromArray($data);
-        return app(\App\Services\OrgEntityService::class)->upsertBusiness($dto, $record);
+        $dto = BusinessDTO::fromArray($data);
+
+        return app(OrgEntityService::class)->upsertBusiness($dto, $record);
     }
 }

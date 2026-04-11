@@ -15,6 +15,7 @@ use App\Models\Location;
 use App\Models\UnitOfMeasure;
 use App\Models\VatMaster;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Schema;
 
 class ItemSeeder extends Seeder
 {
@@ -23,10 +24,10 @@ class ItemSeeder extends Seeder
      */
     public function run(): void
     {
-        \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
+        Schema::disableForeignKeyConstraints();
         Item::truncate();
         ItemSku::truncate();
-        \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+        Schema::enableForeignKeyConstraints();
 
         // Ensure we have supporting data
         $mainLocation = Location::first() ?? Location::create(['name' => 'Main Warehouse', 'code' => 'MAIN']);
@@ -49,7 +50,7 @@ class ItemSeeder extends Seeder
 
         $items = [
             [
-                'item_number' => '1000',
+                'item_code' => '1000',
                 'description' => 'High-Performance Laptop Z1',
                 'description_2' => '16GB RAM, 512GB SSD',
                 'general_product_posting_group_id' => $retailGroup->id,
@@ -72,7 +73,7 @@ class ItemSeeder extends Seeder
                 'blocked' => false,
             ],
             [
-                'item_number' => '1100',
+                'item_code' => '1100',
                 'description' => 'Wireless Ergonomic Mouse',
                 'description_2' => 'Bluetooth 5.0, Rechargeable',
                 'general_product_posting_group_id' => $retailGroup->id,
@@ -95,7 +96,7 @@ class ItemSeeder extends Seeder
                 'blocked' => false,
             ],
             [
-                'item_number' => 'SERV-01',
+                'item_code' => 'SERV-01',
                 'description' => 'On-Site Technical Support',
                 'description_2' => 'Hourly rate for hardware repair',
                 'general_product_posting_group_id' => $serviceGroup->id,
@@ -119,7 +120,7 @@ class ItemSeeder extends Seeder
         foreach ($items as $itemData) {
             // Resolve UOM ID
             $itemData['uom_id'] = $uoms[$itemData['base_unit_of_measure']] ?? null;
-            
+
             // Resolve VAT ID
             $itemData['vat_id'] = $vats[$itemData['vat_prod_posting_group']] ?? null;
 
@@ -131,7 +132,7 @@ class ItemSeeder extends Seeder
             ])->first()?->id;
 
             $item = Item::updateOrCreate(
-                ['item_number' => $itemData['item_number']],
+                ['item_code' => $itemData['item_code']],
                 $itemData
             );
 
@@ -141,7 +142,7 @@ class ItemSeeder extends Seeder
                     'item_id' => $item->id,
                     'location_id' => $item->location_id,
                 ], [
-                    'sku_code' => $item->item_number . '-' . $mainLocation->code,
+                    'sku_code' => $item->item_code.'-'.$mainLocation->code,
                     'is_active' => true,
                 ]);
 

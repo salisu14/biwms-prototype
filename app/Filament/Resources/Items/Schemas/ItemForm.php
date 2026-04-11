@@ -2,10 +2,17 @@
 
 namespace App\Filament\Resources\Items\Schemas;
 
+use App\Enums\InventoryMethod;
 use App\Enums\ItemType;
+use App\Enums\PriceCalculationMethod;
+use App\Enums\UomType;
+use App\Models\Category;
+use App\Models\UnitOfMeasure;
+use App\Models\Vendor;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Grid;
@@ -19,151 +26,249 @@ class ItemForm
     {
         return $schema
             ->components([
-                Tabs::make('Item Details')
+                Tabs::make('Item Management')
                     ->tabs([
+                        // --- GENERAL TAB ---
                         Tab::make('General')
-                            ->icon('heroicon-m-information-circle')
+                            ->icon('heroicon-o-information-circle')
                             ->schema([
                                 Grid::make(2)->schema([
-                                    TextInput::make('item_number')
-                                        ->label('Item Number/SKU')
+                                    TextInput::make('item_code')
+                                        ->label('Item Code')
                                         ->required()
-                                        ->unique(ignoreRecord: true),
+                                        ->unique(ignoreRecord: true)
+                                        ->maxLength(20)
+                                        ->placeholder('e.g., ITEM-001')
+                                        ->prefixIcon('heroicon-o-qr-code'),
+
                                     Select::make('item_type')
                                         ->options(ItemType::options())
                                         ->required()
-                                        ->native(false),
+                                        ->default(ItemType::INVENTORY->value)
+                                        ->native(false)
+                                        ->live(),
+
                                     TextInput::make('description')
                                         ->required()
-                                        ->columnSpanFull(),
+                                        ->maxLength(255)
+                                        ->columnSpanFull()
+                                        ->placeholder('Primary item description'),
+
                                     Textarea::make('description_2')
                                         ->label('Extended Description')
+                                        ->placeholder('Additional details, specifications, or notes...')
+                                        ->rows(3)
                                         ->columnSpanFull(),
+                                ]),
+
+                                Grid::make(2)->schema([
+                                    Select::make('inventory_method')
+                                        ->options(InventoryMethod::options())
+                                        ->required()
+                                        ->default(InventoryMethod::FIFO->value)
+                                        ->native(false)
+                                        ->visible(fn ($get) => $get('item_type') !== ItemType::SERVICE->value),
+
+                                    TextInput::make('shelf_life_days')
+                                        ->label('Shelf Life (Days)')
+                                        ->numeric()
+                                        ->integer()
+                                        ->placeholder('Leave blank if non-perishable'),
                                 ]),
                             ]),
 
+                        // --- PRICING & COSTING TAB ---
                         Tab::make('Pricing & Costing')
-                            ->icon('heroicon-m-currency-dollar')
+                            ->icon('heroicon-o-currency-dollar')
                             ->schema([
                                 Grid::make(3)->schema([
                                     TextInput::make('unit_price')
-                                        ->label('Sales Price')
+                                        ->label('Sales Price (Base)')
                                         ->numeric()
                                         ->prefix('$')
-                                        ->required(),
-                                    TextInput::make('unit_cost')
-                                        ->label('Unit Cost')
-                                        ->numeric()
-                                        ->prefix('$')
-                                        ->required(),
-                                    TextInput::make('standard_cost')
-                                        ->numeric()
-                                        ->prefix('$'),
-
-                                    Select::make('inventory_method')
-                                        ->label('Inventory Method')
-                                        ->options(\App\Enums\InventoryMethod::class)
                                         ->required()
-                                        ->native(false),
-                                    TextInput::make('costing_method')
-                                        ->default('AVERAGE')
-                                        ->hidden(), // Deprecated in favor of inventory_method
-                                    TextInput::make('profit_percent')
-                                        ->label('Profit %')
+                                        ->step(0.0001),
+
+                                    TextInput::make('unit_cost')
+                                        ->label('Unit Cost (Avg/LIFO)')
                                         ->numeric()
-                                        ->suffix('%'),
+                                        ->prefix('$')
+                                        ->required()
+                                        ->step(0.0001),
+
+                                    TextInput::make('standard_cost')
+                                        ->label('Standard Cost (Fixed)')
+                                        ->numeric()
+                                        ->prefix('$')
+                                        ->step(0.0001),
+
+                                    TextInput::make('profit_percent')
+                                        ->label('Profit Margin %')
+                                        ->numeric()
+                                        ->suffix('%')
+                                        ->step(0.01),
+
+                                    Select::make('price_calculation_method')
+                                        ->options(PriceCalculationMethod::class)
+                                        ->default(PriceCalculationMethod::STANDARD->value)
+                                        ->native(false),
+
+                                    TextInput::make('default_price_list_code')
+                                        ->label('Price List Ref')
+                                        ->placeholder('Internal price list mapping'),
+                                ]),
+
+                                Toggle::make('allow_negative_price')
+                                    ->label('Allow Negative Pricing')
+                                    ->helperText('Used for promotional or discount items.'),
+                            ]),
+
+                        // --- RELATIONSHIPS TAB (UOM, CATEGORY, VENDOR) ---
+                        Tab::make('Relationships')
+                            ->icon('heroicon-o-link')
+                            ->schema([
+                                Grid::make(1)->schema([
+                                    // Categories
+                                    Repeater::make('categoryAssignments')
+                                        ->relationship('categoryAssignments')
+                                        ->schema([
+                                            Select::make('category_id')
+                                                ->label('Category')
+                                                ->relationship('category', 'category_name')
+                                                ->searchable()
+                                                ->preload()
+                                                ->required(),
+                                            Toggle::make('is_primary')->label('Primary'),
+                                        ])
+                                        ->columns(2)
+                                        ->itemLabel(fn (array $state): ?string => isset($state['category_id']) ? Category::find($state['category_id'])?->category_name : 'New Category'
+                                        )
+                                        ->collapsible()
+                                        ->collapsed(),
+
+                                    // Units of Measure
+                                    Repeater::make('uomAssignments')
+                                        ->relationship('uomAssignments')
+                                        ->schema([
+                                            Select::make('uom_id')
+                                                ->label('UOM')
+                                                ->relationship('uom', 'uom_code')
+                                                ->required(),
+                                            Select::make('uom_type')->options(UomType::options())->required(),
+                                            TextInput::make('conversion_factor')->numeric()->default(1.0)->required(),
+                                            Toggle::make('is_default')->label('Default'),
+                                        ])
+                                        ->columns(4)
+                                        ->itemLabel(fn (array $state): ?string => isset($state['uom_id']) ? UnitOfMeasure::find($state['uom_id'])?->uom_code : 'New UOM'
+                                        )
+                                        ->collapsible()
+                                        ->collapsed(),
+
+                                    // Vendors
+                                    Repeater::make('vendorItems')
+                                        ->relationship('vendorItems')
+                                        ->schema([
+                                            Select::make('vendor_id')
+                                                ->relationship('vendor', 'vendor_name')
+                                                ->required(),
+                                            TextInput::make('vendor_item_code')->label('Vendor Part #')->required(),
+                                            TextInput::make('unit_cost')->numeric()->prefix('$')->required(),
+                                            Toggle::make('is_preferred')->label('Preferred'),
+                                        ])
+                                        ->columns(4)
+                                        ->itemLabel(fn (array $state): ?string => isset($state['vendor_id']) ? Vendor::find($state['vendor_id'])?->vendor_name : 'New Vendor'
+                                        )
+                                        ->collapsible()
+                                        ->collapsed(),
                                 ]),
                             ]),
 
+                        // --- INVENTORY & LOGISTICS TAB ---
                         Tab::make('Inventory & Logistics')
-                            ->icon('heroicon-m-cube')
+                            ->icon('heroicon-o-cube')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    Select::make('uom_id')
-                                        ->label('Base Unit of Measure')
-                                        ->relationship('uom', 'uom_code')
-                                        ->searchable()
-                                        ->preload()
-                                        ->required(),
-                                    
-                                    Select::make('sku_id')
-                                        ->label('Default SKU/Variant')
-                                        ->relationship('sku', 'sku_code')
-                                        ->searchable()
-                                        ->placeholder('Auto-generated if blank'),
+                                    TextInput::make('inventory')
+                                        ->label('Current Inventory')
+                                        ->numeric()
+                                        ->disabledOn('edit')
+                                        ->helperText('Manual entry only on creation.'),
+
+                                    TextInput::make('reorder_point')
+                                        ->numeric()
+                                        ->suffix('min'),
+
+                                    TextInput::make('reorder_quantity')
+                                        ->numeric()
+                                        ->suffix('eoq'),
 
                                     Select::make('location_id')
                                         ->label('Default Location')
                                         ->relationship('location', 'name')
-                                        ->searchable(),
+                                        ->searchable()
+                                        ->preload(),
 
-                                    TextInput::make('inventory')
-                                        ->label('Initial Inventory')
-                                        ->numeric()
-                                        ->default(0)
-                                        ->disabledOn('edit'),
-                                    
-                                    TextInput::make('reorder_point')
-                                        ->numeric(),
-                                    TextInput::make('reorder_quantity')
-                                        ->numeric(),
                                     TextInput::make('bin_code')
-                                        ->label('Default Bin'),
+                                        ->label('Default Bin')
+                                        ->placeholder('Pick/Put-away default'),
+
+                                    TextInput::make('item_tracking_code')
+                                        ->label('Tracking Code')
+                                        ->placeholder('Serial/Lot rule mapping'),
                                 ]),
-                                Fieldset::make('Physical Attributes')
+
+                                Fieldset::make('Physical Constraints')
                                     ->schema([
-                                        TextInput::make('weight')->numeric()->suffix('kg'),
-                                        TextInput::make('volume')->numeric()->suffix('m³'),
-                                        TextInput::make('shelf_no'),
+                                        TextInput::make('weight')->numeric()->suffix('kg')->step(0.0001),
+                                        TextInput::make('volume')->numeric()->suffix('m³')->step(0.0001),
+                                        TextInput::make('shelf_no')->label('Shelf Reference'),
                                     ])->columns(3),
                             ]),
 
+                        // --- POSTING & VAT TAB ---
                         Tab::make('Posting & VAT')
-                            ->icon('heroicon-m-arrows-right-left')
+                            ->icon('heroicon-o-arrows-right-left')
                             ->schema([
                                 Grid::make(2)->schema([
                                     Select::make('general_product_posting_group_id')
                                         ->label('Gen. Prod. Posting Group')
                                         ->relationship('generalProductPostingGroup', 'id')
                                         ->required(),
-                                    
+
                                     Select::make('inventory_posting_group_id')
                                         ->label('Inventory Posting Group')
                                         ->relationship('inventoryPostingGroup', 'id')
                                         ->required(),
 
                                     Select::make('vat_id')
-                                        ->label('VAT Configuration')
+                                        ->label('VAT Code')
                                         ->relationship('vat', 'code')
                                         ->searchable()
                                         ->preload(),
 
-                                    Select::make('general_posting_setup_id')
-                                        ->label('Default Gen. Posting Setup')
-                                        ->relationship('generalPostingSetup', 'id')
-                                        ->placeholder('System Resolved'),
-                                    
-                                    Select::make('inventory_posting_setup_id')
-                                        ->label('Default Inv. Posting Setup')
-                                        ->relationship('inventoryPostingSetup', 'id')
-                                        ->placeholder('Location Resolved'),
+                                    TextInput::make('vat_prod_posting_group')
+                                        ->label('VAT Prod. Posting Group')
+                                        ->placeholder('VAT categorization for posting'),
                                 ]),
                             ]),
 
-                        Tab::make('Settings')
-                            ->icon('heroicon-m-cog-6-tooth')
+                        // --- STATUS TAB ---
+                        Tab::make('Status')
+                            ->icon('heroicon-o-cog-6-tooth')
                             ->schema([
                                 Grid::make(2)->schema([
-                                    Toggle::make('blocked')
-                                        ->label('Blocked (Global)')
-                                        ->helperText('Prevents all transactions for this item.'),
-                                    Toggle::make('sales_blocked')
-                                        ->label('Blocked for Sales'),
-                                    Toggle::make('purchasing_blocked')
-                                        ->label('Blocked for Purchasing'),
                                     Toggle::make('is_active')
+                                        ->label('Active Status')
                                         ->default(true)
-                                        ->label('Active Status'),
+                                        ->onColor('success')
+                                        ->offColor('danger'),
+
+                                    Toggle::make('blocked')
+                                        ->label('Global Block')
+                                        ->helperText('Prevents all transactions.'),
+
+                                    Toggle::make('sales_blocked')->label('Sales Blocked'),
+                                    Toggle::make('purchasing_blocked')->label('Purchasing Blocked'),
                                 ]),
                             ]),
                     ])->columnSpanFull(),

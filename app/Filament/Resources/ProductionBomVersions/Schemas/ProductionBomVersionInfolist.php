@@ -60,15 +60,14 @@ class ProductionBomVersionInfolist
                                 ->placeholder('System'),
                         ]),
 
-
-                ])
+                ]),
             ]);
     }
 
-    #Automatically utilizes the `HasLabel`, `HasColor`, and `HasIcon` interfaces defined in the enum above. Because the `status` field in your model is cast to this Enum, Filament's `badge()` method will:
-    #1.  Display the user-friendly label (e.g., "Certified (Active)").
-    #2.  Apply the semantic color (e.g., Green for Certified).
-    #3.  Display the associated icon (e.g., Check Badge).
+    // Automatically utilizes the `HasLabel`, `HasColor`, and `HasIcon` interfaces defined in the enum above. Because the `status` field in your model is cast to this Enum, Filament's `badge()` method will:
+    // 1.  Display the user-friendly label (e.g., "Certified (Active)").
+    // 2.  Apply the semantic color (e.g., Green for Certified).
+    // 3.  Display the associated icon (e.g., Check Badge).
 
-    #This provides a high-end visual experience in the Infolist without needing to hardcode colors or icons inside the schema class itself.#
+    // This provides a high-end visual experience in the Infolist without needing to hardcode colors or icons inside the schema class itself.#
 }

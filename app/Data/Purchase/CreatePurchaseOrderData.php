@@ -5,8 +5,9 @@ namespace App\Data\Purchase;
 use App\Data\PO\PurchaseOrderLineData;
 use App\Enums\PurchaseOrderType;
 use Carbon\Carbon;
+use Spatie\LaravelData\Attributes\Validation\Nullable;
+use Spatie\LaravelData\Attributes\Validation\Required;
 use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Attributes\Validation\{Required, Nullable};
 
 class CreatePurchaseOrderData extends Data
 {
@@ -17,8 +18,8 @@ class CreatePurchaseOrderData extends Data
         #[Required]
         public int $vendorId,
 
-//        #[Nullable]
-//        public ?string $vendorName,
+        //        #[Nullable]
+        //        public ?string $vendorName,
 
         #[Required]
         public Carbon $orderDate,

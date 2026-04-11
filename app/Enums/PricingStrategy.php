@@ -13,7 +13,7 @@ enum PricingStrategy: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::STANDARD => 'Standard/Fixed Price',
             self::TIERED => 'Tiered (Quantity Breaks)',
             self::DYNAMIC => 'Dynamic/Formula Based',
@@ -25,7 +25,7 @@ enum PricingStrategy: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::STANDARD => 'bg-slate-100 text-slate-800',
             self::TIERED => 'bg-indigo-100 text-indigo-800',
             self::DYNAMIC => 'bg-purple-100 text-purple-800',
@@ -36,7 +36,7 @@ enum PricingStrategy: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::STANDARD => 'heroicon-o-currency-dollar',
             self::TIERED => 'heroicon-o-layers',
             self::DYNAMIC => 'heroicon-o-variable',
@@ -48,7 +48,7 @@ enum PricingStrategy: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::STANDARD => 'Uses a static, fixed unit price.',
             self::TIERED => 'Price changes based on the volume or quantity ordered.',
             self::DYNAMIC => 'Calculated in real-time based on external variables or formulas.',

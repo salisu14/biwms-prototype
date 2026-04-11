@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\Customers\Schemas;
 
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -43,7 +43,7 @@ class CustomerForm
                             ->schema([
                                 Toggle::make('blocked')
                                     ->live(),
-//                                    ->color('danger'),
+                                //                                    ->color('danger'),
 
                                 Select::make('blocked_reason')
                                     ->options([

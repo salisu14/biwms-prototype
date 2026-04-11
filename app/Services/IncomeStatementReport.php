@@ -31,13 +31,13 @@ class IncomeStatementReport
             'company_name' => config('app.company_name'),
             'period' => $this->period,
             'printed_at' => now()->format('Y-m-d H:i'),
-            'lines' => $this->rows->map(fn($row) => [
+            'lines' => $this->rows->map(fn ($row) => [
                 'account_no' => $row['account_no'],
-                'description' => str_repeat('  ', $row['indentation']) . $row['account_name'],
+                'description' => str_repeat('  ', $row['indentation']).$row['account_name'],
                 'amount' => number_format($row['net_change'], 2),
                 'compare_amount' => isset($row['compare_amount']) ? number_format($row['compare_amount'], 2) : null,
                 'variance' => isset($row['variance']) ? number_format($row['variance'], 2) : null,
-                'variance_percent' => isset($row['variance_percent']) ? number_format($row['variance_percent'], 1) . '%' : null,
+                'variance_percent' => isset($row['variance_percent']) ? number_format($row['variance_percent'], 1).'%' : null,
                 'bold' => $row['bold'],
             ]),
             'totals' => [
@@ -47,7 +47,7 @@ class IncomeStatementReport
                 'operating_expenses' => number_format($this->summary['operating_expenses'], 2),
                 'operating_income' => number_format($this->summary['operating_income'], 2),
                 'net_income' => number_format($this->summary['net_income'], 2),
-            ]
+            ],
         ];
     }
 }

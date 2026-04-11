@@ -10,11 +10,11 @@ class PriceValidationService
     {
         $query = PriceList::where('item_id', $data['item_id']);
 
-        if (!empty($data['customer_id'])) {
+        if (! empty($data['customer_id'])) {
             $query->where('customer_id', $data['customer_id']);
         }
 
-        if (!empty($data['customer_group_id'])) {
+        if (! empty($data['customer_group_id'])) {
             $query->where('customer_group_id', $data['customer_group_id']);
         }
 

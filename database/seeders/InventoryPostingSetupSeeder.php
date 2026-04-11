@@ -2,11 +2,11 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\InventoryPostingSetup;
 use App\Models\ChartOfAccount;
-use App\Models\Location;
 use App\Models\InventoryPostingGroup;
+use App\Models\InventoryPostingSetup;
+use App\Models\Location;
+use Illuminate\Database\Seeder;
 
 class InventoryPostingSetupSeeder extends Seeder
 {
@@ -18,8 +18,9 @@ class InventoryPostingSetupSeeder extends Seeder
         $finishedGroup = InventoryPostingGroup::where('code', 'FINISHED')->first();
         $inTransitGroup = InventoryPostingGroup::where('code', 'IN-TRANSIT')->first();
 
-        if (!$rawGroup || !$wipGroup || !$finishedGroup) {
+        if (! $rawGroup || ! $wipGroup || ! $finishedGroup) {
             $this->command->error('Required InventoryPostingGroups not found. Run InventoryPostingGroupSeeder first.');
+
             return;
         }
 
@@ -28,8 +29,9 @@ class InventoryPostingSetupSeeder extends Seeder
         $wipAccount = ChartOfAccount::where('account_number', '21310')->first();
         $finishedAccount = ChartOfAccount::where('account_number', '21410')->first();
 
-        if (!$rawMatAccount || !$wipAccount || !$finishedAccount) {
+        if (! $rawMatAccount || ! $wipAccount || ! $finishedAccount) {
             $this->command->error('Required ChartOfAccounts not found. Run ChartOfAccountSeeder first.');
+
             return;
         }
 
@@ -82,8 +84,9 @@ class InventoryPostingSetupSeeder extends Seeder
         }
 
         foreach ($setups as $setup) {
-            if (!$setup['location']) {
-                $this->command->warn("Skipping setup: location not found");
+            if (! $setup['location']) {
+                $this->command->warn('Skipping setup: location not found');
+
                 continue;
             }
 
@@ -115,6 +118,6 @@ class InventoryPostingSetupSeeder extends Seeder
             ]
         );
 
-        $this->command->info("Created default setup for RAW");
+        $this->command->info('Created default setup for RAW');
     }
 }

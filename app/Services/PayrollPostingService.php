@@ -2,13 +2,16 @@
 
 namespace App\Services;
 
-use App\Enums\PayrollStatus;
-use App\Models\PayrollDocument;
-use App\Models\GlEntry;
-use App\Models\DefaultDimension;
 use App\Enums\PayCodeType;
-use Illuminate\Support\Facades\DB;
+use App\Enums\PayrollStatus;
+use App\Enums\SourceType;
+use App\Models\Employee;
+use App\Models\GlEntry;
+use App\Models\PayrollDocument;
+use App\Models\User;
 use Exception;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class PayrollPostingService
 {
@@ -66,7 +69,7 @@ class PayrollPostingService
         });
     }
 
-    private function createGlEntry(int $accountId, float $amount, $postingDate, string $docNo, string $desc, int $transactionNumber, \App\Models\Employee $employee): void
+    private function createGlEntry(int $accountId, float $amount, $postingDate, string $docNo, string $desc, int $transactionNumber, Employee $employee): void
     {
         $debit = $amount > 0 ? $amount : 0;
         $credit = $amount < 0 ? abs($amount) : 0;
@@ -74,7 +77,7 @@ class PayrollPostingService
         GlEntry::create([
             'chart_of_account_id' => $accountId,
             'transaction_number' => $transactionNumber,
-            'source_type' => \App\Enums\SourceType::EMPLOYEE,
+            'source_type' => SourceType::EMPLOYEE,
             'source_number' => $employee->employee_number,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
@@ -84,7 +87,7 @@ class PayrollPostingService
             'amount' => $amount,
             'debit_amount' => $debit,
             'credit_amount' => $credit,
-            'user_id' => \Illuminate\Support\Facades\Auth::id() ?? \App\Models\User::first()->id ?? 1,
+            'user_id' => Auth::id() ?? User::first()->id ?? 1,
         ]);
     }
 }

@@ -42,7 +42,7 @@ class RoutingLinesRelationManager extends RelationManager
                         ->columnSpan(2),
 
                     Select::make('type') // Assuming RoutingLine has a type
-                    ->label('Type')
+                        ->label('Type')
                         ->options([
                             'MACHINE' => 'Machine Center',
                             'MANUAL' => 'Manual',
@@ -53,7 +53,7 @@ class RoutingLinesRelationManager extends RelationManager
                     Toggle::make('blocking')
                         ->label('Blocking')
                         ->default(false),
-            ]),
+                ]),
 
                 Section::make('Times & Costs')
                     ->description('Setup and run times for this operation.')

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PayCodes\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
 class PayCodesTable
@@ -13,14 +14,14 @@ class PayCodesTable
     {
         return $table
             ->columns([
-                \Filament\Tables\Columns\TextColumn::make('code')
+                TextColumn::make('code')
                     ->searchable()
                     ->sortable(),
-                \Filament\Tables\Columns\TextColumn::make('name')
+                TextColumn::make('name')
                     ->searchable(),
-                \Filament\Tables\Columns\TextColumn::make('type')
+                TextColumn::make('type')
                     ->badge(),
-                \Filament\Tables\Columns\TextColumn::make('glAccount.name')
+                TextColumn::make('glAccount.name')
                     ->label('GL Account'),
             ])
             ->filters([

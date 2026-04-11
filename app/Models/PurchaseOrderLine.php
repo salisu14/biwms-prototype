@@ -75,7 +75,7 @@ class PurchaseOrderLine extends Model
                 $item = Item::find($line->item_id);
                 if ($item) {
                     $line->general_product_posting_group_id = $item->general_product_posting_group_id;
-                    $line->item_code = $item->item_number;
+                    $line->item_code = $item->item_code;
                 }
             }
         });

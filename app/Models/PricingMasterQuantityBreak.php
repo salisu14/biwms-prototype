@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PricingMasterQuantityBreak.php
 
 namespace App\Models;
@@ -48,13 +49,13 @@ class PricingMasterQuantityBreak extends Model
         $max = $this->maximum_quantity ? number_format($this->maximum_quantity) : '+';
 
         if ($this->unit_price !== null) {
-            return number_format($this->minimum_quantity) . ' - ' . $max . ' @ $' . number_format($this->unit_price, 2);
+            return number_format($this->minimum_quantity).' - '.$max.' @ $'.number_format($this->unit_price, 2);
         }
 
         if ($this->discount_percent !== null) {
-            return number_format($this->minimum_quantity) . ' - ' . $max . ' @ ' . $this->discount_percent . '% off';
+            return number_format($this->minimum_quantity).' - '.$max.' @ '.$this->discount_percent.'% off';
         }
 
-        return number_format($this->minimum_quantity) . ' - ' . $max;
+        return number_format($this->minimum_quantity).' - '.$max;
     }
 }

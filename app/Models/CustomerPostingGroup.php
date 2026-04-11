@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/CustomerPostingGroup.php
 
 namespace App\Models;

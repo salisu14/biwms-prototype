@@ -15,7 +15,7 @@ class PriceList extends Model
         'price',
         'currency',
         'starting_date',
-        'ending_date'
+        'ending_date',
     ];
 
     protected $casts = [

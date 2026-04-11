@@ -1,4 +1,5 @@
 <?php
+
 // app/Traits/HasEnums.php
 
 namespace App\Traits;
@@ -10,7 +11,9 @@ trait HasEnums
      */
     public function serializeEnum($enumClass, $value): ?array
     {
-        if (!$value) return null;
+        if (! $value) {
+            return null;
+        }
 
         $enum = $enumClass::tryFrom($value);
 

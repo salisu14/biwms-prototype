@@ -21,7 +21,7 @@ class ItemInfolist
                     ->schema([
                         Grid::make(3)->schema([
                             Group::make([
-                                TextEntry::make('item_number')
+                                TextEntry::make('item_code')
                                     ->label('SKU / Number')
                                     ->weight('bold')
                                     ->copyable(),

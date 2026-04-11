@@ -13,7 +13,7 @@ enum DimensionCombinationRestriction: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::NoLimitation => 'No Limitation',
             self::Limited => 'Limited (Check Specific Values)',
             self::Blocked => 'Blocked (Cannot Combine)',

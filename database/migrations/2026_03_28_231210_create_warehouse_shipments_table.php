@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\ShipmentStatus;
+use App\Enums\SourceDocument;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -17,7 +19,7 @@ return new class extends Migration
             $table->foreignId('location_id')->constrained('locations');
 
             // Source Document
-            $table->enum('source_document', array_column(\App\Enums\SourceDocument::cases(), 'value'));
+            $table->enum('source_document', array_column(SourceDocument::cases(), 'value'));
 
             $table->unsignedBigInteger('source_document_id');
             $table->string('source_document_number', 20);
@@ -32,8 +34,8 @@ return new class extends Migration
 
             // Status
             // Source Document
-            $table->enum('status', array_column(\App\Enums\ShipmentStatus::cases(), 'value'))
-            ->default('OPEN');
+            $table->enum('status', array_column(ShipmentStatus::cases(), 'value'))
+                ->default('OPEN');
 
             // Assignment
             $table->foreignId('assigned_user_id')->nullable();

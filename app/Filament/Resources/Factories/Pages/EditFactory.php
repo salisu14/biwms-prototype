@@ -2,9 +2,12 @@
 
 namespace App\Filament\Resources\Factories\Pages;
 
+use App\DTOs\FactoryDTO;
 use App\Filament\Resources\Factories\FactoryResource;
+use App\Services\OrgEntityService;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class EditFactory extends EditRecord
 {
@@ -17,9 +20,10 @@ class EditFactory extends EditRecord
         ];
     }
 
-    protected function handleRecordUpdate(\Illuminate\Database\Eloquent\Model $record, array $data): \Illuminate\Database\Eloquent\Model
+    protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        $dto = \App\DTOs\FactoryDTO::fromArray($data);
-        return app(\App\Services\OrgEntityService::class)->upsertFactory($dto, $record);
+        $dto = FactoryDTO::fromArray($data);
+
+        return app(OrgEntityService::class)->upsertFactory($dto, $record);
     }
 }

@@ -1,4 +1,5 @@
 <?php
+
 // database/seeders/UnitOfMeasureSeeder.php
 
 namespace Database\Seeders;
@@ -258,8 +259,8 @@ class UnitOfMeasureSeeder extends Seeder
         }
 
         $this->command->info('Unit of Measures seeded successfully!');
-        $this->command->info('Total: ' . count($uoms) . ' UOMs');
-        $this->command->info('Base UOMs: ' . collect($uoms)->where('is_base_uom', true)->count());
-        $this->command->info('Derived UOMs: ' . collect($uoms)->where('is_base_uom', false)->count());
+        $this->command->info('Total: '.count($uoms).' UOMs');
+        $this->command->info('Base UOMs: '.collect($uoms)->where('is_base_uom', true)->count());
+        $this->command->info('Derived UOMs: '.collect($uoms)->where('is_base_uom', false)->count());
     }
 }

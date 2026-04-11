@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
@@ -33,14 +34,13 @@ return new class extends Migration {
                 ->nullOnDelete();
             $table->timestamp('approved_at')->nullable();
 
-
             // Dates
             $table->date('invoice_date');
             $table->date('due_date')->nullable();
 
-//            // Dimensions
-//            $table->foreignId('dimension_1_id')->nullable()->constrained('dimensions');
-//            $table->foreignId('dimension_2_id')->nullable()->constrained('dimensions');
+            //            // Dimensions
+            //            $table->foreignId('dimension_1_id')->nullable()->constrained('dimensions');
+            //            $table->foreignId('dimension_2_id')->nullable()->constrained('dimensions');
 
             $table->timestamps();
         });

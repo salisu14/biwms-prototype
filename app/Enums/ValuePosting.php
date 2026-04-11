@@ -15,7 +15,7 @@ enum ValuePosting: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::None => 'No Requirement',
             self::CodeMandatory => 'Code Mandatory', // Any value allowed, but must exist
             self::SameCode => 'Same Code',           // Must be this specific value

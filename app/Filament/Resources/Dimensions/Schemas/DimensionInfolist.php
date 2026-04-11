@@ -52,8 +52,13 @@ class DimensionInfolist
                                 TextEntry::make('global_dimension_no')
                                     ->label('Priority')
                                     ->formatStateUsing(function ($state) {
-                                        if ($state == 1) return 'Global Dimension 1';
-                                        if ($state == 2) return 'Global Dimension 2';
+                                        if ($state == 1) {
+                                            return 'Global Dimension 1';
+                                        }
+                                        if ($state == 2) {
+                                            return 'Global Dimension 2';
+                                        }
+
                                         return 'Shortcut Dimension';
                                     })
                                     ->badge()

@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/DocumentStatus.php
 
 namespace App\Enums;
@@ -12,7 +13,7 @@ enum DocumentStatus: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'Open',
             self::POSTED => 'Posted',
             self::CANCELLED => 'Cancelled',
@@ -22,7 +23,7 @@ enum DocumentStatus: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'bg-blue-100 text-blue-800 border-blue-200',
             self::POSTED => 'bg-green-100 text-green-800 border-green-200',
             self::CANCELLED => 'bg-red-100 text-red-800 border-red-200',
@@ -32,7 +33,7 @@ enum DocumentStatus: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'folder-open',
             self::POSTED => 'check-circle',
             self::CANCELLED => 'times-circle',
@@ -61,7 +62,7 @@ enum DocumentStatus: string
      */
     public function allowedTransitions(): array
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => [self::POSTED, self::CANCELLED, self::PENDING_APPROVAL],
             self::PENDING_APPROVAL => [self::OPEN, self::POSTED, self::CANCELLED],
             self::POSTED => [self::CANCELLED], // Reversal

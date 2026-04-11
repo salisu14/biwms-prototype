@@ -13,8 +13,8 @@ class CreateWarehouseReceiptAction
     {
         $order = PurchaseOrder::with('lines')->findOrFail($data->purchaseOrderId);
 
-        if (!$order->can_receive) {
-            throw new \Exception("Purchase Order cannot be received.");
+        if (! $order->can_receive) {
+            throw new \Exception('Purchase Order cannot be received.');
         }
 
         return DB::transaction(function () use ($order, $data) {

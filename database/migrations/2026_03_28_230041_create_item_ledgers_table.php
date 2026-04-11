@@ -42,7 +42,7 @@ return new class extends Migration
                 'ADJUSTMENT_POS',   // Positive inventory adjustment
                 'ADJUSTMENT_NEG',   // Negative inventory adjustment
                 'SCRAP',            // Scrap/waste
-                'PRODUCTION_OUTPUT' // Finished goods from production
+                'PRODUCTION_OUTPUT', // Finished goods from production
             ]);
 
             $table->decimal('quantity', 18, 4);

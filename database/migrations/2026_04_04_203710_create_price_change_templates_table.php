@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('name');
             $table->enum('adjustment_type', ['increase', 'decrease', 'fixed']);
             $table->decimal('value', 10, 2);
-            $table->enum('status', [ 'draft', 'approved', 'applied'])->default('draft');
+            $table->enum('status', ['draft', 'approved', 'applied'])->default('draft');
             $table->timestamp('effective_from')->nullable();
             $table->timestamp('effective_to')->nullable();
             $table->enum('base', ['cost', 'price']);

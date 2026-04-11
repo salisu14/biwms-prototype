@@ -71,7 +71,7 @@ class Department extends Model
             if ($department->parent_department_id) {
                 $parent = static::find($department->parent_department_id);
                 $department->level = $parent->level + 1;
-                $department->department_path = $parent->department_path . '|' . $department->department_code;
+                $department->department_path = $parent->department_path.'|'.$department->department_code;
             } else {
                 $department->department_path = $department->department_code;
             }
@@ -79,15 +79,15 @@ class Department extends Model
 
         static::created(function ($department) {
             // Auto-create dimension value if not linked
-            if (!$department->dimension_value_id) {
-                $dimension = \App\Models\Dimension::where('code', 'DEPARTMENT')->first();
+            if (! $department->dimension_value_id) {
+                $dimension = Dimension::where('code', 'DEPARTMENT')->first();
                 if ($dimension) {
-                    $dimValue = \App\Models\DimensionValue::create([
+                    $dimValue = DimensionValue::create([
                         'dimension_id' => $dimension->id,
                         'code' => $department->department_code,
                         'name' => $department->name,
                         'dimension_value_type' => 'standard',
-                        'blocked' => !$department->status->canPost(),
+                        'blocked' => ! $department->status->canPost(),
                     ]);
                     $department->updateQuietly(['dimension_value_id' => $dimValue->id]);
                 }
@@ -99,7 +99,7 @@ class Department extends Model
             if ($department->dimension_value_id && $department->isDirty(['name', 'status'])) {
                 $department->dimensionValue?->update([
                     'name' => $department->name,
-                    'blocked' => !$department->status->canPost(),
+                    'blocked' => ! $department->status->canPost(),
                 ]);
             }
         });
@@ -151,10 +151,10 @@ class Department extends Model
         return $this->belongsTo(DimensionValue::class);
     }
 
-//    public function company(): BelongsTo
-//    {
-//        return $this->belongsTo(Company::class);
-//    }
+    //    public function company(): BelongsTo
+    //    {
+    //        return $this->belongsTo(Company::class);
+    //    }
 
     public function blockedByUser(): BelongsTo
     {
@@ -193,14 +193,16 @@ class Department extends Model
         if ($this->annual_budget === null) {
             return null;
         }
+
         return $this->annual_budget - $this->budget_utilized;
     }
 
     public function getBudgetUtilizationPercentAttribute(): float
     {
-        if (!$this->annual_budget) {
+        if (! $this->annual_budget) {
             return 0;
         }
+
         return min(100, ($this->budget_utilized / $this->annual_budget) * 100);
     }
 
@@ -228,7 +230,7 @@ class Department extends Model
             'status' => DepartmentStatus::INACTIVE,
             'blocked_at' => now(),
             'blocked_by' => auth()->id(),
-            'notes' => $reason ? $this->notes . "\n[Blocked: {$reason}]" : $this->notes,
+            'notes' => $reason ? $this->notes."\n[Blocked: {$reason}]" : $this->notes,
         ]);
     }
 

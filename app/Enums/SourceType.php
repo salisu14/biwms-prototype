@@ -14,7 +14,7 @@ enum SourceType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CUSTOMER => 'Customer',
             self::VENDOR => 'Vendor',
             self::ITEM => 'Inventory Item',
@@ -27,7 +27,7 @@ enum SourceType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CUSTOMER => 'bg-blue-100 text-blue-800',
             self::VENDOR => 'bg-amber-100 text-amber-800',
             self::ITEM => 'bg-emerald-100 text-emerald-800',
@@ -40,7 +40,7 @@ enum SourceType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CUSTOMER => 'heroicon-o-user-group',
             self::VENDOR => 'heroicon-o-building-storefront',
             self::ITEM => 'heroicon-o-cube',

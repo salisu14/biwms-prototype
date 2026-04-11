@@ -32,7 +32,7 @@ class ProductionBomInfolist
                                 default => 'productivity', // Fallback
                             }),
 
-                        TextEntry::make('item.item_number')
+                        TextEntry::make('item.item_code')
                             ->label('Item')
                             ->badge()
                             ->color('gray')
@@ -42,7 +42,7 @@ class ProductionBomInfolist
                 Section::make('Type & Versioning')
                     ->columns(2)
                     ->schema([
-                        TextEntry::make('item.item_number')
+                        TextEntry::make('item.item_code')
                             ->label('Item Number')
                             ->badge()
                             ->color('primary')
@@ -51,7 +51,7 @@ class ProductionBomInfolist
                         TextEntry::make('type.name')
                             ->label('Type')
                             ->badge(),
-//                            ->color(fn (string $state): string => ProductionBomType::from($state)?->color() ?? 'gray'),
+                        //                            ->color(fn (string $state): string => ProductionBomType::from($state)?->color() ?? 'gray'),
 
                         TextEntry::make('version')
                             ->label('Version Count')
@@ -68,24 +68,24 @@ class ProductionBomInfolist
                             ->placeholder('-'),
 
                         TextEntry::make('item.unit_cost')
-                        ->label('Item Standard Cost')
-                        ->money()
-                        ->placeholder('-'),
-                ]),
+                            ->label('Item Standard Cost')
+                            ->money()
+                            ->placeholder('-'),
+                    ]),
 
                 Section::make('Audit Trail')
                     ->schema([
-                    TextEntry::make('created_at')
-                        ->label('Created At')
-                        ->dateTime()
-                        ->placeholder('-'),
+                        TextEntry::make('created_at')
+                            ->label('Created At')
+                            ->dateTime()
+                            ->placeholder('-'),
 
-                    TextEntry::make('updated_at')
-                        ->label('Last Updated')
-                        ->dateTime()
-                        ->placeholder('-'),
-                ])
-                ->collapsible(),
+                        TextEntry::make('updated_at')
+                            ->label('Last Updated')
+                            ->dateTime()
+                            ->placeholder('-'),
+                    ])
+                    ->collapsible(),
             ]);
     }
 }

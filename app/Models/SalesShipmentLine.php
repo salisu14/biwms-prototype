@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\SalesLineType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-use App\Enums\SalesLineType;
 
 class SalesShipmentLine extends Model
 {
@@ -19,7 +19,7 @@ class SalesShipmentLine extends Model
         'description', 'quantity', 'quantity_base', 'unit_of_measure',
         'unit_price', 'line_discount_pct', 'qty_shipped_not_invoiced',
         'quantity_invoiced', 'order_no', 'order_line_no', 'drop_shipment',
-        'location_code', 'bin_code', 'dimension_set_id', 'serial_no', 'lot_no'
+        'location_code', 'bin_code', 'dimension_set_id', 'serial_no', 'lot_no',
     ];
 
     protected $casts = [
@@ -82,11 +82,13 @@ class SalesShipmentLine extends Model
 
     public function requiresItemTracking(): bool
     {
-        if (!$this->isItem()) return false;
+        if (! $this->isItem()) {
+            return false;
+        }
 
         // Check item tracking setup
         return Item::where('item_no', $this->no)
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->where('item_tracking_code', '!=', null)
                     ->where('item_tracking_code', '!=', '');
             })->exists();

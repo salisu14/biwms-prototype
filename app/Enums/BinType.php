@@ -10,10 +10,24 @@ enum BinType: string
     case PICK = 'PICK';
     case STORAGE = 'STORAGE';
     case QC = 'QC';
+    case RECEIVING = 'receiving';
+    case SHIPPING = 'shipping';
+    case BULK = 'bulk';
+    case QUALITY_CONTROL = 'quality_control';
+    case PRODUCTION_SUPPLY = 'production_supply';
+    case PRODUCTION_OUTPUT = 'production_output';
+    case COOLING = 'cooling';
+    case FREEZING = 'freezing';
+    case HAZARDOUS = 'hazardous';
+
+    public function isProductionRelated(): bool
+    {
+        return in_array($this, [self::PRODUCTION_SUPPLY, self::PRODUCTION_OUTPUT]);
+    }
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVE => 'Receiving Bin',
             self::SHIP => 'Shipping Bin',
             self::PUT_AWAY => 'Put-Away Bin',
@@ -25,7 +39,7 @@ enum BinType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVE => 'bg-emerald-100 text-emerald-800',
             self::SHIP => 'bg-amber-100 text-amber-800',
             self::PUT_AWAY => 'bg-blue-100 text-blue-800',
@@ -37,7 +51,7 @@ enum BinType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVE => 'heroicon-o-arrow-down-on-square',
             self::SHIP => 'heroicon-o-paper-airplane',
             self::PUT_AWAY => 'heroicon-o-inbox-stack',
@@ -49,7 +63,7 @@ enum BinType: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVE => 'Used for initial unloading and counting.',
             self::SHIP => 'Temporary staging for outbound delivery.',
             self::PUT_AWAY => 'Interim bin before moving to main storage.',

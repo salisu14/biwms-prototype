@@ -7,16 +7,19 @@ use App\Filament\Resources\Items\ItemResource;
 use App\Models\Item;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Table;
+
 class ListRawMaterials extends ListRecords
 {
     protected static string $resource = ItemResource::class;
 
     protected static ?string $title = 'Raw Materials';
+
     protected static ?string $navigationLabel = 'Raw Materials';
 
     protected static string|null|\BackedEnum $navigationIcon = 'heroicon-o-cube';
 
     protected static string|null|\UnitEnum $navigationGroup = 'Inventory';
+
     protected static ?int $navigationSort = 1;
 
     public function table(Table $table): Table

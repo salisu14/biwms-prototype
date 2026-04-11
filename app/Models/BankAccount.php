@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/BankAccount.php
 
 namespace App\Models;
@@ -93,18 +94,18 @@ class BankAccount extends Model
             ->sum(DB::raw('debit_amount - credit_amount'));
     }
 
-//    public function updateBalance(float $amount, string $type): void
-//    {
-//        if ($type === 'RECEIPT') {
-//            $this->current_balance += $amount;
-//            $this->available_balance += $amount;
-//        } else {
-//            $this->current_balance -= $amount;
-//            $this->available_balance -= $amount;
-//        }
-//
-//        $this->save();
-//    }
+    //    public function updateBalance(float $amount, string $type): void
+    //    {
+    //        if ($type === 'RECEIPT') {
+    //            $this->current_balance += $amount;
+    //            $this->available_balance += $amount;
+    //        } else {
+    //            $this->current_balance -= $amount;
+    //            $this->available_balance -= $amount;
+    //        }
+    //
+    //        $this->save();
+    //    }
 
     public function getNextCheckNumber(): string
     {

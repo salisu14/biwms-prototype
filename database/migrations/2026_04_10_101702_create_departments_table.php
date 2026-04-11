@@ -44,7 +44,7 @@ return new class extends Migration
 
             // Location (if department is location-specific)
             $table->string('location_code', 10)->nullable();
-//            $table->foreignId('company_id')->nullable()->constrained('companies'); // Multi-company support
+            //            $table->foreignId('company_id')->nullable()->constrained('companies'); // Multi-company support
 
             // Budgeting
             $table->decimal('annual_budget', 18, 4)->nullable();

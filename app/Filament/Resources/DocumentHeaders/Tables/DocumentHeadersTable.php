@@ -2,19 +2,18 @@
 
 namespace App\Filament\Resources\DocumentHeaders\Tables;
 
-use App\Enums\DocumentType;
 use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
-use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 class DocumentHeadersTable
@@ -57,7 +56,7 @@ class DocumentHeadersTable
                     ->label('Total Value')
                     ->money('USD')
                     ->sortable(query: function (Builder $query, string $direction): Builder {
-                        return $query->orderByRaw('(SELECT SUM(quantity * unit_cost) FROM item_ledgers WHERE item_ledgers.doc_id = document_headers.id) ' . $direction);
+                        return $query->orderByRaw('(SELECT SUM(quantity * unit_cost) FROM item_ledgers WHERE item_ledgers.doc_id = document_headers.id) '.$direction);
                     })
                     ->toggleable(),
 

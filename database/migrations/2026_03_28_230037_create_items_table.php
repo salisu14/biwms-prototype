@@ -1,7 +1,9 @@
 <?php
 
 use App\Enums\CostingMethod;
+use App\Enums\InventoryMethod;
 use App\Enums\ItemType;
+use App\Enums\PriceCalculationMethod;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -15,77 +17,70 @@ return new class extends Migration
     {
         Schema::create('items', function (Blueprint $table) {
             $table->id();
-            $table->string('item_number', 20)->unique();
-            $table->string('description');
+            $table->string('item_code', 20)->unique();
+            $table->string('description', 255);
             $table->text('description_2')->nullable();
 
-            // Posting Groups (Critical for P&L)
+            // Item Type & Management
+            $table->enum('item_type', array_column(ItemType::cases(), 'value'))
+                ->default('INVENTORY');
+            $table->enum('inventory_method', array_column(InventoryMethod::cases(), 'value'))
+                ->default('FIFO');
+
+            // Posting Groups
             $table->foreignId('general_product_posting_group_id')
                 ->constrained('general_product_posting_groups');
             $table->foreignId('inventory_posting_group_id')
                 ->constrained('inventory_posting_groups');
             $table->string('vat_prod_posting_group', 20)->nullable();
 
-            // Item Type
-            $table->enum('item_type', array_column(ItemType::cases(), 'value'))
-                ->default('INVENTORY');
+            // Core Foreign Keys (Nullable if linked later)
+            $table->foreignId('uom_id')->nullable()->constrained('unit_of_measures');
+            $table->unsignedBigInteger('sku_id')->nullable()->index(); // Default SKU, FK added in ItemSku migration
+            $table->foreignId('vat_id')->nullable()->constrained('vat_masters');
+            $table->foreignId('general_posting_setup_id')->nullable()->constrained('general_posting_setups');
+            $table->foreignId('inventory_posting_setup_id')->nullable()->constrained('inventory_posting_setups');
 
-            // Costing
+            // Pricing & Costing
             $table->enum('costing_method', array_column(CostingMethod::cases(), 'value'))
                 ->default('AVERAGE');
-
             $table->decimal('unit_cost', 15, 4)->default(0);
-            $table->decimal('standard_cost', 15, 4)->nullable();
+            $table->decimal('standard_cost', 15, 4)->default(0);
             $table->decimal('last_direct_cost', 15, 4)->nullable();
+            $table->decimal('unit_price', 15, 4)->default(0);
+            $table->decimal('profit_percent', 5, 2)->nullable();
 
-            // Base price (fallback if no price list hit)
-            $table->decimal('unit_price', 15, 4)->default(0)->change();
-
-            // Price calculation method
-            $table->enum('price_calculation_method', array_column(\App\Enums\PriceCalculationMethod::cases(), 'value'))
+            // Pricing Calculation
+            $table->enum('price_calculation_method', array_column(PriceCalculationMethod::cases(), 'value'))
                 ->default('STANDARD');
-
-            // Pricing-specific fields
-            $table->decimal('profit_percent', 5, 2)->nullable()->after('unit_price');
-            $table->decimal('last_direct_cost', 15, 4)->nullable()->change();
-
-            // Default price list for this item
             $table->string('default_price_list_code', 20)->nullable();
-
-            // Allow negative pricing (for promotional items)
             $table->boolean('allow_negative_price')->default(false);
 
-            // Pricing
-            $table->decimal('unit_price', 15, 4)->default(0);
-
             // Inventory Control
-            $table->decimal('inventory', 15, 4)->default(0); // Current stock
+            $table->decimal('inventory', 15, 4)->default(0);
             $table->decimal('reorder_point', 15, 4)->nullable();
             $table->decimal('reorder_quantity', 15, 4)->nullable();
 
-            // Default Location/Bin
-            $table->foreignId('location_id')
-                ->nullable()
-                ->constrained('locations');
+            // Default Warehouse Positioning
+            $table->foreignId('location_id')->nullable()->constrained('locations');
             $table->string('bin_code', 20)->nullable();
 
-            // Physical
+            // Physical & WMS Attributes
             $table->string('base_unit_of_measure', 20)->default('PCS');
             $table->decimal('weight', 10, 4)->nullable();
             $table->decimal('volume', 10, 4)->nullable();
-
-            // WMS
             $table->string('shelf_no', 20)->nullable();
             $table->string('item_tracking_code', 20)->nullable();
-
             $table->integer('shelf_life_days')->nullable();
-            $table->boolean('is_active')->default(true);
 
+            // Status & Blocks
+            $table->boolean('is_active')->default(true);
             $table->boolean('blocked')->default(false);
             $table->boolean('sales_blocked')->default(false);
             $table->boolean('purchasing_blocked')->default(false);
 
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

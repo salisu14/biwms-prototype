@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\OrgEntityService;
 use Illuminate\Database\Eloquent\Model;
 
 class Factory extends Model
@@ -20,7 +21,7 @@ class Factory extends Model
     protected static function booted()
     {
         static::deleting(function ($factory) {
-            app(\App\Services\OrgEntityService::class)->deleteFactoryDimension($factory);
+            app(OrgEntityService::class)->deleteFactoryDimension($factory);
         });
     }
 }

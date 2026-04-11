@@ -22,7 +22,7 @@ enum AccountCategory: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CASH => 'Cash & Equivalents',
             self::RECEIVABLE => 'Accounts Receivable',
             self::INVENTORY => 'Inventory',
@@ -43,7 +43,7 @@ enum AccountCategory: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CASH, self::RECEIVABLE, self::INVENTORY, self::FIXED_ASSET => 'bg-green-100 text-green-800',
             self::PAYABLE, self::ACCRUAL => 'bg-red-100 text-red-800',
             self::REVENUE => 'bg-blue-100 text-blue-800',
@@ -54,7 +54,7 @@ enum AccountCategory: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CASH => 'heroicon-o-currency-dollar',
             self::RECEIVABLE => 'heroicon-o-user-plus',
             self::INVENTORY => 'heroicon-o-archive-box',
@@ -75,7 +75,7 @@ enum AccountCategory: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CASH => 'Liquid funds and bank balances',
             self::RECEIVABLE => 'Money owed by customers',
             self::INVENTORY => 'Raw materials and finished goods',

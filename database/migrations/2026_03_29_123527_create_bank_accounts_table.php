@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\BankAccountType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -30,7 +31,7 @@ return new class extends Migration
             $table->string('currency_code', 3)->default('USD');
 
             // Account Type
-            $table->enum('account_type', array_column(\App\Enums\BankAccountType::cases(), 'value'))
+            $table->enum('account_type', array_column(BankAccountType::cases(), 'value'))
                 ->default('CHECKING');
 
             // Controls

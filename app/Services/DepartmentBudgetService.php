@@ -21,6 +21,7 @@ class DepartmentBudgetService
         }
 
         $projectedUtilization = $department->budget_utilized + $amount;
+
         return $projectedUtilization <= $department->annual_budget;
     }
 

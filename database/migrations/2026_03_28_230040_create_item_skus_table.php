@@ -14,10 +14,10 @@ return new class extends Migration
         Schema::create('item_skus', function (Blueprint $table) {
             $table->id();
             $table->foreignId('item_id')
-                ->constrained('item_masters', 'id')
+                ->constrained('items', 'id')
                 ->onDelete('cascade');
             $table->foreignId('location_id')
-                ->constrained('location_masters', 'id')
+                ->constrained('locations', 'id')
                 ->onDelete('cascade');
             $table->string('sku_code', 50)->unique();
             $table->decimal('reorder_point', 18, 4)->default(0);

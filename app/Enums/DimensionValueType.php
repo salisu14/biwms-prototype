@@ -17,7 +17,7 @@ enum DimensionValueType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::Standard => 'Standard',
             self::Heading => 'Heading',
             self::Total => 'Total',

@@ -15,7 +15,7 @@ class DimensionSetTreeNode extends Model
         'parent_dimension_set_id',
         'dimension_value_id',
         'dimension_set_id',
-        'in_use'
+        'in_use',
     ];
 
     protected $casts = [

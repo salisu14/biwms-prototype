@@ -79,7 +79,7 @@ class NumberSeriesLine extends Model
         );
 
         // 4. Stitch parts together: [PREFIX][PADDED_NUMBER][SUFFIX]
-        return ($this->prefix ?? '') . $paddedNumber . ($this->suffix ?? '');
+        return ($this->prefix ?? '').$paddedNumber.($this->suffix ?? '');
     }
 
     /**
@@ -90,7 +90,7 @@ class NumberSeriesLine extends Model
         $nextValue = ($this->last_no_used ?? ($this->starting_no - $this->increment_by)) + $this->increment_by;
 
         return $this->update([
-            'last_no_used' => $nextValue
+            'last_no_used' => $nextValue,
         ]);
     }
 

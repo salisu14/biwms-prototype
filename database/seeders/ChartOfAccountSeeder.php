@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Enums\AccountType;
 use App\Enums\AccountCategory;
+use App\Enums\AccountType;
 use App\Models\ChartOfAccount;
 use Illuminate\Database\Seeder;
 

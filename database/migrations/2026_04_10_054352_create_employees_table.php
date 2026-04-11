@@ -20,12 +20,12 @@ return new class extends Migration
             $table->string('email')->nullable()->unique();
             $table->string('phone')->nullable();
             $table->string('job_title')->nullable();
-            
+
             // Organizational Tracking (Dimensions)
             $table->string('business_code')->nullable()->index();
             $table->string('factory_code')->nullable()->index();
             $table->string('department_code')->nullable()->index();
-            
+
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

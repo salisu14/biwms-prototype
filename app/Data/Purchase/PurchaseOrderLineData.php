@@ -2,9 +2,9 @@
 
 namespace App\Data\Purchase;
 
+use Spatie\LaravelData\Attributes\Validation\Numeric;
+use Spatie\LaravelData\Attributes\Validation\Required;
 use Spatie\LaravelData\Data;
-
-use Spatie\LaravelData\Attributes\Validation\{Required, Numeric};
 
 class PurchaseOrderLineData extends Data
 {

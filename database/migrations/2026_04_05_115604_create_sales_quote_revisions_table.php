@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('sales_quote_revisions', function(Blueprint $table){
+        Schema::create('sales_quote_revisions', function (Blueprint $table) {
             $table->id();
             $table->string('revision_number', 20)->comment('Unique revision number');
             $table->foreignId('sales_quote_id')->constrained()->cascadeOnDelete();

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\CalculationMethod;
+use App\Enums\PayCodeType;
 use Illuminate\Database\Eloquent\Model;
 
 class PayCode extends Model
@@ -16,8 +18,8 @@ class PayCode extends Model
     ];
 
     protected $casts = [
-        'type' => \App\Enums\PayCodeType::class,
-        'calculation_method' => \App\Enums\CalculationMethod::class,
+        'type' => PayCodeType::class,
+        'calculation_method' => CalculationMethod::class,
         'default_amount' => 'decimal:4',
     ];
 

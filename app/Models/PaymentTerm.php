@@ -92,7 +92,7 @@ class PaymentTerm extends Model
 
     public function canUse(): bool
     {
-        return $this->is_active && !$this->blocked;
+        return $this->is_active && ! $this->blocked;
     }
 
     /**
@@ -100,7 +100,7 @@ class PaymentTerm extends Model
      */
     public function calculateDueDate(\DateTime $postingDate): \DateTime
     {
-        return match($this->calculation_type) {
+        return match ($this->calculation_type) {
             PaymentTermsCalculation::NET => (clone $postingDate)->modify("+{$this->due_date_net_days} days"),
 
             PaymentTermsCalculation::END_OF_MONTH => (clone $postingDate)
@@ -112,12 +112,12 @@ class PaymentTerm extends Model
                 ->modify("+{$this->due_date_net_days} days"),
 
             PaymentTermsCalculation::DUE_DATE => (clone $postingDate)
-                ->modify("first day of next month")
-                ->setDate((int)$postingDate->format('Y'), (int)$postingDate->format('m'), $this->due_date_day_of_month ?? 1),
+                ->modify('first day of next month')
+                ->setDate((int) $postingDate->format('Y'), (int) $postingDate->format('m'), $this->due_date_day_of_month ?? 1),
 
             PaymentTermsCalculation::DUE_DAY => (clone $postingDate)
                 ->modify("+{$this->due_date_months_ahead} months")
-                ->setDate((int)$postingDate->format('Y'), (int)$postingDate->format('m'), $this->due_date_day_of_month ?? 1),
+                ->setDate((int) $postingDate->format('Y'), (int) $postingDate->format('m'), $this->due_date_day_of_month ?? 1),
 
             PaymentTermsCalculation::CASH_RECEIPT => $postingDate, // Immediate
 
@@ -130,11 +130,11 @@ class PaymentTerm extends Model
      */
     public function calculateDiscountDate(\DateTime $postingDate): ?\DateTime
     {
-        if (!$this->discount_allowed || $this->discount_percent <= 0) {
+        if (! $this->discount_allowed || $this->discount_percent <= 0) {
             return null;
         }
 
-        return match($this->discount_calculation_type) {
+        return match ($this->discount_calculation_type) {
             PaymentTermsDiscountCalculation::NET_DAYS => (clone $postingDate)->modify("+{$this->discount_net_days} days"),
             PaymentTermsDiscountCalculation::END_OF_MONTH => (clone $postingDate)->modify('last day of this month'),
             PaymentTermsDiscountCalculation::DUE_DATE => $this->calculateDueDate($postingDate),
@@ -147,7 +147,7 @@ class PaymentTerm extends Model
      */
     public function calculateDiscount(float $amount, \DateTime $postingDate, ?\DateTime $paymentDate = null): float
     {
-        if (!$this->discount_allowed || $this->discount_percent <= 0) {
+        if (! $this->discount_allowed || $this->discount_percent <= 0) {
             return 0;
         }
 
@@ -167,7 +167,7 @@ class PaymentTerm extends Model
      */
     public function isWithinTolerance(float $paymentAmount, float $expectedAmount): bool
     {
-        if (!$this->payment_tolerance_enabled) {
+        if (! $this->payment_tolerance_enabled) {
             return abs($paymentAmount - $expectedAmount) < 0.01;
         }
 

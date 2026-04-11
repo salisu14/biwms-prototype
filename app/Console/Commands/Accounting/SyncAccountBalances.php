@@ -28,7 +28,7 @@ class SyncAccountBalances extends Command
      */
     public function handle()
     {
-        $this->info("Recalculating Chart of Account balances...");
+        $this->info('Recalculating Chart of Account balances...');
 
         DB::transaction(function () {
             // Reset all balances to 0
@@ -54,6 +54,6 @@ class SyncAccountBalances extends Command
             $this->newLine();
         });
 
-        $this->info("All account balances have been synchronized with the ledger.");
+        $this->info('All account balances have been synchronized with the ledger.');
     }
 }

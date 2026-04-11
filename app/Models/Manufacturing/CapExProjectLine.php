@@ -2,10 +2,13 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\PurchaseOrder;
+use App\Models\User;
+use App\Models\Vendor;
+use App\Models\VendorInvoice;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CapExProjectLine extends Model
 {
@@ -73,12 +76,12 @@ class CapExProjectLine extends Model
 
     public function vendor(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Vendor::class);
+        return $this->belongsTo(Vendor::class);
     }
 
     public function capitalizedByUser(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'capitalized_by');
+        return $this->belongsTo(User::class, 'capitalized_by');
     }
 
     // Scopes
@@ -154,7 +157,7 @@ class CapExProjectLine extends Model
      */
     public function capitalize(int $userId): void
     {
-        if (!$this->eligible_for_capitalization) {
+        if (! $this->eligible_for_capitalization) {
             throw new \Exception('Line is not eligible for capitalization');
         }
 
@@ -192,10 +195,10 @@ class CapExProjectLine extends Model
      */
     public function getSourceDocument(): ?Model
     {
-        return match($this->source_document_type) {
+        return match ($this->source_document_type) {
             'PRODUCTION_ORDER' => ProductionOrder::find($this->source_document_id),
-            'PURCHASE_ORDER' => \App\Models\PurchaseOrder::find($this->source_document_id),
-            'VENDOR_INVOICE' => \App\Models\VendorInvoice::find($this->source_document_id),
+            'PURCHASE_ORDER' => PurchaseOrder::find($this->source_document_id),
+            'VENDOR_INVOICE' => VendorInvoice::find($this->source_document_id),
             default => null,
         };
     }
@@ -213,7 +216,7 @@ class CapExProjectLine extends Model
      */
     public function getProductionCostDetails(): ?array
     {
-        if (!$this->isFromProduction()) {
+        if (! $this->isFromProduction()) {
             return null;
         }
 

@@ -2,15 +2,16 @@
 
 namespace App\Services;
 
+use App\Models\Item;
+use App\Models\ItemLedgerEntry;
 use App\Models\ItemTrackingEntry;
 use App\Models\ItemTrackingLine;
 use App\Models\ReservationEntry;
-use App\Models\ItemLedgerEntry;
-use App\Models\SalesShipmentLine;
 use App\Models\SalesOrderLine;
+use App\Models\SalesShipmentLine;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Collection;
 
 /**
  * BC equivalent: Codeunit 6500 "Item Tracking Management"
@@ -19,14 +20,11 @@ use Illuminate\Support\Collection;
 class ItemTrackingManagementService
 {
     private bool $strictExpirationPosting = true;
+
     private bool $allowExpiredLot = false;
 
     /**
      * Copy tracking from Order Line to Shipment Line (BC: CopyTracking)
-     *
-     * @param SalesOrderLine $orderLine
-     * @param SalesShipmentLine $shipmentLine
-     * @param float $qtyToShip
      */
     public function copyTrackingToShipment(
         SalesOrderLine $orderLine,
@@ -41,7 +39,9 @@ class ItemTrackingManagementService
         $remainingToShip = $qtyToShip;
 
         foreach ($trackingLines as $tracking) {
-            if ($remainingToShip <= 0) break;
+            if ($remainingToShip <= 0) {
+                break;
+            }
 
             $shipQty = min($tracking->quantity, $remainingToShip);
 
@@ -86,11 +86,6 @@ class ItemTrackingManagementService
 
     /**
      * Get available tracking for item (BC: LookupTrackingAvailability)
-     *
-     * @param string $itemNo
-     * @param string|null $variantCode
-     * @param string|null $locationCode
-     * @return Collection
      */
     public function lookupTrackingAvailability(
         string $itemNo,
@@ -100,8 +95,8 @@ class ItemTrackingManagementService
         return ItemLedgerEntry::where('item_no', $itemNo)
             ->where('open', true)
             ->where('quantity', '>', 0)
-            ->when($variantCode, fn($q) => $q->where('variant_code', $variantCode))
-            ->when($locationCode, fn($q) => $q->where('location_code', $locationCode))
+            ->when($variantCode, fn ($q) => $q->where('variant_code', $variantCode))
+            ->when($locationCode, fn ($q) => $q->where('location_code', $locationCode))
             ->whereNotNull('lot_no')
             ->orWhereNotNull('serial_no')
             ->select([
@@ -111,7 +106,7 @@ class ItemTrackingManagementService
                 'warranty_date',
                 DB::raw('SUM(quantity) as available_quantity'),
                 'location_code',
-                'variant_code'
+                'variant_code',
             ])
             ->groupBy(['lot_no', 'serial_no', 'location_code', 'variant_code', 'expiration_date', 'warranty_date'])
             ->get();
@@ -128,7 +123,7 @@ class ItemTrackingManagementService
         float $quantity,
         string $sourceType,
         int $sourceId,
-        \DateTimeInterface $expirationDate = null
+        ?\DateTimeInterface $expirationDate = null
     ): ReservationEntry {
 
         // Check availability
@@ -142,7 +137,7 @@ class ItemTrackingManagementService
 
         // Check expiration
         if ($this->strictExpirationPosting && $expirationDate && $expirationDate < now()) {
-            if (!$this->allowExpiredLot) {
+            if (! $this->allowExpiredLot) {
                 throw new \RuntimeException("Lot {$lotNo} has expired");
             }
         }
@@ -163,9 +158,7 @@ class ItemTrackingManagementService
     /**
      * Suggest tracking lines based on FEFO/FIFO (BC: SuggestTracking)
      *
-     * @param string $itemNo
-     * @param float $quantityNeeded
-     * @param string $method 'FEFO' (First Expired First Out), 'FIFO', 'LIFO'
+     * @param  string  $method  'FEFO' (First Expired First Out), 'FIFO', 'LIFO'
      */
     public function suggestTracking(
         string $itemNo,
@@ -195,7 +188,9 @@ class ItemTrackingManagementService
         $remaining = $quantityNeeded;
 
         foreach ($entries as $entry) {
-            if ($remaining <= 0) break;
+            if ($remaining <= 0) {
+                break;
+            }
 
             $suggestQty = min($entry->quantity, $remaining);
             $suggestions->push([
@@ -218,11 +213,15 @@ class ItemTrackingManagementService
      */
     public function checkItemTracking(string $itemNo, array $trackingData): void
     {
-        $item = \App\Models\Item::where('item_no', $itemNo)->first();
-        if (!$item) return;
+        $item = Item::where('item_no', $itemNo)->first();
+        if (! $item) {
+            return;
+        }
 
         $trackingCode = $item->item_tracking_code;
-        if (empty($trackingCode)) return; // No tracking required
+        if (empty($trackingCode)) {
+            return;
+        } // No tracking required
 
         $setup = $this->getItemTrackingSetup($trackingCode);
 
@@ -240,7 +239,7 @@ class ItemTrackingManagementService
         }
 
         // Validate serial number uniqueness
-        if (!empty($trackingData['serial_no'])) {
+        if (! empty($trackingData['serial_no'])) {
             $this->validateSerialNoUnique($itemNo, $trackingData['serial_no']);
         }
     }
@@ -255,8 +254,8 @@ class ItemTrackingManagementService
     ): ?\DateTimeInterface {
 
         return ItemLedgerEntry::where('item_no', $itemNo)
-            ->when($lotNo, fn($q) => $q->where('lot_no', $lotNo))
-            ->when($serialNo, fn($q) => $q->where('serial_no', $serialNo))
+            ->when($lotNo, fn ($q) => $q->where('lot_no', $lotNo))
+            ->when($serialNo, fn ($q) => $q->where('serial_no', $serialNo))
             ->whereNotNull('expiration_date')
             ->value('expiration_date');
     }
@@ -269,7 +268,7 @@ class ItemTrackingManagementService
         string $lotNo,
         \DateTimeInterface $newExpirationDate
     ): void {
-        DB::transaction(function() use ($itemNo, $lotNo, $newExpirationDate) {
+        DB::transaction(function () use ($itemNo, $lotNo, $newExpirationDate) {
             ItemLedgerEntry::where('item_no', $itemNo)
                 ->where('lot_no', $lotNo)
                 ->update(['expiration_date' => $newExpirationDate]);
@@ -314,7 +313,7 @@ class ItemTrackingManagementService
      */
     public function isItemTrackingRequired(string $itemNo): bool
     {
-        return \App\Models\Item::where('item_no', $itemNo)
+        return Item::where('item_no', $itemNo)
             ->whereNotNull('item_tracking_code')
             ->where('item_tracking_code', '!=', '')
             ->exists();
@@ -328,7 +327,7 @@ class ItemTrackingManagementService
         return ItemTrackingEntry::where('trackable_type', get_class($line))
             ->where('trackable_id', $line->id)
             ->get()
-            ->map(fn($entry) => [
+            ->map(fn ($entry) => [
                 'lot_no' => $entry->lot_no,
                 'serial_no' => $entry->serial_no,
                 'quantity' => abs($entry->quantity),
@@ -364,6 +363,7 @@ class ItemTrackingManagementService
     public function trackingQtyMatch($line, float $docQty): bool
     {
         $trackingQty = $this->calcTotalTrackingQty($line);
+
         return abs($trackingQty - $docQty) < 0.00001;
     }
 
@@ -375,8 +375,8 @@ class ItemTrackingManagementService
     ): float {
         return ItemLedgerEntry::where('item_no', $itemNo)
             ->where('location_code', $locationCode)
-            ->when($lotNo, fn($q) => $q->where('lot_no', $lotNo))
-            ->when($serialNo, fn($q) => $q->where('serial_no', $serialNo))
+            ->when($lotNo, fn ($q) => $q->where('lot_no', $lotNo))
+            ->when($serialNo, fn ($q) => $q->where('serial_no', $serialNo))
             ->where('open', true)
             ->sum('quantity');
     }
@@ -398,7 +398,7 @@ class ItemTrackingManagementService
 
     private function getSourceType($line): string
     {
-        return match(get_class($line)) {
+        return match (get_class($line)) {
             SalesOrderLine::class => 'sales_order',
             SalesShipmentLine::class => 'sales_shipment',
             default => strtolower(class_basename($line)),
@@ -407,7 +407,7 @@ class ItemTrackingManagementService
 
     private function getItemTrackingSetup(string $code): array
     {
-        return Cache::remember("tracking_setup_{$code}", 3600, function() use ($code) {
+        return Cache::remember("tracking_setup_{$code}", 3600, function () use ($code) {
             return DB::table('item_tracking_codes')
                 ->where('code', $code)
                 ->first()?->toArray() ?? [];

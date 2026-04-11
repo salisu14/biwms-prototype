@@ -2,20 +2,22 @@
 
 namespace App\Services;
 
+use App\Enums\ShipmentStatus;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderLine;
 use App\Models\SalesShipmentHeader;
 use App\Models\SalesShipmentLine;
-use App\Models\ItemLedgerEntry;
-use App\Enums\ShipmentStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SalesShipmentPostingService
 {
     private NumberSeriesService $numberSeries;
+
     private InventoryPostingService $inventoryPosting;
+
     private DimensionManagementService $dimensionService;
+
     private ItemTrackingManagementService $itemTrackingService;
 
     public function __construct(
@@ -33,10 +35,9 @@ class SalesShipmentPostingService
     /**
      * Post Sales Order Shipment (mirrors BC Codeunit 80 "Sales-Post")
      *
-     * @param SalesOrder $salesOrder
-     * @param array $shipmentLines ['line_id' => qty_to_ship]
-     * @param array $options ['posting_date', 'shipping_agent_code', 'package_tracking_no']
-     * @return SalesShipmentHeader
+     * @param  array  $shipmentLines  ['line_id' => qty_to_ship]
+     * @param  array  $options  ['posting_date', 'shipping_agent_code', 'package_tracking_no']
+     *
      * @throws \Exception
      */
     public function postShipment(
@@ -44,7 +45,7 @@ class SalesShipmentPostingService
         array $shipmentLines = [],
         array $options = []
     ): SalesShipmentHeader {
-        return DB::transaction(function() use ($salesOrder, $shipmentLines, $options) {
+        return DB::transaction(function () use ($salesOrder, $shipmentLines, $options) {
 
             // 1. Validate posting
             $this->validatePosting($salesOrder, $shipmentLines);
@@ -56,7 +57,9 @@ class SalesShipmentPostingService
             foreach ($salesOrder->lines as $orderLine) {
                 $qtyToShip = $shipmentLines[$orderLine->id] ?? $orderLine->qty_to_ship;
 
-                if ($qtyToShip <= 0) continue;
+                if ($qtyToShip <= 0) {
+                    continue;
+                }
 
                 $this->postShipmentLine($shipmentHeader, $orderLine, $qtyToShip);
             }
@@ -67,9 +70,9 @@ class SalesShipmentPostingService
             // 5. Create Item Ledger Entries (Inventory reduction)
             $this->inventoryPosting->postShipmentInventory($shipmentHeader);
 
-            Log::info("Sales Shipment Posted", [
+            Log::info('Sales Shipment Posted', [
                 'shipment_no' => $shipmentHeader->document_no,
-                'order_no' => $salesOrder->order_no
+                'order_no' => $salesOrder->order_no,
             ]);
 
             return $shipmentHeader->fresh('lines');
@@ -79,7 +82,7 @@ class SalesShipmentPostingService
     private function validatePosting(SalesOrder $order, array $shipmentLines): void
     {
         if ($order->status !== 'released') {
-            throw new \InvalidArgumentException("Order must be released before posting");
+            throw new \InvalidArgumentException('Order must be released before posting');
         }
 
         foreach ($order->lines as $line) {
@@ -159,7 +162,7 @@ class SalesShipmentPostingService
         float $qtyToShip
     ): void {
 
-        $lineAmount = $qtyToShip * $orderLine->unit_price * (1 - $orderLine->line_discount_pct/100);
+        $lineAmount = $qtyToShip * $orderLine->unit_price * (1 - $orderLine->line_discount_pct / 100);
 
         $shipmentLine = SalesShipmentLine::create([
             'sales_shipment_header_id' => $header->id,
@@ -230,7 +233,7 @@ class SalesShipmentPostingService
     private function updateOrderAfterPosting(SalesOrder $order): void
     {
         $allShipped = $order->lines->every(
-            fn($line) => $line->outstanding_quantity <= 0
+            fn ($line) => $line->outstanding_quantity <= 0
         );
 
         $order->update([

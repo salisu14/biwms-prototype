@@ -47,7 +47,7 @@ class LinesRelationManager extends RelationManager
                 Grid::make(4)->schema([
                     Select::make('item_id')
                         ->label('Item')
-                        ->relationship('item', 'item_number', fn ($query) => $query->where('blocked', false))
+                        ->relationship('item', 'item_code', fn ($query) => $query->where('blocked', false))
                         ->searchable()
                         ->preload()
                         ->required(fn ($get) => $get('type') === PurchaseLineType::ITEM->value)
@@ -61,7 +61,7 @@ class LinesRelationManager extends RelationManager
                             $item = Item::find($state);
                             if ($item) {
                                 $set('description', $item->description);
-                                $set('item_code', $item->item_number);
+                                $set('item_code', $item->item_code);
 
                                 // Logic to set the ACTIVE unit_of_measure field using Item model method
                                 $baseUom = $item->getDefaultUom(UomType::BASE);
@@ -255,7 +255,7 @@ class LinesRelationManager extends RelationManager
                         if ($data['type'] === PurchaseLineType::ITEM->value && isset($data['item_id'])) {
                             $item = Item::find($data['item_id']);
                             if ($item) {
-                                $data['item_code'] = $item->item_number;
+                                $data['item_code'] = $item->item_code;
                                 $data['general_product_posting_group_id'] = $item->general_product_posting_group_id;
                             }
                         } elseif ($data['type'] === PurchaseLineType::FIXED_ASSET->value && isset($data['asset_id'])) {

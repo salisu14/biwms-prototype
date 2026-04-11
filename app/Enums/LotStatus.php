@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/LotStatus.php
 
 namespace App\Enums;
@@ -13,7 +14,7 @@ enum LotStatus: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::QUARANTINE => 'Quarantine - Pending QA',
             self::APPROVED => 'Approved - Available',
             self::REJECTED => 'Rejected - Destroy',
@@ -24,7 +25,7 @@ enum LotStatus: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::QUARANTINE => 'bg-yellow-100 text-yellow-800 border-yellow-400 ring-yellow-400',
             self::APPROVED => 'bg-green-100 text-green-800 border-green-400 ring-green-400',
             self::REJECTED => 'bg-red-100 text-red-800 border-red-400 ring-red-400',
@@ -35,7 +36,7 @@ enum LotStatus: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::QUARANTINE => 'clock',
             self::APPROVED => 'check-circle',
             self::REJECTED => 'times-circle',
@@ -73,7 +74,7 @@ enum LotStatus: string
      */
     public function dispositionAction(): string
     {
-        return match($this) {
+        return match ($this) {
             self::QUARANTINE => 'Awaiting QA Review',
             self::APPROVED => 'Available for Use',
             self::REJECTED => 'Schedule Destruction',
@@ -87,7 +88,7 @@ enum LotStatus: string
      */
     public function allowedTransitions(): array
     {
-        return match($this) {
+        return match ($this) {
             self::QUARANTINE => [self::APPROVED, self::REJECTED],
             self::APPROVED => [self::RECALLED, self::EXPIRED],
             self::REJECTED => [], // Terminal
@@ -101,7 +102,7 @@ enum LotStatus: string
      */
     public function regulatoryImpact(): string
     {
-        return match($this) {
+        return match ($this) {
             self::QUARANTINE, self::APPROVED => 'Normal',
             self::REJECTED, self::EXPIRED => 'Medium',
             self::RECALLED => 'High - FDA Reportable',

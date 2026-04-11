@@ -2,9 +2,8 @@
 
 namespace App\Filament\Resources\ItemSkus\Schemas;
 
-use App\Models\ItemMaster;
-use App\Models\LocationMaster;
-use Filament\Forms;
+use App\Models\Item;
+use App\Models\Location;
 use Filament\Forms\Components\DatePicker; // Added for date fields
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -88,7 +87,7 @@ class ItemSkuForm
                                 ->numeric()
                                 ->default(0)
                                 ->suffix('days'),
-                        ])
+                        ]),
                     ]),
 
                 Section::make('Validity & Status')
@@ -126,11 +125,11 @@ class ItemSkuForm
         $locationId = $get('location_id');
 
         if ($itemId && $locationId) {
-            $item = ItemMaster::find($itemId);
-            $location = LocationMaster::find($locationId);
+            $item = Item::find($itemId);
+            $location = Location::find($locationId);
 
             if ($item && $location) {
-                $skuCode = sprintf('%s-%s', $item->item_code, $location->location_code);
+                $skuCode = sprintf('%s-%s', $item->item_code, $location->code);
                 $set('sku_code', $skuCode);
             } else {
                 $set('sku_code', null);

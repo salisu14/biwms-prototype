@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/WarehouseShipment.php
 
 namespace App\Models;
@@ -70,7 +71,7 @@ class WarehouseShipment extends Model
     // Post the shipment (creates item ledger entries)
     public function post(): bool
     {
-        if (!$this->canPost()) {
+        if (! $this->canPost()) {
             return false;
         }
 

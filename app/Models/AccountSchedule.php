@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AccountSchedule extends Model
 {
@@ -11,7 +12,7 @@ class AccountSchedule extends Model
         'description',
     ];
 
-    public function lines(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function lines(): HasMany
     {
         return $this->hasMany(AccountScheduleLine::class, 'schedule_id')->orderBy('line_no');
     }

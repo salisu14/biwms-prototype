@@ -9,8 +9,8 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Schemas\Schema;
 use Filament\Pages\Page;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\ColumnGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -24,11 +24,15 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
     use InteractsWithTable;
 
     protected static string|null|\BackedEnum $navigationIcon = 'heroicon-o-presentation-chart-line';
+
     protected static ?string $title = 'Inventory Movement & Valuation';
+
     protected string $view = 'filament.pages.inventory-valuation-report';
 
     public ?string $startDate = null;
+
     public ?string $endDate = null;
+
     public ?int $locationId = null;
 
     public function mount(): void
@@ -71,7 +75,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
         return $table
             ->query($service->getMovementSummary($start, $end, $this->locationId))
             ->columns([
-                TextColumn::make('item_number')
+                TextColumn::make('item_code')
                     ->label('Item No.')
                     ->searchable()
                     ->sortable()
@@ -137,8 +141,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                     ->columns([
                         TextColumn::make('closing_qty')
                             ->label('Qty')
-                            ->getStateUsing(fn ($record) =>
-                                $record->opening_qty +
+                            ->getStateUsing(fn ($record) => $record->opening_qty +
                                 $record->purchase_in_qty + $record->purchase_out_qty +
                                 $record->pos_adj_qty + $record->neg_adj_qty +
                                 $record->sale_out_qty + $record->sale_in_qty +
@@ -148,8 +151,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('closing_value')
                             ->label('Value')
-                            ->getStateUsing(fn ($record) =>
-                                $record->opening_value +
+                            ->getStateUsing(fn ($record) => $record->opening_value +
                                 $record->purchase_in_value + $record->purchase_out_value +
                                 $record->pos_adj_value + $record->neg_adj_value +
                                 $record->sale_out_value + $record->sale_in_value +

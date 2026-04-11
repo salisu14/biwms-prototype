@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Enums\GlAccountType;
-use App\Enums\GlAccountCategory;
-use App\Enums\IncomeBalanceType;
 use App\Enums\DebitCreditType;
+use App\Enums\GlAccountCategory;
+use App\Enums\GlAccountType;
+use App\Enums\IncomeBalanceType;
 use App\Models\GlAccount;
 use Illuminate\Database\Seeder;
 

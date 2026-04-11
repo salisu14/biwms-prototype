@@ -11,22 +11,21 @@ use App\Filament\Resources\PurchaseCreditMemos\Schemas\PurchaseCreditMemoForm;
 use App\Models\PurchaseCreditMemo;
 use App\Services\Purchases\PurchaseCreditMemoService;
 use BackedEnum;
-use UnitEnum;
-use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Actions\Action as TableAction;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use UnitEnum;
 
 class PurchaseCreditMemoResource extends Resource
 {
     protected static ?string $model = PurchaseCreditMemo::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-document-duplicate';
+
     protected static string|UnitEnum|null $navigationGroup = 'Purchases';
 
     public static function form(Schema $schema): Schema
@@ -57,7 +56,7 @@ class PurchaseCreditMemoResource extends Resource
                         app(PurchaseCreditMemoService::class)->submitForApproval($record);
                         Notification::make()->title('Credit memo submitted for approval')->success()->send();
                     }),
-                
+
                 TableAction::make('approve')
                     ->label('Approve')
                     ->icon('heroicon-o-check-circle')
@@ -93,6 +92,7 @@ class PurchaseCreditMemoResource extends Resource
                     }),
             ]);
     }
+
     public static function getRelations(): array
     {
         return [

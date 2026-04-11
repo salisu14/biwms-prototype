@@ -47,7 +47,7 @@ class PermissionsTableSeeder extends Seeder
         foreach ($permissionPatterns as [$entity, $actions]) {
             foreach ($actions as $action) {
                 $permissions[] = [
-                    'name'       => "{$entity}_{$action}",
+                    'name' => "{$entity}_{$action}",
                     'guard_name' => $guard,
                     'created_at' => $now,
                     'updated_at' => $now,
@@ -58,7 +58,7 @@ class PermissionsTableSeeder extends Seeder
         // Add standalone permissions
         foreach ($standalonePermissions as $name) {
             $permissions[] = [
-                'name'       => $name,
+                'name' => $name,
                 'guard_name' => $guard,
                 'created_at' => $now,
                 'updated_at' => $now,

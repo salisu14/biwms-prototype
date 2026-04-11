@@ -7,7 +7,7 @@ use App\Models\EmployeePostingGroup;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\EmployeePostingGroup>
+ * @extends Factory<EmployeePostingGroup>
  */
 class EmployeePostingGroupFactory extends Factory
 {

@@ -1,10 +1,13 @@
 <?php
+
 // app/Models/ChartOfAccount.php
 
 namespace App\Models;
 
 use App\Enums\AccountCategory;
 use App\Enums\AccountType;
+use App\Enums\GlAccountType;
+use App\Enums\IncomeBalanceType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -25,9 +28,9 @@ class ChartOfAccount extends Model
                 ];
 
                 if (in_array($account->account_type->value, $incomeBalanceTypes)) {
-                    $account->income_balance = \App\Enums\IncomeBalanceType::INCOME_STATEMENT;
+                    $account->income_balance = IncomeBalanceType::INCOME_STATEMENT;
                 } else {
-                    $account->income_balance = \App\Enums\IncomeBalanceType::BALANCE_SHEET;
+                    $account->income_balance = IncomeBalanceType::BALANCE_SHEET;
                 }
             }
         });
@@ -60,8 +63,8 @@ class ChartOfAccount extends Model
         'new_page' => 'boolean',
         'account_type' => AccountType::class,
         'account_category' => AccountCategory::class,
-        'gl_account_type' => \App\Enums\GlAccountType::class,
-        'income_balance' => \App\Enums\IncomeBalanceType::class,
+        'gl_account_type' => GlAccountType::class,
+        'income_balance' => IncomeBalanceType::class,
     ];
 
     // Parent account (for hierarchical COA)
@@ -121,13 +124,13 @@ class ChartOfAccount extends Model
     public function isTotalAccount(): bool
     {
         return in_array($this->gl_account_type, [
-            \App\Enums\GlAccountType::TOTAL,
-            \App\Enums\GlAccountType::END_TOTAL,
+            GlAccountType::TOTAL,
+            GlAccountType::END_TOTAL,
         ]);
     }
 
     public function isIncomeStatement(): bool
     {
-        return $this->income_balance === \App\Enums\IncomeBalanceType::INCOME_STATEMENT;
+        return $this->income_balance === IncomeBalanceType::INCOME_STATEMENT;
     }
 }

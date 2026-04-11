@@ -18,9 +18,9 @@ class InventoryReportExport implements FromCollection
             );
     }
 
-//    public function collection()
-//    {
-//        return app(InventoryValuationReportService::class)
-//            ->generate(request('start'), request('end'));
-//    }
+    //    public function collection()
+    //    {
+    //        return app(InventoryValuationReportService::class)
+    //            ->generate(request('start'), request('end'));
+    //    }
 }

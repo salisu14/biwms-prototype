@@ -27,13 +27,13 @@ class PricingService
             })
 
             // Priority (VERY IMPORTANT)
-            ->orderByRaw("
+            ->orderByRaw('
                 CASE
                     WHEN customer_id IS NOT NULL THEN 1
                     WHEN customer_group_id IS NOT NULL THEN 2
                     ELSE 3
                 END
-            ")
+            ')
 
             ->value('price');
     }

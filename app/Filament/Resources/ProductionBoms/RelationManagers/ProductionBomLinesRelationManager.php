@@ -3,6 +3,9 @@
 namespace App\Filament\Resources\ProductionBoms\RelationManagers;
 
 use App\Filament\Resources\ProductionBoms\ProductionBomResource;
+use App\Models\Item;
+use App\Models\Manufacturing\ProductionBom;
+use App\Models\UnitOfMeasure;
 use Filament\Actions\AssociateAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -38,8 +41,7 @@ class ProductionBomLinesRelationManager extends RelationManager
 
                         TextInput::make('line_number')
                             ->numeric()
-                            ->default(fn () =>
-                                ($this->getOwnerRecord()->lines()->max('line_number') ?? 0) + 10000
+                            ->default(fn () => ($this->getOwnerRecord()->lines()->max('line_number') ?? 0) + 10000
                             )
                             ->required(),
 
@@ -61,15 +63,17 @@ class ProductionBomLinesRelationManager extends RelationManager
                     // ✅ ITEM SELECT
                     Select::make('item_id')
                         ->label('Item')
-                        ->relationship('item', 'item_number')
+                        ->relationship('item', 'item_code')
                         ->searchable()
                         ->preload()
                         ->visible(fn (Get $get) => $get('type') === 'ITEM')
                         ->reactive()
                         ->afterStateUpdated(function ($state, $set) {
-                            if (!$state) return;
+                            if (! $state) {
+                                return;
+                            }
 
-                            $item = \App\Models\Item::with('uoms')->find($state);
+                            $item = Item::with('uoms')->find($state);
 
                             $set('description', $item?->description);
 
@@ -86,9 +90,11 @@ class ProductionBomLinesRelationManager extends RelationManager
                         ->visible(fn (Get $get) => $get('type') === 'PRODUCTION_BOM')
                         ->reactive()
                         ->afterStateUpdated(function ($state, $set) {
-                            if (!$state) return;
+                            if (! $state) {
+                                return;
+                            }
 
-                            $bom = \App\Models\Manufacturing\ProductionBom::with('item')->find($state);
+                            $bom = ProductionBom::with('item')->find($state);
 
                             $set('description', $bom?->description);
                             $set('unit_of_measure_code', $bom?->unit_of_measure_code);
@@ -113,7 +119,7 @@ class ProductionBomLinesRelationManager extends RelationManager
                         Select::make('unit_of_measure_code')
                             ->label('UOM')
                             ->disabled()
-                            ->options(fn () => \App\Models\UnitOfMeasure::pluck('uom_code', 'uom_code')->toArray()), // 🔥 controlled automatically
+                            ->options(fn () => UnitOfMeasure::pluck('uom_code', 'uom_code')->toArray()), // 🔥 controlled automatically
                     ]),
 
                 ]),
@@ -137,7 +143,7 @@ class ProductionBomLinesRelationManager extends RelationManager
                         'PRODUCTION_BOM' => 'warning',
                     }),
 
-                TextColumn::make('item.item_number')
+                TextColumn::make('item.item_code')
                     ->label('Item')
                     ->searchable()
                     ->toggleable(),

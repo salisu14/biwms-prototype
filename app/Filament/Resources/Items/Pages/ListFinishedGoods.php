@@ -14,11 +14,13 @@ class ListFinishedGoods extends ListRecords
     protected static string $resource = ItemResource::class;
 
     protected static ?string $title = 'Finished Goods';
+
     protected static ?string $navigationLabel = 'Finished Goods';
 
     protected static string|null|\BackedEnum $navigationIcon = 'heroicon-o-check-badge';
 
     protected static string|null|\UnitEnum $navigationGroup = 'Inventory';
+
     protected static ?int $navigationSort = 2;
 
     public function table(Table $table): Table
@@ -32,6 +34,7 @@ class ListFinishedGoods extends ListRecords
             )
             ->columns(ItemResource::table($table)->getColumns()); // reuse columns if needed
     }
+
     protected function modifyQueryUsing(Builder $query): Builder
     {
         return $query->where('item_type', ItemType::FINISHED_GOOD->value);

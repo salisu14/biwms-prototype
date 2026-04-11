@@ -2,9 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\SalesShipmentHeader;
 use App\Models\ItemLedgerEntry;
-use Illuminate\Support\Facades\DB;
+use App\Models\SalesShipmentHeader;
 
 /**
  * Handles inventory posting for shipments (BC Item Journal / Item Ledger Entry creation)
@@ -14,7 +13,9 @@ class InventoryPostingService
     public function postShipmentInventory(SalesShipmentHeader $shipment): void
     {
         foreach ($shipment->lines as $line) {
-            if (!$line->isItem()) continue;
+            if (! $line->isItem()) {
+                continue;
+            }
 
             // Create Item Ledger Entry (BC Table 32)
             ItemLedgerEntry::create([

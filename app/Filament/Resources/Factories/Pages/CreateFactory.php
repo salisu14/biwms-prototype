@@ -2,16 +2,20 @@
 
 namespace App\Filament\Resources\Factories\Pages;
 
+use App\DTOs\FactoryDTO;
 use App\Filament\Resources\Factories\FactoryResource;
+use App\Services\OrgEntityService;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class CreateFactory extends CreateRecord
 {
     protected static string $resource = FactoryResource::class;
 
-    protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
+    protected function handleRecordCreation(array $data): Model
     {
-        $dto = \App\DTOs\FactoryDTO::fromArray($data);
-        return app(\App\Services\OrgEntityService::class)->upsertFactory($dto);
+        $dto = FactoryDTO::fromArray($data);
+
+        return app(OrgEntityService::class)->upsertFactory($dto);
     }
 }

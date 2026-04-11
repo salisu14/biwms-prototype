@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Models\AccountSchedule;
-use App\Models\AccountScheduleLine;
-use App\Models\ChartOfAccount;
-use App\Models\GlEntry;
-use App\Enums\GlAccountType;
-use App\Enums\IncomeBalanceType;
 use App\Enums\AccountScheduleTotalingType;
+use App\Enums\AccountType;
+use App\Enums\IncomeBalanceType;
+use App\Models\AccountSchedule;
+use App\Models\ChartOfAccount;
+use App\Models\ExpenseBudget;
+use App\Models\GlEntry;
 use App\Services\Finance\GeneralLedgerService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -100,8 +100,8 @@ class IncomeStatementService
         $results = collect();
 
         foreach ($schedule->lines as $line) {
-            $amount = match($line->totaling_type) {
-                AccountScheduleTotalingType::POSTING_ACCOUNTS, 
+            $amount = match ($line->totaling_type) {
+                AccountScheduleTotalingType::POSTING_ACCOUNTS,
                 AccountScheduleTotalingType::TOTAL_ACCOUNTS => $this->sumAccounts($line->totaling, $fromDate, $toDate, $dim1, $dim2),
                 AccountScheduleTotalingType::FORMULA => $this->calculateFormula($line->totaling, $results),
                 default => 0,
@@ -167,7 +167,9 @@ class IncomeStatementService
         ?string $dim1,
         ?string $dim2
     ): float {
-        if (empty($account->totaling)) return 0;
+        if (empty($account->totaling)) {
+            return 0;
+        }
 
         // Parse totaling range (e.g., "4100..4199" or "4100|4200|4300")
         $accountCodes = $this->parseTotaling($account->totaling);
@@ -176,15 +178,19 @@ class IncomeStatementService
             $q->whereIn('account_number', $accountCodes);
         })->whereBetween('posting_date', [$from, $to]);
 
-        if ($dim1) $query->where('shortcut_dimension_1_code', $dim1);
-        if ($dim2) $query->where('shortcut_dimension_2_code', $dim2);
+        if ($dim1) {
+            $query->where('shortcut_dimension_1_code', $dim1);
+        }
+        if ($dim2) {
+            $query->where('shortcut_dimension_2_code', $dim2);
+        }
 
         return (float) $query->sum(DB::raw('debit_amount - credit_amount'));
     }
 
     private function parseTotaling(?string $totaling): array
     {
-        if (!$totaling) {
+        if (! $totaling) {
             return [];
         }
 
@@ -217,8 +223,12 @@ class IncomeStatementService
             $q->whereIn('account_number', $accountCodes);
         })->whereBetween('posting_date', [$from, $to]);
 
-        if ($dim1) $query->where('shortcut_dimension_1_code', $dim1);
-        if ($dim2) $query->where('shortcut_dimension_2_code', $dim2);
+        if ($dim1) {
+            $query->where('shortcut_dimension_1_code', $dim1);
+        }
+        if ($dim2) {
+            $query->where('shortcut_dimension_2_code', $dim2);
+        }
 
         return (float) $query->sum(DB::raw('debit_amount - credit_amount'));
     }
@@ -230,7 +240,7 @@ class IncomeStatementService
         $expression = $formula;
         foreach ($previousResults as $res) {
             if ($res['row_no']) {
-                $expression = str_replace($res['row_no'], (string)$res['amount'], $expression);
+                $expression = str_replace($res['row_no'], (string) $res['amount'], $expression);
             }
         }
 
@@ -248,8 +258,11 @@ class IncomeStatementService
 
     private function calculateVariancePercent(float $actual, ?float $budget, ChartOfAccount $account): ?float
     {
-        if ($budget === null || $budget == 0) return null;
+        if ($budget === null || $budget == 0) {
+            return null;
+        }
         $actualSigned = $this->applySign($actual, $account);
+
         return (($actualSigned - $budget) / abs($budget)) * 100;
     }
 
@@ -260,14 +273,15 @@ class IncomeStatementService
         if ($account->show_opposite_sign || in_array($account->account_type, ['revenue', 'sales'])) {
             return $amount * -1;
         }
+
         return $amount;
     }
 
     private function calculateSummary(Collection $rows): array
     {
-        $revenue = $rows->filter(fn($r) => in_array($r['account_type'], [\App\Enums\AccountType::REVENUE, 'REVENUE', 'revenue']))->sum('net_change');
-        $cogs = $rows->filter(fn($r) => in_array($r['account_type'], [\App\Enums\AccountType::COGS, 'COGS', 'cogs']))->sum('net_change');
-        $operatingExp = $rows->filter(fn($r) => in_array($r['account_type'], [\App\Enums\AccountType::EXPENSE, 'EXPENSE', 'expense']))->sum('net_change');
+        $revenue = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::REVENUE, 'REVENUE', 'revenue']))->sum('net_change');
+        $cogs = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::COGS, 'COGS', 'cogs']))->sum('net_change');
+        $operatingExp = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::EXPENSE, 'EXPENSE', 'expense']))->sum('net_change');
 
         return [
             'total_revenue' => $revenue,
@@ -288,11 +302,13 @@ class IncomeStatementService
     ): ?float {
         // Basic lookup in ExpenseBudget if exists for this account category/code
         // This is a simplified implementation
-        $budget = \App\Models\ExpenseBudget::where('category_code', $account->account_number)
+        $budget = ExpenseBudget::where('category_code', $account->account_number)
             ->where('fiscal_year', $fiscalYear ?: $from->year)
             ->first();
 
-        if (!$budget) return null;
+        if (! $budget) {
+            return null;
+        }
 
         $amount = 0;
         $startMonth = $from->month;

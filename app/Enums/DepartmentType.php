@@ -18,7 +18,7 @@ enum DepartmentType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPERATING => 'Operating',
             self::ADMINISTRATIVE => 'Administrative',
             self::SALES => 'Sales & Marketing',
@@ -33,7 +33,7 @@ enum DepartmentType: string
 
     public function defaultExpenseAccount(): ?string
     {
-        return match($this) {
+        return match ($this) {
             self::SALES => '6110',
             self::PURCHASING => '6120',
             self::PRODUCTION => '6200',

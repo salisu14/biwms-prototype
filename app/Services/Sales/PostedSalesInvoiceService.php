@@ -2,12 +2,12 @@
 
 namespace App\Services\Sales;
 
-use App\Models\PostedSalesInvoice;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesCreditMemoLine;
-use Illuminate\Support\Facades\DB;
-use Exception;
+use App\Models\PostedSalesInvoice;
 use DateTime;
+use Exception;
+use Illuminate\Support\Facades\DB;
 
 class PostedSalesInvoiceService
 {
@@ -37,7 +37,7 @@ class PostedSalesInvoiceService
             throw new Exception('Invoice is already cancelled');
         }
 
-        return DB::transaction(function () use ($invoice, $userId, $reason) {
+        return DB::transaction(function () use ($invoice, $userId) {
             // Create credit memo
             $creditMemo = PostedSalesCreditMemo::create([
                 'document_number' => PostedSalesCreditMemo::generateNumber(),
@@ -88,6 +88,7 @@ class PostedSalesInvoiceService
         $prefix = 'SI';
         $year = date('Y');
         $count = PostedSalesInvoice::whereYear('posted_at', $year)->count() + 1;
+
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
     }
 }

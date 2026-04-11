@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\ShipmentStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Enums\ShipmentStatus;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SalesShipmentHeader extends Model
 {
@@ -20,7 +20,7 @@ class SalesShipmentHeader extends Model
         'order_date', 'posting_date', 'shipment_date', 'shipment_method_code',
         'shipping_agent_code', 'package_tracking_no', 'location_code',
         'shortcut_dimension_1_code', 'shortcut_dimension_2_code', 'dimension_set_id',
-        'currency_code', 'prices_including_vat', 'correction'
+        'currency_code', 'prices_including_vat', 'correction',
     ];
 
     protected $casts = [
@@ -70,7 +70,7 @@ class SalesShipmentHeader extends Model
 
     public function scopeShippedNotInvoiced($query)
     {
-        return $query->whereHas('lines', function($q) {
+        return $query->whereHas('lines', function ($q) {
             $q->whereRaw('quantity > quantity_invoiced');
         });
     }
@@ -78,7 +78,7 @@ class SalesShipmentHeader extends Model
     // Accessors
     public function getStatusAttribute(): ShipmentStatus
     {
-        $hasOutstanding = $this->lines->contains(fn($line) => $line->qty_shipped_not_invoiced > 0);
+        $hasOutstanding = $this->lines->contains(fn ($line) => $line->qty_shipped_not_invoiced > 0);
 
         if ($hasOutstanding) {
             return ShipmentStatus::PARTIALLY_SHIPPED;
@@ -95,14 +95,14 @@ class SalesShipmentHeader extends Model
 
     public function isFullyInvoiced(): bool
     {
-        return $this->lines->every(fn($line) => $line->qty_shipped_not_invoiced == 0);
+        return $this->lines->every(fn ($line) => $line->qty_shipped_not_invoiced == 0);
     }
 
     public function getShipmentLinesForInvoicing(): array
     {
         return $this->lines
             ->where('qty_shipped_not_invoiced', '>', 0)
-            ->map(fn($line) => [
+            ->map(fn ($line) => [
                 'shipment_no' => $this->document_no,
                 'shipment_line_no' => $line->line_no,
                 'order_no' => $line->order_no,

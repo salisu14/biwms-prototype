@@ -4,6 +4,7 @@ namespace App\Filament\Resources\SalesInvoices\Tables;
 
 use App\Enums\ApprovalStatus;
 use App\Models\SalesInvoice;
+use App\Services\PostingService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -39,17 +40,17 @@ class SalesInvoicesTable
                     ->sortable(),
 
                 TextColumn::make('total_amount')
-                    ->money(fn($record) => $record->currency_code ?? 'USD')
+                    ->money(fn ($record) => $record->currency_code ?? 'USD')
                     ->alignment('right')
                     ->summarize(Sum::make()->label('Total Sales')),
 
                 SelectColumn::make('status')
                     ->options(ApprovalStatus::class)
-                    ->disabled(fn($record) => $record->isPosted()),
+                    ->disabled(fn ($record) => $record->isPosted()),
 
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn(ApprovalStatus $state): string => match ($state) {
+                    ->color(fn (ApprovalStatus $state): string => match ($state) {
                         ApprovalStatus::DRAFT => 'gray',
                         ApprovalStatus::PENDING => 'warning',
                         ApprovalStatus::APPROVED => 'success',
@@ -61,14 +62,14 @@ class SalesInvoicesTable
 
                 TextColumn::make('due_date')
                     ->date()
-                    ->color(fn($record) => $record->due_date->isPast() && !$record->isPosted() ? 'danger' : null)
+                    ->color(fn ($record) => $record->due_date->isPast() && ! $record->isPosted() ? 'danger' : null)
                     ->sortable(),
             ])
             ->filters([
                 SelectFilter::make('status')
                     ->options(ApprovalStatus::class),
                 Filter::make('overdue')
-                    ->query(fn(Builder $query) => $query->where('due_date', '<', now())->where('status', '!=', 'posted')),
+                    ->query(fn (Builder $query) => $query->where('due_date', '<', now())->where('status', '!=', 'posted')),
 
                 SelectFilter::make('status')
                     ->options([
@@ -99,8 +100,8 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-check')
                     ->color('success')
                     // Ensure you compare against the Enum object if your model casts it
-                    ->visible(fn($record) => $record->status === ApprovalStatus::PENDING)
-                    ->action(fn(SalesInvoice $record) => $record->update([
+                    ->visible(fn ($record) => $record->status === ApprovalStatus::PENDING)
+                    ->action(fn (SalesInvoice $record) => $record->update([
                         'status' => ApprovalStatus::APPROVED,
                         'approved_by' => auth()->id(),
                         'approved_at' => now(),
@@ -112,8 +113,8 @@ class SalesInvoicesTable
                     ->label('Reject')
                     ->icon('heroicon-o-x-mark')
                     ->color('danger')
-                    ->visible(fn($record) => $record->status === ApprovalStatus::PENDING)
-                    ->action(fn(SalesInvoice $record) => $record->update([
+                    ->visible(fn ($record) => $record->status === ApprovalStatus::PENDING)
+                    ->action(fn (SalesInvoice $record) => $record->update([
                         'status' => ApprovalStatus::REJECTED,
                     ])
                     ),
@@ -124,17 +125,17 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-check-badge')
                     ->color('primary')
                     ->requiresConfirmation()
-                    ->visible(fn($record) => $record->status === ApprovalStatus::APPROVED)
+                    ->visible(fn ($record) => $record->status === ApprovalStatus::APPROVED)
                     ->action(function (SalesInvoice $record) {
-                        app(\App\Services\PostingService::class)
+                        app(PostingService::class)
                             ->postSalesInvoice($record);
                     }),
 
                 ViewAction::make()
-                ->visible(fn($record) => !$record->isPosted()),
+                    ->visible(fn ($record) => ! $record->isPosted()),
 
                 EditAction::make()
-                    ->visible(fn($record) => !$record->isPosted()),
+                    ->visible(fn ($record) => ! $record->isPosted()),
 
             ])
             ->toolbarActions([

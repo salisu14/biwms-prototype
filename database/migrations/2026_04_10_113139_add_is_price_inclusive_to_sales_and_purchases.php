@@ -14,7 +14,7 @@ return new class extends Migration
         $tables = [
             'customers', 'vendors',
             'sales_orders', 'sales_quotes',
-            'purchase_orders', 'purchase_quotes'
+            'purchase_orders', 'purchase_quotes',
         ];
 
         foreach ($tables as $table) {
@@ -33,7 +33,7 @@ return new class extends Migration
         $tables = [
             'customers', 'vendors',
             'sales_orders', 'sales_quotes',
-            'purchase_orders', 'purchase_quotes'
+            'purchase_orders', 'purchase_quotes',
         ];
 
         foreach ($tables as $table) {
@@ -42,5 +42,4 @@ return new class extends Migration
             });
         }
     }
-
 };

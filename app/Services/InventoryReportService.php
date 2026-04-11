@@ -2,12 +2,11 @@
 
 namespace App\Services;
 
+use App\Enums\ItemLedgerEntryType;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
-use App\Enums\ItemLedgerEntryType;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class InventoryReportService
 {
@@ -25,12 +24,12 @@ class InventoryReportService
             'opening_qty' => ItemLedgerEntry::selectRaw('COALESCE(SUM(quantity), 0)')
                 ->whereColumn('item_id', 'items.id')
                 ->where('posting_date', '<', $startDate)
-                ->when($locationId, fn($q) => $q->where('location_id', $locationId)),
-            
+                ->when($locationId, fn ($q) => $q->where('location_id', $locationId)),
+
             'opening_value' => ItemLedgerEntry::selectRaw('COALESCE(SUM(cost_amount_actual), 0)')
                 ->whereColumn('item_id', 'items.id')
                 ->where('posting_date', '<', $startDate)
-                ->when($locationId, fn($q) => $q->where('location_id', $locationId)),
+                ->when($locationId, fn ($q) => $q->where('location_id', $locationId)),
         ]);
 
         // movements during period
@@ -61,15 +60,15 @@ class InventoryReportService
                     ->whereColumn('item_id', 'items.id')
                     ->whereBetween('posting_date', [$startDate, $endDate])
                     ->where('entry_type', $type->value)
-                    ->when($qtyCheck, fn($q) => $q->where('quantity', $qtyCheck, 0))
-                    ->when($locationId, fn($q) => $q->where('location_id', $locationId)),
-                
+                    ->when($qtyCheck, fn ($q) => $q->where('quantity', $qtyCheck, 0))
+                    ->when($locationId, fn ($q) => $q->where('location_id', $locationId)),
+
                 "{$key}_value" => ItemLedgerEntry::selectRaw('COALESCE(SUM(cost_amount_actual), 0)')
                     ->whereColumn('item_id', 'items.id')
                     ->whereBetween('posting_date', [$startDate, $endDate])
                     ->where('entry_type', $type->value)
-                    ->when($qtyCheck, fn($q) => $q->where('quantity', $qtyCheck, 0))
-                    ->when($locationId, fn($q) => $q->where('location_id', $locationId)),
+                    ->when($qtyCheck, fn ($q) => $q->where('quantity', $qtyCheck, 0))
+                    ->when($locationId, fn ($q) => $q->where('location_id', $locationId)),
             ]);
         }
     }

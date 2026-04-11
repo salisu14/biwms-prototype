@@ -13,7 +13,7 @@ enum PriceType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::UNIT_PRICE => 'Fixed Unit Price',
             self::PERCENT_DISCOUNT => 'Percentage Discount',
             self::AMOUNT_DISCOUNT => 'Amount Discount',
@@ -25,7 +25,7 @@ enum PriceType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::UNIT_PRICE => 'bg-emerald-100 text-emerald-800',
             self::PERCENT_DISCOUNT, self::AMOUNT_DISCOUNT => 'bg-rose-100 text-rose-800',
             self::COST_PLUS_PERCENT, self::COST_PLUS_AMOUNT => 'bg-amber-100 text-amber-800',
@@ -35,7 +35,7 @@ enum PriceType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::UNIT_PRICE => 'heroicon-o-currency-dollar',
             self::PERCENT_DISCOUNT => 'heroicon-o-receipt-percent',
             self::AMOUNT_DISCOUNT => 'heroicon-o-tag',
@@ -47,7 +47,7 @@ enum PriceType: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::UNIT_PRICE => 'A specific fixed price per unit of measure.',
             self::PERCENT_DISCOUNT => 'A percentage deducted from the base unit price.',
             self::AMOUNT_DISCOUNT => 'A fixed currency amount deducted from the base price.',

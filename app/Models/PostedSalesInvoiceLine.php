@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PostedSalesInvoiceLine.php
 
 namespace App\Models;
@@ -123,7 +124,10 @@ class PostedSalesInvoiceLine extends Model
 
     public function getProfitMarginPercentAttribute(): float
     {
-        if ($this->line_amount == 0) return 0;
+        if ($this->line_amount == 0) {
+            return 0;
+        }
+
         return ($this->profit_amount / $this->line_amount) * 100;
     }
 

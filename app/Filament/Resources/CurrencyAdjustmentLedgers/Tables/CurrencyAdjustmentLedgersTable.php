@@ -4,6 +4,7 @@ namespace App\Filament\Resources\CurrencyAdjustmentLedgers\Tables;
 
 use App\Enums\CurrencyAdjustmentType;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
@@ -59,9 +60,9 @@ class CurrencyAdjustmentLedgersTable
                     ->searchable(),
                 SelectFilter::make('adjustment_type')
                     ->options(CurrencyAdjustmentType::class),
-                \Filament\Tables\Filters\Filter::make('gains_only')
+                Filter::make('gains_only')
                     ->query(fn ($query) => $query->where('adjustment_amount', '>', 0)),
-                \Filament\Tables\Filters\Filter::make('losses_only')
+                Filter::make('losses_only')
                     ->query(fn ($query) => $query->where('adjustment_amount', '<', 0)),
             ])
             ->recordActions([

@@ -43,7 +43,7 @@ class SalesQuoteResource extends Resource
     {
         return [
             'items' => ItemsRelationManager::class,
-            RevisionsRelationManager::class
+            RevisionsRelationManager::class,
         ];
     }
 

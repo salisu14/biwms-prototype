@@ -2,7 +2,9 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Enums\FlushingMethod;
 use App\Models\Item;
+use App\Models\WarehouseRequest;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -66,6 +68,32 @@ class ProductionOrderComponent extends Model
         'due_date' => 'date',
     ];
 
+    public function warehouseRequests()
+    {
+        return $this->morphMany(WarehouseRequest::class, 'source', 'source_document', 'source_id')
+            ->where('source_document', 'production_order_component');
+    }
+
+    public function getRemainingQuantityAttribute(): float
+    {
+        $requested = $this->warehouseRequests()
+            ->whereIn('status', ['open', 'partial'])
+            ->sum('quantity_outstanding');
+
+        return max(0, $this->quantity - $this->consumed_quantity - $requested);
+    }
+
+    public function flushingMethod(): FlushingMethod
+    {
+        // Check work center flushing method
+        $workCenter = $this->routingLine?->workCenter;
+        if ($workCenter && $workCenter->workCenterBin) {
+            return $workCenter->workCenterBin->flushing_method;
+        }
+
+        return FlushingMethod::MANUAL;
+    }
+
     public function productionOrder(): BelongsTo
     {
         return $this->belongsTo(ProductionOrder::class, 'production_order_id');
@@ -81,8 +109,8 @@ class ProductionOrderComponent extends Model
         return $this->actual_quantity_consumed >= ($this->expected_quantity - 0.01);
     }
 
-    public function getRemainingQuantityAttribute(): float
-    {
-        return ($this->expected_quantity ?? 0) - ($this->actual_quantity_consumed ?? 0);
-    }
+    //    public function getRemainingQuantityAttribute(): float
+    //    {
+    //        return ($this->expected_quantity ?? 0) - ($this->actual_quantity_consumed ?? 0);
+    //    }
 }

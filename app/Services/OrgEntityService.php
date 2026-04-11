@@ -4,11 +4,11 @@ namespace App\Services;
 
 use App\DTOs\BusinessDTO;
 use App\DTOs\FactoryDTO;
+use App\Enums\DimensionValueType;
 use App\Models\Business;
-use App\Models\Factory;
 use App\Models\Dimension;
 use App\Models\DimensionValue;
-use App\Enums\DimensionValueType;
+use App\Models\Factory;
 
 class OrgEntityService
 {
@@ -17,8 +17,8 @@ class OrgEntityService
      */
     public function upsertBusiness(BusinessDTO $dto, ?Business $business = null): Business
     {
-        $business = $business ?? new Business();
-        
+        $business = $business ?? new Business;
+
         $business->fill($dto->toArray());
         $business->save();
 
@@ -32,18 +32,18 @@ class OrgEntityService
      */
     public function upsertFactory(FactoryDTO $dto, ?Factory $factory = null): Factory
     {
-        $factory = $factory ?? new Factory();
-        
+        $factory = $factory ?? new Factory;
+
         $factory->fill($dto->toArray());
         $factory->save();
 
         // Find the parent business dimension value ID to establish hierarchy
         $business = Business::find($dto->businessId);
         $parentDimensionValueId = null;
-        
+
         if ($business) {
             $parentDimensionValueId = DimensionValue::where('code', $business->code)
-                ->whereHas('dimension', fn($q) => $q->where('code', 'BUSINESS'))
+                ->whereHas('dimension', fn ($q) => $q->where('code', 'BUSINESS'))
                 ->value('id');
         }
 

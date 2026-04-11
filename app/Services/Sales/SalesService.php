@@ -2,6 +2,7 @@
 
 namespace App\Services\Sales;
 
+use App\Services\PostingService;
 use App\Services\PricingService;
 
 class SalesService
@@ -31,6 +32,6 @@ class SalesService
             ['account_id' => 1300, 'credit' => $cost], // Inventory
         ];
 
-        app(\App\Services\PostingService::class)->post($lines);
+        app(PostingService::class)->post($lines);
     }
 }

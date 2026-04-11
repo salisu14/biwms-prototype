@@ -10,7 +10,7 @@ enum PaymentTermsDiscountCalculation: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::NET_DAYS => 'Net Days',
             self::END_OF_MONTH => 'End of Month',
             self::DUE_DATE => 'Due Date',

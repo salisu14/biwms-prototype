@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/VatMaster.php
 
 namespace App\Models;
@@ -12,13 +13,14 @@ use Illuminate\Database\Eloquent\Model;
     'description',
     'purchase_account_number',
     'sales_account_number',
-    'percentage'
+    'percentage',
 ])]
 class VatMaster extends Model
 {
     use HasFactory;
 
     protected $primaryKey = 'id';
+
     protected $table = 'vat_masters';
 
     protected $casts = [
@@ -38,7 +40,7 @@ class VatMaster extends Model
      */
     public function getFormattedPercentageAttribute(): string
     {
-        return $this->percentage . '%';
+        return $this->percentage.'%';
     }
 
     /**

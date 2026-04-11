@@ -3,11 +3,11 @@
 use App\DTOs\BusinessDTO;
 use App\DTOs\FactoryDTO;
 use App\Models\Business;
-use App\Models\Factory;
 use App\Models\DimensionValue;
+use App\Models\Factory;
 use App\Services\OrgEntityService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Database\Seeders\OrgDimensionSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
@@ -21,8 +21,8 @@ test('creating a business syncs dimension value', function () {
     $business = $this->service->upsertBusiness($dto);
 
     expect(Business::count())->toBe(1);
-    
-    $dimValue = DimensionValue::whereHas('dimension', fn($q) => $q->where('code', 'BUSINESS'))
+
+    $dimValue = DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', 'BUSINESS'))
         ->where('code', 'WEST')
         ->first();
 
@@ -40,11 +40,11 @@ test('creating a factory assigns correct dimension hierarchy', function () {
 
     expect(Factory::count())->toBe(1);
 
-    $businessDimValue = DimensionValue::whereHas('dimension', fn($q) => $q->where('code', 'BUSINESS'))
+    $businessDimValue = DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', 'BUSINESS'))
         ->where('code', 'WEST')
         ->first();
 
-    $factoryDimValue = DimensionValue::whereHas('dimension', fn($q) => $q->where('code', 'FACTORY'))
+    $factoryDimValue = DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', 'FACTORY'))
         ->where('code', 'DELTA')
         ->first();
 
@@ -56,10 +56,10 @@ test('creating a factory assigns correct dimension hierarchy', function () {
 test('deleting a business deletes its dimension value', function () {
     $dto = new BusinessDTO('WEST', 'Western Operations');
     $business = $this->service->upsertBusiness($dto);
-    
+
     $business->delete();
 
-    $dimValue = DimensionValue::whereHas('dimension', fn($q) => $q->where('code', 'BUSINESS'))
+    $dimValue = DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', 'BUSINESS'))
         ->where('code', 'WEST')
         ->first();
 

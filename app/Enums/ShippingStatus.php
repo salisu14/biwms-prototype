@@ -6,7 +6,7 @@ use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasIcon;
 use Filament\Support\Contracts\HasLabel;
 
-enum ShippingStatus: string implements HasLabel, HasColor, HasIcon
+enum ShippingStatus: string implements HasColor, HasIcon, HasLabel
 {
     case Pending = 'pending';
     case Picked = 'picked';

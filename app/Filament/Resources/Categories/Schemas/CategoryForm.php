@@ -3,10 +3,11 @@
 namespace App\Filament\Resources\Categories\Schemas;
 
 use App\Enums\CategoryType;
+use App\Models\Category;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -55,8 +56,7 @@ class CategoryForm
 
                         Placeholder::make('dynamic_description')
                             ->label('Type Information')
-                            ->content(fn ($get): string =>
-                                CategoryType::tryFrom($get('category_type'))?->description() ?? 'Select a type to see details.'
+                            ->content(fn ($get): string => CategoryType::tryFrom($get('category_type'))?->description() ?? 'Select a type to see details.'
                             )
                             ->columnSpanFull(),
                     ]),
@@ -70,12 +70,12 @@ class CategoryForm
                             Select::make('parent_id')
                                 ->label('Parent Category')
                                 ->options(function () {
-                                    return \App\Models\Category::query()
+                                    return Category::query()
                                         ->whereNotNull('category_name')
                                         ->where('category_name', '!=', '')
                                         ->get()
                                         ->mapWithKeys(fn ($category) => [
-                                            $category->id => $category->category_name ?? 'Unnamed Category (ID: ' . $category->id . ')'
+                                            $category->id => $category->category_name ?? 'Unnamed Category (ID: '.$category->id.')',
                                         ])
                                         ->toArray();
                                 })

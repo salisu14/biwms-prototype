@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\SalesOrders\Schemas;
 
-use App\Models\SalesOrder;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;

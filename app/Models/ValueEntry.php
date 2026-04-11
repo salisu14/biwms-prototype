@@ -5,8 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class ValueEntry extends Model
 {
@@ -350,11 +348,11 @@ class ValueEntry extends Model
             ->where('inventory_posting_group', $item?->inventory_posting_group_code)
             ->first();
 
-        if (!$setup) {
+        if (! $setup) {
             return null;
         }
 
-        return match($this->item_ledger_entry_type) {
+        return match ($this->item_ledger_entry_type) {
             'PURCHASE' => $setup->inventory_account,
             'SALE' => $setup->cogs_account,
             'POSITIVE_ADJUSTMENT', 'NEGATIVE_ADJUSTMENT' => $setup->inventory_adj_account,
@@ -372,7 +370,7 @@ class ValueEntry extends Model
      */
     public function determineBalancingAccount(): ?string
     {
-        return match($this->item_ledger_entry_type) {
+        return match ($this->item_ledger_entry_type) {
             'PURCHASE' => $this->vendor?->payables_account,
             'SALE' => $this->getSalesAccount(),
             'CONSUMPTION' => $this->getAppliedAccount(), // Raw Materials account
@@ -399,7 +397,7 @@ class ValueEntry extends Model
         // Determine debit/credit based on entry type
         $isDebit = in_array($this->item_ledger_entry_type, [
             'PURCHASE', 'POSITIVE_ADJUSTMENT', 'CONSUMPTION',
-            'CAPACITY', 'OVERHEAD', 'TRANSFER_IN'
+            'CAPACITY', 'OVERHEAD', 'TRANSFER_IN',
         ]);
 
         $glEntry = GLEntry::create([
@@ -419,7 +417,7 @@ class ValueEntry extends Model
             'posting_date' => $this->posting_date,
             'document_type' => $this->document_type ?? 'PRODUCTION',
             'document_no' => $this->document_no ?? $this->source_no,
-            'description' => $this->getGLDescription() . ' (Balancing)',
+            'description' => $this->getGLDescription().' (Balancing)',
             'account_no' => $isDebit ? $creditAccount : $debitAccount,
             'debit_amount' => $isDebit ? 0 : $amount,
             'credit_amount' => $isDebit ? $amount : 0,
@@ -453,7 +451,7 @@ class ValueEntry extends Model
         $reversal->indirect_cost_amount = -$this->indirect_cost_amount;
         $reversal->overhead_amount = -$this->overhead_amount;
         $reversal->posting_date = $postingDate ?? now();
-        $reversal->description = 'Reversal of Entry ' . $this->entry_no;
+        $reversal->description = 'Reversal of Entry '.$this->entry_no;
         $reversal->original_entry_no = $this->id;
         $reversal->entry_type = 'REVERSAL';
         $reversal->gl_posted = false;
@@ -537,7 +535,7 @@ class ValueEntry extends Model
 
     private function getGLDescription(): string
     {
-        return match($this->item_ledger_entry_type) {
+        return match ($this->item_ledger_entry_type) {
             'CONSUMPTION' => "Consumption: {$this->item_no} -> PO {$this->production_order_no}",
             'OUTPUT' => "Output: PO {$this->production_order_no} -> {$this->item_no}",
             'CAPACITY' => "Capacity: {$this->capacity_type} {$this->capacity_no} -> PO {$this->production_order_no}",

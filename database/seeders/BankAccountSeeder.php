@@ -336,7 +336,7 @@ class BankAccountSeeder extends Seeder
         }
 
         $this->command->info('Bank Accounts seeded successfully!');
-        $this->command->info('Total: ' . count($bankAccounts) . ' accounts');
+        $this->command->info('Total: '.count($bankAccounts).' accounts');
 
         $activeCount = collect($bankAccounts)->where('active', true)->count();
         $inactiveCount = collect($bankAccounts)->where('active', false)->count();
@@ -345,14 +345,14 @@ class BankAccountSeeder extends Seeder
         // Summary by type
         $byType = collect($bankAccounts)->groupBy('account_type.value');
         foreach ($byType as $type => $items) {
-            $this->command->info("{$type}: " . $items->count());
+            $this->command->info("{$type}: ".$items->count());
         }
 
         // Summary by currency
         $byCurrency = collect($bankAccounts)->groupBy('currency_code');
         foreach ($byCurrency as $currency => $items) {
             $total = $items->sum('current_balance');
-            $this->command->info("{$currency}: {$items->count()} accounts, Balance: " . number_format($total, 2));
+            $this->command->info("{$currency}: {$items->count()} accounts, Balance: ".number_format($total, 2));
         }
     }
 

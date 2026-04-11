@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\DimensionValueType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DimensionValue extends Model
 {
@@ -13,14 +14,14 @@ class DimensionValue extends Model
 
     protected $fillable = [
         'dimension_id', 'code', 'name', 'dimension_value_type',
-        'parent_id', 'indentation', 'blocked', 'starting_date', 'ending_date'
+        'parent_id', 'indentation', 'blocked', 'starting_date', 'ending_date',
     ];
 
     protected $casts = [
         'blocked' => 'boolean',
         'starting_date' => 'date',
         'ending_date' => 'date',
-        'dimension_value_type' => \App\Enums\DimensionValueType::class,
+        'dimension_value_type' => DimensionValueType::class,
     ];
 
     public function dimension(): BelongsTo
@@ -51,10 +52,10 @@ class DimensionValue extends Model
     public function scopeActive($query)
     {
         return $query->where('blocked', false)
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->whereNull('starting_date')->orWhere('starting_date', '<=', now());
             })
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->whereNull('ending_date')->orWhere('ending_date', '>=', now());
             });
     }

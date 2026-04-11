@@ -12,7 +12,7 @@ class Dimension extends Model
 
     protected $fillable = [
         'code', 'name', 'code_caption', 'filter_caption',
-        'description', 'blocked', 'dimension_type', 'global_dimension_no'
+        'description', 'blocked', 'dimension_type', 'global_dimension_no',
     ];
 
     protected $casts = [

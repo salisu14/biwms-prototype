@@ -15,7 +15,7 @@ enum ShipmentStatus: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'Open',
             self::RELEASED => 'Released',
             self::PARTIALLY_SHIPPED => 'Partially Shipped',
@@ -28,7 +28,7 @@ enum ShipmentStatus: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'bg-gray-100 text-gray-800',
             self::RELEASED => 'bg-blue-100 text-blue-800',
             self::PARTIALLY_SHIPPED => 'bg-amber-100 text-amber-800',
@@ -42,7 +42,7 @@ enum ShipmentStatus: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'heroicon-o-document-text',
             self::RELEASED => 'heroicon-o-lock-open',
             self::PARTIALLY_SHIPPED => 'heroicon-o-clock',

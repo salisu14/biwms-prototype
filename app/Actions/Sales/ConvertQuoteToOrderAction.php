@@ -18,14 +18,14 @@ class ConvertQuoteToOrderAction
 
             $order = SalesOrder::create([
                 'customer_id' => $quote->customer_id,
-                'status' => 'pending'
+                'status' => 'pending',
             ]);
 
             foreach ($quote->items as $item) {
                 $order->items()->create([
                     'item_id' => $item->item_id,
                     'quantity' => $item->quantity,
-                    'price' => $item->unit_price
+                    'price' => $item->unit_price,
                 ]);
             }
 

@@ -6,6 +6,8 @@ use App\Data\Purchase\ApprovePurchaseOrderData;
 use App\Data\Purchase\CancelPurchaseOrderData;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
+use App\Models\PurchaseOrder;
+use App\Services\Print\ProformaInvoiceService;
 use App\Services\Purchase\PurchaseOrderService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -14,9 +16,9 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
-use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
 
 class PurchaseOrdersTable
 {
@@ -40,18 +42,21 @@ class PurchaseOrdersTable
                         $enum = $state instanceof PurchaseOrderType
                             ? $state
                             : PurchaseOrderType::tryFrom($state);
+
                         return $enum?->label() ?? (string) $state;
                     })
                     ->icon(function ($state): ?string {
                         $enum = $state instanceof PurchaseOrderType
                             ? $state
                             : PurchaseOrderType::tryFrom($state);
+
                         return $enum?->icon();
                     })
                     ->color(function ($state): string {
                         $enum = $state instanceof PurchaseOrderType
                             ? $state
                             : PurchaseOrderType::tryFrom($state);
+
                         return $enum?->color() ?? 'gray';
                     })
                     ->toggleable(isToggledHiddenByDefault: false),
@@ -64,18 +69,21 @@ class PurchaseOrdersTable
                         $enum = $state instanceof PurchaseOrderStatus
                             ? $state
                             : PurchaseOrderStatus::tryFrom($state);
+
                         return $enum?->label() ?? (string) $state;
                     })
                     ->icon(function ($state): ?string {
                         $enum = $state instanceof PurchaseOrderStatus
                             ? $state
                             : PurchaseOrderStatus::tryFrom($state);
+
                         return $enum?->icon();
                     })
                     ->color(function ($state): string {
                         $enum = $state instanceof PurchaseOrderStatus
                             ? $state
                             : PurchaseOrderStatus::tryFrom($state);
+
                         return $enum?->color() ?? 'gray';
                     }),
 
@@ -106,9 +114,11 @@ class PurchaseOrdersTable
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->visible(fn ($record) => $record instanceof \App\Models\PurchaseOrder && $record->status === PurchaseOrderStatus::PENDING)
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && $record->status === PurchaseOrderStatus::PENDING)
                         ->action(function ($record, PurchaseOrderService $service) {
-                            if (! $record instanceof \App\Models\PurchaseOrder) return;
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
                             $service->approve(new ApprovePurchaseOrderData(
                                 purchaseOrderId: $record->id,
                                 approvedBy: auth()->id()
@@ -122,9 +132,11 @@ class PurchaseOrdersTable
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
                         ->requiresConfirmation()
-                        ->visible(fn ($record) => $record instanceof \App\Models\PurchaseOrder && $record->can_edit && $record->status !== PurchaseOrderStatus::CANCELLED)
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && $record->can_edit && $record->status !== PurchaseOrderStatus::CANCELLED)
                         ->action(function ($record, PurchaseOrderService $service) {
-                            if (! $record instanceof \App\Models\PurchaseOrder) return;
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
                             try {
                                 $service->cancel(new CancelPurchaseOrderData(
                                     purchaseOrderId: $record->id
@@ -139,9 +151,11 @@ class PurchaseOrdersTable
                     Action::make('recalculate')
                         ->label('Refresh Totals')
                         ->icon('heroicon-o-calculator')
-                        ->visible(fn ($record) => $record instanceof \App\Models\PurchaseOrder)
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder)
                         ->action(function ($record, PurchaseOrderService $service) {
-                            if (! $record instanceof \App\Models\PurchaseOrder) return;
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
                             $record->recalculateTotals();
                             Notification::make()->title('Totals Recalculated')->success()->send();
                         }),
@@ -150,12 +164,12 @@ class PurchaseOrdersTable
                         ->label('Proforma Invoice')
                         ->icon('heroicon-o-printer')
                         ->color('info')
-                        ->visible(fn ($record) => $record instanceof \App\Models\PurchaseOrder)
-                        ->action(fn ($record) => $record instanceof \App\Models\PurchaseOrder ? response()->streamDownload(
-                            fn () => print(app(\App\Services\Print\ProformaInvoiceService::class)->generatePurchaseProforma($record->refresh()->load(['lines']))->output()),
-                            $record->order_number . '_Proforma.pdf'
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder)
+                        ->action(fn ($record) => $record instanceof PurchaseOrder ? response()->streamDownload(
+                            fn () => print (app(ProformaInvoiceService::class)->generatePurchaseProforma($record->refresh()->load(['lines']))->output()),
+                            $record->order_number.'_Proforma.pdf'
                         ) : null),
-                ])
+                ]),
             ])
             ->filters([
                 SelectFilter::make('status')

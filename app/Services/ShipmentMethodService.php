@@ -51,7 +51,7 @@ class ShipmentMethodService
             ? $this->getByCode($shipmentMethodCode)
             : $this->getDefaultForCustomer($customer);
 
-        if (!$method || !$method->canUse()) {
+        if (! $method || ! $method->canUse()) {
             throw new \InvalidArgumentException("Invalid or blocked shipment method: {$shipmentMethodCode}");
         }
 
@@ -63,7 +63,7 @@ class ShipmentMethodService
 
         // Validate Incoterm compatibility
         if ($method->is_incoterm && $order->ship_to_country_code) {
-            if (!$method->isValidForRoute($customer->country_code, $order->ship_to_country_code)) {
+            if (! $method->isValidForRoute($customer->country_code, $order->ship_to_country_code)) {
                 throw new \InvalidArgumentException(
                     "Incoterm {$method->incoterm_code} is not valid for this route"
                 );
@@ -82,8 +82,8 @@ class ShipmentMethodService
             ? $this->getByCode($shipmentMethodCode)
             : $this->getDefaultForVendor($vendor);
 
-        if (!$method || !$method->canUse()) {
-            throw new \InvalidArgumentException("Invalid or blocked shipment method");
+        if (! $method || ! $method->canUse()) {
+            throw new \InvalidArgumentException('Invalid or blocked shipment method');
         }
 
         $order->update([
@@ -98,11 +98,11 @@ class ShipmentMethodService
     {
         $method = $this->getByCode($code);
 
-        if (!$method) {
+        if (! $method) {
             throw new \InvalidArgumentException("Shipment method {$code} not found");
         }
 
-        if (!$method->canUse()) {
+        if (! $method->canUse()) {
             throw new \InvalidArgumentException("Shipment method {$code} is blocked or inactive");
         }
 
@@ -127,7 +127,7 @@ class ShipmentMethodService
      */
     public function getIncotermGuidance(ShipmentMethod $method): array
     {
-        if (!$method->is_incoterm) {
+        if (! $method->is_incoterm) {
             return [];
         }
 

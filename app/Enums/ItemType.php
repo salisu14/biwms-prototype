@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/ItemType.php
 
 namespace App\Enums;
@@ -13,7 +14,7 @@ enum ItemType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RAW_MATERIAL => 'Raw Material',
             self::FINISHED_GOOD => 'Finished Good',
             self::PACKAGING => 'Packaging Material',
@@ -24,7 +25,7 @@ enum ItemType: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RAW_MATERIAL => 'Materials used in production or manufacturing',
             self::FINISHED_GOOD => 'Completed products ready for sale',
             self::PACKAGING => 'Materials used for packaging finished goods',
@@ -35,7 +36,7 @@ enum ItemType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RAW_MATERIAL => 'heroicon-m-beaker',
             self::FINISHED_GOOD => 'heroicon-m-check-badge',
             self::PACKAGING => 'heroicon-m-box',
@@ -46,7 +47,7 @@ enum ItemType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RAW_MATERIAL => 'warning',
             self::FINISHED_GOOD => 'success',
             self::PACKAGING => 'info',
@@ -74,6 +75,7 @@ enum ItemType: string
     {
         return array_reduce(self::cases(), function ($carry, $case) {
             $carry[$case->value] = $case->label();
+
             return $carry;
         }, []);
     }

@@ -37,14 +37,14 @@ class DepartmentsTable
                 TextColumn::make('budget_utilized')
                     ->label('Budget Utilization')
                     ->money()
-                    ->description(fn ($record) => "of " . number_format((float)$record->annual_budget, 2) . " (" . $record->budget_utilization_percent . "%)")
+                    ->description(fn ($record) => 'of '.number_format((float) $record->annual_budget, 2).' ('.$record->budget_utilization_percent.'%)')
                     ->sortable(),
                 IconColumn::make('is_cost_center')
                     ->label('CC')
                     ->boolean()
                     ->toggleable(),
                 TextColumn::make('manager.id') // Assuming manager ID or name
-                ->label('Manager')
+                    ->label('Manager')
                     ->placeholder('Not Assigned')
                     ->toggleable(),
                 TextColumn::make('location_code')

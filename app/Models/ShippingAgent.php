@@ -65,7 +65,7 @@ class ShippingAgent extends Model
 
     public function canUse(): bool
     {
-        return $this->is_active && !$this->blocked;
+        return $this->is_active && ! $this->blocked;
     }
 
     public function getDefaultService(): ?ShippingAgentService
@@ -79,7 +79,7 @@ class ShippingAgent extends Model
     {
         $service = $this->services()->where('service_code', $serviceCode)->first();
 
-        if (!$service) {
+        if (! $service) {
             return $this->base_charge;
         }
 

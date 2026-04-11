@@ -25,6 +25,7 @@ class DefaultDimensionsRelationManager extends RelationManager
     protected static ?string $relatedResource = DimensionResource::class;
 
     protected static ?string $title = 'Default Dimensions';
+
     public function form(Schema $schema): Schema
     {
         return $schema
@@ -41,14 +42,16 @@ class DefaultDimensionsRelationManager extends RelationManager
                     ->label('Default Value')
                     ->options(function (Get $get) {
                         $dimCode = $get('dimension_code');
-                        if (!$dimCode) return [];
+                        if (! $dimCode) {
+                            return [];
+                        }
 
-                        return DimensionValue::whereHas('dimension', fn($q) => $q->where('code', $dimCode))
+                        return DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', $dimCode))
                             ->pluck('name', 'code');
                     })
                     ->searchable()
                     ->required()
-                    ->disabled(fn (Get $get) => !$get('dimension_code')),
+                    ->disabled(fn (Get $get) => ! $get('dimension_code')),
 
                 Select::make('value_posting')
                     ->label('Posting Rule')
@@ -88,6 +91,7 @@ class DefaultDimensionsRelationManager extends RelationManager
                     ->mutateDataUsing(function (array $data): array {
                         $data['table_id'] = $this->getOwnerRecord()->getTable();
                         $data['no'] = $this->getOwnerRecord()->id;
+
                         return $data;
                     }),
             ])

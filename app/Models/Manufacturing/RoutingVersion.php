@@ -2,6 +2,7 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -42,12 +43,12 @@ class RoutingVersion extends Model
 
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function lastModifier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'last_modified_by');
+        return $this->belongsTo(User::class, 'last_modified_by');
     }
 
     /**
@@ -85,6 +86,7 @@ class RoutingVersion extends Model
 
         return $totalTime;
     }
+
     protected static function booted(): void
     {
         static::creating(function ($routing) {

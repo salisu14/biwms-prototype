@@ -21,7 +21,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
-
 class RoleResource extends Resource
 {
     protected static ?string $model = Role::class;
@@ -98,10 +97,9 @@ class RoleResource extends Resource
     {
         return [
             'index' => ManageRoles::route('/'),
-            'view'  => ViewRole::route('/{record}'),
+            'view' => ViewRole::route('/{record}'),
         ];
     }
-
 
     public static function infolist(Schema $schema): Schema
     {

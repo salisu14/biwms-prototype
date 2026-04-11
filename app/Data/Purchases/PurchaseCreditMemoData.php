@@ -2,7 +2,6 @@
 
 namespace App\Data\Purchases;
 
-use App\Enums\ApprovalStatus;
 use Spatie\LaravelData\Data;
 use Spatie\LaravelData\DataCollection;
 
@@ -21,14 +20,14 @@ class PurchaseCreditMemoData extends Data
 {
     public function __construct(
         public int $vendor_id,
-        public ?int $corrects_invoice_id = null,
-        public ?string $external_document_number = null,
-        public ?\DateTime $posting_date = null,
-        public ?\DateTime $document_date = null,
-        public ?int $location_id = null,
-        public ?string $currency_code = 'USD',
-        public ?string $reason_code = null,
-        public ?string $description = null,
+        public ?int $corrects_invoice_id,
+        public ?string $external_document_number,
+        public ?\DateTime $posting_date,
+        public ?\DateTime $document_date,
+        public ?int $location_id,
+        public ?string $currency_code,
+        public ?string $reason_code,
+        public ?string $description,
         /** @var DataCollection<PurchaseCreditMemoLineData> */
         public DataCollection $lines,
     ) {}

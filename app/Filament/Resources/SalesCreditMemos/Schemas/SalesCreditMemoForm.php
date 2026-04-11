@@ -8,8 +8,8 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -27,7 +27,7 @@ class SalesCreditMemoForm
                         Section::make('General Information')
                             ->schema([
                                 TextInput::make('memo_number')
-                                    ->default('CM-' . now()->format('Ymd-His'))
+                                    ->default('CM-'.now()->format('Ymd-His'))
                                     ->required()
                                     ->disabled(fn ($record) => $record?->isPosted())
                                     ->unique(ignoreRecord: true),
@@ -109,10 +109,11 @@ class SalesCreditMemoForm
                                             ->numeric()
                                             ->readOnly()
                                             ->placeholder(function (Get $get) {
-                                                $qty = (float)($get('quantity') ?? 0);
-                                                $price = (float)($get('unit_price') ?? 0);
-                                                $vat = (float)($get('vat_percent') ?? 0);
+                                                $qty = (float) ($get('quantity') ?? 0);
+                                                $price = (float) ($get('unit_price') ?? 0);
+                                                $vat = (float) ($get('vat_percent') ?? 0);
                                                 $net = $qty * $price;
+
                                                 return number_format($net + ($net * ($vat / 100)), 2);
                                             })
                                             ->columnSpan(2),
@@ -147,11 +148,13 @@ class SalesCreditMemoForm
                                     ->readOnly()
                                     ->placeholder(function (Get $get) {
                                         $items = collect($get('items'));
-                                        $grandTotal = $items->reduce(function($carry, $item) {
-                                            $net = (float)($item['quantity'] ?? 0) * (float)($item['unit_price'] ?? 0);
-                                            $vat = $net * ((float)($item['vat_percent'] ?? 0) / 100);
+                                        $grandTotal = $items->reduce(function ($carry, $item) {
+                                            $net = (float) ($item['quantity'] ?? 0) * (float) ($item['unit_price'] ?? 0);
+                                            $vat = $net * ((float) ($item['vat_percent'] ?? 0) / 100);
+
                                             return $carry + ($net + $vat);
                                         }, 0);
+
                                         return number_format($grandTotal, 2);
                                     }),
                                 Select::make('currency_code')

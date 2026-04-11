@@ -115,7 +115,7 @@ class ShipmentMethod extends Model
     // Methods
     public function canUse(): bool
     {
-        return $this->is_active && !$this->blocked;
+        return $this->is_active && ! $this->blocked;
     }
 
     public function block(): void
@@ -133,7 +133,7 @@ class ShipmentMethod extends Model
      */
     public function isValidForRoute(?string $originCountry, ?string $destinationCountry): bool
     {
-        if (!$this->is_incoterm) {
+        if (! $this->is_incoterm) {
             return true;
         }
 

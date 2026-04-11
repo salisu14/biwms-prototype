@@ -2,17 +2,16 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Attributes\Description;
-use Illuminate\Console\Attributes\Signature;
-use Illuminate\Console\Command;
+use App\Enums\CalculationMethod;
+use App\Enums\PayrollStatus;
 use App\Models\Employee;
 use App\Models\PayCode;
 use App\Models\PayrollDocument;
 use App\Models\PayrollLine;
-use App\Enums\PayrollStatus;
-use App\Enums\PayCodeType;
-use App\Enums\CalculationMethod;
 use Carbon\Carbon;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 #[Signature('payroll:generate {--month=} {--year=}')]
@@ -30,7 +29,7 @@ class GeneratePayroll extends Command
         $start = Carbon::createFromDate($year, $month, 1)->startOfMonth();
         $end = $start->copy()->endOfMonth();
 
-        $docNo = 'PRL-' . $start->format('Ym') . '-' . rand(100, 999);
+        $docNo = 'PRL-'.$start->format('Ym').'-'.rand(100, 999);
 
         $this->info("Generating payroll draft {$docNo} for {$start->format('F Y')}...");
 
@@ -40,15 +39,16 @@ class GeneratePayroll extends Command
                 'period_start' => $start->toDateString(),
                 'period_end' => $end->toDateString(),
                 'status' => PayrollStatus::DRAFT,
-                'remarks' => "Auto-generated batch",
+                'remarks' => 'Auto-generated batch',
             ]);
 
             $employees = Employee::where('is_active', true)->get();
 
             // Find default PayCodes
             $baseSalaryCode = PayCode::where('code', 'BASE')->first();
-            if (!$baseSalaryCode) {
+            if (! $baseSalaryCode) {
                 $this->error("A PayCode with code 'BASE' must exist to generate standard payroll.");
+
                 return;
             }
 

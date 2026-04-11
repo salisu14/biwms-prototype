@@ -20,7 +20,7 @@ class SalesInvoiceService
 
             $user = Auth::user();
 
-            if (!$user) {
+            if (! $user) {
                 throw new \Exception('Unauthenticated user');
             }
 
@@ -79,12 +79,12 @@ class SalesInvoiceService
     public function post(SalesInvoice $invoice): void
     {
         if ($invoice->isPosted()) {
-            throw new \Exception("Invoice already posted");
+            throw new \Exception('Invoice already posted');
         }
 
         // ✅ Only approved invoices can be posted
         if ($invoice->status !== ApprovalStatus::APPROVED) {
-            throw new \Exception("Only approved invoices can be posted");
+            throw new \Exception('Only approved invoices can be posted');
         }
 
         DB::transaction(function () use ($invoice) {
@@ -92,7 +92,7 @@ class SalesInvoiceService
             $invoice->load('lines');
 
             if ($invoice->lines->isEmpty()) {
-                throw new \Exception("No lines to post");
+                throw new \Exception('No lines to post');
             }
 
             // 🔥 1. Inventory reduction
@@ -122,6 +122,6 @@ class SalesInvoiceService
 
     private function generateNumber(): string
     {
-        return 'INV-' . now()->format('YmdHis');
+        return 'INV-'.now()->format('YmdHis');
     }
 }

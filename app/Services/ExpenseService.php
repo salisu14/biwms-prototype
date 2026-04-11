@@ -403,11 +403,11 @@ class ExpenseService
                 'debit_amount' => $amount,
                 'credit_amount' => 0,
                 'source_type' => 'ITEM',
-                'source_number' => $item->item_number,
+                'source_number' => $item->item_code,
                 'document_type' => 'SALES_RETURN',
                 'document_number' => $documentNo,
                 'posting_date' => now(),
-                'description' => "Reverse COGS (Inv): {$item->item_number}",
+                'description' => "Reverse COGS (Inv): {$item->item_code}",
             ]);
 
             // 2. Credit COGS (Decrease)
@@ -416,11 +416,11 @@ class ExpenseService
                 'debit_amount' => 0,
                 'credit_amount' => $amount,
                 'source_type' => 'ITEM',
-                'source_number' => $item->item_number,
+                'source_number' => $item->item_code,
                 'document_type' => 'SALES_RETURN',
                 'document_number' => $documentNo,
                 'posting_date' => now(),
-                'description' => "Reverse COGS (Exp): {$item->item_number}",
+                'description' => "Reverse COGS (Exp): {$item->item_code}",
             ]);
         }
     }

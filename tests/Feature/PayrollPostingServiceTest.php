@@ -1,15 +1,16 @@
 <?php
 
+use App\Enums\CalculationMethod;
+use App\Enums\PayCodeType;
+use App\Enums\PayrollStatus;
+use App\Models\ChartOfAccount;
 use App\Models\Employee;
 use App\Models\EmployeePostingGroup;
-use App\Models\ChartOfAccount;
+use App\Models\GlEntry;
 use App\Models\PayCode;
 use App\Models\PayrollDocument;
 use App\Models\PayrollLine;
-use App\Models\GlEntry;
-use App\Enums\PayCodeType;
-use App\Enums\CalculationMethod;
-use App\Enums\PayrollStatus;
+use App\Models\User;
 use App\Services\PayrollPostingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -17,7 +18,7 @@ uses(RefreshDatabase::class);
 
 test('posting payroll calculates balanced gl entries for earning and deduction', function () {
     // Setup Admin
-    \App\Models\User::factory()->create();
+    User::factory()->create();
 
     // Setup Accounting
     $salaryExpenseAccount = ChartOfAccount::factory()->create(['account_type' => 'EXPENSE']);
@@ -68,7 +69,7 @@ test('posting payroll calculates balanced gl entries for earning and deduction',
     ]);
 
     // Action
-    $service = new PayrollPostingService();
+    $service = new PayrollPostingService;
     $service->post($doc);
 
     // Assert Status is Posted

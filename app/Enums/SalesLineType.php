@@ -6,7 +6,7 @@ use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasIcon;
 use Filament\Support\Contracts\HasLabel;
 
-enum SalesLineType: string implements HasLabel, HasColor, HasIcon
+enum SalesLineType: string implements HasColor, HasIcon, HasLabel
 {
     case Item = 'item';
     case Resource = 'resource';

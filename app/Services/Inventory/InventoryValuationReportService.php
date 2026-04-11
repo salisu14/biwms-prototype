@@ -2,19 +2,20 @@
 
 namespace App\Services\Inventory;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class InventoryValuationReportService
 {
-    public function generate($startDate, $endDate, $filters = []): \Illuminate\Support\Collection
+    public function generate($startDate, $endDate, $filters = []): Collection
     {
         $query = DB::table('inventory_ledgers')
             ->select('item_id')
 
-            ->selectRaw("
+            ->selectRaw('
                 SUM(CASE WHEN posting_date < ? THEN quantity ELSE 0 END) as opening_qty,
                 SUM(CASE WHEN posting_date < ? THEN cost_amount ELSE 0 END) as opening_value
-            ", [$startDate, $startDate])
+            ', [$startDate, $startDate])
 
             ->selectRaw("
                 SUM(CASE WHEN entry_type = 'purchase' AND posting_date BETWEEN ? AND ? THEN quantity ELSE 0 END) as purchase_qty,

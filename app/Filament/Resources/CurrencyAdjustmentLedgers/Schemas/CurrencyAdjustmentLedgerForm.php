@@ -5,8 +5,8 @@ namespace App\Filament\Resources\CurrencyAdjustmentLedgers\Schemas;
 use App\Enums\CurrencyAdjustmentType;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -45,7 +45,7 @@ class CurrencyAdjustmentLedgerForm
                             TextInput::make('created_at')
                                 ->label('Entry Date')
                                 ->disabled()
-                                ->placeholder(fn($record) => $record?->created_at?->toDateTimeString()),
+                                ->placeholder(fn ($record) => $record?->created_at?->toDateTimeString()),
                         ])->columnSpan(1),
                 ]),
 
@@ -85,7 +85,7 @@ class CurrencyAdjustmentLedgerForm
                         Select::make('adjustment_account_id')
                             ->label('G/L Adjustment Account')
                             ->relationship('adjustmentAccount', 'name')
-                            ->getOptionLabelFromRecordUsing(fn($record) => "{$record->code} - {$record->name}")
+                            ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->code} - {$record->name}")
                             ->required()
                             ->columnSpanFull(),
                     ]),

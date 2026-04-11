@@ -15,8 +15,11 @@ class ChangeGlobalDimensionsJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public ?string $oldDim1;
+
     public ?string $newDim1;
+
     public ?string $oldDim2;
+
     public ?string $newDim2;
 
     /**
@@ -54,7 +57,7 @@ class ChangeGlobalDimensionsJob implements ShouldQueue
 
     public function handle(): void
     {
-        Log::info("Starting global dimension change job", [
+        Log::info('Starting global dimension change job', [
             'old_dim_1' => $this->oldDim1,
             'new_dim_1' => $this->newDim1,
             'old_dim_2' => $this->oldDim2,
@@ -62,15 +65,16 @@ class ChangeGlobalDimensionsJob implements ShouldQueue
         ]);
 
         foreach ($this->tables as $table) {
-            if (!DB::getSchemaBuilder()->hasTable($table)) {
+            if (! DB::getSchemaBuilder()->hasTable($table)) {
                 Log::warning("Table {$table} does not exist, skipping");
+
                 continue;
             }
 
             $hasDim1 = DB::getSchemaBuilder()->hasColumn($table, 'global_dimension_1_code');
             $hasDim2 = DB::getSchemaBuilder()->hasColumn($table, 'global_dimension_2_code');
 
-            if (!$hasDim1 && !$hasDim2) {
+            if (! $hasDim1 && ! $hasDim2) {
                 continue;
             }
 
@@ -139,7 +143,7 @@ class ChangeGlobalDimensionsJob implements ShouldQueue
                 ->update(['dimension_type' => 'global', 'global_dimension_no' => 2]);
         }
 
-        Log::info("Global dimension change job completed successfully");
+        Log::info('Global dimension change job completed successfully');
     }
 
     /**
@@ -147,7 +151,7 @@ class ChangeGlobalDimensionsJob implements ShouldQueue
      */
     public function failed(\Throwable $exception): void
     {
-        Log::error("Global dimension change job failed", [
+        Log::error('Global dimension change job failed', [
             'error' => $exception->getMessage(),
             'trace' => $exception->getTraceAsString(),
         ]);

@@ -15,7 +15,7 @@ enum ShippingAgentServiceType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::GROUND => 'Ground',
             self::EXPRESS => 'Express',
             self::OVERNIGHT => 'Overnight',
@@ -27,7 +27,7 @@ enum ShippingAgentServiceType: string
 
     public function defaultTransitDays(): int
     {
-        return match($this) {
+        return match ($this) {
             self::GROUND => 5,
             self::EXPRESS => 2,
             self::OVERNIGHT => 1,

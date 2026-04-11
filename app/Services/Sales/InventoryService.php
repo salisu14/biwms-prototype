@@ -17,7 +17,9 @@ class InventoryService
         $totalCost = 0;
 
         foreach ($layers as $layer) {
-            if ($remaining <= 0) break;
+            if ($remaining <= 0) {
+                break;
+            }
 
             $take = min($layer->quantity, $remaining);
 

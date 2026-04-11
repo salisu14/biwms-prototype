@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PostedSalesCreditMemo.php
 
 namespace App\Models;
@@ -188,9 +189,16 @@ class PostedSalesCreditMemo extends Model
 
     public function getStatusAttribute(): string
     {
-        if ($this->corrected) return 'CORRECTED';
-        if ($this->fully_applied) return 'FULLY_APPLIED';
-        if ($this->refunded) return 'REFUNDED';
+        if ($this->corrected) {
+            return 'CORRECTED';
+        }
+        if ($this->fully_applied) {
+            return 'FULLY_APPLIED';
+        }
+        if ($this->refunded) {
+            return 'REFUNDED';
+        }
+
         return 'OPEN';
     }
 
@@ -201,7 +209,7 @@ class PostedSalesCreditMemo extends Model
 
     public function getIsInventoryReturnAttribute(): bool
     {
-        return $this->is_return && $this->lines->contains(fn($line) => $line->is_inventory_item);
+        return $this->is_return && $this->lines->contains(fn ($line) => $line->is_inventory_item);
     }
 
     // ==================== BUSINESS METHODS ====================
@@ -218,13 +226,15 @@ class PostedSalesCreditMemo extends Model
 
             foreach ($applications as $app) {
                 $invoice = PostedSalesInvoice::find($app['invoice_id']);
-                if (!$invoice || $invoice->customer_id !== $this->customer_id) {
+                if (! $invoice || $invoice->customer_id !== $this->customer_id) {
                     continue;
                 }
 
                 $amount = min($app['amount'], $this->remaining_amount, $invoice->remaining_amount);
 
-                if ($amount <= 0) continue;
+                if ($amount <= 0) {
+                    continue;
+                }
 
                 // Create application entry
                 CustomerLedgerEntry::create([
@@ -283,7 +293,7 @@ class PostedSalesCreditMemo extends Model
      */
     public function createWarehouseReceipt(?int $userId = null): ?WarehouseReceipt
     {
-        if (!$this->is_inventory_return) {
+        if (! $this->is_inventory_return) {
             return null; // No physical goods to receive
         }
 
@@ -302,7 +312,9 @@ class PostedSalesCreditMemo extends Model
             ]);
 
             foreach ($this->lines as $cmLine) {
-                if (!$cmLine->is_inventory_item) continue;
+                if (! $cmLine->is_inventory_item) {
+                    continue;
+                }
 
                 $receipt->lines()->create([
                     'line_number' => $cmLine->line_number,
@@ -367,6 +379,7 @@ class PostedSalesCreditMemo extends Model
         $prefix = 'SCM';
         $year = date('Y');
         $count = self::whereYear('posted_at', $year)->count() + 1;
+
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
     }
 
@@ -410,14 +423,18 @@ class PostedSalesCreditMemo extends Model
 
             foreach ($returnOrder->lines as $soLine) {
                 $returnQty = $returnQuantities[$soLine->id] ?? 0;
-                if ($returnQty <= 0) continue;
+                if ($returnQty <= 0) {
+                    continue;
+                }
 
                 // Find original invoice line
                 $invLine = $originalInvoice->lines()
                     ->where('so_line_id', $soLine->return_against_line_id)
                     ->first();
 
-                if (!$invLine) continue;
+                if (! $invLine) {
+                    continue;
+                }
 
                 $ratio = $returnQty / $invLine->quantity;
 

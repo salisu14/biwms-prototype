@@ -6,12 +6,11 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Table;
 
 class ItemSkusTable
 {
@@ -50,8 +49,7 @@ class ItemSkusTable
                     ->label('On Hand')
                     ->sortable()
                     ->badge()
-                    ->color(fn ($record): string =>
-                    $record->needs_reorder ? 'danger' : 'success'
+                    ->color(fn ($record): string => $record->needs_reorder ? 'danger' : 'success'
                     )
                     ->suffix(' qty'),
 
@@ -62,8 +60,7 @@ class ItemSkusTable
                     ->falseIcon('heroicon-o-check')
                     ->trueColor('danger')
                     ->falseColor('success')
-                    ->tooltip(fn ($record): string =>
-                    $record->needs_reorder
+                    ->tooltip(fn ($record): string => $record->needs_reorder
                         ? "Below Reorder Point ({$record->reorder_point})"
                         : 'Stock Sufficient'
                     ),

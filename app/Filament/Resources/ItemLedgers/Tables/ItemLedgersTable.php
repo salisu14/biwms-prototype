@@ -6,10 +6,10 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
-use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 class ItemLedgersTable
@@ -43,7 +43,7 @@ class ItemLedgersTable
                 TextColumn::make('entry_type')
                     ->label('Type')
                     ->badge()
-                    ->color(fn ($state): string => match($state) {
+                    ->color(fn ($state): string => match ($state) {
                         'RECEIPT', 'TRANSFER_IN', 'RETURN', 'ADJUSTMENT_POS', 'PRODUCTION_OUTPUT' => 'success',
                         'ISSUE', 'TRANSFER_OUT', 'SALE', 'ADJUSTMENT_NEG', 'SCRAP' => 'danger',
                         default => 'gray',
@@ -55,14 +55,12 @@ class ItemLedgersTable
                     ->label('Quantity')
                     ->sortable()
                     ->weight('bold')
-                    ->getStateUsing(fn ($record): float =>
-                    $record->is_inbound ? $record->quantity : -$record->quantity  // Use property
+                    ->getStateUsing(fn ($record): float => $record->is_inbound ? $record->quantity : -$record->quantity  // Use property
                     )
                     ->color(fn ($record): string => $record->is_inbound ? 'success' : 'danger')  // Use property
-                    ->formatStateUsing(fn ($record): string =>
-                        ($record->is_inbound ? '+' : '-') . number_format($record->quantity, 4)
+                    ->formatStateUsing(fn ($record): string => ($record->is_inbound ? '+' : '-').number_format($record->quantity, 4)
                     )
-                    ->suffix(fn ($record): string => ' ' . ($record->uom?->uom_code ?? '')),
+                    ->suffix(fn ($record): string => ' '.($record->uom?->uom_code ?? '')),
 
                 TextColumn::make('unit_cost')
                     ->label('Unit Cost')
@@ -75,7 +73,7 @@ class ItemLedgersTable
                     ->label('Total Value')
                     ->money('USD')
                     ->sortable(query: function (Builder $query, string $direction): Builder {
-                        return $query->orderByRaw('(quantity * unit_cost) ' . $direction);
+                        return $query->orderByRaw('(quantity * unit_cost) '.$direction);
                     })
                     ->getStateUsing(fn ($record): float => $record->quantity * $record->unit_cost)
                     ->toggleable(),
@@ -139,10 +137,10 @@ class ItemLedgersTable
                     ->falseLabel('Outbound Only')
                     ->queries(
                         true: fn (Builder $query) => $query->whereIn('entry_type', [
-                            'RECEIPT', 'TRANSFER_IN', 'RETURN', 'ADJUSTMENT_POS', 'PRODUCTION_OUTPUT'
+                            'RECEIPT', 'TRANSFER_IN', 'RETURN', 'ADJUSTMENT_POS', 'PRODUCTION_OUTPUT',
                         ]),
                         false: fn (Builder $query) => $query->whereIn('entry_type', [
-                            'ISSUE', 'TRANSFER_OUT', 'SALE', 'ADJUSTMENT_NEG', 'SCRAP'
+                            'ISSUE', 'TRANSFER_OUT', 'SALE', 'ADJUSTMENT_NEG', 'SCRAP',
                         ]),
                     ),
             ])

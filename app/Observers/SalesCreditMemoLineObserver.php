@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Observers;
+
 use App\Models\SalesCreditMemoLine;
 
 class SalesCreditMemoLineObserver

@@ -20,7 +20,7 @@ return new class extends Migration
             $table->foreignId('customer_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('customer_group_id')->nullable()->constrained()->nullOnDelete();
 
-//            $table->foreignId('business_id')->nullable()->constrained()->nullOnDelete();
+            //            $table->foreignId('business_id')->nullable()->constrained()->nullOnDelete();
 
             // Price
             $table->decimal('price', 18, 2);

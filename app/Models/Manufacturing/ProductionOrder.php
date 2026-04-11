@@ -5,14 +5,16 @@ namespace App\Models\Manufacturing;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
-use App\Models\Manufacturing\CapExProject;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
 use App\Models\InventoryPostingGroup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
+use App\Models\Location;
 use App\Models\User;
+use App\Models\WarehouseActivity;
+use App\Models\WarehouseRequest;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -115,6 +117,24 @@ class ProductionOrder extends Model
     ];
 
     // ==================== RELATIONSHIPS ====================
+    // Add to existing ProductionOrder model
+
+    public function warehouseActivities()
+    {
+        return $this->hasMany(WarehouseActivity::class, 'source_no', 'order_no')
+            ->where('source_document', 'production_order');
+    }
+
+    public function warehouseRequests()
+    {
+        return $this->hasMany(WarehouseRequest::class, 'source_no', 'order_no')
+            ->where('source_document', 'production_order');
+    }
+
+    public function location()
+    {
+        return $this->belongsTo(Location::class, 'location_code', 'code');
+    }
 
     public function item(): BelongsTo
     {

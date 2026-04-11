@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/VendorItem.php
 
 namespace App\Models;
@@ -97,6 +98,7 @@ class VendorItem extends Model
     public function getIsCurrentlyEffectiveAttribute(): bool
     {
         $now = now();
+
         return $this->is_active
             && ($this->effective_date === null || $this->effective_date <= $now)
             && ($this->expiry_date === null || $this->expiry_date >= $now);
@@ -108,6 +110,7 @@ class VendorItem extends Model
     public function scopeActiveAndEffective($query)
     {
         $now = now();
+
         return $query->where('is_active', true)
             ->where(function ($q) use ($now) {
                 $q->whereNull('effective_date')

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProductionBomVersions\Schemas;
 
 use App\Enums\ProductionBomStatus;
 use App\Models\Manufacturing\ProductionBom;
+use App\Models\UnitOfMeasure;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -31,8 +32,7 @@ class ProductionBomVersionForm
                         ->preload()
                         ->required()
                         ->reactive()
-                        ->afterStateUpdated(fn ($state, $set) =>
-                        $set('unit_of_measure_code', null)
+                        ->afterStateUpdated(fn ($state, $set) => $set('unit_of_measure_code', null)
                         ),
 
                     // ✅ VERSION CODE
@@ -58,35 +58,35 @@ class ProductionBomVersionForm
                     Select::make('unit_of_measure_code')
                         ->label('UOM')
                         ->disabled()
-                        ->options(fn () => \App\Models\UnitOfMeasure::pluck('uom_code', 'uom_code')->toArray()),
-//                    Select::make('unit_of_measure_code')
-//                        ->label('Unit of Measure')
-//                        ->placeholder('Select a BOM first')
-//                        ->reactive()
-//                        ->disabled(fn (Get $get) => !$get('production_bom_id'))
-//                        ->options(function (Get $get, $record) {
-//
-//                            // 🔥 Critical fix: support BOTH create & edit
-//                            $bomId = $get('production_bom_id')
-//                                ?? $record?->production_bom_id;
-//
-//                            if (!$bomId) {
-//                                return [];
-//                            }
-//
-//                            $bom = ProductionBom::with('item.uoms')->find($bomId);
-//
-//                            if (!$bom || !$bom->item) {
-//                                return [];
-//                            }
-//
-//                            return $bom->item->uoms
-//                                ->pluck('uom_code', 'uom_code') // or description => code
-//                                ->toArray();
-//                        })
-//                        ->searchable()
-//                        ->required()
-//                        ->dehydrated(true),
+                        ->options(fn () => UnitOfMeasure::pluck('uom_code', 'uom_code')->toArray()),
+                    //                    Select::make('unit_of_measure_code')
+                    //                        ->label('Unit of Measure')
+                    //                        ->placeholder('Select a BOM first')
+                    //                        ->reactive()
+                    //                        ->disabled(fn (Get $get) => !$get('production_bom_id'))
+                    //                        ->options(function (Get $get, $record) {
+                    //
+                    //                            // 🔥 Critical fix: support BOTH create & edit
+                    //                            $bomId = $get('production_bom_id')
+                    //                                ?? $record?->production_bom_id;
+                    //
+                    //                            if (!$bomId) {
+                    //                                return [];
+                    //                            }
+                    //
+                    //                            $bom = ProductionBom::with('item.uoms')->find($bomId);
+                    //
+                    //                            if (!$bom || !$bom->item) {
+                    //                                return [];
+                    //                            }
+                    //
+                    //                            return $bom->item->uoms
+                    //                                ->pluck('uom_code', 'uom_code') // or description => code
+                    //                                ->toArray();
+                    //                        })
+                    //                        ->searchable()
+                    //                        ->required()
+                    //                        ->dehydrated(true),
 
                 ]),
 

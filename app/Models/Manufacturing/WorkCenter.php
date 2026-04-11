@@ -2,10 +2,13 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\Vendor;
+use App\Models\WorkCenterBin;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class WorkCenter extends Model
 {
@@ -70,7 +73,12 @@ class WorkCenter extends Model
 
     public function Subcontractor(): BelongsTo
     {
-        return $this->BelongsTo(\App\Models\Vendor::class, 'subcontractor_id');
+        return $this->BelongsTo(Vendor::class, 'subcontractor_id');
+    }
+
+    public function workCenterBin(): HasOne
+    {
+        return $this->hasOne(WorkCenterBin::class, 'work_center_id');
     }
 
     /**
@@ -84,4 +92,3 @@ class WorkCenter extends Model
             ->sum('capacity');
     }
 }
-

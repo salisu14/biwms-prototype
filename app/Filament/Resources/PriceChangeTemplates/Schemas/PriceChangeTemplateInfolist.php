@@ -36,10 +36,10 @@ class PriceChangeTemplateInfolist
 
                         TextEntry::make('value')
                             ->label('Value')
-                            ->formatStateUsing(fn ($record, $state) => $record->adjustment_type === 'percentage' ? $state . '%' : '₦' . number_format($state, 2)),
+                            ->formatStateUsing(fn ($record, $state) => $record->adjustment_type === 'percentage' ? $state.'%' : '₦'.number_format($state, 2)),
 
                         TextEntry::make('base')
-                            ->formatStateUsing(fn (string $state): string => 'Based on ' . ucfirst($state)),
+                            ->formatStateUsing(fn (string $state): string => 'Based on '.ucfirst($state)),
 
                         TextEntry::make('rounding')
                             ->label('Rounding decimals')

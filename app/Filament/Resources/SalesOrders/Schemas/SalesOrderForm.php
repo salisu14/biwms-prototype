@@ -79,7 +79,7 @@ class SalesOrderForm
                                                             ->schema([
                                                                 Select::make('item_id')
                                                                     ->label('Item No.')
-                                                                    ->relationship('item', 'item_number', fn ($query) => $query->where('item_type', 'FINISHED_GOOD'))
+                                                                    ->relationship('item', 'item_code', fn ($query) => $query->where('item_type', 'FINISHED_GOOD'))
                                                                     ->searchable()
                                                                     ->preload()
                                                                     ->required()
@@ -89,7 +89,7 @@ class SalesOrderForm
                                                                         if ($state) {
                                                                             $item = Item::find($state);
                                                                             $set('description', $item?->description);
-                                                                            $set('item_code', $item?->item_number);
+                                                                            $set('item_code', $item?->item_code);
                                                                             $set('unit_price', $item?->unit_price ?? 0);
                                                                             $set('unit_of_measure_code', $item?->base_unit_of_measure);
                                                                         }

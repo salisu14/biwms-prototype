@@ -2,10 +2,6 @@
 
 namespace App\Filament\Resources\ItemLedgerEntries\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -92,7 +88,7 @@ class ItemLedgerEntriesTable
                         return $query
                             ->when($data['from'], fn ($query, $date) => $query->whereDate('posting_date', '>=', $date))
                             ->when($data['until'], fn ($query, $date) => $query->whereDate('posting_date', '<=', $date));
-                    })
+                    }),
             ]);
     }
 }

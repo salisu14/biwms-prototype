@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/PurchaseInvoice.php
 
 namespace App\Models;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PurchaseInvoice extends Model
 {
     use HasFactory;
+
     protected $table = 'posted_purchase_invoices';
 
     protected $fillable = [
@@ -151,14 +153,15 @@ class PurchaseInvoice extends Model
 
     public function getIsOverdueAttribute(): bool
     {
-        return !$this->paid_in_full && $this->due_date < now();
+        return ! $this->paid_in_full && $this->due_date < now();
     }
 
     public function getDaysOverdueAttribute(): ?int
     {
-        if (!$this->is_overdue) {
+        if (! $this->is_overdue) {
             return null;
         }
+
         return $this->due_date->diffInDays(now());
     }
 
@@ -173,6 +176,7 @@ class PurchaseInvoice extends Model
         if ($this->is_overdue) {
             return 'OVERDUE';
         }
+
         return 'OPEN';
     }
 
@@ -264,7 +268,7 @@ class PurchaseInvoice extends Model
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
     }
 
-     protected static function booted(): void
+    protected static function booted(): void
     {
         static::creating(function (PurchaseInvoice $invoice) {
             if (empty($invoice->posted_at)) {

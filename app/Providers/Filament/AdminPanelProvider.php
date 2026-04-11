@@ -139,7 +139,7 @@ class AdminPanelProvider extends PanelProvider
 
                                 NavigationItem::make('Profit and Loss Report')
                                     ->icon('heroicon-o-currency-dollar')
-                                    ->url('/admin/profit-and-loss-report'), 
+                                    ->url('/admin/profit-and-loss-report'),
 
                                 NavigationItem::make('Financial Reports')
                                     ->icon('heroicon-o-chart-bar')

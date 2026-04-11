@@ -54,8 +54,7 @@ class WorkCenterInfolist
                             TextEntry::make('efficiency')
                                 ->label('Current Efficiency')
                                 ->suffix('%')
-                                ->color(fn ($record): string =>
-                                $record->efficiency >= 90
+                                ->color(fn ($record): string => $record->efficiency >= 90
                                     ? 'success'
                                     : ($record->efficiency >= 75 ? 'warning' : 'danger')
                                 ),
@@ -73,7 +72,7 @@ class WorkCenterInfolist
                             })
                             ->columnSpanFull()
                             ->inlineLabel(),
-//                            ->inlineLabelColor('primary'),
+                        //                            ->inlineLabelColor('primary'),
                     ]),
 
                 Section::make('Costing')

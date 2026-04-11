@@ -18,7 +18,6 @@ return new class extends Migration
             $table->foreignId('general_product_posting_group_id')
                 ->constrained('general_product_posting_groups');
 
-
             // Sales accounts
             $table->foreignId('sales_account_id')->nullable()->constrained('chart_of_accounts');
             $table->foreignId('sales_credit_memo_account_id')->nullable()->constrained('chart_of_accounts');
@@ -40,14 +39,13 @@ return new class extends Migration
             $table->foreignId('capacity_overhead_variance_account_id')->nullable()->constrained('chart_of_accounts');
             $table->foreignId('manufacturing_overhead_variance_account_id')->nullable()->constrained('chart_of_accounts');
 
-
             $table->boolean('blocked')->default(false);
             $table->timestamps();
 
             // Unique combination
             $table->unique([
                 'general_business_posting_group_id',
-                'general_product_posting_group_id'
+                'general_product_posting_group_id',
             ], 'unique_posting_setup');
         });
     }

@@ -9,7 +9,7 @@ class CustomerGroup extends Model
 {
     protected $fillable = [
         'code',
-        'name'
+        'name',
     ];
 
     public function customers(): HasMany

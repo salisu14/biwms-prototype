@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\SalesShipmentHeader;
-use App\Models\SalesShipmentLine;
 use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceLine;
+use App\Models\SalesShipmentHeader;
+use App\Models\SalesShipmentLine;
 use Illuminate\Support\Collection;
 
 /**
@@ -17,28 +17,26 @@ class GetShipmentLinesService
     /**
      * Retrieve shipment lines for invoicing (BC "Get Shipment Lines" action)
      *
-     * @param string $customerNo
-     * @param array $filters Optional filters (shipment_no, posting_date_from, etc.)
-     * @return Collection
+     * @param  array  $filters  Optional filters (shipment_no, posting_date_from, etc.)
      */
     public function getShipmentLinesForInvoicing(string $customerNo, array $filters = []): Collection
     {
         $query = SalesShipmentLine::with('header')
-            ->whereHas('header', function($q) use ($customerNo) {
+            ->whereHas('header', function ($q) use ($customerNo) {
                 $q->where('sell_to_customer_no', $customerNo);
             })
             ->where('qty_shipped_not_invoiced', '>', 0)
             ->where('type', '!=', ' '); // Skip comment lines
 
-        if (!empty($filters['shipment_no'])) {
+        if (! empty($filters['shipment_no'])) {
             $query->where('document_no', $filters['shipment_no']);
         }
 
-        if (!empty($filters['item_no'])) {
+        if (! empty($filters['item_no'])) {
             $query->where('no', $filters['item_no']);
         }
 
-        return $query->get()->map(function($line) {
+        return $query->get()->map(function ($line) {
             return [
                 'shipment_no' => $line->document_no,
                 'shipment_line_no' => $line->line_no,
@@ -61,9 +59,7 @@ class GetShipmentLinesService
     /**
      * Copy selected shipment lines to Sales Invoice (BC "InsertLine" pattern)
      *
-     * @param SalesInvoice $invoice
-     * @param array $selectedLines Array of ['shipment_no', 'shipment_line_no', 'qty_to_invoice']
-     * @return void
+     * @param  array  $selectedLines  Array of ['shipment_no', 'shipment_line_no', 'qty_to_invoice']
      */
     public function copyShipmentLinesToInvoice(SalesInvoice $invoice, array $selectedLines): void
     {
@@ -72,7 +68,9 @@ class GetShipmentLinesService
                 ->where('line_no', $selection['shipment_line_no'])
                 ->first();
 
-            if (!$shipmentLine) continue;
+            if (! $shipmentLine) {
+                continue;
+            }
 
             $qtyToInvoice = $selection['qty_to_invoice'] ?? $shipmentLine->qty_shipped_not_invoiced;
 
@@ -133,16 +131,15 @@ class GetShipmentLinesService
     /**
      * BC: Undo Shipment functionality (reverse posting)
      *
-     * @param SalesShipmentHeader $shipment
      * @throws \Exception
      */
     public function undoShipment(SalesShipmentHeader $shipment): void
     {
         if ($shipment->isFullyInvoiced()) {
-            throw new \InvalidArgumentException("Cannot undo shipment that has been fully invoiced");
+            throw new \InvalidArgumentException('Cannot undo shipment that has been fully invoiced');
         }
 
-        DB::transaction(function() use ($shipment) {
+        DB::transaction(function () use ($shipment) {
             foreach ($shipment->lines as $line) {
                 if ($line->quantity_invoiced > 0) {
                     throw new \InvalidArgumentException(

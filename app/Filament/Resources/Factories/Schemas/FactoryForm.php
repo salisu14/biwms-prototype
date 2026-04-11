@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\Factories\Schemas;
 
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class FactoryForm
@@ -10,17 +13,17 @@ class FactoryForm
     {
         return $schema
             ->components([
-                \Filament\Forms\Components\TextInput::make('code')
+                TextInput::make('code')
                     ->required()
                     ->maxLength(20)
                     ->unique(ignoreRecord: true),
-                \Filament\Forms\Components\TextInput::make('name')
+                TextInput::make('name')
                     ->required()
                     ->maxLength(255),
-                \Filament\Forms\Components\Select::make('business_id')
+                Select::make('business_id')
                     ->relationship('business', 'name')
                     ->required(),
-                \Filament\Forms\Components\Toggle::make('is_active')
+                Toggle::make('is_active')
                     ->default(true)
                     ->required(),
             ]);

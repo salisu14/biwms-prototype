@@ -10,6 +10,7 @@ class GeneralLedgerSetup extends Model
     use HasFactory;
 
     protected $table = 'general_ledger_setup';
+
     public $timestamps = true;
 
     protected $fillable = [
@@ -17,7 +18,7 @@ class GeneralLedgerSetup extends Model
         'shortcut_dimension_3_code', 'shortcut_dimension_4_code',
         'shortcut_dimension_5_code', 'shortcut_dimension_6_code',
         'shortcut_dimension_7_code', 'shortcut_dimension_8_code',
-        'lc_code', 'company_name'
+        'lc_code', 'company_name',
     ];
 
     /**

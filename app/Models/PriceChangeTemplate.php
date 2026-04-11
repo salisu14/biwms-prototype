@@ -15,7 +15,7 @@ class PriceChangeTemplate extends Model
         'rounding',
         'status', // draft, approved, applied
         'effective_from',
-        'effective_to'
+        'effective_to',
     ];
 
     protected $casts = [

@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/CategoryType.php
 
 namespace App\Enums;
@@ -14,7 +15,7 @@ enum CategoryType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::THERAPEUTIC => 'Therapeutic Category',
             self::BOTANICAL => 'Botanical/Part Used',
             self::REGULATORY => 'Regulatory Classification',
@@ -26,7 +27,7 @@ enum CategoryType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::THERAPEUTIC => 'bg-green-100 text-green-800',
             self::BOTANICAL => 'bg-amber-100 text-amber-800',
             self::REGULATORY => 'bg-blue-100 text-blue-800',
@@ -38,7 +39,7 @@ enum CategoryType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::THERAPEUTIC => 'heart-pulse',
             self::BOTANICAL => 'leaf',
             self::REGULATORY => 'shield-alt',
@@ -50,7 +51,7 @@ enum CategoryType: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::THERAPEUTIC => 'Health benefit categories (immune, cardiovascular, etc.)',
             self::BOTANICAL => 'Plant part used (root, leaf, flower, bark)',
             self::REGULATORY => 'FDA/EMA classification (supplement, drug, cosmetic)',
@@ -62,7 +63,7 @@ enum CategoryType: string
 
     public function allowsMultiple(): bool
     {
-        return match($this) {
+        return match ($this) {
             self::THERAPEUTIC => true,  // Can be both immune and anti-inflammatory
             self::BOTANICAL => false,   // Only one part per item
             self::REGULATORY => false,  // Only one regulatory path

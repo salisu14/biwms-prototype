@@ -96,7 +96,7 @@ class CapExProjectInfolist
                                 TextEntry::make('creator.name')->label('Created By'),
                             ]),
                     ])
-                    ->compact()
+                    ->compact(),
             ]);
     }
 }

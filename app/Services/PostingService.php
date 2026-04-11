@@ -90,7 +90,7 @@ class PostingService
     ): array {
         $setup = $customer->getPostingSetupFor($item);
         if (! $setup) {
-            throw new \Exception("General Posting Setup missing for customer {$customer->customer_number} and item {$item->item_number}");
+            throw new \Exception("General Posting Setup missing for customer {$customer->customer_number} and item {$item->item_code}");
         }
 
         return DB::transaction(function () use ($customer, $item, $quantity, $unitPrice, $unitCost, $postingDate, $documentNumber, $setup) {
@@ -117,7 +117,7 @@ class PostingService
                 'debit_amount' => 0,
                 'credit_amount' => $totalRevenue,
                 'source_type' => 'ITEM',
-                'source_number' => $item->item_number,
+                'source_number' => $item->item_code,
                 'document_type' => 'SALES_INVOICE',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
@@ -131,7 +131,7 @@ class PostingService
                     'debit_amount' => $totalCost,
                     'credit_amount' => 0,
                     'source_type' => 'ITEM',
-                    'source_number' => $item->item_number,
+                    'source_number' => $item->item_code,
                     'document_type' => 'SALES_INVOICE',
                     'document_number' => $documentNumber,
                     'posting_date' => $postingDate,
@@ -144,7 +144,7 @@ class PostingService
                         'debit_amount' => 0,
                         'credit_amount' => $totalCost,
                         'source_type' => 'ITEM',
-                        'source_number' => $item->item_number,
+                        'source_number' => $item->item_code,
                         'document_type' => 'SALES_INVOICE',
                         'document_number' => $documentNumber,
                         'posting_date' => $postingDate,
@@ -174,7 +174,7 @@ class PostingService
     ): array {
         $setup = $vendor->getPostingSetupFor($item);
         if (! $setup) {
-            throw new \Exception("General Posting Setup missing for vendor {$vendor->vendor_number} and item {$item->item_number}");
+            throw new \Exception("General Posting Setup missing for vendor {$vendor->vendor_number} and item {$item->item_code}");
         }
 
         return DB::transaction(function () use ($vendor, $item, $quantity, $unitCost, $postingDate, $documentNumber, $setup) {
@@ -187,7 +187,7 @@ class PostingService
                     'debit_amount' => $totalCost,
                     'credit_amount' => 0,
                     'source_type' => 'ITEM',
-                    'source_number' => $item->item_number,
+                    'source_number' => $item->item_code,
                     'document_type' => 'PURCHASE_INVOICE',
                     'document_number' => $documentNumber,
                     'posting_date' => $postingDate,
@@ -199,7 +199,7 @@ class PostingService
                     'debit_amount' => $totalCost,
                     'credit_amount' => 0,
                     'source_type' => 'ITEM',
-                    'source_number' => $item->item_number,
+                    'source_number' => $item->item_code,
                     'document_type' => 'PURCHASE_INVOICE',
                     'document_number' => $documentNumber,
                     'posting_date' => $postingDate,
@@ -394,7 +394,7 @@ class PostingService
         $setup = $vendor->getPostingSetupFor($item);
 
         if (! $setup) {
-            throw new \Exception("Posting setup missing for vendor {$vendor->vendor_number} and item {$item->item_number}");
+            throw new \Exception("Posting setup missing for vendor {$vendor->vendor_number} and item {$item->item_code}");
         }
 
         $entries = [];
@@ -404,7 +404,7 @@ class PostingService
             $inventoryAccount = $item->getInventoryAccount();
 
             if (! $inventoryAccount) {
-                throw new \Exception("Inventory account missing for item {$item->item_number}");
+                throw new \Exception("Inventory account missing for item {$item->item_code}");
             }
 
             $entries[] = $this->createGlEntry([
@@ -412,7 +412,7 @@ class PostingService
                 'debit_amount' => $lineTotal,
                 'credit_amount' => 0,
                 'source_type' => 'ITEM',
-                'source_number' => $item->item_number,
+                'source_number' => $item->item_code,
                 'document_type' => 'PURCHASE_INVOICE',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
@@ -425,7 +425,7 @@ class PostingService
                 'debit_amount' => $lineTotal,
                 'credit_amount' => 0,
                 'source_type' => 'ITEM',
-                'source_number' => $item->item_number,
+                'source_number' => $item->item_code,
                 'document_type' => 'PURCHASE_INVOICE',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,

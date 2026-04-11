@@ -2,6 +2,10 @@
 
 namespace App\Filament\Resources\PayCodes\Schemas;
 
+use App\Enums\CalculationMethod;
+use App\Enums\PayCodeType;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Schema;
 
 class PayCodeForm
@@ -10,23 +14,23 @@ class PayCodeForm
     {
         return $schema
             ->components([
-                \Filament\Forms\Components\TextInput::make('code')
+                TextInput::make('code')
                     ->required()
                     ->maxLength(20)
                     ->unique(ignoreRecord: true),
-                \Filament\Forms\Components\TextInput::make('name')
+                TextInput::make('name')
                     ->required()
                     ->maxLength(255),
-                \Filament\Forms\Components\Select::make('type')
-                    ->options(\App\Enums\PayCodeType::class)
+                Select::make('type')
+                    ->options(PayCodeType::class)
                     ->required(),
-                \Filament\Forms\Components\Select::make('calculation_method')
-                    ->options(\App\Enums\CalculationMethod::class)
+                Select::make('calculation_method')
+                    ->options(CalculationMethod::class)
                     ->required(),
-                \Filament\Forms\Components\TextInput::make('default_amount')
+                TextInput::make('default_amount')
                     ->numeric()
                     ->label('Default Amount / %'),
-                \Filament\Forms\Components\Select::make('gl_account_id')
+                Select::make('gl_account_id')
                     ->relationship('glAccount', 'name')
                     ->label('GL Account Mapping')
                     ->required(),

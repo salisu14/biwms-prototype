@@ -11,7 +11,6 @@ use App\Models\DimensionValue;
 use App\Models\Employee;
 use App\Models\GlEntry;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
 
 class DepartmentService
 {
@@ -32,7 +31,7 @@ class DepartmentService
             }
 
             // Create dimension value if dimension integration enabled
-            if (!empty($data['create_dimension_value']) && $data['create_dimension_value'] === true) {
+            if (! empty($data['create_dimension_value']) && $data['create_dimension_value'] === true) {
                 $dimensionValue = $this->createDimensionValue($data);
                 $data['dimension_value_id'] = $dimensionValue->id;
                 $data['global_dimension_1_code'] = $dimensionValue->code;
@@ -41,7 +40,7 @@ class DepartmentService
             $department = Department::create($data);
 
             // Update employee manager reference if manager_id provided
-            if (!empty($data['manager_id'])) {
+            if (! empty($data['manager_id'])) {
                 $this->updateManager($department, $data['manager_id']);
             }
 
@@ -181,7 +180,7 @@ class DepartmentService
         $query = Department::with(['dimensionValue'])
             ->whereNotNull('annual_budget');
 
-        if (!empty($departmentIds)) {
+        if (! empty($departmentIds)) {
             $query->whereIn('id', $departmentIds);
         }
 
@@ -220,7 +219,7 @@ class DepartmentService
 
         $department->level = $parent ? $parent->level + 1 : 0;
         $department->department_path = $parent
-            ? $parent->department_path . '|' . $department->department_code
+            ? $parent->department_path.'|'.$department->department_code
             : $department->department_code;
 
         $department->save();
@@ -252,7 +251,7 @@ class DepartmentService
             'name' => $department->name,
             'manager' => $department->manager?->full_name,
             'employee_count' => $department->employees()->count(),
-            'children' => $department->subDepartments->map(fn($child) => $this->buildTreeNode($child)),
+            'children' => $department->subDepartments->map(fn ($child) => $this->buildTreeNode($child)),
         ];
     }
 }

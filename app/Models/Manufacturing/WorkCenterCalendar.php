@@ -2,6 +2,7 @@
 
 namespace App\Models\Manufacturing;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -40,12 +41,12 @@ class WorkCenterCalendar extends Model
      */
     public function getAvailableMinutes(): float
     {
-        if (!$this->is_working_day || !$this->start_time || !$this->end_time) {
+        if (! $this->is_working_day || ! $this->start_time || ! $this->end_time) {
             return 0;
         }
 
-        $start = \Carbon\Carbon::parse($this->start_time);
-        $end = \Carbon\Carbon::parse($this->end_time);
+        $start = Carbon::parse($this->start_time);
+        $end = Carbon::parse($this->end_time);
 
         return $end->diffInMinutes($start) * ($this->efficiency / 100);
     }

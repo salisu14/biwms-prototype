@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PayrollStatus;
 use Illuminate\Database\Eloquent\Model;
 
 class PayrollDocument extends Model
@@ -17,7 +18,7 @@ class PayrollDocument extends Model
     protected $casts = [
         'period_start' => 'date',
         'period_end' => 'date',
-        'status' => \App\Enums\PayrollStatus::class,
+        'status' => PayrollStatus::class,
     ];
 
     public function lines()

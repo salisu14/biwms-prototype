@@ -83,14 +83,16 @@ class BuffersRelationManager extends RelationManager
                     ->label('Entity')
                     ->state(function (Model $record): string {
                         $entity = $record->entity;
-                        if (!$entity) return 'Unknown';
+                        if (! $entity) {
+                            return 'Unknown';
+                        }
 
                         // Adapt these attributes to match your Vendor/Customer/Bank models
                         return match ($record->entity_type) {
-                            'App\Models\Vendor' => "Vendor: " . ($entity->vendor_name ?? $entity->vendor_code),
-                            'App\Models\Customer' => "Customer: " . ($entity->name ?? $entity->customer_code),
-                            'App\Models\BankAccount' => "Bank: " . ($entity->bank_name ?? $entity->account_no),
-                            default => "Other: " . $record->entity_id,
+                            'App\Models\Vendor' => 'Vendor: '.($entity->vendor_name ?? $entity->vendor_code),
+                            'App\Models\Customer' => 'Customer: '.($entity->name ?? $entity->customer_code),
+                            'App\Models\BankAccount' => 'Bank: '.($entity->bank_name ?? $entity->account_no),
+                            default => 'Other: '.$record->entity_id,
                         };
                     })
                     ->searchable(query: function ($query, string $search) {

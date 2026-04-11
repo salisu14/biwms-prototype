@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PurchaseCreditMemos\Pages;
 
 use App\Filament\Resources\PurchaseCreditMemos\PurchaseCreditMemoResource;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListPurchaseCreditMemos extends ListRecords
@@ -12,7 +13,7 @@ class ListPurchaseCreditMemos extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            \Filament\Actions\CreateAction::make(),
+            CreateAction::make(),
         ];
     }
 }

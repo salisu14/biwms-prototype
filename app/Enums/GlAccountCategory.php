@@ -2,7 +2,6 @@
 
 namespace App\Enums;
 
-
 /**
  * Corresponds to the 'account_category' column in gl_accounts.
  */

@@ -2,7 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\AccountScheduleAmountType;
+use App\Enums\AccountScheduleRowType;
+use App\Enums\AccountScheduleTotalingType;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AccountScheduleLine extends Model
 {
@@ -24,9 +28,9 @@ class AccountScheduleLine extends Model
     ];
 
     protected $casts = [
-        'totaling_type' => \App\Enums\AccountScheduleTotalingType::class,
-        'row_type' => \App\Enums\AccountScheduleRowType::class,
-        'amount_type' => \App\Enums\AccountScheduleAmountType::class,
+        'totaling_type' => AccountScheduleTotalingType::class,
+        'row_type' => AccountScheduleRowType::class,
+        'amount_type' => AccountScheduleAmountType::class,
         'show_opposite_sign' => 'boolean',
         'bold' => 'boolean',
         'italic' => 'boolean',
@@ -35,7 +39,7 @@ class AccountScheduleLine extends Model
         'new_page' => 'boolean',
     ];
 
-    public function schedule(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function schedule(): BelongsTo
     {
         return $this->belongsTo(AccountSchedule::class, 'schedule_id');
     }

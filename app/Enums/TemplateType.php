@@ -13,7 +13,7 @@ enum TemplateType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ITEM => 'Item Journal',
             self::TRANSFER => 'Transfer Journal',
             self::PHYSICAL_INVENTORY => 'Physical Inventory Journal',
@@ -25,7 +25,7 @@ enum TemplateType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ITEM => 'bg-blue-100 text-blue-800',
             self::TRANSFER => 'bg-indigo-100 text-indigo-800',
             self::PHYSICAL_INVENTORY => 'bg-emerald-100 text-emerald-800',
@@ -37,7 +37,7 @@ enum TemplateType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ITEM => 'heroicon-o-cube',
             self::TRANSFER => 'heroicon-o-arrows-right-left',
             self::PHYSICAL_INVENTORY => 'heroicon-o-clipboard-document-list',

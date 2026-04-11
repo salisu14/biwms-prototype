@@ -53,7 +53,7 @@ class CapExProjectsTable
                 TextColumn::make('usage')
                     ->label('Budget Usage')
                     ->state(fn ($record) => $record->budget_amount > 0 ? ($record->actual_amount / $record->budget_amount) * 100 : 0)
-                    ->formatStateUsing(fn ($state) => number_format($state, 0) . '%')
+                    ->formatStateUsing(fn ($state) => number_format($state, 0).'%')
                     ->color(fn ($state) => $state > 100 ? 'danger' : 'gray'),
 
                 TextColumn::make('projectManager.name')

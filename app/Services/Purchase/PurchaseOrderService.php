@@ -18,13 +18,15 @@ use App\Models\PurchaseOrder;
 use App\Models\Vendor;
 use App\Models\WarehouseReceipt;
 use App\Services\PostingService;
+use App\Services\Warehouse\PutAwayWorksheetService;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
 class PurchaseOrderService
 {
     public function __construct(
-        protected PostingService $postingService
+        protected PostingService $postingService,
+        protected PutAwayWorksheetService $putAwayService
     ) {}
 
     /**
@@ -239,6 +241,10 @@ class PurchaseOrderService
                     'unit_of_measure_code' => $line->unit_of_measure,
                     'source_line_id' => $line->id,
                 ]);
+
+                // Create Put-away activity
+                $this->putAwayService->createPutAwayFromPurchase($line, $qtyToReceive);
+
                 $hasLines = true;
             }
 

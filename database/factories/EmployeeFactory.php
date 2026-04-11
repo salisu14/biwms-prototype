@@ -2,7 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Enums\EmployeeAssignmentType;
 use App\Models\Employee;
+use App\Models\EmployeePostingGroup;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -24,8 +26,8 @@ class EmployeeFactory extends Factory
             'email' => $this->faker->unique()->safeEmail,
             'phone' => $this->faker->phoneNumber,
             'job_title' => $this->faker->jobTitle,
-            'assignment_type' => \App\Enums\EmployeeAssignmentType::Corporate,
-            'employee_posting_group_id' => \App\Models\EmployeePostingGroup::factory(),
+            'assignment_type' => EmployeeAssignmentType::Corporate,
+            'employee_posting_group_id' => EmployeePostingGroup::factory(),
             'business_code' => null,
             'factory_code' => null,
             'department_code' => null,

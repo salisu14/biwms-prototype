@@ -11,7 +11,7 @@ enum WarehouseReceiptStatus: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'Open',
             self::RELEASED => 'Released',
             self::PARTIALLY_RECEIVED => 'Partially Received',
@@ -21,7 +21,7 @@ enum WarehouseReceiptStatus: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'bg-slate-100 text-slate-800',
             self::RELEASED => 'bg-blue-100 text-blue-800',
             self::PARTIALLY_RECEIVED => 'bg-amber-100 text-amber-800',
@@ -31,7 +31,7 @@ enum WarehouseReceiptStatus: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'heroicon-o-document-plus',
             self::RELEASED => 'heroicon-o-lock-open',
             self::PARTIALLY_RECEIVED => 'heroicon-o-clock',
@@ -41,7 +41,7 @@ enum WarehouseReceiptStatus: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::OPEN => 'Initial state; items can be added or modified.',
             self::RELEASED => 'The receipt is finalized and ready for processing.',
             self::PARTIALLY_RECEIVED => 'Some items have been counted and put away.',

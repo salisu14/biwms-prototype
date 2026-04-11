@@ -88,10 +88,11 @@ class LinesRelationManager extends RelationManager
                         if ($record->item) {
                             return $record->item->description;
                         }
+
                         return $record->category?->category_name ?? 'Undefined';
                     })
-                    ->description(fn ($record) => $record->item ? "Item: {$record->item->item_number}" : "Category Path: {$record->category?->full_path}")
-                    ->searchable(['item.description', 'item.item_number', 'category.category_name']),
+                    ->description(fn ($record) => $record->item ? "Item: {$record->item->item_code}" : "Category Path: {$record->category?->full_path}")
+                    ->searchable(['item.description', 'item.item_code', 'category.category_name']),
 
                 TextColumn::make('category.category_name')
                     ->label('Category')

@@ -53,7 +53,7 @@ class ShippingMethodInfolist
                                             ->label('Status')
                                             ->formatStateUsing(fn ($record) => $record->blocked ? 'Blocked' : ($record->is_active ? 'Active' : 'Inactive'))
                                             ->badge()
-                                            ->color(fn ($state) => match($state) {
+                                            ->color(fn ($state) => match ($state) {
                                                 'Blocked' => 'danger',
                                                 'Active' => 'success',
                                                 default => 'gray',

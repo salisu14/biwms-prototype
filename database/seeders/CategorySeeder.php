@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Category;
+use Illuminate\Database\Seeder;
 
 class CategorySeeder extends Seeder
 {
@@ -95,7 +95,7 @@ class CategorySeeder extends Seeder
         $parts = ['Root', 'Leaf', 'Flower', 'Bark', 'Seed', 'Fruit', 'Rhizome', 'Aerial Parts'];
         foreach ($parts as $part) {
             $this->createCategory([
-                'category_code' => 'BOT-' . strtoupper(substr($part, 0, 3)),
+                'category_code' => 'BOT-'.strtoupper(substr($part, 0, 3)),
                 'category_name' => $part,
                 'parent_id' => $botanical->id,
                 'category_type' => 'BOTANICAL',
@@ -199,7 +199,7 @@ class CategorySeeder extends Seeder
         if ($parentId) {
             $parent = Category::find($parentId);
             if ($parent) {
-                $path = $parent->hierarchy_path . '.' . $data['category_code'];
+                $path = $parent->hierarchy_path.'.'.$data['category_code'];
             }
         }
 

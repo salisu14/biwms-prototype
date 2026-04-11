@@ -16,7 +16,7 @@ enum JournalEntryType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE => 'Purchase',
             self::SALE => 'Sale',
             self::POSITIVE_ADJUSTMENT => 'Positive Adjustment',
@@ -31,7 +31,7 @@ enum JournalEntryType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE, self::POSITIVE_ADJUSTMENT, self::OUTPUT, self::ASSEMBLY_OUTPUT => 'bg-emerald-100 text-emerald-800',
             self::SALE, self::NEGATIVE_ADJUSTMENT, self::CONSUMPTION, self::ASSEMBLY_CONSUMPTION => 'bg-rose-100 text-rose-800',
             self::TRANSFER => 'bg-blue-100 text-blue-800',
@@ -40,7 +40,7 @@ enum JournalEntryType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE => 'heroicon-o-shopping-cart',
             self::SALE => 'heroicon-o-tag',
             self::POSITIVE_ADJUSTMENT => 'heroicon-o-plus-circle',

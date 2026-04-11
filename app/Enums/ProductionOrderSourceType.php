@@ -10,7 +10,7 @@ enum ProductionOrderSourceType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ITEM => 'Item',
             self::FAMILY => 'Item Family',
             self::SALES_HEADER => 'Sales Order',
@@ -19,7 +19,7 @@ enum ProductionOrderSourceType: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ITEM => 'Production based on single item',
             self::FAMILY => 'Production based on item family',
             self::SALES_HEADER => 'Production linked to sales order',

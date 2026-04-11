@@ -31,7 +31,7 @@ class ShippingAgentsTable
                     ->label('Agent Name')
                     ->searchable()
                     ->sortable()
-                    ->description(fn ($record) => $record->city . ($record->country_code ? ", {$record->country_code}" : "")),
+                    ->description(fn ($record) => $record->city.($record->country_code ? ", {$record->country_code}" : '')),
                 TextColumn::make('default_service_type')
                     ->label('Default Service')
                     ->badge()

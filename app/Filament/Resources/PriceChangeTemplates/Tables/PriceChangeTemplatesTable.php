@@ -40,7 +40,7 @@ class PriceChangeTemplatesTable
                     ->label('Adj. Value')
                     ->numeric()
                     ->sortable()
-                    ->formatStateUsing(fn ($record, $state) => $record->adjustment_type === 'percentage' ? $state . '%' : '₦' . number_format($state, 2)),
+                    ->formatStateUsing(fn ($record, $state) => $record->adjustment_type === 'percentage' ? $state.'%' : '₦'.number_format($state, 2)),
 
                 TextColumn::make('base')
                     ->label('Base')

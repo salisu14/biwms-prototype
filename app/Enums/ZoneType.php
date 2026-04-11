@@ -13,7 +13,7 @@ enum ZoneType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVING => 'Receiving Zone',
             self::STORAGE => 'Storage/Putaway',
             self::PICKING => 'Picking Area',
@@ -25,7 +25,7 @@ enum ZoneType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVING => 'bg-emerald-100 text-emerald-800',
             self::STORAGE => 'bg-blue-100 text-blue-800',
             self::PICKING => 'bg-indigo-100 text-indigo-800',
@@ -37,7 +37,7 @@ enum ZoneType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVING => 'heroicon-o-arrow-down-tray',
             self::STORAGE => 'heroicon-o-square-3-stack-3d',
             self::PICKING => 'heroicon-o-hand-raised',
@@ -49,7 +49,7 @@ enum ZoneType: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIVING => 'Inbound area for offloading and initial tally.',
             self::STORAGE => 'Main warehouse areas for long or short term stock.',
             self::PICKING => 'Optimized area for order fulfillment and staging.',

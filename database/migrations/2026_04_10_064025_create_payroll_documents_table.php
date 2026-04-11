@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\PayrollStatus;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -16,7 +17,7 @@ return new class extends Migration
             $table->string('document_number', 20)->unique();
             $table->date('period_start');
             $table->date('period_end');
-            $table->enum('status', array_column(\App\Enums\PayrollStatus::cases(), 'value'))->default(\App\Enums\PayrollStatus::DRAFT->value);
+            $table->enum('status', array_column(PayrollStatus::cases(), 'value'))->default(PayrollStatus::DRAFT->value);
             $table->text('remarks')->nullable();
             $table->timestamps();
         });

@@ -28,18 +28,21 @@ class PurchaseOrderInfolist
                                 $enum = $state instanceof PurchaseOrderType
                                     ? $state
                                     : PurchaseOrderType::tryFrom($state);
+
                                 return $enum?->label() ?? (string) $state;
                             })
                             ->color(function ($state): string {
                                 $enum = $state instanceof PurchaseOrderType
                                     ? $state
                                     : PurchaseOrderType::tryFrom($state);
+
                                 return $enum?->color() ?? 'gray';
                             })
                             ->icon(function ($state): ?string {
                                 $enum = $state instanceof PurchaseOrderType
                                     ? $state
                                     : PurchaseOrderType::tryFrom($state);
+
                                 return $enum?->icon();
                             }),
 
@@ -50,18 +53,21 @@ class PurchaseOrderInfolist
                                 $enum = $state instanceof PurchaseOrderStatus
                                     ? $state
                                     : PurchaseOrderStatus::tryFrom($state);
+
                                 return $enum?->label() ?? (string) $state;
                             })
                             ->color(function ($state): string {
                                 $enum = $state instanceof PurchaseOrderStatus
                                     ? $state
                                     : PurchaseOrderStatus::tryFrom($state);
+
                                 return $enum?->color() ?? 'gray';
                             })
                             ->icon(function ($state): ?string {
                                 $enum = $state instanceof PurchaseOrderStatus
                                     ? $state
                                     : PurchaseOrderStatus::tryFrom($state);
+
                                 return $enum?->icon();
                             }),
                     ]),

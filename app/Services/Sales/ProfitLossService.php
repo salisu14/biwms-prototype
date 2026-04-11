@@ -21,7 +21,7 @@ class ProfitLossService
         return [
             'revenue' => $revenue,
             'cogs' => $cogs,
-            'gross_profit' => $revenue - $cogs
+            'gross_profit' => $revenue - $cogs,
         ];
     }
 }

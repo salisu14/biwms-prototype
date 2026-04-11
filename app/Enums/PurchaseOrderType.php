@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/PurchaseOrderType.php
 
 namespace App\Enums;
@@ -14,7 +15,7 @@ enum PurchaseOrderType: string
      */
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'Purchase Order',
             self::PURCHASE_RETURN => 'Purchase Return',
             self::PURCHASE_INVOICE => 'Purchase Invoice',
@@ -26,7 +27,7 @@ enum PurchaseOrderType: string
      */
     public function code(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'P',
             self::PURCHASE_RETURN => 'PR',
             self::PURCHASE_INVOICE => 'PI',
@@ -38,7 +39,7 @@ enum PurchaseOrderType: string
      */
     public function seriesCode(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'PURCHASE',
             self::PURCHASE_RETURN => 'PURCHASE_RETURN',
             self::PURCHASE_INVOICE => 'PURCHASE_INVOICE',
@@ -50,7 +51,7 @@ enum PurchaseOrderType: string
      */
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'primary',
             self::PURCHASE_RETURN => 'warning',
             self::PURCHASE_INVOICE => 'success',
@@ -62,7 +63,7 @@ enum PurchaseOrderType: string
      */
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'heroicon-m-shopping-cart',
             self::PURCHASE_RETURN => 'heroicon-m-arrow-uturn-left',
             self::PURCHASE_INVOICE => 'heroicon-m-document-currency-dollar',
@@ -108,6 +109,7 @@ enum PurchaseOrderType: string
     {
         return array_reduce(self::cases(), function ($carry, $case) {
             $carry[$case->value] = $case->label();
+
             return $carry;
         }, []);
     }
@@ -123,6 +125,7 @@ enum PurchaseOrderType: string
                 'icon' => $case->icon(),
                 'color' => $case->color(),
             ];
+
             return $carry;
         }, []);
     }

@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/InventoryPostingGroup.php
 
 namespace App\Models;
@@ -46,7 +47,7 @@ class InventoryPostingGroup extends Model
             ->where('location_id', $locationId)
             ->first();
 
-        if (!$setup && $locationId) {
+        if (! $setup && $locationId) {
             // Try default (null location)
             $setup = $this->inventoryPostingSetups()
                 ->whereNull('location_id')

@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/UserDepartment.php
 
 namespace App\Enums;
@@ -18,7 +19,7 @@ enum UserDepartment: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::WAREHOUSE => 'Warehouse Operations',
             self::PRODUCTION => 'Manufacturing/Production',
             self::QA => 'Quality Assurance',
@@ -34,7 +35,7 @@ enum UserDepartment: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::WAREHOUSE => 'bg-orange-100 text-orange-800',
             self::PRODUCTION => 'bg-blue-100 text-blue-800',
             self::QA => 'bg-green-100 text-green-800',
@@ -50,7 +51,7 @@ enum UserDepartment: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::WAREHOUSE => 'warehouse',
             self::PRODUCTION => 'industry',
             self::QA => 'clipboard-check',
@@ -69,7 +70,7 @@ enum UserDepartment: string
      */
     public function defaultPermissions(): array
     {
-        return match($this) {
+        return match ($this) {
             self::WAREHOUSE => ['inventory.view', 'inventory.move', 'picking.execute', 'receiving.execute'],
             self::PRODUCTION => ['production.view', 'production.execute', 'inventory.issue', 'inventory.receive'],
             self::QA => ['qa.release', 'qa.reject', 'deviation.manage', 'audit.view'],

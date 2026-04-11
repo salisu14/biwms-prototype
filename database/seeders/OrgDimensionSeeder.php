@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Enums\DimensionValueType;
 use App\Models\Dimension;
 use App\Models\DimensionValue;
-use App\Enums\DimensionValueType;
 use Illuminate\Database\Seeder;
 
 class OrgDimensionSeeder extends Seeder
@@ -46,27 +46,27 @@ class OrgDimensionSeeder extends Seeder
         DimensionValue::updateOrCreate(
             ['dimension_id' => $factoryDim->id, 'code' => 'ALPHA'],
             [
-                'name' => 'Factory Alpha', 
+                'name' => 'Factory Alpha',
                 'dimension_value_type' => DimensionValueType::Standard,
-                'parent_id' => $north->id
+                'parent_id' => $north->id,
             ]
         );
 
         DimensionValue::updateOrCreate(
             ['dimension_id' => $factoryDim->id, 'code' => 'BETA'],
             [
-                'name' => 'Factory Beta', 
+                'name' => 'Factory Beta',
                 'dimension_value_type' => DimensionValueType::Standard,
-                'parent_id' => $north->id
+                'parent_id' => $north->id,
             ]
         );
 
         DimensionValue::updateOrCreate(
             ['dimension_id' => $factoryDim->id, 'code' => 'GAMMA'],
             [
-                'name' => 'Factory Gamma', 
+                'name' => 'Factory Gamma',
                 'dimension_value_type' => DimensionValueType::Standard,
-                'parent_id' => $south->id
+                'parent_id' => $south->id,
             ]
         );
 

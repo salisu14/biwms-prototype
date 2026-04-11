@@ -65,22 +65,22 @@ class GlAccount extends Model
 
     public function vendorInvoicesPayable(): HasMany
     {
-        return $this->hasMany(\App\Models\VendorInvoice::class, 'payable_gl_account_id');
+        return $this->hasMany(VendorInvoice::class, 'payable_gl_account_id');
     }
 
     public function vendorInvoicesExpense(): HasMany
     {
-        return $this->hasMany(\App\Models\VendorInvoice::class, 'expense_gl_account_id');
+        return $this->hasMany(VendorInvoice::class, 'expense_gl_account_id');
     }
 
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function lastModifier(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'last_modified_by');
+        return $this->belongsTo(User::class, 'last_modified_by');
     }
 
     // Scopes
@@ -104,6 +104,7 @@ class GlAccount extends Model
     {
         // Define capitalizable account categories/types
         $capitalizableCategories = ['FIXED_ASSETS', 'CAPEX', 'CONSTRUCTION_IN_PROGRESS'];
+
         return in_array($this->account_category, $capitalizableCategories);
     }
 

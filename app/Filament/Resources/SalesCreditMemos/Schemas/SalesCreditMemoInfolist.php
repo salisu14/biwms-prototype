@@ -2,11 +2,10 @@
 
 namespace App\Filament\Resources\SalesCreditMemos\Schemas;
 
+use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Infolists\Components\RepeatableEntry;
-use Filament\Schemas\Components\Group;
 
 class SalesCreditMemoInfolist
 {
@@ -57,7 +56,7 @@ class SalesCreditMemoInfolist
                                     ->label('Line Total')
                                     ->money(fn ($record) => $record->currency_code ?? 'NGN'),
                             ])
-                            ->columns(5)
+                            ->columns(5),
                     ]),
 
                 // Conditional Audit Trail Section

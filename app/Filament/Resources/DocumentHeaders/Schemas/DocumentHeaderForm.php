@@ -2,14 +2,13 @@
 
 namespace App\Filament\Resources\DocumentHeaders\Schemas;
 
-use App\Enums\DocumentType;
 use App\Enums\DocumentStatus;
-use Filament\Forms;
+use App\Enums\DocumentType;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -33,21 +32,21 @@ class DocumentHeaderForm
                                 )
                                 ->searchable()
                                 ->required()
-                                ->disabled(fn ($record) => $record && !DocumentStatus::tryFrom($record->status)?->isEditable()),
+                                ->disabled(fn ($record) => $record && ! DocumentStatus::tryFrom($record->status)?->isEditable()),
 
                             TextInput::make('doc_no')
                                 ->label('Document Number')
                                 ->required()
                                 ->unique(ignoreRecord: true)
-                                ->default(fn () => 'DOC-' . now()->format('Ymd-His'))
-                                ->disabled(fn ($record) => $record && !DocumentStatus::tryFrom($record->status)?->isEditable()),
+                                ->default(fn () => 'DOC-'.now()->format('Ymd-His'))
+                                ->disabled(fn ($record) => $record && ! DocumentStatus::tryFrom($record->status)?->isEditable()),
 
                             DatePicker::make('doc_date')
                                 ->label('Document Date')
                                 ->required()
                                 ->default(now())
                                 ->native(false)
-                                ->disabled(fn ($record) => $record && !DocumentStatus::tryFrom($record->status)?->isEditable()),
+                                ->disabled(fn ($record) => $record && ! DocumentStatus::tryFrom($record->status)?->isEditable()),
 
                             DatePicker::make('posting_date')
                                 ->label('Posting Date')
@@ -55,7 +54,7 @@ class DocumentHeaderForm
                                 ->default(now())
                                 ->native(false)
                                 ->helperText('Date the financial impact takes effect.')
-                                ->disabled(fn ($record) => $record && !DocumentStatus::tryFrom($record->status)?->isEditable()),
+                                ->disabled(fn ($record) => $record && ! DocumentStatus::tryFrom($record->status)?->isEditable()),
                         ]),
                     ]),
 
@@ -71,13 +70,13 @@ class DocumentHeaderForm
                             ->required()
                             ->default('OPEN')
                             ->helperText('Current state of the document.')
-                            ->disabled(fn ($record) => $record && !DocumentStatus::tryFrom($record->status)?->isEditable()),
+                            ->disabled(fn ($record) => $record && ! DocumentStatus::tryFrom($record->status)?->isEditable()),
 
                         Textarea::make('notes')
                             ->label('Notes')
                             ->rows(3)
                             ->columnSpanFull()
-                            ->disabled(fn ($record) => $record && !DocumentStatus::tryFrom($record->status)?->isEditable()),
+                            ->disabled(fn ($record) => $record && ! DocumentStatus::tryFrom($record->status)?->isEditable()),
                     ]),
 
                 Hidden::make('created_by')

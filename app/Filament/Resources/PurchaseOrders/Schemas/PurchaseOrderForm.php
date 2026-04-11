@@ -7,12 +7,11 @@ use App\Enums\PurchaseOrderType;
 use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
-use Filament\Infolists\Components\TextEntry;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -36,7 +35,7 @@ class PurchaseOrderForm
                                 ->live()
                                 ->afterStateUpdated(fn ($state, callable $set) =>
                                     // Auto-generate a preview if number is empty (optional UX enhancement)
-                                $set('order_number_preview', PurchaseOrderType::from($state)?->seriesCode() . '-AUTO')
+                                $set('order_number_preview', PurchaseOrderType::from($state)?->seriesCode().'-AUTO')
                                 ),
 
                             TextInput::make('order_number')
@@ -82,7 +81,7 @@ class PurchaseOrderForm
                                 ->options(PurchaseOrderStatus::options())
                                 ->default('PENDING')
                                 ->required()
-                                ->disabled(fn ($record) => !$record?->canEdit), // Disable if model says not editable
+                                ->disabled(fn ($record) => ! $record?->canEdit), // Disable if model says not editable
                         ]),
 
                         // Store the vendor name denormalized field, hidden from user interaction or read-only
@@ -111,7 +110,7 @@ class PurchaseOrderForm
                             TextInput::make('payment_terms')
                                 ->label('Payment Terms')
                                 ->maxLength(50),
-                        ])
+                        ]),
                     ])
                     ->columns(2),
 
@@ -150,7 +149,8 @@ class PurchaseOrderForm
                             ->content(function ($get) {
                                 $amount = (float) $get('total_amount');
                                 $vat = (float) $get('total_vat');
-                                return '$' . number_format($amount + $vat, 4);
+
+                                return '$'.number_format($amount + $vat, 4);
                             })
                             ->visible(fn ($context) => $context === 'create'),
                     ])
@@ -170,8 +170,8 @@ class PurchaseOrderForm
                                 ->label('Approved At')
                                 ->seconds(false)
                                 ->disabled()
-                                ->visible(fn ($record) => $record && !is_null($record->approved_at)),
-                        ])
+                                ->visible(fn ($record) => $record && ! is_null($record->approved_at)),
+                        ]),
                     ])
                     ->collapsible()
                     ->visible(fn ($record) => $record !== null), // Only show in Edit mode

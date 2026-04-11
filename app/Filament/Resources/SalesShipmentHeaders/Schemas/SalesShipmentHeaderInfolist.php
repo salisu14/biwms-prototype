@@ -57,7 +57,7 @@ class SalesShipmentHeaderInfolist
                             TextEntry::make('created_at')->dateTime(),
                             TextEntry::make('updated_at')->dateTime(),
                         ])->columnSpan(1),
-                ])->from('lg')->columnSpanFull()
+                ])->from('lg')->columnSpanFull(),
             ]);
     }
 }

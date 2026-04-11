@@ -3,10 +3,13 @@
 namespace App\Filament\Resources\SalesShipmentHeaders\Tables;
 
 use App\Enums\ShipmentStatus;
+use App\Models\Location;
+use App\Models\SalesShipmentHeader;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Tables\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -55,7 +58,7 @@ class SalesShipmentHeadersTable
             ])
             ->filters([
                 SelectFilter::make('location_code')
-                    ->options(fn() => \App\Models\Location::pluck('code', 'code')),
+                    ->options(fn () => Location::pluck('code', 'code')),
                 Filter::make('shipped_not_invoiced')
                     ->query(fn (Builder $query): Builder => $query->shippedNotInvoiced())
                     ->label('Shipped Not Invoiced'),
@@ -63,11 +66,11 @@ class SalesShipmentHeadersTable
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
-                \Filament\Tables\Actions\Action::make('print_waybill')
+                Action::make('print_waybill')
                     ->label('Print Waybill')
                     ->icon('heroicon-o-printer')
                     ->color('success')
-                    ->url(fn (\App\Models\SalesShipmentHeader $record) => route('waybill.print', $record))
+                    ->url(fn (SalesShipmentHeader $record) => route('waybill.print', $record))
                     ->openUrlInNewTab(),
             ])
             ->toolbarActions([

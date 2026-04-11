@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/ItemLot.php
 
 namespace App\Models;
@@ -19,14 +20,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'quantity_received',
     'quantity_remaining',
     'status', // QUARANTINE, APPROVED, REJECTED, EXPIRED
-    'coa_reference'
+    'coa_reference',
 ])]
 class ItemLot extends Model
 {
     use HasFactory;
 
     protected $primaryKey = 'id';
+
     protected $table = 'item_lots';
+
     protected $casts = [
         'receipt_date' => 'date',
         'expiry_date' => 'date',

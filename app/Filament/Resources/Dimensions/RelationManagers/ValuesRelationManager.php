@@ -82,7 +82,7 @@ class ValuesRelationManager extends RelationManager
                     ->searchable()
                     ->sortable()
                     // Visually represent hierarchy with indentation
-                    ->formatStateUsing(fn ($record, $state) => str_repeat('— ', $record->indentation) . $state),
+                    ->formatStateUsing(fn ($record, $state) => str_repeat('— ', $record->indentation).$state),
                 TextColumn::make('dimension_value_type')
                     ->label('Type')
                     ->badge(),

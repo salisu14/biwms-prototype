@@ -11,8 +11,8 @@ class UpdatePurchaseOrderAction
     {
         $order = PurchaseOrder::findOrFail($data->purchaseOrderId);
 
-        if (!$order->can_edit) {
-            throw new \Exception("Cannot edit this purchase order.");
+        if (! $order->can_edit) {
+            throw new \Exception('Cannot edit this purchase order.');
         }
 
         $order->update([

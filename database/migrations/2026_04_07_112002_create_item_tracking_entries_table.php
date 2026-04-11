@@ -62,25 +62,25 @@ return new class extends Migration
             $table->index(['document_type', 'document_no'], 'item_tracking_document');
             $table->index('item_ledg_entry_no', 'item_tracking_ledg_entry');
         });
-//        Schema::create('item_tracking_entries', function (Blueprint $table) {
-//            $table->id();
-//            $table->morphs('document'); // SalesShipmentLine or SalesOrderLine
-//            $table->string('item_no', 20);
-//            $table->string('variant_code', 10)->nullable();
-//            $table->string('serial_no', 50)->nullable();
-//            $table->string('lot_no', 50)->nullable();
-//            $table->decimal('quantity', 18, 4);
-//            $table->decimal('quantity_base', 18, 4);
-//            $table->date('expiration_date')->nullable();
-//            $table->date('warranty_date')->nullable();
-//            $table->string('entry_type', 20); // Sale, Purchase, Positive Adjmt, etc.
-//            $table->integer('item_ledg_entry_no')->nullable();
-//            $table->boolean('correction')->default(false);
-//            $table->timestamps();
-//
-//            $table->index(['item_no', 'lot_no']);
-//            $table->index(['item_no', 'serial_no']);
-//        });
+        //        Schema::create('item_tracking_entries', function (Blueprint $table) {
+        //            $table->id();
+        //            $table->morphs('document'); // SalesShipmentLine or SalesOrderLine
+        //            $table->string('item_no', 20);
+        //            $table->string('variant_code', 10)->nullable();
+        //            $table->string('serial_no', 50)->nullable();
+        //            $table->string('lot_no', 50)->nullable();
+        //            $table->decimal('quantity', 18, 4);
+        //            $table->decimal('quantity_base', 18, 4);
+        //            $table->date('expiration_date')->nullable();
+        //            $table->date('warranty_date')->nullable();
+        //            $table->string('entry_type', 20); // Sale, Purchase, Positive Adjmt, etc.
+        //            $table->integer('item_ledg_entry_no')->nullable();
+        //            $table->boolean('correction')->default(false);
+        //            $table->timestamps();
+        //
+        //            $table->index(['item_no', 'lot_no']);
+        //            $table->index(['item_no', 'serial_no']);
+        //        });
     }
 
     /**

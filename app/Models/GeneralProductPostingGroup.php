@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/GeneralProductPostingGroup.php
 
 namespace App\Models;
@@ -76,7 +77,7 @@ class GeneralProductPostingGroup extends Model
     ): ?ChartOfAccount {
         $setup = $this->getSetupWith($businessGroup);
 
-        if (!$setup) {
+        if (! $setup) {
             return null;
         }
 

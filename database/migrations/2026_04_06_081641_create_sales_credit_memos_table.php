@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ApprovalStatus;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -16,7 +17,7 @@ return new class extends Migration
             $table->string('memo_number')->unique();
             $table->decimal('total_amount', 15, 2);
 
-            $table->enum('status', array_column(\App\Enums\ApprovalStatus::cases(), 'value'))
+            $table->enum('status', array_column(ApprovalStatus::cases(), 'value'))
                 ->default('draft');
 
             $table->text('reason')->nullable();

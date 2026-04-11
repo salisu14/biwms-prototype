@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/InventoryPostingSetup.php
 
 namespace App\Models;
