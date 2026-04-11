@@ -17,6 +17,7 @@ enum AccountCategory: string
     case OTHER_INCOME_EXPENSE = 'OTHER_INCOME_EXPENSE';
 
     case CURRENT_ASSET = 'CURRENT_ASSET';
+    case CURRENT_LIABILITY = 'CURRENT_LIABILITY';
     case FIXED_ASSET_LIABILITIES = 'FIXED_ASSET_LIABILITIES';
     case NON_CURRENT_ASSET = 'NON_CURRENT_ASSET';
     case NON_CURRENT_LIABILITY = 'NON_CURRENT_LIABILITY';
@@ -36,6 +37,7 @@ enum AccountCategory: string
             self::NON_OPERATING => 'Non-Operating Items',
             self::OTHER_INCOME_EXPENSE => 'Other Income & Expenses',
             self::CURRENT_ASSET => 'Current Assets',
+            self::CURRENT_LIABILITY => 'Current Liabilities',
             self::FIXED_ASSET_LIABILITIES => 'Fixed Asset Liabilities',
             self::NON_CURRENT_ASSET => 'Non-Current Assets',
             self::NON_CURRENT_LIABILITY => 'Non-Current Liabilities',
@@ -47,7 +49,7 @@ enum AccountCategory: string
     {
         return match ($this) {
             self::CASH, self::RECEIVABLE, self::INVENTORY, self::FIXED_ASSET => 'bg-green-100 text-green-800',
-            self::PAYABLE, self::ACCRUAL => 'bg-red-100 text-red-800',
+            self::PAYABLE, self::ACCRUAL, self::CURRENT_LIABILITY => 'bg-red-100 text-red-800',
             self::REVENUE => 'bg-blue-100 text-blue-800',
             self::COGS, self::OPERATING_EXPENSE => 'bg-orange-100 text-orange-800',
             self::NON_OPERATING, self::OTHER_INCOME_EXPENSE => 'bg-gray-100 text-gray-800',
@@ -72,6 +74,7 @@ enum AccountCategory: string
             self::FIXED_ASSET_LIABILITIES => 'heroicon-o-building-library',
             self::NON_CURRENT_ASSET => 'heroicon-o-cube',
             self::NON_CURRENT_LIABILITY => 'heroicon-o-credit-card',
+            self::CURRENT_LIABILITY => 'heroicon-o-credit-card',
             default => 'heroicon-o-banknotes',
         };
     }

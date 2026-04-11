@@ -65,29 +65,29 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn () => request()->is('admin/chart-of-accounts*')),
 
                                 // Posting Groups Cluster
-                                NavigationItem::make('Posting Groups')
-                                    ->icon('heroicon-o-squares-2x2')
-                                    ->url('/admin/posting-groups')
-                                    ->isActiveWhen(fn () => request()->is('admin/posting-groups*') ||
-                                        request()->is('admin/general-business-posting-groups*') ||
-                                        request()->is('admin/general-product-posting-groups*') ||
-                                        request()->is('admin/vendor-posting-groups*') ||
-                                        request()->is('admin/customer-posting-groups*') ||
-                                        request()->is('admin/vat-posting-groups*')),
+//                                NavigationItem::make('Posting Groups')
+//                                    ->icon('heroicon-o-squares-2x2')
+//                                    ->url('/admin/posting-groups')
+//                                    ->isActiveWhen(fn () => request()->is('admin/posting-groups*') ||
+//                                        request()->is('admin/general-business-posting-groups*') ||
+//                                        request()->is('admin/general-product-posting-groups*') ||
+//                                        request()->is('admin/vendor-posting-groups*') ||
+//                                        request()->is('admin/customer-posting-groups*') ||
+//                                        request()->is('admin/vat-posting-groups*')),
 
                                 // Posting Setups
-                                NavigationItem::make('Posting Setups')
-                                    ->icon('heroicon-o-adjustments-horizontal')
-                                    ->url('/admin/posting-setups')
-                                    ->isActiveWhen(fn () => request()->is('admin/posting-setups*') ||
-                                        request()->is('admin/general-posting-setups*') ||
-                                        request()->is('admin/vat-posting-setups*')),
+//                                NavigationItem::make('Posting Setups')
+//                                    ->icon('heroicon-o-adjustments-horizontal')
+//                                    ->url('/admin/posting-setups')
+//                                    ->isActiveWhen(fn () => request()->is('admin/posting-setups*') ||
+//                                        request()->is('admin/general-posting-setups*') ||
+//                                        request()->is('admin/vat-posting-setups*')),
 
                                 // VAT & Tax
                                 NavigationItem::make('VAT & Tax Setup')
                                     ->icon('heroicon-o-receipt-percent')
-                                    ->url('/admin/vat-setup')
-                                    ->isActiveWhen(fn () => request()->is('admin/vat*')),
+                                    ->url('/admin/vat-masters')
+                                    ->isActiveWhen(fn () => request()->is('admin/vat-masters*')),
 
                                 NavigationItem::make('Journal Templates')
                                     ->icon('heroicon-o-document-text')
@@ -100,6 +100,18 @@ class AdminPanelProvider extends PanelProvider
                                 NavigationItem::make('Gen. Business Posting Group')
                                     ->icon('heroicon-o-document-text')
                                     ->url('/admin/general-business-posting-groups'),
+
+                                NavigationItem::make('Vat Posting Setups')
+                                    ->icon('heroicon-o-document-text')
+                                    ->url('/admin/vat-posting-setups'),
+
+                                NavigationItem::make('Vat Buss. Posting Groups')
+                                    ->icon('heroicon-o-document-text')
+                                    ->url('/admin/vat-business-posting-groups'),
+
+                                NavigationItem::make('Vat Product Posting Groups')
+                                    ->icon('heroicon-o-document-text')
+                                    ->url('/admin/vat-product-posting-groups'),
 
                                 NavigationItem::make('Bank Accounts')
                                     ->icon('heroicon-o-document-currency-dollar')

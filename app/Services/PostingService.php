@@ -16,6 +16,7 @@ use App\Models\PaymentApplication;
 use App\Models\PurchaseCreditMemo;
 use App\Models\SalesCreditMemo;
 use App\Models\SalesInvoice;
+use App\Models\VatPostingSetup;
 use App\Models\Vendor;
 use Illuminate\Support\Facades\DB;
 
@@ -575,7 +576,9 @@ class PostingService
         float $lineTotal,
         \DateTime $postingDate,
         string $documentNumber,
-        string $description
+        string $description,
+        float $vatAmount = 0,
+        ?int $vatPostingSetupId = null
     ): array {
         $setup = $vendor->getPostingSetupFor($item);
 
@@ -617,6 +620,27 @@ class PostingService
                 'posting_date' => $postingDate,
                 'description' => "Purchase expense: {$description}",
             ]);
+        }
+
+        // VAT Input (Debit)
+        if ($vatAmount > 0) {
+            $vatSetup = $vatPostingSetupId ? VatPostingSetup::find($vatPostingSetupId) : null;
+            if (! $vatSetup) {
+                $vatService = app(VatService::class);
+                $vatSetup = $vatService->resolveSetup($vendor->vat_business_posting_group_id, $item->vat_product_posting_group_id);
+            }
+
+            if ($vatSetup && $vatSetup->purchase_vat_account_id) {
+                $entries[] = $this->createGlEntry([
+                    'chart_of_account_id' => $vatSetup->purchase_vat_account_id,
+                    'debit_amount' => $vatAmount,
+                    'credit_amount' => 0,
+                    'document_type' => 'PURCHASE_INVOICE',
+                    'document_number' => $documentNumber,
+                    'posting_date' => $postingDate,
+                    'description' => "VAT Input: {$description}",
+                ]);
+            }
         }
 
         return $entries;
@@ -787,19 +811,31 @@ class PostingService
                     throw new \Exception("Missing sales account for item '{$item->name}'.");
                 }
 
-                $lineRevenue = $line->quantity * $line->unit_price;
+                $vatBusGroup = $invoice->vat_business_posting_group_id;
+                $vatProdGroup = $item->vat_product_posting_group_id;
+
+                $vatService = app(VatService::class);
+                $vatSetup = $vatService->resolveSetup($vatBusGroup, $vatProdGroup);
+
+                $lineTotalRaw = $line->quantity * $line->unit_price;
+                $vatCalc = $vatService->calculate($lineTotalRaw, $vatSetup, $invoice->is_price_inclusive);
+
+                $lineRevenue = $vatCalc['net_amount'];
+                $lineVat = $vatCalc['vat_amount'];
+                $lineTotalWithVat = $vatCalc['total_amount'];
+
                 $lineCost = $line->quantity * ($item->unit_cost ?? 0);
 
                 // 1. Accounts Receivable (Debit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $receivablesAccount->id,
-                    'debit_amount' => $lineRevenue,
+                    'debit_amount' => $lineTotalWithVat,
                     'credit_amount' => 0,
                     'document_type' => 'SALES_INVOICE',
                     'document_number' => $invoice->invoice_number,
                     'posting_date' => $invoice->posting_date,
                     'document_date' => $invoice->posting_date,
-                    'description' => "Invoice {$invoice->invoice_number}",
+                    'description' => "Invoice {$invoice->invoice_number} - Total",
                 ]);
 
                 // 2. Revenue (Credit)
@@ -813,6 +849,20 @@ class PostingService
                     'document_date' => $invoice->posting_date,
                     'description' => "Revenue {$item->description}",
                 ]);
+
+                // 2.5 VAT Liability (Credit)
+                if ($lineVat > 0 && $vatSetup && $vatSetup->sales_vat_account_id) {
+                    $entries[] = $this->createGlEntry([
+                        'chart_of_account_id' => $vatSetup->sales_vat_account_id,
+                        'debit_amount' => 0,
+                        'credit_amount' => $lineVat,
+                        'document_type' => 'SALES_INVOICE',
+                        'document_number' => $invoice->invoice_number,
+                        'posting_date' => $invoice->posting_date,
+                        'document_date' => $invoice->posting_date,
+                        'description' => "VAT Output {$item->description}",
+                    ]);
+                }
 
                 // Inventory postings (only for inventory items)
                 if ($item->isInventoryItem()) {

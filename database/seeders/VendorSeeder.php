@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\AccountCategory;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\VatBusinessPostingGroup;
 use App\Models\Vendor;
 use App\Models\VendorPostingGroup;
 use Illuminate\Database\Seeder;
@@ -23,6 +24,9 @@ class VendorSeeder extends Seeder
 
         $domesticVendGroup = VendorPostingGroup::where('code', 'DOMESTIC')->first();
         $foreignVendGroup = VendorPostingGroup::where('code', 'FOREIGN')->first();
+
+        $domesticVatBusGroup = VatBusinessPostingGroup::where('code', 'DOMESTIC')->first();
+        $exportVatBusGroup = VatBusinessPostingGroup::where('code', 'EXPORT')->first();
 
         $vendors = [
             [
@@ -47,6 +51,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET30',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -73,6 +78,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET15',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -99,6 +105,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $foreignBusGroup?->id,
                 'vendor_posting_group_id' => $foreignVendGroup?->id,
                 'vat_bus_posting_group' => 'EXPORT',
+                'vat_business_posting_group_id' => $exportVatBusGroup?->id,
                 'payment_terms_code' => 'NET60',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -125,6 +132,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET30',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -151,6 +159,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET45',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -203,6 +212,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET15',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -229,6 +239,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET30',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -255,6 +266,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET60',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -281,6 +293,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET30',
                 'blocked' => false,
                 'blocked_reason' => 'NONE',
@@ -308,6 +321,7 @@ class VendorSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'vendor_posting_group_id' => $domesticVendGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'payment_terms_code' => 'NET30',
                 'blocked' => true,
                 'blocked_reason' => 'INACTIVE',

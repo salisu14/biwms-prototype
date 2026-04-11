@@ -8,6 +8,7 @@ use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
 use App\Models\Asset;
 use App\Models\Item;
 use App\Models\PurchaseOrder;
+use App\Services\VatService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -62,6 +63,19 @@ class LinesRelationManager extends RelationManager
                             if ($item) {
                                 $set('description', $item->description);
                                 $set('item_code', $item->item_code);
+                                $set('vat_product_posting_group_id', $item->vat_product_posting_group_id);
+
+                                // Resolve VAT percentage
+                                $vatBusGroup = $this->getOwnerRecord()->vat_business_posting_group_id;
+                                $vatProdGroup = $item->vat_product_posting_group_id;
+
+                                if ($vatBusGroup && $vatProdGroup) {
+                                    $vatService = app(VatService::class);
+                                    $percentage = $vatService->getVatPercentage($vatBusGroup, $vatProdGroup);
+                                    $set('vat_percentage', $percentage);
+                                } else {
+                                    $set('vat_percentage', 0);
+                                }
 
                                 // Logic to set the ACTIVE unit_of_measure field using Item model method
                                 $baseUom = $item->getDefaultUom(UomType::BASE);

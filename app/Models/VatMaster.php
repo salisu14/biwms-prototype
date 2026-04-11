@@ -7,12 +7,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'code',
     'description',
-    'purchase_account_number',
-    'sales_account_number',
+    'purchase_account_id',
+    'sales_account_id',
     'percentage',
 ])]
 class VatMaster extends Model
@@ -26,6 +27,22 @@ class VatMaster extends Model
     protected $casts = [
         'percentage' => 'decimal:2',
     ];
+
+    /**
+     * G/L Account for Purchase VAT (Input)
+     */
+    public function purchaseAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'purchase_account_id');
+    }
+
+    /**
+     * G/L Account for Sales VAT (Output)
+     */
+    public function salesAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'sales_account_id');
+    }
 
     /**
      * Check if this is "No VAT" (0%)

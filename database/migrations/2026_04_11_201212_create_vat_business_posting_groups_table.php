@@ -11,20 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('vat_masters', function (Blueprint $table) {
+        Schema::create('vat_business_posting_groups', function (Blueprint $table) {
             $table->id();
-
             $table->string('code', 20)->unique();
-            $table->string('description', 100);
-            $table->string('purchase_account_number', 50);
-            $table->string('sales_account_number', 50);
-            $table->decimal('percentage', 5, 2)->default(0);
-
+            $table->string('description', 100)->nullable();
             $table->timestamps();
-
-            // Indexes
-            $table->index('code');
-            $table->index('percentage');
         });
     }
 
@@ -33,6 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('vat_masters');
+        Schema::dropIfExists('vat_business_posting_groups');
     }
 };

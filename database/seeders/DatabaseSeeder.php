@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             CurrencySeeder::class,
             BankAccountSeeder::class,
             GlAccountSeeder::class,
+            VatPostingSeeder::class,
             InventoryPostingGroupSeeder::class,
             InventoryPostingSetupSeeder::class,
             GeneralBusinessPostingGroupSeeder::class,
@@ -34,7 +35,7 @@ class DatabaseSeeder extends Seeder
             ItemSeeder::class,
             VendorSeeder::class,
             NumberSeriesSeeder::class,
-            VatMasterSeeder::class,
+            // VatMasterSeeder::class, // Replaced by VatPostingSeeder
             PermissionsTableSeeder::class,
             RolesTableSeeder::class,
             UsersTableSeeder::class,

@@ -22,6 +22,7 @@ class Customer extends Model
         'phone',
         'general_business_posting_group_id',
         'customer_posting_group_id',
+        'vat_business_posting_group_id',
         'vat_bus_posting_group',
         'customer_type',
         'location_id',
@@ -55,6 +56,11 @@ class Customer extends Model
     public function customerPostingGroup(): BelongsTo
     {
         return $this->belongsTo(CustomerPostingGroup::class);
+    }
+
+    public function vatBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatBusinessPostingGroup::class);
     }
 
     public function location(): BelongsTo

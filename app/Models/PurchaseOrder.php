@@ -38,6 +38,7 @@ class PurchaseOrder extends Model
         'general_business_posting_group_id',
         'vendor_posting_group_id',
         'vat_bus_posting_group',
+        'vat_business_posting_group_id',
         'is_price_inclusive',
     ];
 
@@ -126,6 +127,11 @@ class PurchaseOrder extends Model
     public function vendorPostingGroup(): BelongsTo
     {
         return $this->belongsTo(VendorPostingGroup::class);
+    }
+
+    public function vatBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatBusinessPostingGroup::class);
     }
 
     public function warehouseReceipts(): HasMany

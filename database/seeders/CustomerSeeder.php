@@ -7,6 +7,7 @@ use App\Models\CustomerPostingGroup;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\Location;
 use App\Models\PricingGroup;
+use App\Models\VatBusinessPostingGroup;
 use Illuminate\Database\Seeder;
 
 class CustomerSeeder extends Seeder
@@ -30,6 +31,9 @@ class CustomerSeeder extends Seeder
         $mainLocation = Location::first();
         $standardPricingGroup = PricingGroup::where('code', 'STANDARD')->first();
 
+        $domesticVatBusGroup = VatBusinessPostingGroup::where('code', 'DOMESTIC')->first();
+        $exportVatBusGroup = VatBusinessPostingGroup::where('code', 'EXPORT')->first();
+
         $customers = [
             // Domestic Customers
             [
@@ -41,6 +45,7 @@ class CustomerSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'customer_posting_group_id' => $domesticCustGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'location_id' => $mainLocation?->id,
                 'shipping_agent_code' => 'FEDEX',
                 'payment_terms_code' => 'NET30',
@@ -62,6 +67,7 @@ class CustomerSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'customer_posting_group_id' => $domesticCustGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'location_id' => $mainLocation?->id,
                 'shipping_agent_code' => 'UPS',
                 'payment_terms_code' => 'NET15',
@@ -83,6 +89,7 @@ class CustomerSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'customer_posting_group_id' => $domesticCustGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'location_id' => $mainLocation?->id,
                 'shipping_agent_code' => 'FEDEX',
                 'payment_terms_code' => 'NET45',
@@ -104,6 +111,7 @@ class CustomerSeeder extends Seeder
                 'general_business_posting_group_id' => $domesticBusGroup?->id,
                 'customer_posting_group_id' => $domesticCustGroup?->id,
                 'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
                 'location_id' => $mainLocation?->id,
                 'shipping_agent_code' => 'UPS',
                 'payment_terms_code' => 'NET30',
@@ -148,6 +156,7 @@ class CustomerSeeder extends Seeder
                 'general_business_posting_group_id' => $exportBusGroup?->id,
                 'customer_posting_group_id' => $exportCustGroup?->id,
                 'vat_bus_posting_group' => 'EXPORT',
+                'vat_business_posting_group_id' => $exportVatBusGroup?->id,
                 'location_id' => $mainLocation?->id,
                 'shipping_agent_code' => 'DHL',
                 'payment_terms_code' => 'NET30',
@@ -169,6 +178,7 @@ class CustomerSeeder extends Seeder
                 'general_business_posting_group_id' => $exportBusGroup?->id,
                 'customer_posting_group_id' => $exportCustGroup?->id,
                 'vat_bus_posting_group' => 'EXPORT',
+                'vat_business_posting_group_id' => $exportVatBusGroup?->id,
                 'location_id' => $mainLocation?->id,
                 'shipping_agent_code' => 'DHL',
                 'payment_terms_code' => 'NET45',

@@ -14,6 +14,7 @@ use App\Models\ItemSku;
 use App\Models\Location;
 use App\Models\UnitOfMeasure;
 use App\Models\VatMaster;
+use App\Models\VatProductPostingGroup;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 
@@ -43,6 +44,9 @@ class ItemSeeder extends Seeder
 
         $serviceInvGroup = InventoryPostingGroup::where('code', 'SERVICE')->first()
             ?? InventoryPostingGroup::create(['code' => 'SERVICE', 'description' => 'Service Posting Group']);
+
+        $standardVatProdGroup = VatProductPostingGroup::where('code', 'STANDARD')->first();
+        $zeroVatProdGroup = VatProductPostingGroup::where('code', 'ZERO')->first();
 
         // Cache some common lookups
         $vats = VatMaster::all()->pluck('id', 'code');
@@ -126,6 +130,12 @@ class ItemSeeder extends Seeder
 
             // Resolve Posting Setups (Best effort)
             $itemData['general_posting_setup_id'] = GeneralPostingSetup::where('general_product_posting_group_id', $itemData['general_product_posting_group_id'])->first()?->id;
+
+            // Map VAT product group
+            $itemData['vat_product_posting_group_id'] = $itemData['vat_prod_posting_group'] === 'VAT20'
+                ? $standardVatProdGroup?->id
+                : $zeroVatProdGroup?->id;
+
             $itemData['inventory_posting_setup_id'] = InventoryPostingSetup::where([
                 'inventory_posting_group_id' => $itemData['inventory_posting_group_id'],
                 'location_id' => $itemData['location_id'] ?? $mainLocation->id,

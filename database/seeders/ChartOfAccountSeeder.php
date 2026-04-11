@@ -267,6 +267,30 @@ class ChartOfAccountSeeder extends Seeder
                 'direct_posting' => true,
                 'parent_account_number' => '70000',
             ],
+
+            // ============================================
+            // TAX ACCOUNTS (Assets 14000s / Liabilities 20000s)
+            // ============================================
+
+            // VAT Receivable (Asset)
+            [
+                'account_number' => '14100',
+                'name' => 'Purchase VAT (Input)',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => true,
+                'parent_account_number' => '14000',
+            ],
+
+            // VAT Payable (Liability)
+            [
+                'account_number' => '20100',
+                'name' => 'Sales VAT (Output)',
+                'account_type' => AccountType::LIABILITY,
+                'account_category' => AccountCategory::CURRENT_LIABILITY,
+                'direct_posting' => true,
+                'parent_account_number' => '20000',
+            ],
         ];
 
         foreach ($accounts as $accountData) {
@@ -333,6 +357,20 @@ class ChartOfAccountSeeder extends Seeder
                 'account_type' => AccountType::ASSET,
                 'account_category' => AccountCategory::CURRENT_ASSET,
                 'direct_posting' => false, // Control account - no direct posting
+            ],
+            [
+                'account_number' => '14000',
+                'name' => 'Other Current Assets',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::CURRENT_ASSET,
+                'direct_posting' => false,
+            ],
+            [
+                'account_number' => '20000',
+                'name' => 'Current Liabilities',
+                'account_type' => AccountType::LIABILITY,
+                'account_category' => AccountCategory::CURRENT_LIABILITY,
+                'direct_posting' => false,
             ],
         ];
 

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SalesOrders\RelationManagers;
 use App\Enums\ItemType;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
 use App\Models\Item;
+use App\Services\VatService;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -54,11 +55,26 @@ class LinesRelationManager extends RelationManager
                                             }
 
                                             $item = Item::find($state);
+                                            $order = $get('../../'); // In RelationManager, ../../ refers to the parent record state if in a form, but here we might need a better way.
+                                            // Actually, $this->getOwnerRecord() is the way to go for parent data.
+
                                             $set('item_code', $item->item_code);
                                             $set('description', $item->description);
                                             $set('unit_price', $item->unit_price);
                                             $set('unit_cost', $item->unit_cost);
-                                            $set('vat_percentage', 15); // Default or fetch from item
+                                            $set('vat_product_posting_group_id', $item->vat_product_posting_group_id);
+
+                                            // Resolve VAT percentage
+                                            $vatBusGroup = $this->getOwnerRecord()->vat_business_posting_group_id;
+                                            $vatProdGroup = $item->vat_product_posting_group_id;
+
+                                            if ($vatBusGroup && $vatProdGroup) {
+                                                $vatService = app(VatService::class);
+                                                $percentage = $vatService->getVatPercentage($vatBusGroup, $vatProdGroup);
+                                                $set('vat_percentage', $percentage);
+                                            } else {
+                                                $set('vat_percentage', 0);
+                                            }
 
                                             // Set UOM from item's default sales UOM if available
                                             $uom = $item->uoms()->wherePivot('uom_type', 'SALES')->first()
@@ -137,6 +153,11 @@ class LinesRelationManager extends RelationManager
                 Section::make('Technical Details')
                     ->schema([
                         TextInput::make('item_code')->readOnly(),
+                        Select::make('vat_product_posting_group_id')
+                            ->label('VAT Prod. Posting Group')
+                            ->relationship('vatProductPostingGroup', 'code')
+                            ->disabled()
+                            ->dehydrated(),
                         Select::make('general_product_posting_group_id')
                             ->relationship('generalProductPostingGroup', 'id'),
                         Select::make('inventory_posting_group_id')
@@ -195,7 +216,7 @@ class LinesRelationManager extends RelationManager
         $qty = (float) $get('quantity');
         $price = (float) $get('unit_price');
         $discPercent = (float) $get('line_discount_percent');
-        $vatPercent = (float) $get('vat_percentage') ?? 15;
+        $vatPercent = (float) $get('vat_percentage');
 
         $subtotal = $qty * $price;
         $discountAmount = $subtotal * ($discPercent / 100);

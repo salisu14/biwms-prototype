@@ -25,6 +25,7 @@ class SalesOrder extends Model
         'ship_to_address',
         'general_business_posting_group_id',
         'customer_posting_group_id',
+        'vat_business_posting_group_id',
         'vat_bus_posting_group',
         'pricing_group_id',
         'location_id',
@@ -257,6 +258,11 @@ class SalesOrder extends Model
     public function customerPostingGroup(): BelongsTo
     {
         return $this->belongsTo(CustomerPostingGroup::class);
+    }
+
+    public function vatBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatBusinessPostingGroup::class);
     }
 
     public function pricingGroup(): BelongsTo

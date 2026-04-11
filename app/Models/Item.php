@@ -25,6 +25,7 @@ class Item extends Model
         'general_product_posting_group_id',
         'inventory_posting_group_id',
         'vat_prod_posting_group',
+        'vat_product_posting_group_id',
         'vat_id',
         'item_type',
         'inventory_method',
@@ -180,6 +181,11 @@ class Item extends Model
     public function vat(): BelongsTo
     {
         return $this->belongsTo(VatMaster::class, 'vat_id');
+    }
+
+    public function vatProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatProductPostingGroup::class);
     }
 
     public function generalPostingSetup(): BelongsTo

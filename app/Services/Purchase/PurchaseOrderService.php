@@ -322,7 +322,8 @@ class PurchaseOrderService
                     lineTotal: $lineTotal,
                     postingDate: $data->postingDate,
                     documentNumber: $invoice->document_number,
-                    description: $poLine->description
+                    description: $poLine->description,
+                    vatAmount: $vatAmount
                 );
 
                 $totalAmount += $lineTotal;
