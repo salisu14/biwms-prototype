@@ -306,6 +306,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-arrow-down-tray')
                                     ->url('/admin/warehouse-receipts'),
 
+                                NavigationItem::make('Warehouse Activities')
+                                    ->icon('heroicon-o-arrow-down-tray')
+                                    ->url('/admin/warehouse-activities'),
+
                                 NavigationItem::make('Put-aways')
                                     ->icon('heroicon-o-arrow-down-on-square')
                                     ->url('/admin/put-aways'),
