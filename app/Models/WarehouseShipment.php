@@ -88,6 +88,11 @@ class WarehouseShipment extends Model
         return true;
     }
 
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
     // Scope
     public function scopeOpen($query)
     {
