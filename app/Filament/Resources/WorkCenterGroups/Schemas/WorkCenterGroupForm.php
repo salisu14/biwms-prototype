@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\WorkCenterGroups\Schemas;
 
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class WorkCenterGroupForm
@@ -11,10 +13,23 @@ class WorkCenterGroupForm
     {
         return $schema
             ->components([
-                TextInput::make('code')
-                    ->required(),
-                TextInput::make('name')
-                    ->required(),
+                Section::make('Group Identification')
+                    ->description('Define the primary classification for production capacity.')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            TextInput::make('code')
+                                ->label('Group Code')
+                                ->required()
+                                ->unique(ignoreRecord: true)
+                                ->placeholder('e.g., ASSEMBLY_DEPT')
+                                ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+
+                            TextInput::make('name')
+                                ->label('Group Name')
+                                ->required()
+                                ->placeholder('e.g., Assembly & Finishing'),
+                        ]),
+                    ]),
             ]);
     }
 }

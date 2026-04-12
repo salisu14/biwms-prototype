@@ -16,18 +16,31 @@ class WorkCenterGroupsTable
         return $table
             ->columns([
                 TextColumn::make('code')
-                    ->searchable(),
+                    ->label('Group Code')
+                    ->weight('bold')
+                    ->searchable()
+                    ->sortable(),
+
                 TextColumn::make('name')
-                    ->searchable(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->label('Group Name')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('work_centers_count')
+                    ->label('Work Centers')
+                    ->counts('workCenters')
+                    ->badge()
+                    ->color('info')
+                    ->alignCenter()
+                    ->sortable(),
+
                 TextColumn::make('updated_at')
+                    ->label('Last Modified')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->defaultSort('code')
             ->filters([
                 //
             ])
