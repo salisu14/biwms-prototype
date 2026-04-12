@@ -294,6 +294,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-map-pin')
                                     ->url('/admin/locations'),
 
+                                NavigationItem::make('Zones')
+                                    ->icon('heroicon-o-inbox')
+                                    ->url('/admin/zones'),
+
                                 NavigationItem::make('Bins')
                                     ->icon('heroicon-o-inbox')
                                     ->url('/admin/bins'),
