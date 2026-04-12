@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class WorkCenter extends Model
 {
@@ -71,14 +70,19 @@ class WorkCenter extends Model
         return $this->hasMany(WorkCenterCalendar::class, 'work_center_id');
     }
 
-    public function Subcontractor(): BelongsTo
+    public function subcontractor(): BelongsTo
     {
-        return $this->BelongsTo(Vendor::class, 'subcontractor_id');
+        // Fixed: lowercase method name and lowercase belongsTo call
+        return $this->belongsTo(Vendor::class, 'subcontractor_id');
     }
 
-    public function workCenterBin(): HasOne
+    /**
+     * Define as 'bins' and 'HasMany' to ensure compatibility with
+     * BinsRelationManager. The manager's UI will limit this to one entry.
+     */
+    public function bins(): HasMany
     {
-        return $this->hasOne(WorkCenterBin::class, 'work_center_id');
+        return $this->hasMany(WorkCenterBin::class, 'work_center_id');
     }
 
     /**
@@ -86,7 +90,7 @@ class WorkCenter extends Model
      */
     public function getAvailableCapacity($startDate, $endDate): float
     {
-        return $this->calendarEntries()
+        return (float) $this->calendarEntries()
             ->whereBetween('date', [$startDate, $endDate])
             ->where('is_working_day', true)
             ->sum('capacity');

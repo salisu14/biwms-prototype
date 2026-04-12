@@ -302,6 +302,15 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-inbox')
                                     ->url('/admin/bins'),
 
+                                NavigationItem::make('Work Center Groups')
+                                    ->icon('heroicon-o-hand-raised')
+                                    ->url('/admin/work-center-groups'),
+
+
+                                NavigationItem::make('Work Centers')
+                                    ->icon('heroicon-o-hand-raised')
+                                    ->url('/admin/work-centers'),
+
                                 NavigationItem::make('Warehouse Receipts')
                                     ->icon('heroicon-o-arrow-down-tray')
                                     ->url('/admin/warehouse-receipts'),
