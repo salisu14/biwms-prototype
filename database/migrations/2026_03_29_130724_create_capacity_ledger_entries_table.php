@@ -20,15 +20,20 @@ return new class extends Migration
             $table->foreignId('machine_center_id')->nullable()->constrained('machine_centers');
 
             $table->date('posting_date');
-            $table->string('document_number');
+            $table->string('document_no');
 
             $table->decimal('setup_time', 15, 4)->default(0);
             $table->decimal('run_time', 15, 4)->default(0);
+            $table->decimal('stop_time', 15, 4)->default(0);
             $table->string('setup_time_unit')->default('MINUTES');
             $table->string('run_time_unit')->default('MINUTES');
 
+            $table->decimal('output_quantity', 15, 4)->default(0);
+            $table->decimal('scrap_quantity', 15, 4)->default(0);
+
             $table->decimal('direct_cost', 15, 4)->default(0);
             $table->decimal('overhead_cost', 15, 4)->default(0);
+            $table->decimal('unit_cost', 15, 4)->default(0);
             $table->decimal('total_cost', 15, 4)->default(0);
 
             $table->string('type')->default('RUN'); // SETUP, RUN, STOP, OUTPUT
@@ -37,6 +42,7 @@ return new class extends Migration
 
             $table->index(['production_order_id', 'posting_date']);
             $table->index(['work_center_id', 'posting_date']);
+            $table->index(['document_no']);
         });
     }
 
