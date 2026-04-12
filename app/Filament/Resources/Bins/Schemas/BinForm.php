@@ -80,8 +80,8 @@ class BinForm
                                                 ->inline(false),
                                             Select::make('dedicated_item_id')
                                                 ->label('Dedicated Item')
-                                                ->relationship('dedicatedItem', 'item_number')
-                                                ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->item_number} - {$record->description}")
+                                                ->relationship('dedicatedItem', 'item_code')
+                                                ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->item_code} - {$record->description}")
                                                 ->searchable()
                                                 ->preload()
                                                 ->required(fn (Get $get) => $get('dedicated'))
