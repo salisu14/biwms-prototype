@@ -63,6 +63,11 @@ class WarehouseActivityLine extends Model
         return $this->belongsTo(Item::class, 'item_id');
     }
 
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_id');
+    }
+
     public function sourceZone(): BelongsTo
     {
         return $this->belongsTo(Zone::class, 'source_zone_id');
@@ -86,6 +91,11 @@ class WarehouseActivityLine extends Model
     public function handler(): BelongsTo
     {
         return $this->belongsTo(User::class, 'handled_by');
+    }
+
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
     }
 
     public function isComplete(): bool
