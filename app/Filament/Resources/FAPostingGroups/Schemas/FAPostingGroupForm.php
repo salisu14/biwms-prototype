@@ -8,7 +8,10 @@ use App\Enums\TangibleAssetType;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
 
 class FAPostingGroupForm
@@ -17,68 +20,117 @@ class FAPostingGroupForm
     {
         return $schema
             ->components([
-                Section::make('Group Identity')
-                    ->schema([
-                        TextInput::make('code')
-                            ->required()
-                            ->unique(ignoreRecord: true),
-                        TextInput::make('description'),
-                    ])->columns(2),
+                Tabs::make('Fixed Asset Posting Setup')
+                    ->tabs([
+                        Tabs\Tab::make('General')
+                            ->icon('heroicon-m-identification')
+                            ->schema([
+                                Grid::make(3)->schema([
+                                    TextInput::make('code')
+                                        ->label('Posting Group Code')
+                                        ->required()
+                                        ->unique(ignoreRecord: true)
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                    TextInput::make('description')
+                                        ->label('Description')
+                                        ->maxLength(255)
+                                        ->columnSpan(2),
+                                ]),
+                                Section::make('Status & Active Rules')
+                                    ->schema([
+                                        Toggle::make('is_active')
+                                            ->label('Active Status')
+                                            ->default(true)
+                                            ->onColor('success'),
+                                    ])->compact()->inlineLabel(),
+                            ]),
 
-                Section::make('Financial Accounts')
-                    ->schema([
-                        Select::make('acquisition_cost_account_id')
-                            ->relationship('acquisitionAccount', 'account_number')
-                            ->searchable()
-                            ->preload()
-                            ->required(),
-                        Select::make('depreciation_account_id')
-                            ->relationship('depreciationAccount', 'account_number')
-                            ->searchable()
-                            ->preload(),
-                        Select::make('depreciation_expense_account_id')
-                            ->relationship('depExpenseAccount', 'account_number')
-                            ->searchable()
-                            ->preload(),
-                    ])->columns(3),
+                        Tabs\Tab::make('Acquisition & Depreciation')
+                            ->icon('heroicon-m-calculator')
+                            ->schema([
+                                Section::make('Acquisition Posting')
+                                    ->description('Accounts used during purchase or capitalization.')
+                                    ->schema([
+                                        Grid::make(2)->schema([
+                                            self::getAccountSelect('acquisition_cost_account_id', 'acquisitionAccount', 'Acquisition Cost Account'),
+                                            self::getAccountSelect('acquisition_cost_offset_account_id', 'acquisitionCostOffsetAccount', 'Acquisition Cost Offset'),
+                                        ]),
+                                    ]),
+                                Section::make('Depreciation Posting')
+                                    ->description('Accounts for accumulated depreciation and periodic expenses.')
+                                    ->schema([
+                                        Grid::make(2)->schema([
+                                            self::getAccountSelect('depreciation_account_id', 'depreciationAccount', 'Accum. Depreciation Account'),
+                                            self::getAccountSelect('depreciation_expense_account_id', 'depExpenseAccount', 'Depreciation Expense Account'),
+                                        ]),
+                                    ]),
+                            ]),
 
-                Section::make('Disposal Accounts')
-                    ->schema([
-                        Select::make('disposal_proceeds_account_id')
-                            ->relationship('disposalProceedsAccount', 'account_number')
-                            ->label('Disposal Proceeds Account')
-                            ->searchable(),
-                        Select::make('gain_on_disposal_account_id')
-                            ->relationship('gainOnDisposalAccount', 'account_number')
-                            ->label('Gain on Disposal Account')
-                            ->searchable(),
-                        Select::make('loss_on_disposal_account_id')
-                            ->relationship('lossOnDisposalAccount', 'account_number')
-                            ->label('Loss on Disposal Account')
-                            ->searchable(),
-                    ])->columns(3),
+                        Tabs\Tab::make('Disposal & Maintenance')
+                            ->icon('heroicon-m-banknotes')
+                            ->schema([
+                                Section::make('Disposal Posting')
+                                    ->schema([
+                                        Grid::make(3)->schema([
+                                            self::getAccountSelect('disposal_proceeds_account_id', 'disposalProceedsAccount', 'Disposal Proceeds Account'),
+                                            self::getAccountSelect('gain_on_disposal_account_id', 'gainOnDisposalAccount', 'Gain on Disposal Account'),
+                                            self::getAccountSelect('loss_on_disposal_account_id', 'lossOnDisposalAccount', 'Loss on Disposal Account'),
+                                        ]),
+                                    ]),
+                                Section::make('Maintenance Posting')
+                                    ->schema([
+                                        Grid::make(2)->schema([
+                                            self::getAccountSelect('maintenance_expense_account_id', 'maintenanceExpenseAccount', 'Maintenance Expense Account'),
+                                            self::getAccountSelect('maintenance_cost_account_id', 'maintenanceCostAccount', 'Maintenance Cost Account'),
+                                        ]),
+                                    ]),
+                            ]),
 
-                Section::make('Appreciation & Revaluation')
-                    ->schema([
-                        Select::make('appreciation_account_id')
-                            ->relationship('appreciationAccount', 'account_number')
-                            ->label('Appreciation Account')
-                            ->searchable(),
-                        Select::make('revaluation_gain_account_id')
-                            ->relationship('revaluationGainAccount', 'account_number')
-                            ->label('Revaluation Gain Account')
-                            ->searchable(),
-                    ])->columns(2),
+                        Tabs\Tab::make('Revaluation')
+                            ->icon('heroicon-m-arrow-path')
+                            ->schema([
+                                Grid::make(2)->schema([
+                                    self::getAccountSelect('appreciation_account_id', 'appreciationAccount', 'Appreciation Account'),
+                                    self::getAccountSelect('revaluation_gain_account_id', 'revaluationGainAccount', 'Revaluation Gain Account'),
+                                ]),
+                            ]),
 
-                Section::make('Applicability')
-                    ->schema([
-                        CheckboxList::make('applicable_tangible_types')
-                            ->options(TangibleAssetType::class),
-                        CheckboxList::make('applicable_intangible_types')
-                            ->options(IntangibleAssetType::class),
-                        CheckboxList::make('applicable_liquidity_types')
-                            ->options(LiquidityAssetType::class),
-                    ])->columns(3),
+                        Tabs\Tab::make('Applicability')
+                            ->icon('heroicon-m-check-badge')
+                            ->schema([
+                                Section::make('Asset Type Mapping')
+                                    ->description('Define which asset types can utilize this posting group.')
+                                    ->schema([
+                                        Grid::make(3)->schema([
+                                            CheckboxList::make('applicable_tangible_types')
+                                                ->label('Tangible Assets')
+                                                ->options(TangibleAssetType::class)
+                                                ->columns(1),
+                                            CheckboxList::make('applicable_intangible_types')
+                                                ->label('Intangible Assets')
+                                                ->options(IntangibleAssetType::class)
+                                                ->columns(1),
+                                            CheckboxList::make('applicable_liquidity_types')
+                                                ->label('Liquidity Assets')
+                                                ->options(LiquidityAssetType::class)
+                                                ->columns(1),
+                                        ]),
+                                    ]),
+                            ]),
+                    ])->columnSpanFull(),
             ]);
+    }
+
+    /**
+     * Helper to create a standardized G/L Account selector
+     */
+    protected static function getAccountSelect(string $name, string $relationship, string $label): Select
+    {
+        return Select::make($name)
+            ->label($label)
+            ->relationship($relationship, 'name')
+            ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->account_number} - {$record->name}")
+            ->searchable()
+            ->preload();
     }
 }

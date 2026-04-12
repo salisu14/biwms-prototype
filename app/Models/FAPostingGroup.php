@@ -87,4 +87,19 @@ class FAPostingGroup extends Model
     {
         return $this->belongsTo(ChartOfAccount::class, 'loss_on_disposal_account_id');
     }
+
+    public function acquisitionCostOffsetAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'acquisition_cost_offset_account_id');
+    }
+
+    public function maintenanceExpenseAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'maintenance_expense_account_id');
+    }
+
+    public function maintenanceCostAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'maintenance_cost_account_id');
+    }
 }
