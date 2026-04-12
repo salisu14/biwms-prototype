@@ -44,7 +44,7 @@ class ItemForm
                                     Select::make('item_type')
                                         ->options(ItemType::options())
                                         ->required()
-                                        ->default(ItemType::INVENTORY->value)
+                                        ->default(ItemType::FINISHED_GOOD->value)
                                         ->native(false)
                                         ->live(),
 
