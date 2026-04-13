@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\BlanketSalesOrders\Schemas;
 
+use App\Models\BlanketOrder;
 use App\Models\Customer;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -31,7 +32,14 @@ class BlanketSalesOrderForm
                                     TextInput::make('document_number')
                                         ->label('BO Number')
                                         ->required()
-                                        ->unique(ignoreRecord: true),
+                                        ->unique(ignoreRecord: true)
+                                        ->maxLength(50)
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?BlanketOrder $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The number cannot be changed once the Blanket SO is created.'),
                                     TextInput::make('status')
                                         ->default('OPEN')
                                         ->disabled()

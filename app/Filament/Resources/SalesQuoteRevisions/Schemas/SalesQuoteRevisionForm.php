@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\SalesQuoteRevisions\Schemas;
 
+use App\Models\SalesQuoteRevision;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
@@ -20,9 +21,15 @@ class SalesQuoteRevisionForm
                     ->schema([
                         TextInput::make('revision_number')
                             ->label('Revision Identifier')
-                            ->placeholder('e.g., REV-2024-001')
                             ->required()
-                            ->unique(ignoreRecord: true),
+                            ->unique(ignoreRecord: true)
+                            ->placeholder('e.g., REV-2024-001')
+                            // Lock the field if the record already exists in the database
+                            ->disabled(fn (?SalesQuoteRevision $record) => $record !== null)
+                            // Ensure the value is still sent to the database during creation
+                            ->dehydrated()
+                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                            ->helperText('The code cannot be changed once the Sales quote revision is created.'),
 
                         Select::make('sales_quote_id')
                             ->label('Sales Quote')

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ShippingAgents\Schemas;
 
 use App\Enums\ShippingAgentServiceType;
+use App\Models\ShippingAgent;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -26,9 +27,16 @@ class ShippingAgentForm
                             ->schema([
                                 Grid::make(3)->schema([
                                     TextInput::make('code')
+                                        ->label('Code')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                        ->maxLength(10)
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?ShippingAgent $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The code cannot be changed once the Shipping agent is created.'),
                                     TextInput::make('name')
                                         ->required()
                                         ->live(onBlur: true)

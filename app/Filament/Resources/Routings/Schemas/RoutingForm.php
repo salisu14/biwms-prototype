@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Routings\Schemas;
 
+use App\Models\Manufacturing\Routing;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -24,7 +25,13 @@ class RoutingForm
                                 ->label('Routing Code')
                                 ->required()
                                 ->unique(ignoreRecord: true)
-                                ->maxLength(50),
+                                ->maxLength(50)
+                                // Lock the field if the record already exists in the database
+                                ->disabled(fn (?Routing $record) => $record !== null)
+                                // Ensure the value is still sent to the database during creation
+                                ->dehydrated()
+                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                ->helperText('The code cannot be changed once the Routing is created.'),
 
                             Select::make('type')
                                 ->label('Routing Type')

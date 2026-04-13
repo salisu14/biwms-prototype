@@ -29,7 +29,12 @@ class CategoryForm
                                 ->required()
                                 ->unique(ignoreRecord: true)
                                 ->maxLength(50)
-                                ->columnSpan(1),
+                                // Lock the field if the record already exists in the database
+                                ->disabled(fn (?Category $record) => $record !== null)
+                                // Ensure the value is still sent to the database during creation
+                                ->dehydrated()
+                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                ->helperText('The code cannot be changed once the Category is created.'),
 
                             TextInput::make('category_name')
                                 ->label('Category Name')

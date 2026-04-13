@@ -2,6 +2,7 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\ChartOfAccount;
 use App\Models\Vendor;
 use App\Models\WorkCenterBin;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -40,7 +41,8 @@ class WorkCenter extends Model
         'location_code',
 
         // Posting
-        'work_center_account_no', // G/L Account for WIP
+        'work_center_account_no', // Legacy string (kept for reference)
+        'work_center_gl_account_id', // FK to chart_of_accounts
         'subcontractor_id', // If outsourced work center
     ];
 
@@ -68,6 +70,12 @@ class WorkCenter extends Model
     public function calendarEntries(): HasMany
     {
         return $this->hasMany(WorkCenterCalendar::class, 'work_center_id');
+    }
+
+    /** The G/L account used to post WIP and capacity costs for this work center. */
+    public function glAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'work_center_gl_account_id');
     }
 
     public function subcontractor(): BelongsTo

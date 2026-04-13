@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Currencies\Schemas;
 
 use App\Enums\CurrencyExchangeRateType;
 use App\Enums\CurrencyRoundingMethod;
+use App\Models\Currency;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -28,10 +29,16 @@ class CurrencyForm
                                 Grid::make(3)->schema([
                                     TextInput::make('code')
                                         ->label('ISO Code')
-                                        ->placeholder('e.g., USD')
                                         ->required()
+                                        ->unique(ignoreRecord: true)
                                         ->maxLength(10)
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                        ->placeholder('e.g., USD')
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?Currency $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The cod cannot be changed once the currency is created.'),
                                     TextInput::make('description')
                                         ->required()
                                         ->maxLength(255),

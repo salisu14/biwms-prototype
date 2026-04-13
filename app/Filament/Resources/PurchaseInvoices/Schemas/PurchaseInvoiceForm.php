@@ -32,9 +32,16 @@ class PurchaseInvoiceForm
                             ->schema([
                                 Grid::make(3)->schema([
                                     TextInput::make('document_number')
-                                        ->label('Invoice No.')
+                                        ->label('Invoice Number')
                                         ->required()
-                                        ->default(fn () => (new PurchaseInvoice)->generateNumber() ?? 'AUTO-GEN'),
+                                        ->unique(ignoreRecord: true)
+                                        ->default(fn () => (new PurchaseInvoice)->generateNumber() ?? 'AUTO-GEN')
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?PurchaseInvoice $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The number cannot be changed once the Purchase invoice is created.'),
 
                                     Select::make('vendor_id')
                                         ->relationship('vendor', 'vendor_name')

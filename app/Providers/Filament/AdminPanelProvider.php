@@ -121,7 +121,7 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/payments'),
 
-                                NavigationItem::make('FA Posting Groups')
+                                NavigationItem::make('FixedAsset Posting Groups')
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/f-a-posting-groups'),
 

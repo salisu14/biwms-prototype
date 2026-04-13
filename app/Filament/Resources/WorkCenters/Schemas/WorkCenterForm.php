@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\WorkCenters\Schemas;
 
+use App\Models\ChartOfAccount;
+use App\Models\Manufacturing\WorkCenter;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -22,10 +24,15 @@ class WorkCenterForm
                     ->schema([
                         Grid::make(2)->schema([
                             TextInput::make('code')
-                                ->label('Work Center Code')
+                                ->label('WorkCenter Code')
                                 ->required()
                                 ->unique(ignoreRecord: true)
-                                ->maxLength(20),
+                                // Lock the field if the record already exists in the database
+                                ->disabled(fn (?WorkCenter $record) => $record !== null)
+                                // Ensure the value is still sent to the database during creation
+                                ->dehydrated()
+                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                ->helperText('The code cannot be changed once the work center is created.'),
 
                             TextInput::make('name')
                                 ->label('Work Center name')
@@ -34,7 +41,7 @@ class WorkCenterForm
 
                             Select::make('work_center_group_id')
                                 ->label('Group')
-                                ->relationship('group', 'name') // Assuming WorkCenterGroup has a 'name' column
+                                ->relationship('group', 'name')
                                 ->searchable()
                                 ->preload()
                                 ->required(),
@@ -149,11 +156,24 @@ class WorkCenterForm
                     ->collapsible(),
 
                 Section::make('Financials')
-                    ->description('G/L Account configuration.')
+                    ->description('G/L Account configuration for WIP and capacity cost posting.')
                     ->schema([
-                        TextInput::make('work_center_account_no')
-                            ->label('G/L Account No')
-                            ->required(),
+                        Select::make('work_center_gl_account_id')
+                            ->label('G/L Account')
+                            ->relationship(
+                                name: 'glAccount',
+                                titleAttribute: 'account_number',
+                                modifyQueryUsing: fn ($query) => $query
+                                    ->where('direct_posting', true)
+                                    ->where('blocked', false),
+                            )
+                            ->getOptionLabelFromRecordUsing(
+                                fn (ChartOfAccount $record) => "{$record->account_number} – {$record->name}"
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->helperText('Select the posting account for WIP and capacity costs (must allow direct posting).'),
                     ])
                     ->collapsible(),
 

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\BankAccounts\Schemas;
 
+use App\Models\BankAccount;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -27,7 +28,14 @@ class BankAccountForm
                                         ->label('Account Code')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                        ->maxLength(50)
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?BankAccount $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The code cannot be changed once the Asset is created.'),
+
                                     TextInput::make('account_name')
                                         ->label('Display Name')
                                         ->required()

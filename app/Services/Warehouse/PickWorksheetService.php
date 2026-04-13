@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\Warehouse;
 
-use App\Enums\WarehouseActivityType;
 use App\Enums\WarehouseDocumentStatus;
 use App\Models\Bin;
 use App\Models\Item;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderComponent;
-use App\Models\WarehouseActivity;
-use App\Models\WarehouseActivityLine;
+use App\Models\WarehousePick;
+use App\Models\WarehousePickLine;
 use App\Models\WarehouseRequest;
 use App\Services\NumberSeriesService;
 use Illuminate\Support\Collection;
@@ -26,26 +25,23 @@ class PickWorksheetService
     ) {}
 
     /**
-     * Create pick from production order component
+     * Create a WarehousePick from a production order component.
      */
     public function createPickFromProductionOrder(
         ProductionOrderComponent $component,
         ?string $toBinCode = null
-    ): ?WarehouseActivity {
-        return DB::transaction(function () use ($component, $toBinCode) {
-            // Check if component needs picking
+    ): ?WarehousePick {
+        return DB::transaction(function () use ($component, $toBinCode): ?WarehousePick {
             $remainingQty = $component->remaining_quantity;
+
             if ($remainingQty <= 0) {
                 return null;
             }
 
             $item = $component->item;
             $location = $component->productionOrder->location;
-
-            // Determine destination bin
             $toBin = $this->resolveProductionToBin($component, $toBinCode);
 
-            // Find available inventory to pick
             $pickSources = $this->binService->findPickSources(
                 item: $item,
                 location: $location,
@@ -55,52 +51,52 @@ class PickWorksheetService
             );
 
             if ($pickSources->isEmpty()) {
-                throw new \RuntimeException("Insufficient inventory for item {$item->item_no} at location {$location->code}");
+                throw new \RuntimeException(
+                    "Insufficient inventory for item {$item->item_no} at location {$location->code}"
+                );
             }
 
-            // Create warehouse activity
-            $activity = WarehouseActivity::create([
+            $pick = WarehousePick::create([
                 'no' => $this->numberSeriesService->getNextNo('PICK'),
-                'activity_type' => WarehouseActivityType::PICK,
                 'status' => WarehouseDocumentStatus::OPEN,
                 'location_id' => $location->id,
                 'source_document' => 'production_order',
                 'source_no' => $component->productionOrder->document_number,
-                'source_line_no' => $component->line_number,
                 'source_id' => $component->id,
             ]);
 
-            // Create activity lines
             $lineNo = 10000;
             $remainingToPick = $remainingQty;
 
             foreach ($pickSources as $source) {
                 $pickQty = min($source->available_quantity, $remainingToPick);
 
-                WarehouseActivityLine::create([
-                    'warehouse_activity_id' => $activity->id,
+                WarehousePickLine::create([
+                    'warehouse_pick_id' => $pick->id,
                     'line_no' => $lineNo,
+                    'source_line_no' => $component->line_number,
                     'item_id' => $item->id,
+                    'description' => $item->description,
+                    'quantity' => $pickQty,
                     'quantity_to_handle' => $pickQty,
+                    'quantity_handled' => 0,
                     'quantity_base' => $this->calculateBaseQty($item, $pickQty, $component->unit_of_measure_code),
                     'unit_of_measure_code' => $component->unit_of_measure_code,
-                    'source_zone_id' => $source->zone_id,
-                    'source_bin_id' => $source->bin_id,
-                    'source_lot_no' => $source->lot_no,
-                    'source_serial_no' => $source->serial_no,
-                    'destination_zone_id' => $toBin?->zone_id,
-                    'destination_bin_id' => $toBin?->id,
+                    'zone_id' => $source->zone_id,
+                    'bin_id' => $source->bin_id,
                     'lot_no' => $source->lot_no,
                     'serial_no' => $source->serial_no,
                     'expiration_date' => $source->expiration_date,
+                    'destination_zone_id' => $toBin?->zone_id,
+                    'destination_bin_id' => $toBin?->id,
+                    'line_status' => 'open',
                 ]);
 
-                // Reserve inventory
                 $this->reservationService->reserve(
                     binContent: $source,
                     quantity: $pickQty,
                     reservationType: 'pick',
-                    referenceNo: $activity->no,
+                    referenceNo: $pick->no,
                     referenceLineNo: $lineNo
                 );
 
@@ -112,7 +108,6 @@ class PickWorksheetService
                 }
             }
 
-            // Create warehouse request
             WarehouseRequest::create([
                 'source_document' => 'production_order',
                 'source_no' => $component->productionOrder->document_number,
@@ -128,33 +123,32 @@ class PickWorksheetService
                 'unit_of_measure_code' => $component->unit_of_measure_code,
                 'quantity_outstanding' => $remainingQty - $remainingToPick,
                 'lot_no' => $component->lot_no,
-                'warehouse_activity_id' => $activity->id,
             ]);
 
-            return $activity;
+            return $pick;
         });
     }
 
     /**
-     * Create picks for all components of a production order
+     * Create picks for all outstanding components of a production order.
      */
     public function createPicksForProductionOrder(ProductionOrder $order): Collection
     {
-        $activities = collect();
+        $picks = collect();
 
         foreach ($order->components()->where('remaining_quantity', '>', 0)->get() as $component) {
             try {
-                $activity = $this->createPickFromProductionOrder($component);
-                if ($activity) {
-                    $activities->push($activity);
+                $pick = $this->createPickFromProductionOrder($component);
+
+                if ($pick) {
+                    $picks->push($pick);
                 }
             } catch (\RuntimeException $e) {
-                // Log insufficient inventory
                 \Log::warning("Cannot pick for component {$component->line_number}: {$e->getMessage()}");
             }
         }
 
-        return $activities;
+        return $picks;
     }
 
     private function resolveProductionToBin(ProductionOrderComponent $component, ?string $toBinCode): ?Bin
@@ -165,16 +159,13 @@ class PickWorksheetService
                 ->first();
         }
 
-        // Use work center default bin
         $workCenter = $component->routingLine?->workCenter;
-        if ($workCenter) {
-            $workCenterBin = $workCenter->workCenterBin;
 
-            return $workCenterBin?->toProductionBin;
+        if ($workCenter) {
+            return $workCenter->workCenterBin?->toProductionBin;
         }
 
-        // Fallback to location default production bin
-        return null; // Will be handled by location default
+        return null;
     }
 
     private function calculateBaseQty(Item $item, float $qty, string $uom): float

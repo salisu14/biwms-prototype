@@ -6,6 +6,7 @@ use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
 use App\Models\Item;
 use App\Models\Manufacturing\ProductionBomVersion;
+use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Forms\Components\DatePicker;
@@ -31,11 +32,17 @@ class ProductionOrderForm
                     ->columns(3)
                     ->schema([
                         TextInput::make('document_number')
-                            ->label('Order No.')
+                            ->label('Order Number')
+                            ->required()
+                            ->unique(ignoreRecord: true)
                             ->default(fn () => app(ProductionOrderService::class)->generateDocumentNumber())
-                            ->disabled()
+                            ->placeholder('Auto-generated')
+                            // Lock the field if the record already exists in the database
+                            ->disabled(fn (?ProductionOrder $record) => $record !== null)
+                            // Ensure the value is still sent to the database during creation
                             ->dehydrated()
-                            ->required(),
+                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                            ->helperText('The number cannot be changed once the Production order is created.'),
 
                         Select::make('status')
                             ->options(ProductionOrderStatus::class)

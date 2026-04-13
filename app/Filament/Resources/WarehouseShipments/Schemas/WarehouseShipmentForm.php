@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WarehouseShipments\Schemas;
 
+use App\Models\WarehouseShipment;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -23,7 +24,12 @@ class WarehouseShipmentForm
                                 ->label('Shipment No.')
                                 ->required()
                                 ->unique(ignoreRecord: true)
-                                ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                // Lock the field if the record already exists in the database
+                                ->disabled(fn (?WarehouseShipment $record) => $record !== null)
+                                // Ensure the value is still sent to the database during creation
+                                ->dehydrated()
+                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                ->helperText('The code cannot be changed once the Warehouse shipment is created.'),
 
                             Select::make('location_id')
                                 ->label('Shipping Location')

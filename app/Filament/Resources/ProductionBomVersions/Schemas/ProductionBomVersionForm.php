@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProductionBomVersions\Schemas;
 
 use App\Enums\ProductionBomStatus;
 use App\Models\Manufacturing\ProductionBom;
+use App\Models\Manufacturing\ProductionBomVersion;
 use App\Models\UnitOfMeasure;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -38,9 +39,16 @@ class ProductionBomVersionForm
                     // ✅ VERSION CODE
                     TextInput::make('version_code')
                         ->label('Version Code')
-                        ->placeholder('e.g., V1, V2024-01')
                         ->required()
-                        ->maxLength(20),
+                        ->unique(ignoreRecord: true)
+                        ->maxLength(20)
+                        ->placeholder('e.g., V1, V2024-01')
+                        // Lock the field if the record already exists in the database
+                        ->disabled(fn (?ProductionBomVersion $record) => $record !== null)
+                        // Ensure the value is still sent to the database during creation
+                        ->dehydrated()
+                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                        ->helperText('The code cannot be changed once the Production bom version is created.'),
 
                     // ✅ DESCRIPTION
                     TextInput::make('description')

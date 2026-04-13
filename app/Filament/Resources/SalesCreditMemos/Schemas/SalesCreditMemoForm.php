@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SalesCreditMemos\Schemas;
 
 use App\Models\Item;
+use App\Models\SalesCreditMemo;
 use App\Models\SalesInvoice;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
@@ -27,10 +28,18 @@ class SalesCreditMemoForm
                         Section::make('General Information')
                             ->schema([
                                 TextInput::make('memo_number')
-                                    ->default('CM-'.now()->format('Ymd-His'))
+                                    ->label('Memo Number')
                                     ->required()
-                                    ->disabled(fn ($record) => $record?->isPosted())
-                                    ->unique(ignoreRecord: true),
+                                    ->unique(ignoreRecord: true)
+                                    ->prefix('#')
+                                    ->default('CM-'.now()->format('Ymd-His'))
+                                    ->placeholder('e.g. QTE-2023-001')
+                                    // Lock the field if the record already exists in the database
+                                    ->disabled(fn (?SalesCreditMemo $record) => $record !== null)
+                                    // Ensure the value is still sent to the database during creation
+                                    ->dehydrated()
+                                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                    ->helperText('The code cannot be changed once the Sales credit memo is created.'),
 
                                 Select::make('customer_id')
                                     ->relationship('customer', 'name')

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PurchaseCreditMemos\Schemas;
 
 use App\Enums\ApprovalStatus;
 use App\Models\Item;
+use App\Models\PurchaseCreditMemo;
 use App\Models\PurchaseInvoice;
 use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
@@ -28,9 +29,16 @@ class PurchaseCreditMemoForm
                         Section::make('General Information')
                             ->schema([
                                 TextInput::make('document_number')
+                                    ->label('Document Number')
                                     ->required()
-                                    ->disabled()
-                                    ->placeholder('Auto-generated'),
+                                    ->unique(ignoreRecord: true)
+                                    ->placeholder('Auto-generated')
+                                    // Lock the field if the record already exists in the database
+                                    ->disabled(fn (?PurchaseCreditMemo $record) => $record !== null)
+                                    // Ensure the value is still sent to the database during creation
+                                    ->dehydrated()
+                                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                    ->helperText('The number cannot be changed once the credit memo is created.'),
 
                                 Select::make('vendor_id')
                                     ->relationship('vendor', 'name')

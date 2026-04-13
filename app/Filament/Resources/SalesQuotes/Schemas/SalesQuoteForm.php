@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SalesQuotes\Schemas;
 
 use App\Enums\QuoteStatus;
+use App\Models\SalesQuote;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -25,7 +26,14 @@ class SalesQuoteForm
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->prefix('#')
-                            ->placeholder('e.g. QTE-2023-001'),
+                            ->maxLength(10)
+                            ->placeholder('e.g. QTE-2023-001')
+                            // Lock the field if the record already exists in the database
+                            ->disabled(fn (?SalesQuote $record) => $record !== null)
+                            // Ensure the value is still sent to the database during creation
+                            ->dehydrated()
+                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                            ->helperText('The number cannot be changed once the Sales quote is created.'),
 
                         Select::make('customer_id')
                             ->relationship('customer', 'name')

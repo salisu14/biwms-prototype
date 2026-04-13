@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\CapExProjects\Schemas;
 
+use App\Models\Manufacturing\CapExProject;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -24,10 +25,16 @@ class CapExProjectForm
                         Grid::make(3)
                             ->schema([
                                 TextInput::make('project_number')
+                                    ->label('Project Number')
                                     ->required()
                                     ->unique(ignoreRecord: true)
-                                    ->placeholder('CPX-2024-001'),
-
+                                    ->placeholder('CPX-2024-001')
+                                    // Lock the field if the record already exists in the database
+                                    ->disabled(fn (?CapExProject $record) => $record !== null)
+                                    // Ensure the value is still sent to the database during creation
+                                    ->dehydrated()
+                                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                    ->helperText('The number cannot be changed once the CapEx Project is created.'),
                                 Select::make('status')
                                     ->options([
                                         'PENDING_APPROVAL' => 'Pending Approval',

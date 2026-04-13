@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\SalespersonPurchasers\Schemas;
 
+use App\Models\SalespersonPurchaser;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -17,10 +18,23 @@ class SalespersonPurchaserForm
                 Section::make('General Information')
                     ->schema([
                         TextInput::make('code')
+                            ->label('code')
+                            ->required()
+                            ->unique(ignoreRecord: true)
+                            ->maxLength(20)
+                            // Lock the field if the record already exists in the database
+                            ->disabled(fn (?SalespersonPurchaser $record) => $record !== null)
+                            // Ensure the value is still sent to the database during creation
+                            ->dehydrated()
+                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                            ->helperText('The code cannot be changed once the Sales person purchaser is created.'),
+
+                        TextInput::make('code')
                             ->label('Code')
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->maxLength(20),
+
                         TextInput::make('name')
                             ->required()
                             ->maxLength(100),

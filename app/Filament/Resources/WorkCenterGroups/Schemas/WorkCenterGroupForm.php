@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WorkCenterGroups\Schemas;
 
+use App\Models\Manufacturing\WorkCenterGroup;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -21,8 +22,13 @@ class WorkCenterGroupForm
                                 ->label('Group Code')
                                 ->required()
                                 ->unique(ignoreRecord: true)
+                                // Lock the field if the record already exists in the database
+                                ->disabled(fn (?WorkCenterGroup $record) => $record !== null)
+                                // Ensure the value is still sent to the database during creation
+                                ->dehydrated()
                                 ->placeholder('e.g., ASSEMBLY_DEPT')
-                                ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                ->helperText('The code cannot be changed once the group is created.'),
 
                             TextInput::make('name')
                                 ->label('Group Name')

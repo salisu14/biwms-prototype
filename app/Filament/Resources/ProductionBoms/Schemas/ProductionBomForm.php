@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductionBoms\Schemas;
 
+use App\Models\Manufacturing\ProductionBom;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -18,9 +19,16 @@ class ProductionBomForm
                 Grid::make(3)
                     ->schema([
                         TextInput::make('code')
+                            ->label('Code')
                             ->required()
                             ->unique(ignoreRecord: true)
-                            ->maxLength(50),
+                            ->maxLength(50)
+                            // Lock the field if the record already exists in the database
+                            ->disabled(fn (?ProductionBom $record) => $record !== null)
+                            // Ensure the value is still sent to the database during creation
+                            ->dehydrated()
+                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                            ->helperText('The code cannot be changed once the Production bom is created.'),
 
                         Select::make('status')
                             ->options([

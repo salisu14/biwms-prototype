@@ -4,10 +4,11 @@ namespace App\Filament\Resources\WarehouseActivities\Schemas;
 
 use App\Enums\WarehouseActivityType;
 use App\Enums\WarehouseDocumentStatus;
+use App\Models\WarehouseActivity;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
@@ -28,7 +29,12 @@ class WarehouseActivityForm
                                         ->label('Activity No.')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?WarehouseActivity $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The code cannot be changed once the Warehouse activity is created.'),
 
                                     Select::make('activity_type')
                                         ->options(WarehouseActivityType::class)

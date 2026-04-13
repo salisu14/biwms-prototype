@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Vendors\Schemas;
 
+use App\Models\Vendor;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -14,7 +15,16 @@ class VendorForm
         return $schema
             ->components([
                 TextInput::make('vendor_code')
-                    ->required(),
+                    ->label('Zone Code')
+                    ->required()
+                    ->unique(ignoreRecord: true)
+                    // Lock the field if the record already exists in the database
+                    ->disabled(fn (?Vendor $record) => $record !== null)
+                    // Ensure the value is still sent to the database during creation
+                    ->dehydrated()
+                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                    ->helperText('The code cannot be changed once the Vendor is created.'),
+
                 TextInput::make('vendor_name')
                     ->required(),
                 TextInput::make('contact_person'),

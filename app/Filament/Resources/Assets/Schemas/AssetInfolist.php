@@ -45,7 +45,7 @@ class AssetInfolist
                         ->schema([
                             Grid::make(3)->schema([
                                 TextEntry::make('fixed_asset_category')
-                                    ->label('FA Category')
+                                    ->label('FixedAsset Category')
                                     ->badge()
                                     ->visible(fn ($record) => $record->isFixedAsset()),
                                 TextEntry::make('tangible_type')

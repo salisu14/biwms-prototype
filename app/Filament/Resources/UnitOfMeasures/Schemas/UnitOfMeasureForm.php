@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\UnitOfMeasures\Schemas;
 
+use App\Models\UnitOfMeasure;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
@@ -21,7 +22,13 @@ class UnitOfMeasureForm
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->maxLength(10)
-                            ->placeholder('kg, g, L, mL, etc.'),
+                            // Lock the field if the record already exists in the database
+                            ->disabled(fn (?UnitOfMeasure $record) => $record !== null)
+                            // Ensure the value is still sent to the database during creation
+                            ->dehydrated()
+                            ->placeholder('kg, g, L, mL, etc.')
+                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                            ->helperText('The code cannot be changed once the Unit of Measure group is created.'),
 
                         TextInput::make('description')
                             ->label('Description')

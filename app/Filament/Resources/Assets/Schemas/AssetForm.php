@@ -7,6 +7,7 @@ use App\Enums\FixedAssetCategory;
 use App\Enums\IntangibleAssetType;
 use App\Enums\LiquidityAssetType;
 use App\Enums\TangibleAssetType;
+use App\Models\Asset;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -31,7 +32,13 @@ class AssetForm
                                 ->label('Asset No.')
                                 ->required()
                                 ->unique(ignoreRecord: true)
-                                ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                ->maxLength(50)
+                                // Lock the field if the record already exists in the database
+                                ->disabled(fn (?Asset $record) => $record !== null)
+                                // Ensure the value is still sent to the database during creation
+                                ->dehydrated()
+                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                ->helperText('The code cannot be changed once the Asset is created.'),
                             TextInput::make('description')
                                 ->required()
                                 ->maxLength(255),
@@ -137,7 +144,7 @@ class AssetForm
                                         Grid::make(3)->schema([
                                             Select::make('fa_location_code')
                                                 ->relationship('location', 'name')
-                                                ->label('FA Location (Physical)')
+                                                ->label('FixedAsset Location (Physical)')
                                                 ->searchable()
                                                 ->preload(),
                                             TextInput::make('serial_no')->label('Serial/Asset Tag No.'),
@@ -189,7 +196,7 @@ class AssetForm
                                                 ->label('Affiliated Vendor')
                                                 ->visible(fn (Get $get) => in_array($get('liquidity_type'), [
                                                     LiquidityAssetType::ADVANCE_VENDOR->value,
-                                                    LiquidityAssetType::ACCOUNTS_PAYABLE->value ?? 'NOT_SET', // Just in case
+                                                    LiquidityAssetType::ACCOUNTS_RECEIVABLE->value ?? 'NOT_SET', // Just in case
                                                 ])),
                                             Select::make('customer_id')
                                                 ->relationship('customer', 'customer_name')

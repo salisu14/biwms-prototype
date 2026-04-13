@@ -12,7 +12,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Create FA Posting Groups Table
+        // 1. Create FixedAsset Posting Groups Table
         Schema::create('fa_posting_groups', function (Blueprint $table) {
             $table->id();
             $table->string('code')->unique();

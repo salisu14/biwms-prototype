@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PurchaseReceipts\Schemas;
 
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseReceipt;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -28,7 +29,15 @@ class PurchaseReceiptForm
                                 Grid::make(3)->schema([
                                     TextInput::make('document_number')
                                         ->label('Receipt No.')
-                                        ->required(),
+                                        ->required()
+                                        ->unique(ignoreRecord: true)
+                                        ->maxLength(50)
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?PurchaseReceipt $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The code cannot be changed once the Purchase receipt is created.'),
 
                                     Select::make('purchase_order_id')
                                         ->label('Purchase Order')

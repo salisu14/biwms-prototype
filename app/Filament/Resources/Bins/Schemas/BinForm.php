@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Bins\Schemas;
 
 use App\Enums\BinType;
 use App\Enums\WarehouseClass;
+use App\Models\Bin;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -50,7 +51,14 @@ class BinForm
                                         ->label('Bin Code')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                        ->maxLength(50)
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?Bin $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The code cannot be changed once the Bin is created.'),
+
                                     TextInput::make('bin_name')
                                         ->label('Display Name'),
                                 ]),

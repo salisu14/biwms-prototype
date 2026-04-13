@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\VatProductPostingGroups\Schemas;
 
+use App\Models\VatProductPostingGroup;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -21,8 +22,13 @@ class VatProductPostingGroupForm
                                 ->label('Code')
                                 ->required()
                                 ->unique(ignoreRecord: true)
+                                // Lock the field if the record already exists in the database
+                                ->disabled(fn (?VatProductPostingGroup $record) => $record !== null)
+                                // Ensure the value is still sent to the database during creation
+                                ->dehydrated()
                                 ->placeholder('e.g., STANDARD')
-                                ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                ->helperText('The code cannot be changed once the Vat product posting group is created.'),
                             TextInput::make('description')
                                 ->required()
                                 ->placeholder('e.g., Standard Rate VAT Items'),

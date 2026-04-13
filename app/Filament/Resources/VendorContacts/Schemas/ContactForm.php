@@ -4,10 +4,10 @@ namespace App\Filament\Resources\VendorContacts\Schemas;
 
 use App\Enums\ContactRole;
 use App\Enums\ContactType;
-use Filament\Forms\Components\Group;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class ContactForm

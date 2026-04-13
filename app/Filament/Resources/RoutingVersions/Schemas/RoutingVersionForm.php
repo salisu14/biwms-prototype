@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\RoutingVersions\Schemas;
 
+use App\Models\Manufacturing\RoutingVersion;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -30,8 +31,15 @@ class RoutingVersionForm
                                 TextInput::make('version_code')
                                     ->label('Version Code')
                                     ->required()
+                                    ->unique(ignoreRecord: true)
                                     ->maxLength(20)
-                                    ->placeholder('e.g. V1.0'),
+                                    ->placeholder('e.g. V1.0')
+                                    // Lock the field if the record already exists in the database
+                                    ->disabled(fn (?RoutingVersion $record) => $record !== null)
+                                    // Ensure the value is still sent to the database during creation
+                                    ->dehydrated()
+                                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                    ->helperText('The code cannot be changed once the Sales credit memo is created.'),
 
                                 TextInput::make('description')
                                     ->columnSpanFull(),

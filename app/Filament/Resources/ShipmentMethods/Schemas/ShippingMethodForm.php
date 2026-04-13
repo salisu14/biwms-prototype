@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ShipmentMethods\Schemas;
 
+use App\Models\ShipmentMethod;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -25,9 +26,17 @@ class ShippingMethodForm
                             ->schema([
                                 Grid::make(3)->schema([
                                     TextInput::make('code')
+                                        ->label('Code')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                        ->maxLength(10)
+                                        // Lock the field if the record already exists in the database
+                                        ->disabled(fn (?ShipmentMethod $record) => $record !== null)
+                                        // Ensure the value is still sent to the database during creation
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The code cannot be changed once the Shipping method is created.'),
+
                                     TextInput::make('description')
                                         ->required()
                                         ->live(onBlur: true)

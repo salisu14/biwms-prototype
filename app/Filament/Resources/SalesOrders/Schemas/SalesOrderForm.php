@@ -7,6 +7,7 @@ use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
 use App\Models\Customer;
 use App\Models\Item;
+use App\Models\SalesOrder;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -36,9 +37,15 @@ class SalesOrderForm
                                         Section::make('General Information')
                                             ->schema([
                                                 TextInput::make('order_number')
+                                                    ->label('Order Number')
                                                     ->default(fn () => 'Draft')
                                                     ->disabled()
-                                                    ->dehydrated(false),
+                                                    // Lock the field if the record already exists in the database
+                                                    ->disabled(fn (?SalesOrder $record) => $record !== null)
+                                                    // Ensure the value is still sent to the database during creation
+                                                    ->dehydrated(false)
+                                                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                                    ->helperText('The code cannot be changed once the Sales order is created.'),
 
                                                 Select::make('order_type')
                                                     ->options(SalesOrderType::class)
