@@ -29,10 +29,10 @@ class FixedAssetJournalPostingRoutine extends AbstractJournalPostingRoutine
     protected function postLine(object $line): void
     {
         // TODO: Implement Fixed Asset posting logic
-        // 1. Create FA Ledger Entry
+        // 1. Create FixedAsset Ledger Entry
         // 2. Create G/L Entries if integrated
-        // 3. Update FA Book values
-        
+        // 3. Update FixedAsset Book values
+
         $this->updateLineStatus($line, 'posted');
     }
 

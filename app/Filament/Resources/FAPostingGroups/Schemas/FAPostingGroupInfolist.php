@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\FAPostingGroups\Schemas;
 
 use Filament\Infolists\Components\IconEntry;
@@ -14,7 +16,7 @@ class FAPostingGroupInfolist
     {
         return $schema
             ->components([
-                // Top Section: General Info & Status
+                // Top: General Info & Settings
                 Grid::make(2)
                     ->schema([
                         Section::make('General Information')
@@ -38,40 +40,47 @@ class FAPostingGroupInfolist
                                 ]),
                             ])->columnSpan(1),
 
-                        Section::make('Applicability')
-                            ->description('Asset types this posting group applies to.')
+                        Section::make('Depreciation Defaults')
+                            ->description('Default depreciation settings for this group.')
                             ->schema([
-                                TextEntry::make('applicable_tangible_types')
-                                    ->label('Tangible Types')
-                                    ->formatStateUsing(fn ($state) => is_array($state) ? implode(', ', $state) : '-')
-                                    ->badge(),
+                                IconEntry::make('auto_depreciate_acquisition_year')
+                                    ->label('Depreciate in Acquisition Year')
+                                    ->boolean(),
 
-                                TextEntry::make('applicable_intangible_types')
-                                    ->label('Intangible Types')
-                                    ->formatStateUsing(fn ($state) => is_array($state) ? implode(', ', $state) : '-')
-                                    ->badge(),
+                                TextEntry::make('depreciation_calculation')
+                                    ->label('Calculation Method')
+                                    ->badge()
+                                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                                        'full_year' => 'Full Year',
+                                        'pro_rata' => 'Pro Rata',
+                                        'half_year' => 'Half Year',
+                                        default => $state,
+                                    }),
 
-                                TextEntry::make('applicable_liquidity_types')
-                                    ->label('Liquidity Types')
-                                    ->formatStateUsing(fn ($state) => is_array($state) ? implode(', ', $state) : '-')
-                                    ->badge(),
+                                TextEntry::make('depreciation_start')
+                                    ->label('Start Rule')
+                                    ->badge()
+                                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                                        'acquisition' => 'Acquisition Date',
+                                        'first_day_next_month' => 'First Day Next Month',
+                                        default => $state,
+                                    }),
                             ])->columnSpan(1),
                     ]),
 
-                // Middle Section: Posting Accounts (Acquisition & Depreciation)
+                // Middle: Acquisition & Depreciation
                 Grid::make(2)
                     ->schema([
                         Section::make('Acquisition')
-                            ->description('Accounts for asset purchase and offset.')
+                            ->description('Accounts for asset purchase and capitalization.')
                             ->schema([
-                                TextEntry::make('acquisitionAccount.name')
+                                TextEntry::make('acquisitionCostAccount.name')
                                     ->label('Acquisition Cost Account')
                                     ->icon('heroicon-m-currency-dollar')
                                     ->placeholder('Not Configured'),
 
-                                // Assuming standard relationship naming for offset based on fillable
-                                TextEntry::make('acquisitionCostOffsetAccount.name')
-                                    ->label('Acquisition Cost Offset Account')
+                                TextEntry::make('acquisitionCostAccountLcy.name')
+                                    ->label('Acquisition Cost Account (LCY)')
                                     ->icon('heroicon-m-banknotes')
                                     ->placeholder('Not Configured'),
                             ])->columnSpan(1),
@@ -79,32 +88,20 @@ class FAPostingGroupInfolist
                         Section::make('Depreciation')
                             ->description('Accounts for calculating depreciation expenses.')
                             ->schema([
-                                TextEntry::make('depreciationAccount.name')
-                                    ->label('Depreciation Account')
+                                TextEntry::make('depreciationExpenseAccount.name')
+                                    ->label('Depreciation Expense Account')
                                     ->icon('heroicon-m-chart-bar')
                                     ->placeholder('Not Configured'),
 
-                                TextEntry::make('depExpenseAccount.name')
-                                    ->label('Depreciation Expense Account')
-                                    ->icon('heroicon-m-receipt')
+                                TextEntry::make('accumulatedDepreciationAccount.name')
+                                    ->label('Accumulated Depreciation Account')
                                     ->placeholder('Not Configured'),
                             ])->columnSpan(1),
                     ]),
 
-                // Middle Section: Maintenance & Disposal
+                // Middle: Disposal & Maintenance
                 Grid::make(2)
                     ->schema([
-                        Section::make('Maintenance')
-                            ->schema([
-                                TextEntry::make('maintenanceExpenseAccount.name')
-                                    ->label('Maintenance Expense Account')
-                                    ->placeholder('Not Configured'),
-
-                                TextEntry::make('maintenanceCostAccount.name')
-                                    ->label('Maintenance Cost Account')
-                                    ->placeholder('Not Configured'),
-                            ])->columnSpan(1),
-
                         Section::make('Disposal')
                             ->description('Accounts used when selling or scrapping assets.')
                             ->schema([
@@ -114,35 +111,54 @@ class FAPostingGroupInfolist
                                     ->placeholder('Not Configured'),
 
                                 Grid::make(2)->schema([
-                                    TextEntry::make('gainOnDisposalAccount.name')
+                                    TextEntry::make('disposalGainAccount.name')
                                         ->label('Gain Account')
                                         ->color('success')
                                         ->placeholder('-'),
 
-                                    TextEntry::make('lossOnDisposalAccount.name')
+                                    TextEntry::make('disposalLossAccount.name')
                                         ->label('Loss Account')
                                         ->color('danger')
                                         ->placeholder('-'),
                                 ]),
                             ])->columnSpan(1),
+
+                        Section::make('Maintenance & Capitalization')
+                            ->schema([
+                                TextEntry::make('maintenanceExpenseAccount.name')
+                                    ->label('Maintenance Expense Account')
+                                    ->placeholder('Not Configured'),
+
+                                TextEntry::make('capitalizationAccount.name')
+                                    ->label('Capitalization Account (CWIP)')
+                                    ->placeholder('Not Configured'),
+                            ])->columnSpan(1),
                     ]),
 
-                // Bottom Section: Revaluation & Audit
+                // Bottom: Revaluation & Tax
                 Grid::make(2)
                     ->schema([
                         Section::make('Revaluation')
                             ->schema([
-                                TextEntry::make('appreciationAccount.name')
-                                    ->label('Appreciation Account')
+                                TextEntry::make('revaluationAccount.name')
+                                    ->label('Revaluation Account')
                                     ->placeholder('Not Configured'),
 
-                                TextEntry::make('revaluationGainAccount.name')
-                                    ->label('Revaluation Gain Account')
+                                TextEntry::make('reversalOfRevaluation.name')
+                                    ->label('Reversal of Revaluation')
                                     ->placeholder('Not Configured'),
                             ])->columnSpan(1),
 
-                        Section::make('System Details')
+                        Section::make('Tax & System')
                             ->schema([
+                                TextEntry::make('taxDepreciationAccount.name')
+                                    ->label('Tax Depreciation Account')
+                                    ->placeholder('Not Configured'),
+
+                                TextEntry::make('deferredTaxAccount.name')
+                                    ->label('Deferred Tax Account')
+                                    ->placeholder('Not Configured'),
+
                                 TextEntry::make('created_at')
                                     ->label('Created At')
                                     ->dateTime(),

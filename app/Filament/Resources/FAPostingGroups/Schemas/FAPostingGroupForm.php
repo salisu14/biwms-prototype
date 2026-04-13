@@ -1,12 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\FAPostingGroups\Schemas;
 
-use App\Enums\IntangibleAssetType;
-use App\Enums\LiquidityAssetType;
-use App\Enums\TangibleAssetType;
-use Filament\Forms\Components\CheckboxList;
-use Filament\Forms\Components\Select;
+use App\Models\FAPostingGroup;
+use Filament\Forms\Components\Select as FormSelect;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
@@ -30,19 +29,52 @@ class FAPostingGroupForm
                                         ->label('Posting Group Code')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                        ->maxLength(20)
+                                        ->disabled(fn (?FAPostingGroup $record) => $record !== null)
+                                        ->dehydrated()
+                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                        ->helperText('The code cannot be changed once created.'),
+
                                     TextInput::make('description')
                                         ->label('Description')
-                                        ->maxLength(255)
+                                        ->required()
+                                        ->maxLength(100)
                                         ->columnSpan(2),
                                 ]),
-                                Section::make('Status & Active Rules')
+
+                                Section::make('Status & Depreciation Defaults')
                                     ->schema([
-                                        Toggle::make('is_active')
-                                            ->label('Active Status')
-                                            ->default(true)
-                                            ->onColor('success'),
-                                    ])->compact()->inlineLabel(),
+                                        Grid::make(4)->schema([
+                                            Toggle::make('is_active')
+                                                ->label('Active')
+                                                ->default(true)
+                                                ->onColor('success'),
+
+                                            Toggle::make('auto_depreciate_acquisition_year')
+                                                ->label('Depreciate in Acq. Year')
+                                                ->default(true)
+                                                ->onColor('success'),
+
+                                            FormSelect::make('depreciation_calculation')
+                                                ->label('Depreciation Calculation')
+                                                ->options([
+                                                    'full_year' => 'Full Year',
+                                                    'pro_rata' => 'Pro Rata',
+                                                    'half_year' => 'Half Year',
+                                                ])
+                                                ->default('pro_rata')
+                                                ->native(false),
+
+                                            FormSelect::make('depreciation_start')
+                                                ->label('Depreciation Start')
+                                                ->options([
+                                                    'acquisition' => 'Acquisition Date',
+                                                    'first_day_next_month' => 'First Day Next Month',
+                                                ])
+                                                ->default('acquisition')
+                                                ->native(false),
+                                        ]),
+                                    ])->compact(),
                             ]),
 
                         Tabs\Tab::make('Acquisition & Depreciation')
@@ -52,16 +84,17 @@ class FAPostingGroupForm
                                     ->description('Accounts used during purchase or capitalization.')
                                     ->schema([
                                         Grid::make(2)->schema([
-                                            self::getAccountSelect('acquisition_cost_account_id', 'acquisitionAccount', 'Acquisition Cost Account'),
-                                            self::getAccountSelect('acquisition_cost_offset_account_id', 'acquisitionCostOffsetAccount', 'Acquisition Cost Offset'),
+                                            self::accountSelect('acquisition_cost_account_id', 'acquisitionCostAccount', 'Acquisition Cost Account'),
+                                            self::accountSelect('acquisition_cost_account_id_lcy', 'acquisitionCostAccountLcy', 'Acquisition Cost Account (LCY)'),
                                         ]),
                                     ]),
+
                                 Section::make('Depreciation Posting')
                                     ->description('Accounts for accumulated depreciation and periodic expenses.')
                                     ->schema([
                                         Grid::make(2)->schema([
-                                            self::getAccountSelect('depreciation_account_id', 'depreciationAccount', 'Accum. Depreciation Account'),
-                                            self::getAccountSelect('depreciation_expense_account_id', 'depExpenseAccount', 'Depreciation Expense Account'),
+                                            self::accountSelect('depreciation_expense_account_id', 'depreciationExpenseAccount', 'Depreciation Expense Account'),
+                                            self::accountSelect('accumulated_depreciation_account_id', 'accumulatedDepreciationAccount', 'Accumulated Depreciation Account'),
                                         ]),
                                     ]),
                             ]),
@@ -72,48 +105,38 @@ class FAPostingGroupForm
                                 Section::make('Disposal Posting')
                                     ->schema([
                                         Grid::make(3)->schema([
-                                            self::getAccountSelect('disposal_proceeds_account_id', 'disposalProceedsAccount', 'Disposal Proceeds Account'),
-                                            self::getAccountSelect('gain_on_disposal_account_id', 'gainOnDisposalAccount', 'Gain on Disposal Account'),
-                                            self::getAccountSelect('loss_on_disposal_account_id', 'lossOnDisposalAccount', 'Loss on Disposal Account'),
+                                            self::accountSelect('disposal_proceeds_account_id', 'disposalProceedsAccount', 'Disposal Proceeds Account'),
+                                            self::accountSelect('disposal_gain_account_id', 'disposalGainAccount', 'Disposal Gain Account'),
+                                            self::accountSelect('disposal_loss_account_id', 'disposalLossAccount', 'Disposal Loss Account'),
                                         ]),
                                     ]),
-                                Section::make('Maintenance Posting')
+
+                                Section::make('Maintenance & Capitalization')
                                     ->schema([
                                         Grid::make(2)->schema([
-                                            self::getAccountSelect('maintenance_expense_account_id', 'maintenanceExpenseAccount', 'Maintenance Expense Account'),
-                                            self::getAccountSelect('maintenance_cost_account_id', 'maintenanceCostAccount', 'Maintenance Cost Account'),
+                                            self::accountSelect('maintenance_expense_account_id', 'maintenanceExpenseAccount', 'Maintenance Expense Account'),
+                                            self::accountSelect('capitalization_account_id', 'capitalizationAccount', 'Capitalization Account (CWIP)'),
                                         ]),
                                     ]),
                             ]),
 
-                        Tabs\Tab::make('Revaluation')
+                        Tabs\Tab::make('Revaluation & Tax')
                             ->icon('heroicon-m-arrow-path')
                             ->schema([
-                                Grid::make(2)->schema([
-                                    self::getAccountSelect('appreciation_account_id', 'appreciationAccount', 'Appreciation Account'),
-                                    self::getAccountSelect('revaluation_gain_account_id', 'revaluationGainAccount', 'Revaluation Gain Account'),
-                                ]),
-                            ]),
-
-                        Tabs\Tab::make('Applicability')
-                            ->icon('heroicon-m-check-badge')
-                            ->schema([
-                                Section::make('Asset Type Mapping')
-                                    ->description('Define which asset types can utilize this posting group.')
+                                Section::make('Revaluation')
                                     ->schema([
-                                        Grid::make(3)->schema([
-                                            CheckboxList::make('applicable_tangible_types')
-                                                ->label('Tangible Assets')
-                                                ->options(TangibleAssetType::class)
-                                                ->columns(1),
-                                            CheckboxList::make('applicable_intangible_types')
-                                                ->label('Intangible Assets')
-                                                ->options(IntangibleAssetType::class)
-                                                ->columns(1),
-                                            CheckboxList::make('applicable_liquidity_types')
-                                                ->label('Liquidity Assets')
-                                                ->options(LiquidityAssetType::class)
-                                                ->columns(1),
+                                        Grid::make(2)->schema([
+                                            self::accountSelect('revaluation_account_id', 'revaluationAccount', 'Revaluation Account'),
+                                            self::accountSelect('reversal_of_revaluation_id', 'reversalOfRevaluation', 'Reversal of Revaluation Account'),
+                                        ]),
+                                    ]),
+
+                                Section::make('Tax Depreciation')
+                                    ->description('Accounts for tax-specific depreciation differences.')
+                                    ->schema([
+                                        Grid::make(2)->schema([
+                                            self::accountSelect('tax_depreciation_account_id', 'taxDepreciationAccount', 'Tax Depreciation Account'),
+                                            self::accountSelect('deferred_tax_account_id', 'deferredTaxAccount', 'Deferred Tax Account'),
                                         ]),
                                     ]),
                             ]),
@@ -122,11 +145,11 @@ class FAPostingGroupForm
     }
 
     /**
-     * Helper to create a standardized G/L Account selector
+     * Helper to create a standardised G/L Account selector.
      */
-    protected static function getAccountSelect(string $name, string $relationship, string $label): Select
+    protected static function accountSelect(string $name, string $relationship, string $label): FormSelect
     {
-        return Select::make($name)
+        return FormSelect::make($name)
             ->label($label)
             ->relationship($relationship, 'name')
             ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->account_number} - {$record->name}")

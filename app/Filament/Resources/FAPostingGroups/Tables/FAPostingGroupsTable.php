@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\FAPostingGroups\Tables;
 
 use Filament\Actions\BulkActionGroup;
@@ -29,51 +31,42 @@ class FAPostingGroupsTable
                     ->limit(50),
 
                 // Primary Accounts
-                TextColumn::make('acquisitionAccount.name')
+                TextColumn::make('acquisitionCostAccount.name')
                     ->label('Acquisition Account')
-                    ->description(fn ($record) => $record->acquisitionAccount?->account_number)
+                    ->description(fn ($record) => $record->acquisitionCostAccount?->account_number)
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('depreciationAccount.name')
+                TextColumn::make('accumulatedDepreciationAccount.name')
                     ->label('Accum. Depr. Account')
-                    ->description(fn ($record) => $record->depreciationAccount?->account_number)
+                    ->description(fn ($record) => $record->accumulatedDepreciationAccount?->account_number)
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('depExpenseAccount.name')
+                TextColumn::make('depreciationExpenseAccount.name')
                     ->label('Depr. Expense Account')
-                    ->description(fn ($record) => $record->depExpenseAccount?->account_number)
+                    ->description(fn ($record) => $record->depreciationExpenseAccount?->account_number)
                     ->toggleable()
                     ->searchable(),
 
-                // Applicability Indicators
-                TextColumn::make('applicable_tangible_types')
-                    ->label('Tangible Types')
+                TextColumn::make('depreciation_calculation')
+                    ->label('Calc. Method')
                     ->badge()
-                    ->separator(',')
-                    ->color('info')
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'full_year' => 'Full Year',
+                        'pro_rata' => 'Pro Rata',
+                        'half_year' => 'Half Year',
+                        default => $state,
+                    })
                     ->toggleable(),
 
-                TextColumn::make('applicable_intangible_types')
-                    ->label('Intangible Types')
-                    ->badge()
-                    ->separator(',')
-                    ->color('warning')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                // Disposal & Maintenance (Toggleable)
-                TextColumn::make('maintenance_expense_account_id')
-                    ->label('Maint. Expense A/C')
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('gainOnDisposalAccount.name')
+                // Disposal (Toggleable)
+                TextColumn::make('disposalGainAccount.name')
                     ->label('Gain on Disposal')
                     ->placeholder('-')
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                TextColumn::make('lossOnDisposalAccount.name')
+                TextColumn::make('disposalLossAccount.name')
                     ->label('Loss on Disposal')
                     ->placeholder('-')
                     ->toggleable(isToggledHiddenByDefault: true),
