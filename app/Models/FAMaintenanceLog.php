@@ -37,4 +37,23 @@ class FAMaintenanceLog extends Model
     {
         return $this->belongsTo(Vendor::class);
     }
+
+    // In FAMaintenanceLog model
+    public function maintenanceContract(): BelongsTo
+    {
+        return $this->belongsTo(MaintenanceContract::class, 'maintenance_contract_id');
+    }
+
+    // Optional: Helper to check if service was covered by contract
+    public function isCoveredByContract(): bool
+    {
+        return $this->maintenance_contract_id !== null
+            && $this->maintenanceContract?->isActive();
+    }
+
+    // Get applicable discount from contract
+    public function getContractDiscountPercent(): float
+    {
+        return $this->maintenanceContract?->parts_discount_percent ?? 0;
+    }
 }

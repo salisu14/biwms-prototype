@@ -17,7 +17,7 @@ return new class extends Migration
             // Cost center reference (Work Center, Machine Center, or Location)
             $table->foreignId('work_center_id')->nullable()->constrained('work_centers')->nullOnDelete();
             $table->foreignId('machine_center_id')->nullable()->constrained('machine_centers')->nullOnDelete();
-            $table->foreignId('location_id')->nullable()->constrained('location_masters')->nullOnDelete();
+            $table->foreignId('location_id')->nullable()->constrained('locations')->nullOnDelete();
 
             // Period reference
             $table->date('period'); // First day of the month

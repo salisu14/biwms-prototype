@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Enums\FAPostingType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,11 +14,16 @@ class FALedgerEntry extends Model
 
     protected $table = 'fa_ledger_entries';
 
+    // Tell Laravel we have a composite primary key
+    protected $primaryKey = ['fixed_asset_id', 'depreciation_book_id', 'entry_no'];
+    public $incrementing = false;
+    protected $keyType = 'int';
+
     protected $fillable = [
         'fixed_asset_id',
         'depreciation_book_id',
-        'fa_posting_type',
         'entry_no',
+        'fa_posting_type',
         'document_type',
         'document_no',
         'document_line_no',
@@ -43,14 +47,18 @@ class FALedgerEntry extends Model
         'journal_batch_type',
         'created_by',
         'entry_timestamp',
-        'reversed_entry_id',
+        'reversed_entry_fixed_asset_id',
+        'reversed_entry_depreciation_book_id',
+        'reversed_entry_no',
         'reversed',
         'reversed_at',
     ];
 
     protected $casts = [
-        'fa_posting_type' => FAPostingType::class,
         'posting_date' => 'date',
+        'entry_timestamp' => 'datetime',
+        'reversed_at' => 'datetime',
+        'reversed' => 'boolean',
         'amount' => 'decimal:4',
         'amount_lcy' => 'decimal:4',
         'depreciation_amount' => 'decimal:4',
@@ -60,11 +68,18 @@ class FALedgerEntry extends Model
         'index_factor' => 'decimal:6',
         'proceeds_on_disposal' => 'decimal:4',
         'gain_loss_on_disposal' => 'decimal:4',
-        'entry_timestamp' => 'datetime',
-        'reversed' => 'boolean',
-        'reversed_at' => 'datetime',
     ];
 
+    // Override find method for composite key
+    public static function findByComposite(int $fixedAssetId, int $depreciationBookId, int $entryNo): ?self
+    {
+        return static::where('fixed_asset_id', $fixedAssetId)
+            ->where('depreciation_book_id', $depreciationBookId)
+            ->where('entry_no', $entryNo)
+            ->first();
+    }
+
+    // Relationships
     public function fixedAsset(): BelongsTo
     {
         return $this->belongsTo(FixedAsset::class, 'fixed_asset_id');
@@ -77,24 +92,21 @@ class FALedgerEntry extends Model
 
     public function reversedEntry(): BelongsTo
     {
-        return $this->belongsTo(self::class, 'reversed_entry_id');
+        return $this->belongsTo(self::class,
+            ['reversed_entry_fixed_asset_id', 'reversed_entry_depreciation_book_id', 'reversed_entry_no'],
+            ['fixed_asset_id', 'depreciation_book_id', 'entry_no']
+        );
     }
 
-    public function isAcquisition(): bool
+    public function reverses(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return $this->fa_posting_type === FAPostingType::ACQUISITION;
+        return $this->hasMany(self::class,
+            ['reversed_entry_fixed_asset_id', 'reversed_entry_depreciation_book_id', 'reversed_entry_no'],
+            ['fixed_asset_id', 'depreciation_book_id', 'entry_no']
+        );
     }
 
-    public function isDepreciation(): bool
-    {
-        return $this->fa_posting_type === FAPostingType::DEPRECIATION;
-    }
-
-    public function isDisposal(): bool
-    {
-        return $this->fa_posting_type === FAPostingType::DISPOSAL;
-    }
-
+    // Business methods
     public function reverse(): void
     {
         if ($this->reversed) {
