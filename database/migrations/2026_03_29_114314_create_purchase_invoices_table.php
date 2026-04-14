@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('posted_purchase_invoices', function (Blueprint $table) {
+        Schema::create('purchase_invoices', function (Blueprint $table) {
             $table->id();
 
             // Document Identification

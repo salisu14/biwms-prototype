@@ -13,7 +13,7 @@ class PurchaseInvoice extends Model
 {
     use HasFactory;
 
-    protected $table = 'posted_purchase_invoices';
+    protected $table = 'purchase_invoices';
 
     protected $fillable = [
         'document_number',
