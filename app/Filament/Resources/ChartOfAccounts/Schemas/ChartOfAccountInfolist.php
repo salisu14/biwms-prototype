@@ -16,10 +16,10 @@ class ChartOfAccountInfolist
     {
         return $schema
             ->schema([
-                // Replaced Split::make with Grid::make(2) for a 2-column layout
-                Grid::make(2)
+                // Changed to Grid::make(3) to make it wider and more horizontal
+                Grid::make(3)
                     ->schema([
-                        // LEFT COLUMN: General Info, Posting Groups, Formatting
+                        // COLUMN 1: Identity & Hierarchy
                         Group::make([
                             Section::make('General Information')
                                 ->schema([
@@ -35,7 +35,8 @@ class ChartOfAccountInfolist
 
                                         TextEntry::make('account_category')
                                             ->label('Category')
-                                            ->badge(),
+                                            ->badge()
+                                            ->color('gray'),
 
                                         TextEntry::make('structural_type')
                                             ->label('Type')
@@ -52,81 +53,37 @@ class ChartOfAccountInfolist
                                             ->placeholder('Root Level'),
                                     ]),
                                 ]),
+                        ]),
 
+                        // COLUMN 2: Posting Logic & Controls
+                        Group::make([
                             Section::make('Posting Configuration')
                                 ->schema([
                                     Grid::make(2)->schema([
-                                        // Using direct fields as per your model $fillable
-                                        TextEntry::make('gen_bus_posting_group')
-                                            ->label('Gen. Bus. Posting Group')
+                                        TextEntry::make('genBusPostingGroup.code')
+                                            ->label('Gen. Bus. Group')
                                             ->badge()
                                             ->color('warning')
                                             ->placeholder('-'),
 
-                                        TextEntry::make('gen_prod_posting_group')
-                                            ->label('Gen. Prod. Posting Group')
+                                        TextEntry::make('genProdPostingGroup.code')
+                                            ->label('Gen. Prod. Group')
                                             ->badge()
                                             ->color('warning')
                                             ->placeholder('-'),
 
-                                        TextEntry::make('vat_bus_posting_group')
-                                            ->label('VAT Bus. Posting Group')
+                                        TextEntry::make('vatBusPostingGroup.code')
+                                            ->label('VAT Bus. Group')
                                             ->badge()
                                             ->color('warning')
                                             ->placeholder('-'),
 
-                                        TextEntry::make('vat_prod_posting_group')
-                                            ->label('VAT Prod. Posting Group')
+                                        TextEntry::make('vatProdPostingGroup.code')
+                                            ->label('VAT Prod. Group')
                                             ->badge()
                                             ->color('warning')
                                             ->placeholder('-'),
                                     ]),
-                                ]),
-
-                            Section::make('Reporting & Layout')
-                                ->schema([
-                                    Grid::make(2)->schema([
-                                        TextEntry::make('totaling')
-                                            ->label('Totaling')
-                                            ->placeholder('-'),
-
-                                        TextEntry::make('indentation')
-                                            ->label('Indentation')
-                                            ->formatStateUsing(fn ($state) => str_repeat('• ', $state))
-                                            ->placeholder('None'),
-
-                                        TextEntry::make('no_of_blank_lines')
-                                            ->label('Blank Lines'),
-
-                                        IconEntry::make('new_page')
-                                            ->label('New Page')
-                                            ->boolean(),
-                                    ]),
-
-                                    Grid::make(4)->schema([
-                                        IconEntry::make('bold')->boolean(),
-                                        IconEntry::make('italic')->boolean(),
-                                        IconEntry::make('underline')->boolean(),
-                                        IconEntry::make('show_opposite_sign')->boolean(),
-                                    ])->columns(4),
-                                ]),
-                        ]), // End Left Group
-
-                        // RIGHT COLUMN: Financials, Controls, Audit
-                        Group::make([
-                            Section::make('Financial Status')
-                                ->schema([
-                                    TextEntry::make('balance')
-                                        ->label('Current Balance')
-                                        ->money() // Defaults to currency config
-                                        ->size('lg')
-                                        ->weight('bold')
-                                        ->color(fn($state) => $state < 0 ? 'danger' : 'success'),
-
-                                    TextEntry::make('balance_at_date')
-                                        ->label('Balance at Date')
-                                        ->money()
-                                        ->color('gray'),
                                 ]),
 
                             Section::make('Posting Controls')
@@ -145,30 +102,77 @@ class ChartOfAccountInfolist
 
                                     Grid::make(2)->schema([
                                         TextEntry::make('blocked_from')
-                                            ->label('Blocked From')
+                                            ->label('From')
                                             ->date()
                                             ->placeholder('-'),
 
                                         TextEntry::make('blocked_to')
-                                            ->label('Blocked To')
+                                            ->label('To')
                                             ->date()
                                             ->placeholder('-'),
                                     ]),
                                 ]),
+                        ]),
+
+                        // COLUMN 3: Reporting & Financial Status
+                        Group::make([
+                            Section::make('Reporting & Layout')
+                                ->schema([
+                                    Grid::make(2)->schema([
+                                        TextEntry::make('totaling')
+                                            ->placeholder('-'),
+
+                                        TextEntry::make('indentation')
+                                            ->formatStateUsing(fn ($state) => str_repeat('• ', (int)$state))
+                                            ->placeholder('None'),
+
+                                        TextEntry::make('no_of_blank_lines')
+                                            ->label('Blank Lines'),
+
+                                        IconEntry::make('new_page')
+                                            ->label('New Page')
+                                            ->boolean(),
+                                    ]),
+
+                                    Grid::make(4)->schema([
+                                        IconEntry::make('bold')->boolean(),
+                                        IconEntry::make('italic')->boolean(),
+                                        IconEntry::make('underline')->boolean(),
+                                        IconEntry::make('show_opposite_sign')->label('Opp. Sign')->boolean(),
+                                    ]),
+                                ]),
+
+                            Section::make('Financial Status')
+                                ->schema([
+                                    TextEntry::make('balance')
+                                        ->label('Current Balance')
+                                        ->money()
+                                        ->size('lg')
+                                        ->weight('bold')
+                                        ->color(fn($state) => $state < 0 ? 'danger' : 'success'),
+
+                                    TextEntry::make('balance_at_date')
+                                        ->label('Balance at Date')
+                                        ->money()
+                                        ->color('gray'),
+                                ]),
 
                             Section::make('System Details')
+                                ->collapsed()
                                 ->schema([
-                                    TextEntry::make('created_at')
-                                        ->label('Created At')
-                                        ->dateTime()
-                                        ->size('sm'),
+                                    Grid::make(2)->schema([
+                                        TextEntry::make('created_at')
+                                            ->label('Created')
+                                            ->dateTime()
+                                            ->size('sm'),
 
-                                    TextEntry::make('updated_at')
-                                        ->label('Last Updated')
-                                        ->dateTime()
-                                        ->size('sm'),
+                                        TextEntry::make('updated_at')
+                                            ->label('Updated')
+                                            ->dateTime()
+                                            ->size('sm'),
+                                    ]),
                                 ]),
-                        ]), // End Right Group
+                        ]),
                     ]),
             ]);
     }
