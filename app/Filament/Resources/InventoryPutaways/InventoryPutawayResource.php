@@ -40,7 +40,7 @@ class InventoryPutawayResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\LinesRelationManager::class,
         ];
     }
 
