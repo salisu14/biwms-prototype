@@ -378,9 +378,9 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-building-office')
                                         ->url('/admin/capex-projects'),
 
-                                    NavigationItem::make('Assets')
+                                    NavigationItem::make('Fixed Assets')
                                         ->icon('heroicon-o-building-office')
-                                        ->url('/admin/assets'),
+                                        ->url('/admin/fixed-assets'),
 
                                     NavigationItem::make('Depreciation Books')
                                         ->icon('heroicon-o-building-office')

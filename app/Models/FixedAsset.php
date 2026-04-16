@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Auth;
 
 class FixedAsset extends Model
 {
@@ -95,6 +96,24 @@ class FixedAsset extends Model
         'blocked' => 'boolean',
     ];
 
+    /**
+     * Boot the model to handle audit logging for created_by and modified_by.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (FixedAsset $asset) {
+            if (Auth::check()) {
+                $asset->created_by = Auth::id();
+            }
+        });
+
+        static::saving(function (FixedAsset $asset) {
+            if (Auth::check()) {
+                $asset->modified_by = Auth::id();
+            }
+        });
+    }
+
     // Relationships
     public function postingGroup(): BelongsTo
     {
@@ -109,6 +128,31 @@ class FixedAsset extends Model
     public function faClass(): BelongsTo
     {
         return $this->belongsTo(FAClass::class, 'fa_class_id');
+    }
+
+    public function faSubclass(): BelongsTo
+    {
+        return $this->belongsTo(FASubclass::class, 'fa_subclass_id');
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_id');
+    }
+
+    public function vendor(): BelongsTo
+    {
+        return $this->belongsTo(Vendor::class, 'vendor_id');
+    }
+
+    public function mainVendor(): BelongsTo
+    {
+        return $this->belongsTo(Vendor::class, 'main_vendor_id');
+    }
+
+    public function responsibleEmployee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'responsible_employee_id');
     }
 
     public function ledgerEntries(): HasMany
