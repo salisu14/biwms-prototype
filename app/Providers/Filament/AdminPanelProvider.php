@@ -386,6 +386,10 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-building-office')
                                         ->url('/admin/depreciation-books'),
 
+                                    NavigationItem::make('FA Classes')
+                                        ->icon('heroicon-o-building-office')
+                                        ->url('/admin/f-a-classes'),
+
                                     NavigationItem::make('Machine Centers')
                                         ->icon('heroicon-o-cpu-chip')
                                         ->url('/admin/machine-centers'),

@@ -12,8 +12,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class FAClass extends Model
 {
-    use HasFactory;
-
     protected $table = 'fa_classes';
 
     protected $fillable = ['code', 'name', 'fa_type', 'default_posting_group_id', 'is_active'];

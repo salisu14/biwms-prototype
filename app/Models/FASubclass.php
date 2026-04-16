@@ -10,8 +10,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class FASubclass extends Model
 {
-    use HasFactory;
-
     protected $table = 'fa_subclasses';
 
     protected $fillable = ['fa_class_id', 'code', 'name', 'default_posting_group_id', 'is_active'];
