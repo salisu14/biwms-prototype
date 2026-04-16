@@ -40,7 +40,9 @@ return new class extends Migration
             $table->foreignId('customer_posting_group_id')
                 ->nullable()
                 ->constrained('customer_posting_groups');
-            $table->string('vat_bus_posting_group', 20)->nullable();
+//            $table->string('vat_bus_posting_group', 20)->nullable()->constrained('vat_business_posting_groups');
+
+            $table->foreignId('vat_business_posting_group_id')->nullable()->constrained('vat_business_posting_groups');
 
             // Pricing Group (for price determination)
             $table->foreignId('pricing_group_id')

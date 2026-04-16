@@ -45,7 +45,7 @@ return new class extends Migration
         });
 
         // Drop the old table
-        Schema::dropIfExists('fixed_assets');
+//        Schema::dropIfExists('fixed_assets');
     }
 
     /**

@@ -34,7 +34,9 @@ return new class extends Migration
             $table->foreignId('vendor_posting_group_id')
                 ->nullable()
                 ->constrained('vendor_posting_groups');
-            $table->string('vat_bus_posting_group', 20)->nullable();
+//            $table->string('vat_bus_posting_group', 20)->nullable();
+
+            $table->foreignId('vat_business_posting_group_id')->nullable()->constrained('vat_business_posting_groups');
 
             // Location/Warehouse
             $table->foreignId('location_id')->nullable()->constrained('locations');

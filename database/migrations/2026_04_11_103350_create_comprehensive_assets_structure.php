@@ -12,30 +12,30 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Create FixedAsset Posting Groups Table
-        Schema::create('fa_posting_groups', function (Blueprint $table) {
-            $table->id();
-            $table->string('code')->unique();
-            $table->string('description')->nullable();
-
-            // Account IDs (Foreign keys to ChartOfAccounts or just integers for simplicity if relations aren't strict yet)
-            $table->unsignedBigInteger('acquisition_cost_account_id')->nullable();
-            $table->unsignedBigInteger('acquisition_cost_offset_account_id')->nullable();
-            $table->unsignedBigInteger('depreciation_account_id')->nullable();
-            $table->unsignedBigInteger('depreciation_expense_account_id')->nullable();
-            $table->unsignedBigInteger('maintenance_expense_account_id')->nullable();
-            $table->unsignedBigInteger('maintenance_cost_account_id')->nullable();
-            $table->unsignedBigInteger('disposal_proceeds_account_id')->nullable();
-            $table->unsignedBigInteger('gain_on_disposal_account_id')->nullable();
-            $table->unsignedBigInteger('loss_on_disposal_account_id')->nullable();
-
-            $table->json('applicable_tangible_types')->nullable();
-            $table->json('applicable_intangible_types')->nullable();
-            $table->json('applicable_liquidity_types')->nullable();
-
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-        });
+//        // 1. Create FixedAsset Posting Groups Table
+//        Schema::create('fa_posting_groups', function (Blueprint $table) {
+//            $table->id();
+//            $table->string('code')->unique();
+//            $table->string('description')->nullable();
+//
+//            // Account IDs (Foreign keys to ChartOfAccounts or just integers for simplicity if relations aren't strict yet)
+//            $table->unsignedBigInteger('acquisition_cost_account_id')->nullable();
+//            $table->unsignedBigInteger('acquisition_cost_offset_account_id')->nullable();
+//            $table->unsignedBigInteger('depreciation_account_id')->nullable();
+//            $table->unsignedBigInteger('depreciation_expense_account_id')->nullable();
+//            $table->unsignedBigInteger('maintenance_expense_account_id')->nullable();
+//            $table->unsignedBigInteger('maintenance_cost_account_id')->nullable();
+//            $table->unsignedBigInteger('disposal_proceeds_account_id')->nullable();
+//            $table->unsignedBigInteger('gain_on_disposal_account_id')->nullable();
+//            $table->unsignedBigInteger('loss_on_disposal_account_id')->nullable();
+//
+//            $table->json('applicable_tangible_types')->nullable();
+//            $table->json('applicable_intangible_types')->nullable();
+//            $table->json('applicable_liquidity_types')->nullable();
+//
+//            $table->boolean('is_active')->default(true);
+//            $table->timestamps();
+//        });
 
         // 2. Create Assets Table
         Schema::create('assets', function (Blueprint $table) {
@@ -166,6 +166,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('assets');
-        Schema::dropIfExists('fa_posting_groups');
+//        Schema::dropIfExists('fa_posting_groups');
     }
 };

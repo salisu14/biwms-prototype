@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('code', 20)->unique();
             $table->string('name', 100);
             $table->foreignId('location_id')->nullable()->constrained('locations');
-            $table->foreignId('responsible_employee_id')->nullable()->constrained('employees');
+            $table->foreignId('responsible_employee_id')->nullable()->constrained('users');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

@@ -49,6 +49,10 @@ return new class extends Migration
             $table->foreignId('vendor_posting_group_id')
                 ->constrained('vendor_posting_groups');
 
+            $table->foreignId('vat_business_posting_group_id')
+                ->nullable()
+                ->constrained('vat_business_posting_groups');
+
             $table->foreignId('contact_id')
                 ->constrained()
                 ->cascadeOnDelete();
