@@ -327,6 +327,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-arrow-down-on-square')
                                     ->url('/admin/inventory-putaways'),
 
+                                NavigationItem::make('Warehouse Putaways')
+                                    ->icon('heroicon-o-arrow-down-on-square')
+                                    ->url('/admin/warehouse-putaways'),
+
                                 NavigationItem::make('Warehouse Shipments')
                                     ->icon('heroicon-o-arrow-up-tray')
                                     ->url('/admin/warehouse-shipments'),

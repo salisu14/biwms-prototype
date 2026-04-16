@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
 
 // WarehousePutaway.php - Advanced put-away (Method D)
@@ -23,6 +24,21 @@ class WarehousePutaway extends Model
     public function placeLines()
     {
         return $this->lines()->where('action_type', 'Place');
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
+    public function warehouseReceipt(): BelongsTo
+    {
+        return $this->belongsTo(WarehouseReceipt::class);
+    }
+
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
     }
 
     // Register - only creates warehouse entries (items already received)
