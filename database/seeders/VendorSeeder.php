@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\AccountCategory;
+use App\Enums\AccountType;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\VatBusinessPostingGroup;
@@ -356,8 +357,8 @@ class VendorSeeder extends Seeder
             ['account_number' => '21100'],
             [
                 'name' => 'Trade Payables - Domestic',
-                'account_type' => 'LIABILITY',
-                'account_category' => 'PAYABLE',
+                'account_type' => AccountType::LIABILITY,
+                'account_category' => AccountCategory::PAYABLE,
             ]
         );
 
@@ -365,8 +366,8 @@ class VendorSeeder extends Seeder
             ['account_number' => '21200'],
             [
                 'name' => 'Trade Payables - Foreign',
-                'account_type' => 'LIABILITY',
-                'account_category' => 'PAYABLE',
+                'account_type' => AccountType::LIABILITY,
+                'account_category' => AccountCategory::PAYABLE,
             ]
         );
 
@@ -374,8 +375,8 @@ class VendorSeeder extends Seeder
             ['account_number' => '50900'],
             [
                 'name' => 'Purchase Discounts',
-                'account_type' => 'EXPENSE',
-                'account_category' => 'COGS',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::COGS,
             ]
         );
 
@@ -383,8 +384,8 @@ class VendorSeeder extends Seeder
             ['account_number' => '40900'],
             [
                 'name' => 'Sales Discounts',
-                'account_type' => 'REVENUE',
-                'account_category' => 'REVENUE',
+                'account_type' => AccountType::REVENUE,
+                'account_category' => AccountCategory::REVENUE,
             ]
         );
 
@@ -392,7 +393,7 @@ class VendorSeeder extends Seeder
             ['account_number' => '60950'],
             [
                 'name' => 'Invoice Rounding',
-                'account_type' => 'EXPENSE',
+                'account_type' => AccountType::REVENUE,
                 'account_category' => AccountCategory::OPERATING_EXPENSE,
             ]
         );

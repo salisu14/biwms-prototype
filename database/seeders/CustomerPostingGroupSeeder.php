@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AccountCategory;
+use App\Enums\AccountType;
 use App\Models\ChartOfAccount;
 use App\Models\CustomerPostingGroup;
 use Illuminate\Database\Seeder;
@@ -85,51 +87,51 @@ class CustomerPostingGroupSeeder extends Seeder
             [
                 'account_number' => '11100',
                 'name' => 'Trade Receivables - Domestic',
-                'account_type' => 'ASSET',
-                'account_category' => 'RECEIVABLE',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::RECEIVABLE
             ],
             [
                 'account_number' => '11200',
                 'name' => 'Trade Receivables - Foreign',
-                'account_type' => 'ASSET',
-                'account_category' => 'RECEIVABLE',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::RECEIVABLE
             ],
             [
                 'account_number' => '11300',
                 'name' => 'Trade Receivables - Export',
-                'account_type' => 'ASSET',
-                'account_category' => 'RECEIVABLE',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::RECEIVABLE
             ],
             [
                 'account_number' => '11500',
                 'name' => 'Intercompany Receivables',
-                'account_type' => 'ASSET',
-                'account_category' => 'RECEIVABLE',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::RECEIVABLE
             ],
             [
                 'account_number' => '11800',
                 'name' => 'Employee Receivables',
-                'account_type' => 'ASSET',
-                'account_category' => 'RECEIVABLE',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::RECEIVABLE
             ],
             // Discount and Rounding Accounts
             [
                 'account_number' => '40900',
                 'name' => 'Sales Discounts',
-                'account_type' => 'REVENUE',
-                'account_category' => 'REVENUE',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::REVENUE
             ],
             [
                 'account_number' => '50900',
                 'name' => 'Purchase Discounts',
-                'account_type' => 'EXPENSE',
-                'account_category' => 'COGS',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::COGS
             ],
             [
                 'account_number' => '60950',
                 'name' => 'Invoice Rounding',
-                'account_type' => 'EXPENSE',
-                'account_category' => 'OPERATING_EXPENSE',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::OPERATING_EXPENSE,
             ],
         ];
 

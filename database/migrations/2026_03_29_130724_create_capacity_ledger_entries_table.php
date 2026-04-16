@@ -20,7 +20,7 @@ return new class extends Migration
             $table->foreignId('machine_center_id')->nullable()->constrained('machine_centers');
 
             $table->date('posting_date');
-            $table->string('document_no');
+            $table->string('document_number');
 
             $table->decimal('setup_time', 15, 4)->default(0);
             $table->decimal('run_time', 15, 4)->default(0);
@@ -42,7 +42,7 @@ return new class extends Migration
 
             $table->index(['production_order_id', 'posting_date']);
             $table->index(['work_center_id', 'posting_date']);
-            $table->index(['document_no']);
+            $table->index(['document_number']);
         });
     }
 

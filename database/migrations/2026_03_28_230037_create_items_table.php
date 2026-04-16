@@ -41,6 +41,11 @@ return new class extends Migration
             $table->foreignId('general_posting_setup_id')->nullable()->constrained('general_posting_setups');
             $table->foreignId('inventory_posting_setup_id')->nullable()->constrained('inventory_posting_setups');
 
+            $table->foreignId('vat_product_posting_group_id')
+                ->nullable()
+                ->constrained('vat_product_posting_groups');
+
+
             // Pricing & Costing
             $table->enum('costing_method', array_column(CostingMethod::cases(), 'value'))
                 ->default('AVERAGE');

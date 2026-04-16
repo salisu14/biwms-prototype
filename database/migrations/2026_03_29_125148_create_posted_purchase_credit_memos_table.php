@@ -67,7 +67,7 @@ return new class extends Migration
             $table->string('corrects_invoice_number')->nullable();
             $table->foreignId('corrects_invoice_id')
                 ->nullable()
-                ->constrained('posted_purchase_invoices');
+                ->constrained('purchase_invoices');
 
             // Payment Terms
             $table->string('payment_terms_code')->nullable();

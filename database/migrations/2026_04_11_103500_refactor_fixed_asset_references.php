@@ -20,7 +20,7 @@ return new class extends Migration
         });
 
         // Update posted_purchase_invoice_lines
-        Schema::table('posted_purchase_invoice_lines', function (Blueprint $table) {
+        Schema::table('purchase_invoice_lines', function (Blueprint $table) {
             $table->dropForeign(['fixed_asset_id']);
             $table->renameColumn('fixed_asset_id', 'asset_id');
         });

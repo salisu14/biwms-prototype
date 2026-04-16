@@ -53,6 +53,11 @@ return new class extends Migration
                 ->after('customer_posting_group_id')
                 ->constrained('pricing_groups');
 
+            $table->foreignId('vat_business_posting_group_id')
+                ->nullable()
+                ->constrained('vat_business_posting_groups');
+
+
             // Customer-specific price list (overrides group)
             $table->string('price_list_code', 20)->nullable()->after('pricing_group_id');
 

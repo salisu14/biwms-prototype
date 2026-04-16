@@ -20,7 +20,7 @@ class DatabaseSeeder extends Seeder
             UnitOfMeasureSeeder::class,
             ChartOfAccountSeeder::class,
             CurrencySeeder::class,
-            BankAccountSeeder::class,
+//            BankAccountSeeder::class,
             GlAccountSeeder::class,
             VatPostingSeeder::class,
             InventoryPostingGroupSeeder::class,

@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('vat_product_posting_groups', function (Blueprint $table) {
             $table->id();
-            $table->string('code', 20)->unique();
+            $table->string('code', 20)->unique();  // e.g., 'STANDARD', 'REDUCED', 'ZERO'
             $table->string('description', 100)->nullable();
             $table->timestamps();
         });

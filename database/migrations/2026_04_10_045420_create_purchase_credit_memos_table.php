@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('vendor_name');
 
             // Correction
-            $table->foreignId('corrects_invoice_id')->nullable()->constrained('posted_purchase_invoices');
+            $table->foreignId('corrects_invoice_id')->nullable()->constrained('purchase_invoices');
             $table->string('corrects_invoice_number')->nullable();
 
             // Financials

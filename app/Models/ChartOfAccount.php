@@ -1,136 +1,151 @@
 <?php
 
-// app/Models/ChartOfAccount.php
-
 namespace App\Models;
 
 use App\Enums\AccountCategory;
-use App\Enums\AccountType;
-use App\Enums\GlAccountType;
+use App\Enums\AccountStructuralType;
 use App\Enums\IncomeBalanceType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ChartOfAccount extends Model
 {
     use HasFactory;
 
-    protected static function booted()
-    {
-        static::saving(function ($account) {
-            // Automatically classify Income Statement vs Balance Sheet based on Account Type
-            if ($account->account_type) {
-                $incomeBalanceTypes = [
-                    AccountType::REVENUE->value,
-                    AccountType::COGS->value,
-                    AccountType::EXPENSE->value,
-                ];
-
-                if (in_array($account->account_type->value, $incomeBalanceTypes)) {
-                    $account->income_balance = IncomeBalanceType::INCOME_STATEMENT;
-                } else {
-                    $account->income_balance = IncomeBalanceType::BALANCE_SHEET;
-                }
-            }
-        });
-    }
+    protected $table = 'chart_of_accounts';
 
     protected $fillable = [
         'account_number',
         'name',
-        'account_type',
+        'search_name',
+        'structural_type',
         'account_category',
         'income_balance',
-        'gl_account_type',
         'totaling',
         'indentation',
         'bold',
+        'italic',
+        'underline',
         'show_opposite_sign',
         'new_page',
-        'balance',
+        'no_of_blank_lines',
         'direct_posting',
         'blocked',
+        'blocked_from',
+        'blocked_to',
+        'shortcut_dimension_1_code',
+        'shortcut_dimension_2_code',
+        'gen_bus_posting_group_id',
+        'gen_prod_posting_group_id',
+        'vat_bus_posting_group_id',
+        'vat_prod_posting_group_id',
+        'cost_type_no',
+        'consol_debit_acc',
+        'consol_credit_acc',
+        'consol_translation_method',
         'parent_account_id',
+        'balance',
+        'balance_at_date',
     ];
 
     protected $casts = [
         'balance' => 'decimal:2',
+        'balance_at_date' => 'decimal:2',
         'direct_posting' => 'boolean',
         'blocked' => 'boolean',
         'bold' => 'boolean',
+        'italic' => 'boolean',
+        'underline' => 'boolean',
         'show_opposite_sign' => 'boolean',
         'new_page' => 'boolean',
-        'account_type' => AccountType::class,
+        'indentation' => 'integer',
+        'no_of_blank_lines' => 'integer',
+        'blocked_from' => 'date',
+        'blocked_to' => 'date',
+        'structural_type' => AccountStructuralType::class,
         'account_category' => AccountCategory::class,
-        'gl_account_type' => GlAccountType::class,
         'income_balance' => IncomeBalanceType::class,
     ];
 
-    // Parent account (for hierarchical COA)
-    public function parentAccount()
+    // ==================== RELATIONSHIPS ====================
+
+    /**
+     * General Business Posting Group relationship
+     */
+    public function genBusPostingGroup(): BelongsTo
     {
-        return $this->belongsTo(ChartOfAccount::class, 'parent_account_id');
+        return $this->belongsTo(GeneralBusinessPostingGroup::class, 'gen_bus_posting_group_id');
     }
 
-    // Child accounts
+    /**
+     * General Product Posting Group relationship
+     */
+    public function genProdPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralProductPostingGroup::class, 'gen_prod_posting_group_id');
+    }
+
+    public function vatProdPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatBusinessPostingGroup::class, 'vat_bus_posting_group_id');
+    }
+
+    public function vatBusPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatProductPostingGroup::class, 'vat_prod_posting_group_id');
+    }
+
+    public function parentAccount(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_account_id');
+    }
+
     public function childAccounts(): HasMany
     {
-        return $this->hasMany(ChartOfAccount::class, 'parent_account_id');
-    }
-
-    // Relationships to posting setups
-    public function generalPostingSetupLines(): HasMany
-    {
-        return $this->hasMany(GeneralPostingSetupLine::class);
-    }
-
-    public function inventoryPostingSetupsAsInventory(): HasMany
-    {
-        return $this->hasMany(InventoryPostingSetup::class, 'inventory_account_id');
+        return $this->hasMany(self::class, 'parent_account_id');
     }
 
     public function glEntries(): HasMany
     {
-        return $this->hasMany(GlEntry::class);
+        return $this->hasMany(GlEntry::class, 'chart_of_account_id');
     }
 
-    // Scopes
-    public function scopeActive($query)
-    {
-        return $query->where('blocked', false);
-    }
+    // ==================== BUSINESS METHODS ====================
 
-    public function scopeByType($query, $type)
+    public function isPostingAccount(): bool
     {
-        return $query->where('account_type', $type);
-    }
-
-    public function scopeRevenue($query)
-    {
-        return $query->where('account_type', 'REVENUE');
-    }
-
-    public function scopeCogs($query)
-    {
-        return $query->where('account_type', 'COGS');
-    }
-
-    public function scopeInventory($query)
-    {
-        return $query->where('account_category', 'INVENTORY');
+        return $this->structural_type === AccountStructuralType::POSTING;
     }
 
     public function isTotalAccount(): bool
     {
-        return in_array($this->gl_account_type, [
-            GlAccountType::TOTAL,
-            GlAccountType::END_TOTAL,
-        ]);
+        return $this->structural_type?->isTotal() ?? false;
     }
 
-    public function isIncomeStatement(): bool
+    public function formattedName(): string
     {
-        return $this->income_balance === IncomeBalanceType::INCOME_STATEMENT;
+        return str_repeat('  ', $this->indentation ?? 0) . $this->name;
+    }
+
+    /**
+     * Check if account allows direct posting (Validation)
+     */
+    public function allowsDirectPosting(): bool
+    {
+        return $this->isPostingAccount() && $this->direct_posting && !$this->blocked;
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function ($account) {
+            // Auto-set Income/Balance destination based on category
+            if ($account->account_category instanceof AccountCategory) {
+                $account->income_balance = $account->account_category->isIncomeStatement()
+                    ? IncomeBalanceType::INCOME_STATEMENT
+                    : IncomeBalanceType::BALANCE_SHEET;
+            }
+        });
     }
 }

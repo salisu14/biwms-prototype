@@ -17,7 +17,6 @@ class ItemLedgerEntry extends Model
         'entry_number',
         'entry_type',
         'document_type',
-        'document_number',
         'document_line_number',
         'item_id',
         'variant_code',
@@ -41,6 +40,8 @@ class ItemLedgerEntry extends Model
         'open',
         'source_type',
         'source_id',
+        'document_no',
+        'unit_of_measure_code',
     ];
 
     protected $casts = [

@@ -4,108 +4,38 @@ namespace App\Enums;
 
 enum AccountCategory: string
 {
-    case CASH = 'CASH';
-    case RECEIVABLE = 'RECEIVABLE';
-    case INVENTORY = 'INVENTORY';
-    case FIXED_ASSET = 'FIXED_ASSET';
-    case PAYABLE = 'PAYABLE';
-    case ACCRUAL = 'ACCRUAL';
-    case REVENUE = 'REVENUE';
-    case COGS = 'COGS';
-    case OPERATING_EXPENSE = 'OPERATING_EXPENSE';
-    case NON_OPERATING = 'NON_OPERATING';
-    case OTHER_INCOME_EXPENSE = 'OTHER_INCOME_EXPENSE';
+    // Balance Sheet
+    case ASSET = 'asset';
+    case LIQUID_ASSET = 'liquid_asset';
+    case RECEIVABLE = 'receivable';
+    case INVENTORY = 'inventory';
+    case FIXED_ASSET = 'fixed_asset';
+    case LIABILITY = 'liability';
+    case PAYABLE = 'payable';
+    case EQUITY = 'equity';
 
-    case CURRENT_ASSET = 'CURRENT_ASSET';
-    case CURRENT_LIABILITY = 'CURRENT_LIABILITY';
-    case FIXED_ASSET_LIABILITIES = 'FIXED_ASSET_LIABILITIES';
-    case NON_CURRENT_ASSET = 'NON_CURRENT_ASSET';
-    case NON_CURRENT_LIABILITY = 'NON_CURRENT_LIABILITY';
+    // Income Statement
+    case REVENUE = 'revenue';
+    case COGS = 'cogs';
+    case DIRECT_EXPENSE = 'direct_expense';
+    case INDIRECT_EXPENSE = 'indirect_expense';
+    case OPERATING_EXPENSE = 'operating_expense';
+    case OTHER_INCOME_EXPENSE = 'other_income_expense';
 
-    public function label(): string
+    public function isIncomeStatement(): bool
     {
-        return match ($this) {
-            self::CASH => 'Cash & Equivalents',
-            self::RECEIVABLE => 'Accounts Receivable',
-            self::INVENTORY => 'Inventory',
-            self::FIXED_ASSET => 'Fixed Assets',
-            self::PAYABLE => 'Accounts Payable',
-            self::ACCRUAL => 'Accruals',
-            self::REVENUE => 'Revenue Category',
-            self::COGS => 'COGS Category',
-            self::OPERATING_EXPENSE => 'Operating Expense',
-            self::NON_OPERATING => 'Non-Operating Items',
-            self::OTHER_INCOME_EXPENSE => 'Other Income & Expenses',
-            self::CURRENT_ASSET => 'Current Assets',
-            self::CURRENT_LIABILITY => 'Current Liabilities',
-            self::FIXED_ASSET_LIABILITIES => 'Fixed Asset Liabilities',
-            self::NON_CURRENT_ASSET => 'Non-Current Assets',
-            self::NON_CURRENT_LIABILITY => 'Non-Current Liabilities',
-            default => $this->value,
-        };
+        return in_array($this, [
+            self::REVENUE,
+            self::COGS,
+            self::DIRECT_EXPENSE,
+            self::INDIRECT_EXPENSE,
+            self::OPERATING_EXPENSE,
+            self::OTHER_INCOME_EXPENSE
+        ]);
     }
 
-    public function color(): string
+    public function isBalanceSheet(): bool
     {
-        return match ($this) {
-            self::CASH, self::RECEIVABLE, self::INVENTORY, self::FIXED_ASSET => 'bg-green-100 text-green-800',
-            self::PAYABLE, self::ACCRUAL, self::CURRENT_LIABILITY => 'bg-red-100 text-red-800',
-            self::REVENUE => 'bg-blue-100 text-blue-800',
-            self::COGS, self::OPERATING_EXPENSE => 'bg-orange-100 text-orange-800',
-            self::NON_OPERATING, self::OTHER_INCOME_EXPENSE => 'bg-gray-100 text-gray-800',
-        };
-    }
-
-    public function icon(): string
-    {
-        return match ($this) {
-            self::CASH => 'heroicon-o-currency-dollar',
-            self::RECEIVABLE => 'heroicon-o-user-plus',
-            self::INVENTORY => 'heroicon-o-archive-box',
-            self::FIXED_ASSET => 'heroicon-o-home-modern',
-            self::PAYABLE => 'heroicon-o-user-minus',
-            self::ACCRUAL => 'heroicon-o-clock',
-            self::REVENUE => 'heroicon-o-presentation-chart-line',
-            self::COGS => 'heroicon-o-truck',
-            self::OPERATING_EXPENSE => 'heroicon-o-briefcase',
-            self::NON_OPERATING => 'heroicon-o-no-symbol',
-            self::OTHER_INCOME_EXPENSE => 'heroicon-o-presentation-chart-bar',
-            self::CURRENT_ASSET => 'heroicon-o-banknotes',
-            self::FIXED_ASSET_LIABILITIES => 'heroicon-o-building-library',
-            self::NON_CURRENT_ASSET => 'heroicon-o-cube',
-            self::NON_CURRENT_LIABILITY => 'heroicon-o-credit-card',
-            self::CURRENT_LIABILITY => 'heroicon-o-credit-card',
-            default => 'heroicon-o-banknotes',
-        };
-    }
-
-    public function description(): string
-    {
-        return match ($this) {
-            self::CASH => 'Liquid funds and bank balances',
-            self::RECEIVABLE => 'Money owed by customers',
-            self::INVENTORY => 'Raw materials and finished goods',
-            self::FIXED_ASSET => 'Long-term physical properties',
-            self::PAYABLE => 'Money owed to suppliers',
-            self::ACCRUAL => 'Liabilities for expenses incurred',
-            self::REVENUE => 'Income streams from sales',
-            self::COGS => 'Direct manufacturing and purchase costs',
-            self::OPERATING_EXPENSE => 'Standard day-to-day business costs',
-            self::NON_OPERATING => 'Gains/losses outside core business',
-            self::OTHER_INCOME_EXPENSE => 'Incidental items such as exchange gains/losses',
-        };
-    }
-
-    public static function options(): array
-    {
-        return collect(self::cases())
-            ->map(fn ($case) => [
-                'value' => $case->value,
-                'label' => $case->label(),
-                'color' => $case->color(),
-                'icon' => $case->icon(),
-                'description' => $case->description(),
-            ])
-            ->toArray();
+        return !$this->isIncomeStatement();
     }
 }

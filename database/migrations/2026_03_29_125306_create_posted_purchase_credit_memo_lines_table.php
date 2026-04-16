@@ -46,7 +46,7 @@ return new class extends Migration
 
             $table->foreignId('corrected_invoice_line_id')
                 ->nullable()
-                ->constrained('posted_purchase_invoice_lines');
+                ->constrained('purchase_invoice_lines');
 
             $table->timestamps();
 

@@ -6,6 +6,7 @@ use App\Filament\Resources\ChartOfAccounts\Pages\CreateChartOfAccount;
 use App\Filament\Resources\ChartOfAccounts\Pages\EditChartOfAccount;
 use App\Filament\Resources\ChartOfAccounts\Pages\ListChartOfAccounts;
 use App\Filament\Resources\ChartOfAccounts\Schemas\ChartOfAccountForm;
+use App\Filament\Resources\ChartOfAccounts\Schemas\ChartOfAccountInfolist;
 use App\Filament\Resources\ChartOfAccounts\Tables\ChartOfAccountsTable;
 use App\Models\ChartOfAccount;
 use BackedEnum;
@@ -25,6 +26,11 @@ class ChartOfAccountResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return ChartOfAccountForm::configure($schema);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return ChartOfAccountInfolist::configure($schema);
     }
 
     public static function table(Table $table): Table

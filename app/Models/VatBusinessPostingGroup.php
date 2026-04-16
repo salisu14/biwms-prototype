@@ -2,15 +2,23 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class VatBusinessPostingGroup extends Model
 {
-    use HasFactory;
 
     protected $fillable = [
         'code',
         'description',
+        'blocked'
     ];
+
+    protected $casts = [
+        'blocked' => 'boolean',
+    ];
+
+    public function vatPostingSetups()
+    {
+        return $this->hasMany(VatPostingSetup::class);
+    }
 }

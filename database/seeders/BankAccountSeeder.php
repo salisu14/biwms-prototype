@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AccountCategory;
+use App\Enums\AccountType;
 use App\Enums\BankAccountType;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
@@ -369,43 +371,43 @@ class BankAccountSeeder extends Seeder
             [
                 'account_number' => '10100',
                 'name' => 'Bank - Checking Accounts',
-                'account_type' => 'ASSET',
-                'account_category' => 'CASH',
+                'account_type' => AccountType::ASSET,
+                'account_category' => AccountCategory::ASSET
             ],
             [
                 'account_number' => '10200',
                 'name' => 'Bank - Savings Accounts',
-                'account_type' => 'ASSET',
+                'account_type' => AccountType::ASSET,
                 'account_category' => 'CASH',
             ],
             [
                 'account_number' => '10300',
                 'name' => 'Bank - Money Market',
-                'account_type' => 'ASSET',
+                'account_type' => AccountType::ASSET,
                 'account_category' => 'CASH',
             ],
             [
                 'account_number' => '10400',
                 'name' => 'Bank - Certificates of Deposit',
-                'account_type' => 'ASSET',
+                'account_type' => AccountType::ASSET,
                 'account_category' => 'CASH',
             ],
             [
                 'account_number' => '10500',
                 'name' => 'Bank - Foreign Currency USD',
-                'account_type' => 'ASSET',
+                'account_type' => AccountType::ASSET,
                 'account_category' => 'CASH',
             ],
             [
                 'account_number' => '10510',
                 'name' => 'Bank - Foreign Currency EUR',
-                'account_type' => 'ASSET',
+                'account_type' => AccountType::ASSET,
                 'account_category' => 'CASH',
             ],
             [
                 'account_number' => '10520',
                 'name' => 'Bank - Foreign Currency GBP',
-                'account_type' => 'ASSET',
+                'account_type' => AccountType::ASSET,
                 'account_category' => 'CASH',
             ],
         ];

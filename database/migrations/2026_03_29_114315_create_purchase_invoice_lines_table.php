@@ -11,12 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('posted_purchase_invoice_lines', function (Blueprint $table) {
+        Schema::create('purchase_invoice_lines', function (Blueprint $table) {
             $table->id();
 
             // Parent Invoice
-            $table->foreignId('posted_purchase_invoice_id')
-                ->constrained('posted_purchase_invoices')
+            $table->foreignId('purchase_invoice_id')
+                ->constrained('purchase_invoices')
                 ->onDelete('cascade');
 
             // Source Reference
@@ -90,7 +90,7 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
-            $table->index(['posted_purchase_invoice_id', 'line_number']);
+            $table->index(['purchase_invoice_id', 'line_number']);
             $table->index(['item_id', 'posting_date']);
             $table->index(['gl_account_id', 'posting_date']);
         });
@@ -101,6 +101,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('posted_purchase_invoice_lines');
+        Schema::dropIfExists('purchase_invoice_lines');
     }
 };

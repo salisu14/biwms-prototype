@@ -13,8 +13,9 @@ return new class extends Migration
     {
         Schema::create('vat_business_posting_groups', function (Blueprint $table) {
             $table->id();
-            $table->string('code', 20)->unique();
-            $table->string('description', 100)->nullable();
+            $table->string('code', 20)->unique(); // e.g., 'DOMESTIC', 'EU', 'EXPORT'
+            $table->string('description');
+            $table->boolean('blocked')->default(false);
             $table->timestamps();
         });
     }

@@ -52,11 +52,13 @@ class VatPostingSeeder extends Seeder
             [
                 'vat_business_posting_group_id' => $domestic->id,
                 'vat_product_posting_group_id' => $standard->id,
+                'vat_calculation_type' => 'normal',
             ],
             [
-                'vat_percentage' => 15.00,
+                'vat_percent' => 15.00,
                 'sales_vat_account_id' => $salesVatAcc?->id,
                 'purchase_vat_account_id' => $purchaseVatAcc?->id,
+                'vat_calculation_type' => 'normal',
             ]
         );
 
@@ -65,11 +67,13 @@ class VatPostingSeeder extends Seeder
             [
                 'vat_business_posting_group_id' => $domestic->id,
                 'vat_product_posting_group_id' => $reduced->id,
+                'vat_calculation_type' => 'normal',
             ],
             [
-                'vat_percentage' => 5.00,
+                'vat_percent' => 5.00,
                 'sales_vat_account_id' => $salesVatAcc?->id,
                 'purchase_vat_account_id' => $purchaseVatAcc?->id,
+                'vat_calculation_type' => 'normal',
             ]
         );
 
@@ -78,11 +82,13 @@ class VatPostingSeeder extends Seeder
             [
                 'vat_business_posting_group_id' => $export->id,
                 'vat_product_posting_group_id' => $standard->id,
+                'vat_calculation_type' => 'normal',
             ],
             [
-                'vat_percentage' => 0.00,
+                'vat_percent' => 0.00,
                 'sales_vat_account_id' => $salesVatAcc?->id,
                 'purchase_vat_account_id' => $purchaseVatAcc?->id,
+                'vat_calculation_type' => 'normal',
             ]
         );
 
@@ -91,11 +97,13 @@ class VatPostingSeeder extends Seeder
             [
                 'vat_business_posting_group_id' => $domestic->id,
                 'vat_product_posting_group_id' => $zero->id,
+                'vat_calculation_type' => 'normal',
             ],
             [
-                'vat_percentage' => 0.00,
+                'vat_percent' => 0.00,
                 'sales_vat_account_id' => $salesVatAcc?->id,
                 'purchase_vat_account_id' => $purchaseVatAcc?->id,
+                'vat_calculation_type' => 'normal',
             ]
         );
     }

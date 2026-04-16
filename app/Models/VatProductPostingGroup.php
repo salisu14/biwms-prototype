@@ -13,4 +13,9 @@ class VatProductPostingGroup extends Model
         'code',
         'description',
     ];
+
+    public function vatPostingSetups()
+    {
+        return $this->hasMany(VatPostingSetup::class);
+    }
 }
