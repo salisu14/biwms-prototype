@@ -2,10 +2,21 @@
 
 namespace App\Filament\Resources\PayrollPeriods\Tables;
 
+use App\Enums\PayrollPeriodStatus;
+use App\Models\PayrollPeriod;
+use App\Services\PayrollPeriodService;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Notifications\Notification;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ToggleColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class PayrollPeriodsTable
 {
@@ -13,36 +24,79 @@ class PayrollPeriodsTable
     {
         return $table
             ->columns([
-                \Filament\Tables\Columns\TextColumn::make('start_date')
+                TextColumn::make('start_date')
+                    ->label('Starts')
+                    ->date()
+                    ->sortable()
+                    ->weight('bold'),
+
+                TextColumn::make('end_date')
+                    ->label('Ends')
                     ->date()
                     ->sortable(),
-                \Filament\Tables\Columns\TextColumn::make('end_date')
+
+                TextColumn::make('payment_date')
+                    ->label('Pay Date')
                     ->date()
+                    ->sortable()
+                    ->color('gray'),
+
+                TextColumn::make('status')
+                    ->badge()
                     ->sortable(),
-                \Filament\Tables\Columns\TextColumn::make('payment_date')
-                    ->date()
-                    ->sortable(),
-                \Filament\Tables\Columns\TextColumn::make('status')
-                    ->badge(),
-                \Filament\Tables\Columns\ToggleColumn::make('is_current'),
+
+                ToggleColumn::make('is_current')
+                    ->label('Current'),
+
+                TextColumn::make('documents_count')
+                    ->label('Docs')
+                    ->counts('documents')
+                    ->badge()
+                    ->color('info'),
             ])
+            ->defaultSort('start_date', 'desc')
             ->filters([
-                //
+                SelectFilter::make('status')
+                    ->options(PayrollPeriodStatus::class),
+
+                Filter::make('is_current')
+                    ->label('Current Period Only')
+                    ->query(fn (Builder $query) => $query->where('is_current', true)),
+
+                Filter::make('period_range')
+                    ->form([
+                        DatePicker::make('from'),
+                        DatePicker::make('until'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['from'], fn ($q) => $q->whereDate('start_date', '>=', $data['from']))
+                            ->when($data['until'], fn ($q) => $q->whereDate('end_date', '<=', $data['until']));
+                    })
             ])
             ->recordActions([
                 EditAction::make(),
-                \Filament\Tables\Actions\Action::make('close')
+
+                Action::make('close')
                     ->label('Close Period')
                     ->icon('heroicon-o-lock-closed')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->visible(fn (\App\Models\PayrollPeriod $record) => $record->status !== \App\Enums\PayrollPeriodStatus::Closed)
-                    ->action(function (\App\Models\PayrollPeriod $record, \Filament\Notifications\Notification $notification) {
+                    ->modalHeading('Close Payroll Period?')
+                    ->modalDescription('This will freeze documents and update YTD balances. This action is irreversible.')
+                    ->visible(fn (PayrollPeriod $record) => $record->status !== PayrollPeriodStatus::CLOSED)
+                    ->action(function (PayrollPeriod $record, Notification $notification) {
                         try {
-                            app(\App\Services\PayrollPeriodService::class)->close($record);
-                            $notification->success()->title('Period Closed!')->body('YTD balances have been updated.')->send();
+                            app(PayrollPeriodService::class)->close($record);
+                            $notification->success()
+                                ->title('Period Closed Successfully')
+                                ->body("Year-to-Date balances for the period ending {$record->end_date->format('M d, Y')} have been updated.")
+                                ->send();
                         } catch (\Exception $e) {
-                            $notification->danger()->title('Action Failed')->body($e->getMessage())->send();
+                            $notification->danger()
+                                ->title('Action Failed')
+                                ->body($e->getMessage())
+                                ->send();
                         }
                     }),
             ])

@@ -441,40 +441,58 @@ class AdminPanelProvider extends PanelProvider
                                 ->items([
                                     NavigationItem::make('Business Units')
                                         ->icon('heroicon-o-wrench')
-                                        ->url('/admin/businesses'),
+                                        ->url('/admin/businesses')
+                                        ->isActiveWhen(fn () => request()->is('admin/businesses*')),
 
                                     NavigationItem::make('Factories')
                                         ->icon('heroicon-o-building-storefront')
-                                        ->url('/admin/factories'),
+                                        ->url('/admin/factories')
+                                        ->isActiveWhen(fn () => request()->is('admin/factories*')),
 
                                     NavigationItem::make('Departments')
                                         ->icon('heroicon-o-building-office')
-                                        ->url('/admin/departments'),
+                                        ->url('/admin/departments')
+                                        ->isActiveWhen(fn () => request()->is('admin/departments*')),
 
                                     NavigationItem::make('Employees')
                                         ->icon('heroicon-o-user-group')
-                                        ->url('/admin/employees'),
+                                        ->url('/admin/employees')
+                                        ->isActiveWhen(fn () => request()->is('admin/employees*')),
 
                                     NavigationItem::make('Pay Codes')
                                         ->icon('heroicon-o-banknotes')
-                                        ->url('/admin/pay-codes'),
+                                        ->url('/admin/pay-codes')
+                                        ->isActiveWhen(fn () => request()->is('admin/pay-codes*')),
 
                                     NavigationItem::make('Payroll Periods')
                                         ->icon('heroicon-o-calendar-date-range')
-                                        ->url('/admin/payroll-periods'),
+                                        ->url('/admin/payroll-periods')
+                                        ->isActiveWhen(fn () => request()->is('admin/payroll-periods*')),
 
                                     NavigationItem::make('Payroll Documents')
                                         ->icon('heroicon-o-document-currency-dollar')
                                         ->url('/admin/payroll-documents')
                                         ->isActiveWhen(fn () => request()->is('admin/payroll-documents*')),
 
-                                    NavigationItem::make('Purchase Receipts')
-                                        ->icon('heroicon-o-receipt-percent')
-                                        ->url('/admin/purchase-receipts'),
+                                    NavigationItem::make('Tax Tables')
+                                        ->icon('heroicon-o-square-2-stack')
+                                        ->url('/admin/tax-tables')
+                                        ->isActiveWhen(fn () => request()->is('admin/tax-tables*')),
+
+                                    NavigationItem::make('Social Security Tiers')
+                                        ->icon('heroicon-o-square-2-stack')
+                                        ->url('/admin/social-security-tiers')
+                                        ->isActiveWhen(fn () => request()->is('admin/social-security-tiers*')),
 
                                     NavigationItem::make('Payroll Posting Groups')
                                         ->icon('heroicon-o-archive-box')
-                                        ->url('/admin/payroll-posting-groups'),
+                                        ->url('/admin/payroll-posting-groups')
+                                        ->isActiveWhen(fn () => request()->is('admin/payroll-posting-groups*')),
+
+                                    NavigationItem::make('Purchase Receipts')
+                                        ->icon('heroicon-o-receipt-percent')
+                                        ->url('/admin/purchase-receipts')
+                                        ->isActiveWhen(fn () => request()->is('admin/purchase-receipts*')),
 
                                     NavigationItem::make('WIP Valuation')
                                         ->icon('heroicon-o-currency-dollar')

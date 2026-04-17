@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Filament\Resources\TaxTables\Pages;
+namespace App\Filament\Resources\TaxTable\Pages;
 
-use App\Filament\Resources\TaxTables\TaxTableResource;
+use App\Filament\Resources\TaxTable\TaxTableResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 

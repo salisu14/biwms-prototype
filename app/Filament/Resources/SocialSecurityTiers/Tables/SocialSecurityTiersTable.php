@@ -15,28 +15,58 @@ class SocialSecurityTiersTable
         return $table
             ->columns([
                 TextColumn::make('tier_code')
-                    ->searchable(),
+                    ->label('Tier')
+                    ->badge()
+                    ->color('primary')
+                    ->searchable()
+                    ->sortable(),
+
                 TextColumn::make('from_salary')
-                    ->numeric()
+                    ->label('Min Salary')
+                    ->money()
                     ->sortable(),
+
                 TextColumn::make('to_salary')
-                    ->numeric()
+                    ->label('Max Salary')
+                    ->money()
+                    ->placeholder('Unlimited')
                     ->sortable(),
+
                 TextColumn::make('employee_rate')
-                    ->numeric()
+                    ->label('Emp. Rate')
+                    ->suffix('%')
+                    ->color('info')
+                    ->weight('bold')
                     ->sortable(),
+
                 TextColumn::make('employer_rate')
-                    ->numeric()
+                    ->label('Empr. Rate')
+                    ->suffix('%')
+                    ->color('warning')
+                    ->weight('bold')
                     ->sortable(),
+
+                TextColumn::make('max_base')
+                    ->label('Max Base')
+                    ->money()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('employee_max_amount')
+                    ->label('Emp. Cap')
+                    ->money()
+                    ->toggleable(),
+
+                TextColumn::make('employer_max_amount')
+                    ->label('Empr. Cap')
+                    ->money()
+                    ->toggleable(),
+
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->defaultSort('from_salary', 'asc')
             ->filters([
                 //
             ])

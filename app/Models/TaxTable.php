@@ -2,14 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TaxTable extends Model
 {
-    /** @use HasFactory<\Database\Factories\TaxTableFactory> */
-    use HasFactory;
-
     protected $fillable = [
         'name',
         'jurisdiction',
@@ -22,7 +19,7 @@ class TaxTable extends Model
         'effective_date' => 'date',
     ];
 
-    public function brackets(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function brackets(): HasMany
     {
         return $this->hasMany(TaxBracket::class);
     }
