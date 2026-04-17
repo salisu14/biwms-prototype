@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ExpenseCategories\Pages;
 
 use App\Filament\Resources\ExpenseCategories\ExpenseCategoryResource;
+use App\Models\ExpenseCategory;
 use App\Services\ExpenseService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
