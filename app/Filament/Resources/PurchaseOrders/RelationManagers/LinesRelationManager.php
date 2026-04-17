@@ -5,7 +5,7 @@ namespace App\Filament\Resources\PurchaseOrders\RelationManagers;
 use App\Enums\PurchaseLineType;
 use App\Enums\UomType;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
-use App\Models\Asset;
+use App\Models\FixedAsset;
 use App\Models\Item;
 use App\Models\PurchaseOrder;
 use App\Services\VatService;
@@ -87,8 +87,8 @@ class LinesRelationManager extends RelationManager
                         }),
 
                     Select::make('asset_id')
-                        ->label('Asset')
-                        ->relationship('asset', 'asset_no')
+                        ->label('Fixed Asset')
+                        ->relationship('asset', 'fa_no')
                         ->searchable()
                         ->preload()
                         ->required(fn ($get) => $get('type') === PurchaseLineType::FIXED_ASSET->value)
@@ -99,10 +99,10 @@ class LinesRelationManager extends RelationManager
                                 return;
                             }
 
-                            $asset = Asset::find($state);
+                            $asset = FixedAsset::find($state);
                             if ($asset) {
                                 $set('description', $asset->description);
-                                $set('item_code', $asset->asset_no);
+                                $set('item_code', $asset->fa_no);
                                 $set('unit_of_measure', 'pcs'); // Default for assets
                                 $set('unit_cost', 0); // User likely input cost on PO
                             }
@@ -273,9 +273,9 @@ class LinesRelationManager extends RelationManager
                                 $data['general_product_posting_group_id'] = $item->general_product_posting_group_id;
                             }
                         } elseif ($data['type'] === PurchaseLineType::FIXED_ASSET->value && isset($data['asset_id'])) {
-                            $asset = Asset::find($data['asset_id']);
+                            $asset = FixedAsset::find($data['asset_id']);
                             if ($asset) {
-                                $data['item_code'] = $asset->asset_no;
+                                $data['item_code'] = $asset->fa_no;
                             }
                         }
 

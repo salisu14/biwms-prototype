@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\FixedAsset;
 
-use App\Enums\FAStatus;
 use App\Enums\FAPostingType;
+use App\Enums\FAStatus;
 use App\Models\FixedAsset;
-use App\Models\FALedgerEntry;
-use App\Models\GlEntry;
 use App\Services\NumberSeriesService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -76,7 +75,7 @@ class AcquisitionService
                 fromAccount: $asset->posting_group->capitalization_account_id,
                 toAccount: $asset->posting_group->acquisition_cost_account_id,
                 amount: $asset->book_value,
-                description: "CWIP to Fixed Asset completion"
+                description: 'CWIP to Fixed Asset completion'
             );
 
             $asset->update([
@@ -110,44 +109,17 @@ class AcquisitionService
     {
         $documentNo = $data['document_no'] ?? $this->numberSeriesService->getNextNo('FA-ACQ');
 
-        // FA Ledger Entry
-        FALedgerEntry::create([
-            'fixed_asset_id' => $asset->id,
-            'depreciation_book_id' => $asset->depreciation_book_id,
-            'fa_posting_type' => FAPostingType::ACQUISITION,
-            'posting_date' => $data['acquisition_date'],
-            'document_type' => $data['document_type'] ?? 'Purchase Invoice',
-            'document_no' => $documentNo,
-            'amount' => $data['acquisition_cost'],
-            'amount_lcy' => $data['acquisition_cost'], // Convert if foreign currency
-            'book_value_after' => $data['acquisition_cost'],
-            'description' => "Acquisition: {$asset->description}",
-            'created_by' => Auth::id(),
-            'entry_timestamp' => now(),
-        ]);
-
-        // GL Entry
-        GlEntry::create([
-            'entry_number' => $asset->posting_group->acquisition_cost_account_id,
-            'posting_date' => $data['acquisition_date'],
-            'document_type' => 'FA Acquisition',
-            'transaction_number' => $documentNo,
-            'debit_amount' => $data['acquisition_cost'],
-            'description' => "FA Acquisition: {$asset->fa_no}",
-            'shortcut_dimension_1_code' => $asset->shortcut_dimension_1_code,
-            'shortcut_dimension_2_code' => $asset->shortcut_dimension_2_code,
-            'user_id' => Auth::id(),
-        ]);
-
-        // Credit AP or Cash account (from purchase invoice)
-        GlEntry::create([
-            'entry_number' => $data['payable_account_id'], // From purchase setup
-            'posting_date' => $data['acquisition_date'],
-            'document_type' => 'FA Acquisition',
-            'transaction_number' => $documentNo,
-            'credit_amount' => $data['acquisition_cost'],
-            'description' => "FA Acquisition: {$asset->fa_no}",
-            'user_id' => Auth::id(),
-        ]);
+        $this->postingService->postEntry(
+            asset: $asset,
+            postingType: FAPostingType::ACQUISITION,
+            amount: (float) $data['acquisition_cost'],
+            description: "Acquisition: {$asset->description}",
+            documentNo: $documentNo,
+            postingDate: Carbon::parse($data['acquisition_date'])->toDateTime(),
+            additionalData: [
+                'document_type' => $data['document_type'] ?? 'Purchase Invoice',
+                'book_value_after' => (float) $data['acquisition_cost'],
+            ]
+        );
     }
 }

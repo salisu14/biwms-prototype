@@ -30,7 +30,7 @@ class FAMaintenanceLog extends Model
 
     public function asset(): BelongsTo
     {
-        return $this->belongsTo(Asset::class, 'fixed_asset_id');
+        return $this->belongsTo(FixedAsset::class, 'fixed_asset_id');
     }
 
     public function vendor(): BelongsTo

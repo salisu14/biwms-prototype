@@ -54,18 +54,26 @@ class FinishedProductionOrderResource extends Resource
         return ProductionOrderResource::getRelations();
     }
 
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canEdit($record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete($record): bool
+    {
+        return false;
+    }
+
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListFinishedProductionOrders::route('/'),
             'view' => Pages\ViewFinishedProductionOrder::route('/{record}'),
-            // Finished orders are normally not editable, but keeping edit if needed
-            'edit' => Pages\EditProductionOrder::route('/{record}/edit'),
         ];
-    }
-
-    public static function canCreate(): bool
-    {
-        return false;
     }
 }

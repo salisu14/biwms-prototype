@@ -46,7 +46,7 @@ class FAJournalLine extends Model
 
     public function fixedAsset(): BelongsTo
     {
-        return $this->belongsTo(Asset::class, 'fixed_asset_id');
+        return $this->belongsTo(FixedAsset::class, 'fixed_asset_id');
     }
 
     public function postingGroup(): BelongsTo

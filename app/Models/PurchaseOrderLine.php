@@ -95,7 +95,7 @@ class PurchaseOrderLine extends Model
 
     public function asset(): BelongsTo
     {
-        return $this->belongsTo(Asset::class);
+        return $this->belongsTo(FixedAsset::class, 'asset_id');
     }
 
     public function generalProductPostingGroup(): BelongsTo

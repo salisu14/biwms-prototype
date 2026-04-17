@@ -15,11 +15,11 @@ class DepreciationCalculationService
         \DateTime $from,
         \DateTime $to
     ): float {
-        if (!$asset->canDepreciate()) {
+        if (! $asset->canDepreciate()) {
             return 0;
         }
 
-        return match($asset->depreciation_method) {
+        return match ($asset->depreciation_method) {
             DepreciationMethod::STRAIGHT_LINE => $this->calculateStraightLine($asset, $from, $to),
             DepreciationMethod::DECLINING_BALANCE => $this->calculateDecliningBalance($asset, $from, $to),
             DepreciationMethod::DOUBLE_DECLINING => $this->calculateDoubleDeclining($asset, $from, $to),
@@ -32,41 +32,58 @@ class DepreciationCalculationService
 
     private function calculateStraightLine(FixedAsset $asset, \DateTime $from, \DateTime $to): float
     {
-        $depreciableBase = $asset->book_value - $asset->salvage_value;
+        $depreciableBase = (float) $asset->acquisition_cost - (float) $asset->salvage_value;
 
         if ($asset->useful_life_years <= 0) {
             return 0;
         }
 
-        // Annual depreciation
+        // BC Standard: 360 days per year (30 days per month)
+        $daysInYear = 360;
         $annualDepreciation = $depreciableBase / $asset->useful_life_years;
 
         // Daily rate for partial periods
-        $daysInPeriod = $from->diff($to)->days + 1;
-        $dailyDepreciation = $annualDepreciation / 365;
+        $daysInPeriod = $this->calculateDaysBetween($from, $to);
+        $dailyDepreciation = $annualDepreciation / $daysInYear;
 
         return round($dailyDepreciation * $daysInPeriod, 2);
     }
 
     private function calculateDecliningBalance(FixedAsset $asset, \DateTime $from, \DateTime $to): float
     {
-        $rate = $asset->depreciation_rate / 100; // e.g., 20% = 0.20
-        $bookValue = $asset->net_book_value;
+        $rate = (float) $asset->depreciation_rate / 100;
+        $bookValue = (float) $asset->book_value;
 
-        // Annual depreciation on remaining book value
         $annualDepreciation = $bookValue * $rate;
+        $daysInYear = 360;
 
-        // Check if straight-line would be higher (switch if configured)
-        if ($asset->declining_balance_calc?->switchToStraightLine()) {
-            $remainingLife = $asset->remaining_life_months / 12;
-            if ($remainingLife > 0) {
-                $straightLine = ($bookValue - $asset->salvage_value) / $remainingLife;
-                $annualDepreciation = max($annualDepreciation, $straightLine);
-            }
+        $daysInPeriod = $this->calculateDaysBetween($from, $to);
+
+        return round(($annualDepreciation / $daysInYear) * $daysInPeriod, 2);
+    }
+
+    private function calculateDaysBetween(\DateTime $from, \DateTime $to): int
+    {
+        $fromCarbon = Carbon::parse($from);
+        $toCarbon = Carbon::parse($to);
+
+        // 30/360 day count convention (BC Standard)
+        $d1 = $fromCarbon->day;
+        $m1 = $fromCarbon->month;
+        $y1 = $fromCarbon->year;
+
+        $d2 = $toCarbon->day;
+        $m2 = $toCarbon->month;
+        $y2 = $toCarbon->year;
+
+        if ($d1 === 31) {
+            $d1 = 30;
+        }
+        if ($d2 === 31 && $d1 === 30) {
+            $d2 = 30;
         }
 
-        $daysInPeriod = $from->diff($to)->days + 1;
-        return round(($annualDepreciation / 365) * $daysInPeriod, 2);
+        return ($y2 - $y1) * 360 + ($m2 - $m1) * 30 + ($d2 - $d1) + 1;
     }
 
     private function calculateDoubleDeclining(FixedAsset $asset, \DateTime $from, \DateTime $to): float
@@ -83,12 +100,13 @@ class DepreciationCalculationService
         $annualDepreciation = min($annualDepreciation, $maxDepreciation);
 
         $daysInPeriod = $from->diff($to)->days + 1;
+
         return round(($annualDepreciation / 365) * $daysInPeriod, 2);
     }
 
     private function calculateUnitsOfProduction(FixedAsset $asset, \DateTime $from, \DateTime $to): float
     {
-        if (!$asset->total_estimated_units) {
+        if (! $asset->total_estimated_units) {
             return 0;
         }
 
@@ -118,6 +136,7 @@ class DepreciationCalculationService
         $annualDepreciation = $depreciableBase * ($currentYearDigit / $sumOfYears);
 
         $daysInPeriod = $from->diff($to)->days + 1;
+
         return round(($annualDepreciation / 365) * $daysInPeriod, 2);
     }
 
@@ -138,7 +157,7 @@ class DepreciationCalculationService
 
         foreach ($assetIds as $assetId) {
             $asset = FixedAsset::find($assetId);
-            if (!$asset || !$asset->canDepreciate()) {
+            if (! $asset || ! $asset->canDepreciate()) {
                 continue;
             }
 

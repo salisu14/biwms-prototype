@@ -4,11 +4,12 @@
 
 namespace App\Services;
 
-use App\Models\Asset;
+use App\Enums\FAStatus;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
 use App\Models\Customer;
+use App\Models\FixedAsset;
 use App\Models\GeneralPostingSetup;
 use App\Models\GlEntry;
 use App\Models\Item;
@@ -648,7 +649,7 @@ class PostingService
 
     public function postFixedAssetPurchase(
         Vendor $vendor,
-        Asset $asset,
+        FixedAsset $asset,
         float $quantity,
         float $unitCost,
         float $lineTotal,
@@ -656,10 +657,10 @@ class PostingService
         string $documentNumber,
         string $description
     ): array {
-        $assetAccount = $asset->assetAccount;
+        $assetAccount = $asset->postingGroup?->acquisitionCostAccount;
 
         if (! $assetAccount) {
-            throw new \Exception("Asset G/L Account missing for fixed asset {$asset->code}. Please configure 'asset_gl_account_id' on the Fixed Asset record.");
+            throw new \Exception("Asset G/L Account missing for fixed asset {$asset->fa_no}. Please configure Acquisition Cost Account on the FA Posting Group.");
         }
 
         $entries = [];
@@ -670,21 +671,20 @@ class PostingService
             'debit_amount' => $lineTotal,
             'credit_amount' => 0,
             'source_type' => 'FIXED_ASSET',
-            'source_number' => $asset->asset_no,
+            'source_number' => $asset->fa_no,
             'document_type' => 'PURCHASE_INVOICE',
             'document_number' => $documentNumber,
             'posting_date' => $postingDate,
             'description' => "Asset Acquisition: {$description}",
         ]);
 
-        // 2. Update Asset Model (Simplified logic as per requirement)
+        // 2. Update Asset Model
         $asset->acquisition_cost = (float) $asset->acquisition_cost + $lineTotal;
         $asset->book_value = (float) $asset->book_value + $lineTotal;
         if (! $asset->acquisition_date) {
             $asset->acquisition_date = $postingDate;
         }
-        $asset->active = true;
-        $asset->acquired = true;
+        $asset->status = FAStatus::ACTIVE;
         $asset->save();
 
         return $entries;
@@ -1086,23 +1086,22 @@ class PostingService
     //        }
     //    }
 
-    public function postAssetDisposal(Asset $asset, float $proceeds, \DateTime $postingDate, string $documentNumber): array
+    public function postFixedAssetDisposal(FixedAsset $asset, float $proceeds, \DateTime $postingDate, string $documentNumber): array
     {
         $postingGroup = $asset->postingGroup;
-        if (! $postingGroup || ! $postingGroup->disposal_proceeds_account_id) {
-            throw new \Exception("Disposal posting configuration missing for asset {$asset->asset_no}");
+        if (! $postingGroup) {
+            throw new \Exception("Posting group missing for asset {$asset->fa_no}");
         }
 
         return DB::transaction(function () use ($asset, $proceeds, $postingDate, $documentNumber, $postingGroup) {
             $entries = [];
 
             // 1. Debit Cash/Bank/Receivable (Proceeds)
-            // Note: In real BC, this often comes via a Sales Invoice or Journal
             $entries[] = $this->createGlEntry([
                 'chart_of_account_id' => $postingGroup->disposal_proceeds_account_id,
                 'debit_amount' => $proceeds,
                 'credit_amount' => 0,
-                'document_type' => 'ASSET_DISPOSAL',
+                'document_type' => 'FA_DISPOSAL',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
                 'description' => "Disposal Proceeds: {$asset->description}",
@@ -1111,10 +1110,10 @@ class PostingService
             // 2. Reverse Accumulated Depreciation (Debit)
             if ($asset->accumulated_depreciation > 0) {
                 $entries[] = $this->createGlEntry([
-                    'chart_of_account_id' => $asset->accum_dep_account_id,
-                    'debit_amount' => $asset->accumulated_depreciation,
+                    'chart_of_account_id' => $postingGroup->accumulated_depreciation_account_id,
+                    'debit_amount' => (float) $asset->accumulated_depreciation,
                     'credit_amount' => 0,
-                    'document_type' => 'ASSET_DISPOSAL',
+                    'document_type' => 'FA_DISPOSAL',
                     'document_number' => $documentNumber,
                     'posting_date' => $postingDate,
                     'description' => "Reverse Accum. Depr: {$asset->description}",
@@ -1123,17 +1122,18 @@ class PostingService
 
             // 3. Reverse Acquisition Cost (Credit)
             $entries[] = $this->createGlEntry([
-                'chart_of_account_id' => $asset->asset_account_id,
+                'chart_of_account_id' => $postingGroup->acquisition_cost_account_id,
                 'debit_amount' => 0,
-                'credit_amount' => $asset->acquisition_cost,
-                'document_type' => 'ASSET_DISPOSAL',
+                'credit_amount' => (float) $asset->acquisition_cost,
+                'document_type' => 'FA_DISPOSAL',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
                 'description' => "Reverse Acquisition: {$asset->description}",
             ]);
 
             // 4. Calculate Gain/Loss
-            $gainLoss = $asset->calculateGainLossOnDisposal($proceeds);
+            $bookValue = (float) $asset->acquisition_cost - (float) $asset->accumulated_depreciation;
+            $gainLoss = $proceeds - $bookValue;
             $account = $gainLoss >= 0 ? $postingGroup->gain_on_disposal_account_id : $postingGroup->loss_on_disposal_account_id;
 
             if ($gainLoss != 0 && $account) {
@@ -1141,7 +1141,7 @@ class PostingService
                     'chart_of_account_id' => $account,
                     'debit_amount' => $gainLoss < 0 ? abs($gainLoss) : 0,
                     'credit_amount' => $gainLoss > 0 ? $gainLoss : 0,
-                    'document_type' => 'ASSET_DISPOSAL',
+                    'document_type' => 'FA_DISPOSAL',
                     'document_number' => $documentNumber,
                     'posting_date' => $postingDate,
                     'description' => ($gainLoss > 0 ? 'Gain' : 'Loss')." on Disposal: {$asset->description}",
@@ -1150,10 +1150,10 @@ class PostingService
 
             // Update Asset Status
             $asset->update([
-                'active' => false,
+                'status' => FAStatus::DISPOSED,
                 'disposal_date' => $postingDate,
                 'disposal_proceeds' => $proceeds,
-                'gain_loss_on_disposal' => $gainLoss,
+                'disposal_gain_loss' => $gainLoss,
                 'book_value' => 0,
             ]);
 
@@ -1161,11 +1161,11 @@ class PostingService
         });
     }
 
-    public function postAssetAppreciation(Asset $asset, float $appreciationAmount, \DateTime $postingDate, string $documentNumber): array
+    public function postFixedAssetAppreciation(FixedAsset $asset, float $appreciationAmount, \DateTime $postingDate, string $documentNumber): array
     {
         $postingGroup = $asset->postingGroup;
-        if (! $postingGroup || ! $postingGroup->appreciation_account_id) {
-            throw new \Exception("Appreciation posting configuration missing for asset {$asset->asset_no}");
+        if (! $postingGroup || ! $postingGroup->revaluation_account_id) {
+            throw new \Exception("Appreciation posting configuration missing for asset {$asset->fa_no}");
         }
 
         return DB::transaction(function () use ($asset, $appreciationAmount, $postingDate, $documentNumber, $postingGroup) {
@@ -1173,10 +1173,10 @@ class PostingService
 
             // 1. Debit Asset Account
             $entries[] = $this->createGlEntry([
-                'chart_of_account_id' => $asset->asset_account_id,
+                'chart_of_account_id' => $postingGroup->acquisition_cost_account_id,
                 'debit_amount' => $appreciationAmount,
                 'credit_amount' => 0,
-                'document_type' => 'ASSET_APPRECIATION',
+                'document_type' => 'FA_APPRECIATION',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
                 'description' => "Appreciation: {$asset->description}",
@@ -1184,10 +1184,10 @@ class PostingService
 
             // 2. Credit Revaluation Gain/Reserve
             $entries[] = $this->createGlEntry([
-                'chart_of_account_id' => $postingGroup->revaluation_gain_account_id,
+                'chart_of_account_id' => $postingGroup->revaluation_account_id,
                 'debit_amount' => 0,
                 'credit_amount' => $appreciationAmount,
-                'document_type' => 'ASSET_APPRECIATION',
+                'document_type' => 'FA_APPRECIATION',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
                 'description' => "Revaluation Gain: {$asset->description}",
@@ -1195,86 +1195,8 @@ class PostingService
 
             // Update Asset Value
             $asset->update([
-                'book_value' => $asset->book_value + $appreciationAmount,
+                'book_value' => (float) $asset->book_value + $appreciationAmount,
             ]);
-
-            return $entries;
-        });
-    }
-
-    public function postForexAdjustment(Asset $asset, float $newExchangeRate, \DateTime $postingDate, string $documentNumber): array
-    {
-        if (! $asset->isLiquidityAsset() || ! $asset->currency_id) {
-            throw new \Exception("Asset {$asset->asset_no} is not a multi-currency liquidity asset.");
-        }
-
-        return DB::transaction(function () use ($asset, $newExchangeRate, $postingDate, $documentNumber) {
-            $currency = $asset->currency;
-            $diffLCY = $asset->calculateForexAdjustment($newExchangeRate);
-
-            if ($diffLCY == 0) {
-                return [];
-            }
-
-            $entries = [];
-            $assetAccount = $asset->asset_account_id;
-
-            // Determine accounts from Currency model
-            if ($diffLCY > 0) {
-                $gainAccount = $currency->unrealized_gains_account_id; // Default to unrealized for automated adjustments
-
-                // Debit Asset (Increase LCY value)
-                $entries[] = $this->createGlEntry([
-                    'chart_of_account_id' => $assetAccount,
-                    'debit_amount' => 0, // No change in FCY
-                    'debit_amount_lcy' => $diffLCY,
-                    'credit_amount' => 0,
-                    'currency_id' => $asset->currency_id,
-                    'exchange_rate' => $newExchangeRate,
-                    'document_type' => 'FOREX_ADJUSTMENT',
-                    'document_number' => $documentNumber,
-                    'posting_date' => $postingDate,
-                    'description' => "Forex Gain: {$asset->description}",
-                ]);
-
-                // Credit Gain
-                $entries[] = $this->createGlEntry([
-                    'chart_of_account_id' => $gainAccount,
-                    'debit_amount' => 0,
-                    'credit_amount_lcy' => $diffLCY,
-                    'document_type' => 'FOREX_ADJUSTMENT',
-                    'document_number' => $documentNumber,
-                    'posting_date' => $postingDate,
-                    'description' => 'Unrealized Forex Gain',
-                ]);
-            } else {
-                $lossAccount = $currency->unrealized_losses_account_id;
-                $absDiff = abs($diffLCY);
-
-                // Credit Asset (Decrease LCY value)
-                $entries[] = $this->createGlEntry([
-                    'chart_of_account_id' => $assetAccount,
-                    'debit_amount' => 0,
-                    'credit_amount_lcy' => $absDiff,
-                    'currency_id' => $asset->currency_id,
-                    'exchange_rate' => $newExchangeRate,
-                    'document_type' => 'FOREX_ADJUSTMENT',
-                    'document_number' => $documentNumber,
-                    'posting_date' => $postingDate,
-                    'description' => "Forex Loss: {$asset->description}",
-                ]);
-
-                // Debit Loss
-                $entries[] = $this->createGlEntry([
-                    'chart_of_account_id' => $lossAccount,
-                    'debit_amount_lcy' => $absDiff,
-                    'credit_amount' => 0,
-                    'document_type' => 'FOREX_ADJUSTMENT',
-                    'document_number' => $documentNumber,
-                    'posting_date' => $postingDate,
-                    'description' => 'Unrealized Forex Loss',
-                ]);
-            }
 
             return $entries;
         });

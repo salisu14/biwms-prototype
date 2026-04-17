@@ -72,7 +72,7 @@ class VendorInvoiceLine extends Model
 
     public function asset(): BelongsTo
     {
-        return $this->belongsTo(Asset::class);
+        return $this->belongsTo(FixedAsset::class);
     }
 
     public function purchaseOrder(): BelongsTo

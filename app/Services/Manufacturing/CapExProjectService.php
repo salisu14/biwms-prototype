@@ -2,11 +2,16 @@
 
 namespace App\Services\Manufacturing;
 
+use App\Enums\DepreciationMethod;
+use App\Enums\FAPostingType;
+use App\Enums\FAStatus;
+use App\Enums\FixedAssetType;
+use App\Models\FixedAsset;
 use App\Models\Manufacturing\CapExProject;
 use App\Models\Manufacturing\CapExProjectLine;
-use App\Models\Manufacturing\FixedAsset;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\FixedAsset\FAPostingService;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -14,9 +19,14 @@ class CapExProjectService
 {
     protected GeneralLedgerService $gl;
 
-    public function __construct(GeneralLedgerService $gl)
-    {
+    protected FAPostingService $faPostingService;
+
+    public function __construct(
+        GeneralLedgerService $gl,
+        FAPostingService $faPostingService
+    ) {
         $this->gl = $gl;
+        $this->faPostingService = $faPostingService;
     }
 
     /*
@@ -350,22 +360,22 @@ class CapExProjectService
     protected function createFixedAsset(CapExProject $project, array $data): FixedAsset
     {
         $asset = FixedAsset::create([
-            'code' => $data['asset_code'] ?? $project->project_number,
+            'fa_no' => $data['asset_code'] ?? $this->generateFixedAssetNo($project),
             'description' => $data['description'] ?? $project->description,
-            'asset_type' => $data['asset_type'] ?? 'MACHINERY',
-            'capex_project_id' => $project->id,
+            'fa_type' => $data['fa_type'] ?? FixedAssetType::TANGIBLE,
+            'fa_class_id' => $data['fa_class_id'] ?? null,
+            'fa_subclass_id' => $data['fa_subclass_id'] ?? null,
+            'fa_posting_group_id' => $data['fa_posting_group_id'] ?? $project->capex_gl_account_id, // Fallback if applicable
+            'depreciation_book_id' => $data['depreciation_book_id'] ?? 1, // Default book
             'acquisition_date' => now(),
-            'acquisition_cost' => $project->actual_amount,
-            'net_book_value' => $project->actual_amount,
+            'acquisition_cost' => (float) $project->actual_amount,
+            'book_value' => (float) $project->actual_amount,
             'useful_life_years' => $data['useful_life_years'] ?? 10,
-            'depreciation_method' => $data['depreciation_method'] ?? 'STRAIGHT_LINE',
-            'salvage_value' => $data['salvage_value'] ?? 0,
-            'annual_capacity_minutes' => $data['annual_capacity_minutes'] ?? null,
-            'efficiency_percent' => $data['efficiency_percent'] ?? 100,
+            'depreciation_method' => $data['depreciation_method'] ?? DepreciationMethod::STRAIGHT_LINE,
+            'salvage_value' => (float) ($data['salvage_value'] ?? 0),
+            'status' => FAStatus::ACTIVE,
+            'created_by' => auth()->id(),
         ]);
-
-        $asset->annual_depreciation_amount =
-            ($asset->acquisition_cost - $asset->salvage_value) / $asset->useful_life_years;
 
         $asset->save();
 
@@ -377,6 +387,11 @@ class CapExProjectService
         }
 
         return $asset;
+    }
+
+    protected function generateFixedAssetNo(CapExProject $project): string
+    {
+        return 'FA-'.$project->project_number;
     }
 
     protected function generateProjectNumber(): string
@@ -403,32 +418,20 @@ class CapExProjectService
         CapExProject $project,
         FixedAsset $asset
     ): void {
-        $amount = $project->capitalized_amount;
+        $amount = (float) $project->capitalized_amount;
 
         if ($amount <= 0) {
             throw new DomainException('Invalid capitalization amount.');
         }
 
-        $this->gl->post(
-            [
-                [
-                    'account_id' => $project->capex_gl_account_id, // Fixed Asset
-                    'debit' => $amount,
-                    'credit' => 0,
-                ],
-                [
-                    'account_id' => $project->wip_gl_account_id, // WIP Clearing
-                    'debit' => 0,
-                    'credit' => $amount,
-                ],
-            ],
-            [
-                'document_number' => $asset->code,
-                'description' => "CapEx Capitalization - {$project->project_number}",
-                'dimensions' => [
-                    'project_id' => $project->id,
-                ],
-            ]
+        // Post to FA Ledger and corresponding GL accounts
+        $this->faPostingService->postEntry(
+            asset: $asset,
+            postingType: FAPostingType::ACQUISITION,
+            amount: $amount,
+            description: "CapEx Capitalization - {$project->project_number}",
+            documentNo: $asset->fa_no ?? $project->project_number,
+            postingDate: now()
         );
     }
 

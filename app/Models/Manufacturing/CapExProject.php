@@ -2,10 +2,9 @@
 
 namespace App\Models\Manufacturing;
 
-use App\Models\Asset;
 use App\Models\ChartOfAccount;
+use App\Models\FixedAsset;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,7 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CapExProject extends Model
 {
-    use HasFactory, SoftDeletes;
+    use SoftDeletes;
 
     protected $fillable = [
         'project_number',
@@ -74,12 +73,12 @@ class CapExProject extends Model
 
     public function asset(): BelongsTo
     {
-        return $this->belongsTo(Asset::class, 'asset_id');
+        return $this->belongsTo(FixedAsset::class, 'asset_id');
     }
 
     public function targetAsset(): BelongsTo
     {
-        return $this->belongsTo(Asset::class, 'asset_id');
+        return $this->belongsTo(FixedAsset::class, 'asset_id');
     }
 
     /**

@@ -54,11 +54,25 @@ class ReleasedProductionOrderResource extends Resource
         return ProductionOrderResource::getRelations();
     }
 
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canEdit($record): bool
+    {
+        return true;
+    }
+
+    public static function canDelete($record): bool
+    {
+        return false;
+    }
+
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListReleasedProductionOrders::route('/'),
-            'create' => Pages\CreateReleasedProductionOrder::route('/create'),
             'view' => Pages\ViewReleasedProductionOrder::route('/{record}'),
             'edit' => Pages\EditReleasedProductionOrder::route('/{record}/edit'),
         ];

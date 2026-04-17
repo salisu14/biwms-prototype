@@ -8,13 +8,13 @@ use App\Enums\AccountType;
 use App\Enums\COGSCategory;
 use App\Enums\ExpenseCategoryEnum;
 use App\Enums\RevenueCategory;
-use App\Models\Asset;
 use App\Models\Category;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\ExpenseBudget;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseTransaction;
+use App\Models\FixedAsset;
 use App\Models\Item;
 use App\Models\Vendor;
 use App\Services\Finance\GeneralLedgerService;
@@ -182,13 +182,11 @@ class ExpenseService
      * Post Depreciation Expense
      */
     public function postDepreciationExpense(
-        Asset $asset,
+        FixedAsset $asset,
         float $amount,
         \DateTime $postingDate
     ): ExpenseTransaction {
-        $category = $asset->isPlantMachinery()
-            ? ExpenseCategoryEnum::DEPRECIATION_PLANT
-            : ExpenseCategoryEnum::DEPRECIATION_PLANT; // Extend for other types
+        $category = ExpenseCategoryEnum::DEPRECIATION_PLANT; // Default for now, can be sophisticated based on subclass
 
         return ExpenseTransaction::create([
             'document_type' => 'depreciation',
@@ -199,10 +197,10 @@ class ExpenseService
             'expense_type' => 'indirect',
             'amount' => $amount,
             'amount_lcy' => $amount,
-            'expense_account_id' => $asset->depreciation_expense_account_id,
+            'expense_account_id' => $asset->postingGroup?->depreciation_expense_account_id,
             'shortcut_dimension_1_code' => $asset->shortcut_dimension_1_code,
             'posted_by' => Auth::id(),
-            'description' => "Depreciation of {$asset->asset_no}",
+            'description' => "Depreciation of {$asset->fa_no}",
         ]);
     }
 
