@@ -94,23 +94,23 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/journal-templates'),
 
                                 NavigationItem::make('Gen. Posting Setups')
-                                    ->icon('heroicon-o-document-text')
+                                    ->icon('heroicon-o-tag')
                                     ->url('/admin/general-posting-setups'),
 
                                 NavigationItem::make('Gen. Business Posting Group')
-                                    ->icon('heroicon-o-document-text')
+                                    ->icon('heroicon-o-briefcase')
                                     ->url('/admin/general-business-posting-groups'),
 
                                 NavigationItem::make('Vat Posting Setups')
-                                    ->icon('heroicon-o-document-text')
+                                    ->icon('heroicon-o-eye-slash')
                                     ->url('/admin/vat-posting-setups'),
 
                                 NavigationItem::make('Vat Buss. Posting Groups')
-                                    ->icon('heroicon-o-document-text')
+                                    ->icon('heroicon-o-device-tablet')
                                     ->url('/admin/vat-business-posting-groups'),
 
                                 NavigationItem::make('Vat Product Posting Groups')
-                                    ->icon('heroicon-o-document-text')
+                                    ->icon('heroicon-o-rectangle-group')
                                     ->url('/admin/vat-product-posting-groups'),
 
                                 NavigationItem::make('Bank Accounts')
@@ -121,8 +121,8 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/payments'),
 
-                                NavigationItem::make('FixedAsset Posting Groups')
-                                    ->icon('heroicon-o-document-currency-dollar')
+                                NavigationItem::make('FA Posting Groups')
+                                    ->icon('heroicon-o-adjustments-vertical')
                                     ->url('/admin/f-a-posting-groups'),
 
                                 NavigationItem::make('Inventory Valuation Report')
@@ -224,12 +224,12 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn () => request()->is('admin/customers*')),
 
                                 NavigationItem::make('Customer Contacts')
-                                    ->icon('heroicon-o-users')
+                                    ->icon('heroicon-o-device-phone-mobile')
                                     ->url('/admin/customer-contacts')
                                     ->isActiveWhen(fn () => request()->is('admin/customer-contacts*')),
 
                                 NavigationItem::make('Finished Goods')
-                                    ->icon('heroicon-o-document')
+                                    ->icon('heroicon-o-bolt')
                                     ->url('/admin/items/fg/finished-goods'),
 
                                 NavigationItem::make('Price Change Templates')
@@ -241,15 +241,15 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/sales-orders'),
 
                                 NavigationItem::make('Sales Quotes')
-                                    ->icon('heroicon-o-document')
+                                    ->icon('heroicon-o-sparkles')
                                     ->url('/admin/sales-quotes'),
 
                                 NavigationItem::make('Blanket Orders')
-                                    ->icon('heroicon-o-document')
+                                    ->icon('heroicon-o-archive-box-arrow-down')
                                     ->url('/admin/blanket-sales-orders'),
 
                                 NavigationItem::make('Sales Quote Revisions')
-                                    ->icon('heroicon-o-document')
+                                    ->icon('heroicon-o-star')
                                     ->url('/admin/sales-quote-revisions'),
 
                                 NavigationItem::make('Sales Invoices')
@@ -444,11 +444,11 @@ class AdminPanelProvider extends PanelProvider
                                         ->url('/admin/businesses'),
 
                                     NavigationItem::make('Factories')
-                                        ->icon('heroicon-o-wrench')
+                                        ->icon('heroicon-o-building-storefront')
                                         ->url('/admin/factories'),
 
                                     NavigationItem::make('Departments')
-                                        ->icon('heroicon-o-wrench')
+                                        ->icon('heroicon-o-building-office')
                                         ->url('/admin/departments'),
 
                                     NavigationItem::make('Employees')
@@ -465,8 +465,12 @@ class AdminPanelProvider extends PanelProvider
                                         ->isActiveWhen(fn () => request()->is('admin/payroll-documents*')),
 
                                     NavigationItem::make('Purchase Receipts')
-                                        ->icon('heroicon-o-archive-box')
+                                        ->icon('heroicon-o-receipt-percent')
                                         ->url('/admin/purchase-receipts'),
+
+                                    NavigationItem::make('Employee Posting Groups')
+                                        ->icon('heroicon-o-archive-box')
+                                        ->url('/admin/employee-posting-groups'),
 
                                     NavigationItem::make('WIP Valuation')
                                         ->icon('heroicon-o-currency-dollar')

@@ -30,6 +30,11 @@ class EmployeesRelationManager extends RelationManager
 
     protected static ?string $relatedResource = DepartmentResource::class;
 
+    protected static ?string $recordTitleAttribute = 'Employee';
+
+    protected static ?string $title = 'Employees';
+    protected static ?string $modelLabel = 'Employee Assignment';
+
     public function form(Schema $schema): Schema
     {
         return $schema

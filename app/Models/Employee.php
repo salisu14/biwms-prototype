@@ -52,7 +52,7 @@ class Employee extends Model
         ]);
     }
 
-    protected static function booted()
+    protected static function booted(): void
     {
         static::saving(function ($employee) {
             if ($employee->assignment_type === EmployeeAssignmentType::Corporate) {
@@ -84,7 +84,7 @@ class Employee extends Model
         return $this->belongsTo(Department::class);
     }
 
-    public function compensations()
+    public function compensations(): Employee|HasMany
     {
         return $this->hasMany(EmployeeCompensation::class);
     }

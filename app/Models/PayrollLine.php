@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PayrollLine extends Model
 {
@@ -18,17 +19,17 @@ class PayrollLine extends Model
         'amount' => 'decimal:4',
     ];
 
-    public function document()
+    public function document(): BelongsTo
     {
         return $this->belongsTo(PayrollDocument::class, 'payroll_document_id');
     }
 
-    public function employee()
+    public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
     }
 
-    public function payCode()
+    public function payCode(): BelongsTo
     {
         return $this->belongsTo(PayCode::class);
     }

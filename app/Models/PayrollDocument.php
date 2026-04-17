@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PayrollStatus;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PayrollDocument extends Model
 {
@@ -21,7 +22,7 @@ class PayrollDocument extends Model
         'status' => PayrollStatus::class,
     ];
 
-    public function lines()
+    public function lines(): HasMany
     {
         return $this->hasMany(PayrollLine::class);
     }
