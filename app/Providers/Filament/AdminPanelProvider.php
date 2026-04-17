@@ -138,8 +138,14 @@ class AdminPanelProvider extends PanelProvider
                     ->group(
                         NavigationGroup::make('Finance')
                             ->items([
-                                // Expense Categories
+                                // Expense Transactions
                                 NavigationItem::make('Expenses')
+                                    ->icon('heroicon-o-credit-card')
+                                    ->url('/admin/expense-transactions')
+                                    ->isActiveWhen(fn () => request()->is('admin/expense-transactions*')),
+
+                                // Expense Categories
+                                NavigationItem::make('Expenses Categories')
                                     ->icon('heroicon-o-list-bullet')
                                     ->url('/admin/expense-categories')
                                     ->isActiveWhen(fn () => request()->is('admin/expense-categories*')),
@@ -147,19 +153,23 @@ class AdminPanelProvider extends PanelProvider
                                 // Currencies
                                 NavigationItem::make('Currencies')
                                     ->icon('heroicon-o-currency-dollar')
-                                    ->url('/admin/currencies'),
+                                    ->url('/admin/currencies')
+                                    ->isActiveWhen(fn () => request()->is('admin/currencies*')),
 
                                 NavigationItem::make('Currency Adjustments')
-                                    ->icon('heroicon-o-currency-dollar')
-                                    ->url('/admin/currency-adjustment-ledgers'),
+                                    ->icon('heroicon-o-presentation-chart-bar')
+                                    ->url('/admin/currency-adjustment-ledgers')
+                                    ->isActiveWhen(fn () => request()->is('admin/currency-adjustment-ledgers*')),
 
                                 NavigationItem::make('Profit and Loss Report')
-                                    ->icon('heroicon-o-currency-dollar')
-                                    ->url('/admin/profit-and-loss-report'),
+                                    ->icon('heroicon-o-chart-bar-square')
+                                    ->url('/admin/profit-and-loss-report')
+                                    ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*')),
 
                                 NavigationItem::make('Financial Reports')
                                     ->icon('heroicon-o-chart-bar')
-                                    ->url('/admin/financial-reports'),
+                                    ->url('/admin/financial-reports')
+                                    ->isActiveWhen(fn () => request()->is('admin/financial-reports*')),
                             ])
                     )
                     // Purchasing Module

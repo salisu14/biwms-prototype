@@ -3,27 +3,47 @@
 namespace App\Models;
 
 use App\Enums\AccountType;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Auth;
 
 class ExpenseTransaction extends Model
 {
-    use HasFactory;
+    use SoftDeletes;
 
     protected $fillable = [
-        'document_type', 'document_no', 'posting_date', 'document_date',
-        'account_type', 'category_code', 'expense_type',
-        'amount', 'amount_lcy', 'currency_code', 'currency_factor',
-        'vat_amount', 'vat_bus_posting_group', 'vat_prod_posting_group',
-        'vendor_id', 'customer_id', 'employee_id',
-        'item_id', 'category_id',
-        'purchase_order_no', 'sales_order_no', 'invoice_no',
-        'shortcut_dimension_1_code', 'shortcut_dimension_2_code', 'dimensions',
-        'gl_entry_id', 'expense_account_id',
-        'status', 'reversed_by',
-        'posted_by', 'description',
+        'document_type',
+        'document_no',
+        'posting_date',
+        'document_date',
+        'account_type',
+        'category_code',
+        'expense_type',
+        'amount',
+        'amount_lcy',
+        'currency_code',
+        'currency_factor',
+        'vat_amount',
+        'vat_bus_posting_group',
+        'vendor_id',
+        'customer_id',
+        'employee_id',
+        'item_id',
+        'product_category_id',
+        'purchase_order_no',
+        'sales_order_no',
+        'invoice_no',
+        'shortcut_dimension_1_code',
+        'shortcut_dimension_2_code',
+        'dimensions',
+        'gl_entry_id',
+        'expense_account_id',
+        'status',
+        'reversed_by',
+        'posted_by',
+        'description',
     ];
 
     protected $casts = [
@@ -35,7 +55,50 @@ class ExpenseTransaction extends Model
         'currency_factor' => 'decimal:6',
         'vat_amount' => 'decimal:4',
         'dimensions' => 'array',
+        'posted_by' => 'integer',
+        'reversed_by' => 'integer',
     ];
+
+    /**
+     * Boot the model to handle automatic assignment of auditing fields.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (ExpenseTransaction $transaction) {
+            if (Auth::check()) {
+                // Automatically assign the current user to posted_by if not explicitly set
+                $transaction->posted_by = $transaction->posted_by ?? Auth::id();
+            }
+        });
+    }
+
+    // --- Core Relationships ---
+
+    /**
+     * Link to the metadata/setup model via category_code.
+     */
+    public function expenseCategory(): BelongsTo
+    {
+        return $this->belongsTo(ExpenseCategory::class, 'category_code', 'category_code');
+    }
+
+    /**
+     * The G/L account where the expense is recorded.
+     */
+    public function expenseAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'expense_account_id');
+    }
+
+    /**
+     * The resulting G/L entry if posted.
+     */
+    public function glEntry(): BelongsTo
+    {
+        return $this->belongsTo(GlEntry::class, 'gl_entry_id');
+    }
+
+    // --- Source/Tracking Relationships ---
 
     public function vendor(): BelongsTo
     {
@@ -52,35 +115,40 @@ class ExpenseTransaction extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    /**
+     * Link to inventory item if applicable.
+     */
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
     }
 
-    public function category(): BelongsTo
+    /**
+     * Link to the general Product Category (used for sales returns or COGS grouping).
+     */
+    public function productCategory(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(Category::class, 'product_category_id');
     }
 
-    public function glEntry(): BelongsTo
-    {
-        return $this->belongsTo(GlEntry::class, 'gl_entry_id');
-    }
-
-    public function expenseAccount(): BelongsTo
-    {
-        return $this->belongsTo(ChartOfAccount::class, 'expense_account_id');
-    }
+    // --- Audit & Sub-system Relationships ---
 
     public function allocations(): HasMany
     {
         return $this->hasMany(ExpenseAllocation::class);
     }
 
+    public function postedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'posted_by');
+    }
+
     public function reversedTransaction(): BelongsTo
     {
         return $this->belongsTo(self::class, 'reversed_by');
     }
+
+    // --- Scopes ---
 
     public function scopeByType($query, AccountType $type)
     {
@@ -102,10 +170,7 @@ class ExpenseTransaction extends Model
         return $query->whereBetween('posting_date', [$from, $to]);
     }
 
-    public function scopeByCategory($query, int $categoryId)
-    {
-        return $query->where('category_id', $categoryId);
-    }
+    // --- Helper Methods ---
 
     public function isDirect(): bool
     {
@@ -124,6 +189,6 @@ class ExpenseTransaction extends Model
 
     public function getNetAmount(): float
     {
-        return $this->amount + $this->vat_amount;
+        return (float)$this->amount + (float)$this->vat_amount;
     }
 }

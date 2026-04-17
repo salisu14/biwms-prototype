@@ -2,14 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Dimension extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'code', 'name', 'code_caption', 'filter_caption',
         'description', 'blocked', 'dimension_type', 'global_dimension_no',

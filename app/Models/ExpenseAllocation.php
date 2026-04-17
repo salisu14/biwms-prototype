@@ -2,14 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ExpenseAllocation extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'expense_transaction_id', 'allocation_basis', 'allocation_percentage',
         'allocated_amount', 'target_dimension_1', 'target_dimension_2',
