@@ -175,6 +175,26 @@ class ProductionOrderInfolist
                         TextEntry::make('priority')
                             ->numeric(),
                     ]),
+
+                Section::make('Related Warehouse Documents')
+                    ->icon('heroicon-m-truck')
+                    ->columns(2)
+                    ->schema([
+                        TextEntry::make('warehouseRequests_count')
+                            ->label('Warehouse Requests')
+                            ->state(fn ($record) => $record->warehouseRequests()->count())
+                            ->badge()
+                            ->color('info')
+                            ->icon('heroicon-m-clipboard-document-list'),
+
+                        TextEntry::make('warehouseActivities_count')
+                            ->label('Warehouse Activities (Picks/Put-aways)')
+                            ->state(fn ($record) => $record->warehouseActivities()->count())
+                            ->badge()
+                            ->color('success')
+                            ->icon('heroicon-m-arrow-path'),
+                    ])
+                    ->visible(fn ($record) => $record->status === ProductionOrderStatus::RELEASED),
             ]);
     }
 }

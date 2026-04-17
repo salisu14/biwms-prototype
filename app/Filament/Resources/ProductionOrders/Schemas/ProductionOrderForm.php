@@ -75,7 +75,7 @@ class ProductionOrderForm
                             ->required()
                             ->live()
                             ->columnSpan(2)
-                            ->afterStateUpdated(function ($state, Set $set) {
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                 if (! $state) {
                                     return;
                                 }
@@ -271,10 +271,9 @@ class ProductionOrderForm
 
                         Select::make('location_code')
                             ->label('Target Location')
-                            ->options([
-                                'PROD-FLOOR' => 'Production Floor',
-                                'FG-WAREHOUSE' => 'Finished Goods Warehouse',
-                            ])
+                            ->relationship('location', 'code')
+                            ->searchable()
+                            ->preload()
                             ->required(),
 
                         TextInput::make('bin_code')
@@ -298,7 +297,17 @@ class ProductionOrderForm
                         TextInput::make('unit_cost')
                             ->numeric()
                             ->prefix('$')
-                            ->step(0.0001),
+                            ->step(0.0001)
+                            ->label('Standard Cost')
+                            ->helperText('Expected unit cost for the finished item.'),
+
+                        TextInput::make('cost_rollup')
+                            ->numeric()
+                            ->prefix('$')
+                            ->step(0.0001)
+                            ->label('Rolled-up Cost')
+                            ->disabled()
+                            ->helperText('Sum of component and capacity costs from the BOM and Routing.'),
 
                         Select::make('inventory_posting_group_id')
                             ->label('Inventory Posting Group')

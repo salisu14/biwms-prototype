@@ -5,7 +5,6 @@ namespace App\Filament\Resources\ProductionBoms\RelationManagers;
 use App\Filament\Resources\ProductionBoms\ProductionBomResource;
 use App\Models\Item;
 use App\Models\Manufacturing\ProductionBom;
-use App\Models\UnitOfMeasure;
 use Filament\Actions\AssociateAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -118,8 +117,17 @@ class ProductionBomLinesRelationManager extends RelationManager
 
                         Select::make('unit_of_measure_code')
                             ->label('UOM')
-                            ->disabled()
-                            ->options(fn () => UnitOfMeasure::pluck('uom_code', 'uom_code')->toArray()), // 🔥 controlled automatically
+                            ->relationship('unitOfMeasure', 'uom_code')
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+
+                        Select::make('location_code')
+                            ->label('Location')
+                            ->relationship('location', 'code')
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('Default Location'),
                     ]),
 
                 ]),

@@ -4,6 +4,8 @@ namespace App\Models\Manufacturing;
 
 use App\Enums\FlushingMethod;
 use App\Models\Item;
+use App\Models\Location;
+use App\Models\UnitOfMeasure;
 use App\Models\WarehouseRequest;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -80,7 +82,7 @@ class ProductionOrderComponent extends Model
             ->whereIn('status', ['open', 'partial'])
             ->sum('quantity_outstanding');
 
-        return max(0, $this->quantity - $this->consumed_quantity - $requested);
+        return max(0, ($this->expected_quantity ?? 0) - ($this->actual_quantity_consumed ?? 0) - $requested);
     }
 
     public function flushingMethod(): FlushingMethod
@@ -102,6 +104,23 @@ class ProductionOrderComponent extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_code', 'code');
+    }
+
+    public function unitOfMeasure(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'unit_of_measure_code', 'uom_code');
+    }
+
+    public function routingLine()
+    {
+        // Custom relationship because it depends on two keys
+        return $this->hasOne(ProductionOrderRoutingLine::class, 'routing_link_code', 'routing_link_code')
+            ->where('production_order_id', $this->production_order_id);
     }
 
     public function getIsFullyConsumedAttribute(): bool

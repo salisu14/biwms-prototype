@@ -3,6 +3,8 @@
 namespace App\Models\Manufacturing;
 
 use App\Models\Item;
+use App\Models\Location;
+use App\Models\UnitOfMeasure;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -50,6 +52,16 @@ class ProductionBomVersionLine extends Model
     public function relatedBom(): BelongsTo
     {
         return $this->belongsTo(ProductionBom::class, 'production_bom_id_related');
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_code', 'code');
+    }
+
+    public function unitOfMeasure(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'unit_of_measure_code', 'uom_code');
     }
 
     /**

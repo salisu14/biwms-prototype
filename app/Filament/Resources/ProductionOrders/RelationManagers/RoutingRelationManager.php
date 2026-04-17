@@ -30,6 +30,16 @@ class RoutingRelationManager extends RelationManager
                 TextInput::make('description')
                     ->required()
                     ->maxLength(255),
+                Select::make('setup_time_unit')
+                    ->label('Setup UOM')
+                    ->relationship('setupTimeUnit', 'uom_code')
+                    ->searchable()
+                    ->preload(),
+                Select::make('run_time_unit')
+                    ->label('Run UOM')
+                    ->relationship('runTimeUnit', 'uom_code')
+                    ->searchable()
+                    ->preload(),
             ]);
     }
 
@@ -47,9 +57,11 @@ class RoutingRelationManager extends RelationManager
                     ->label('Work Center'),
                 TextColumn::make('setup_time')
                     ->label('Setup (Plan)')
+                    ->suffix(fn ($record) => " {$record->setup_time_unit}")
                     ->numeric(2),
                 TextColumn::make('run_time')
                     ->label('Run (Plan)')
+                    ->suffix(fn ($record) => " {$record->run_time_unit}")
                     ->numeric(2),
                 TextColumn::make('actual_setup_time')
                     ->label('Setup (Actual)')
@@ -96,8 +108,9 @@ class RoutingRelationManager extends RelationManager
                         TextInput::make('cost')
                             ->label('Direct Cost')
                             ->numeric()
-                            ->required()
-                            ->default(fn ($record) => $record->direct_cost),
+                            ->required(false)
+                            ->helperText('Leave blank to use Work/Machine center standard rates.')
+                            ->default(0),
                     ])
                     ->action(function ($record, array $data, $livewire) {
                         app(ProductionOrderService::class)->postCapacity(

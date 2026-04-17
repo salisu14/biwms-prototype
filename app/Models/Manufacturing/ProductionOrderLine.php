@@ -6,6 +6,8 @@ use App\Enums\ItemLedgerEntryType;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
 use App\Models\Item;
+use App\Models\Location;
+use App\Models\UnitOfMeasure;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -69,6 +71,16 @@ class ProductionOrderLine extends Model
         return $this->belongsTo(Item::class);
     }
 
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_code', 'code');
+    }
+
+    public function unitOfMeasure(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'unit_of_measure_code', 'uom_code');
+    }
+
     public function productionBom(): BelongsTo
     {
         return $this->belongsTo(ProductionBom::class, 'production_bom_id');
@@ -128,6 +140,7 @@ class ProductionOrderLine extends Model
         $produced = $this->productionOrder
             ?->itemLedgerEntries()
             ?->where('entry_type', ItemLedgerEntryType::OUTPUT)
+            ->where('document_line_number', $this->line_number)
             ?->sum('quantity') ?? 0;
 
         return $this->quantity - $produced;

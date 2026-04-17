@@ -59,17 +59,31 @@ class RoutingLinesRelationManager extends RelationManager
                     ->description('Setup and run times for this operation.')
                     ->schema([
                         Grid::make(3)->schema([
-                            TextInput::make('setup_time')
-                                ->label('Setup Time')
-                                ->numeric()
-                                ->suffix('mins')
-                                ->default(0),
+                            Grid::make(2)->schema([
+                                TextInput::make('setup_time')
+                                    ->label('Setup Time')
+                                    ->numeric()
+                                    ->default(0),
+                                Select::make('setup_time_unit')
+                                    ->label('Setup UOM')
+                                    ->relationship('setupTimeUnit', 'uom_code')
+                                    ->searchable()
+                                    ->preload()
+                                    ->default('MINUTES'),
+                            ]),
 
-                            TextInput::make('run_time')
-                                ->label('Run Time')
-                                ->numeric()
-                                ->suffix('mins')
-                                ->required(),
+                            Grid::make(2)->schema([
+                                TextInput::make('run_time')
+                                    ->label('Run Time')
+                                    ->numeric()
+                                    ->required(),
+                                Select::make('run_time_unit')
+                                    ->label('Run UOM')
+                                    ->relationship('runTimeUnit', 'uom_code')
+                                    ->searchable()
+                                    ->preload()
+                                    ->default('MINUTES'),
+                            ]),
 
                             TextInput::make('wait_time')
                                 ->label('Wait Time')

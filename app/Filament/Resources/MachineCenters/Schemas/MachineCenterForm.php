@@ -40,9 +40,11 @@ class MachineCenterForm
                                     ->required()
                                     ->columnSpan(2),
 
-                                TextInput::make('location_code')
+                                Select::make('location_code')
                                     ->label('Shop Floor Location')
-                                    ->placeholder('e.g. BAY-04')
+                                    ->relationship('location', 'code')
+                                    ->searchable()
+                                    ->preload()
                                     ->columnSpan(1),
                             ]),
                     ]),

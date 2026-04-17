@@ -13,6 +13,7 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\Manufacturing\CapacityLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Services\Inventory\CostingService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PickWorksheetService;
 use App\Services\Warehouse\PutAwayWorksheetService;
@@ -23,7 +24,8 @@ class ProductionOrderService
     public function __construct(
         protected PostingService $postingService,
         protected PickWorksheetService $pickService,
-        protected PutAwayWorksheetService $putAwayService
+        protected PutAwayWorksheetService $putAwayService,
+        protected CostingService $costingService
     ) {}
 
     /**
@@ -126,6 +128,13 @@ class ProductionOrderService
                     throw new \Exception('Quantity must be positive');
                 }
 
+                $actualUnitCost = $this->costingService->getUnitCost(
+                    $component->item,
+                    $component->location,
+                    null, // lot
+                    $postingDate->format('Y-m-d')
+                );
+
                 ItemLedgerEntry::create([
                     'entry_type' => ItemLedgerEntryType::CONSUMPTION,
                     'item_id' => $component->item_id,
@@ -134,12 +143,16 @@ class ProductionOrderService
                     'open' => false,
                     'posting_date' => $postingDate,
                     'document_number' => $order->document_number,
-                    'external_document_number' => $component->line_number,
+                    'document_line_number' => $component->line_number,
                     'source_id' => $order->id,
                     'source_type' => ProductionOrder::class,
+                    'location_id' => $component->location?->id,
                     'location_code' => $component->location_code,
-                    'unit_cost' => $component->item->unit_cost,
-                    'cost_amount_actual' => $qty * $component->item->unit_cost,
+                    'unit_cost' => $actualUnitCost,
+                    'cost_amount_actual' => $qty * $actualUnitCost,
+                    'dimensions' => $order->dimension_set_id,
+                    'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+                    'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
                 ]);
 
                 $component->actual_quantity_consumed += $qty;
@@ -150,7 +163,7 @@ class ProductionOrderService
                 $this->createWipGlEntries(
                     $order,
                     $component->item,
-                    $qty * $component->item->unit_cost,
+                    $qty * $actualUnitCost,
                     $postingDate,
                     "Consumption: {$component->item->description}"
                 );
@@ -179,6 +192,8 @@ class ProductionOrderService
         $postingDate = $postingDate ?? now();
 
         DB::transaction(function () use ($order, $quantity, $postingDate, $routingLineId) {
+            $expectedUnitCost = $order->cost_rollup ?? $order->unit_cost ?? 0;
+
             ItemLedgerEntry::create([
                 'entry_type' => ItemLedgerEntryType::OUTPUT,
                 'item_id' => $order->item_id,
@@ -187,10 +202,15 @@ class ProductionOrderService
                 'open' => true,
                 'posting_date' => $postingDate,
                 'document_number' => $order->document_number,
+                'document_line_number' => $order->lines()->firstWhere('item_id', $order->item_id)?->line_number ?? 10000,
                 'source_id' => $order->id,
                 'source_type' => ProductionOrder::class,
                 'location_code' => $order->location_code,
-                'unit_cost' => 0, // Calculated at finish
+                'unit_cost' => $expectedUnitCost,
+                'cost_amount_expected' => $quantity * $expectedUnitCost,
+                'dimensions' => $order->dimension_set_id,
+                'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+                'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
             ]);
 
             if ($routingLineId) {
@@ -225,14 +245,23 @@ class ProductionOrderService
             return;
         }
 
-        DB::transaction(function () use ($order, $routingLineId, $routingLine, $setupTime, $runTime, $cost) {
+        DB::transaction(function () use ($order, $routingLineId, $routingLine, $setupTime, $runTime, &$cost) {
             $workCenter = $routingLine->workCenter;
+            $machineCenter = $routingLine->machineCenter;
+            $center = $machineCenter ?? $workCenter;
+
+            if ($cost <= 0 && $center) {
+                // Derive cost from center rates
+                $totalTime = $setupTime + $runTime;
+                $cost = $totalTime * ($center->direct_unit_cost ?? 0);
+            }
+
             $totalTime = $setupTime + $runTime;
 
             // Calculate Indirect Cost (Overhead)
             $indirectCost = 0;
-            if ($workCenter) {
-                $indirectCost = ($cost * ($workCenter->indirect_cost_percent / 100)) + ($workCenter->overhead_rate * $totalTime);
+            if ($center) {
+                $indirectCost = ($cost * ($center->indirect_cost_percent / 100)) + ($center->overhead_rate * $totalTime);
             }
 
             $totalCost = $cost + $indirectCost;
@@ -288,15 +317,20 @@ class ProductionOrderService
                 ? $order->unit_cost
                 : ($totalOutput > 0 ? $totalActualCost / $totalOutput : 0);
 
-            $totalInventoryCost = $totalOutput * $inventoryUnitCost;
-
             // Update Output entries with the determined cost
-            $order->itemLedgerEntries()
+            $outputEntries = $order->itemLedgerEntries()
                 ->where('entry_type', ItemLedgerEntryType::OUTPUT)
-                ->update([
+                ->get();
+
+            $totalInventoryCost = 0;
+            foreach ($outputEntries as $entry) {
+                $actualCostForEntry = $entry->quantity * $inventoryUnitCost;
+                $entry->update([
                     'unit_cost' => $inventoryUnitCost,
-                    'cost_amount_actual' => $totalInventoryCost,
+                    'cost_amount_actual' => $actualCostForEntry,
                 ]);
+                $totalInventoryCost += $actualCostForEntry;
+            }
 
             // G/L Integration:
             // 1. Move from WIP to Inventory (at the cost we recorded in Inventory)
@@ -596,6 +630,9 @@ class ProductionOrderService
             'sourceable_type' => ProductionOrder::class,
             'sourceable_id' => $order->id,
             'user_id' => auth()->id(),
+            'dimensions' => $order->dimension_set_id,
+            'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
         ]);
 
         // Inventory Entry (Credit)
@@ -612,6 +649,9 @@ class ProductionOrderService
             'sourceable_type' => ProductionOrder::class,
             'sourceable_id' => $order->id,
             'user_id' => auth()->id(),
+            'dimensions' => $order->dimension_set_id,
+            'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
         ]);
     }
 
@@ -656,6 +696,9 @@ class ProductionOrderService
             'sourceable_type' => ProductionOrder::class,
             'sourceable_id' => $order->id,
             'user_id' => auth()->id(),
+            'dimensions' => $order->dimension_set_id,
+            'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
         ]);
 
         // Direct Applied Entry (Credit)
@@ -672,6 +715,9 @@ class ProductionOrderService
             'sourceable_type' => ProductionOrder::class,
             'sourceable_id' => $order->id,
             'user_id' => auth()->id(),
+            'dimensions' => $order->dimension_set_id,
+            'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
         ]);
 
         // Overhead Applied Entry (Credit)
@@ -689,6 +735,9 @@ class ProductionOrderService
                 'sourceable_type' => ProductionOrder::class,
                 'sourceable_id' => $order->id,
                 'user_id' => auth()->id(),
+                'dimensions' => $order->dimension_set_id,
+                'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+                'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
             ]);
         }
     }
@@ -724,6 +773,9 @@ class ProductionOrderService
             'sourceable_type' => ProductionOrder::class,
             'sourceable_id' => $order->id,
             'user_id' => auth()->id(),
+            'dimensions' => $order->dimension_set_id,
+            'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
         ]);
 
         // WIP Entry (Credit)
@@ -740,6 +792,9 @@ class ProductionOrderService
             'sourceable_type' => ProductionOrder::class,
             'sourceable_id' => $order->id,
             'user_id' => auth()->id(),
+            'dimensions' => $order->dimension_set_id,
+            'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
         ]);
     }
 
@@ -788,6 +843,9 @@ class ProductionOrderService
             'sourceable_type' => ProductionOrder::class,
             'sourceable_id' => $order->id,
             'user_id' => auth()->id(),
+            'dimensions' => $order->dimension_set_id,
+            'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
         ]);
 
         // Variance Entry
@@ -804,6 +862,9 @@ class ProductionOrderService
             'sourceable_type' => ProductionOrder::class,
             'sourceable_id' => $order->id,
             'user_id' => auth()->id(),
+            'dimensions' => $order->dimension_set_id,
+            'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
         ]);
     }
 

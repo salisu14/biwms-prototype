@@ -66,11 +66,9 @@ class ProductionBomForm
                             ->schema([
                                 Select::make('unit_of_measure_code')
                                     ->label('Base UOM')
-                                    ->options([
-                                        'PCS' => 'Pieces',
-                                        'SET' => 'Set',
-                                        'KG' => 'Kilogram',
-                                    ])
+                                    ->relationship('unitOfMeasure', 'uom_code')
+                                    ->searchable()
+                                    ->preload()
                                     ->required(),
 
                                 DatePicker::make('starting_date')

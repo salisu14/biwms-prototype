@@ -2,6 +2,7 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\Location;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -49,5 +50,10 @@ class MachineCenter extends Model
     public function workCenter(): BelongsTo
     {
         return $this->belongsTo(WorkCenter::class, 'work_center_id');
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_code', 'code');
     }
 }

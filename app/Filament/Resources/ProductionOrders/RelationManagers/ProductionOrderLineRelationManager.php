@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ProductionOrders\RelationManagers;
 
 use App\Models\Item;
+use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -92,8 +93,11 @@ class ProductionOrderLineRelationManager extends RelationManager
                             ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', $state * ($get('unit_cost') ?? 0))
                             ),
 
-                        TextInput::make('unit_of_measure_code')
+                        Select::make('unit_of_measure_code')
                             ->label('UOM')
+                            ->relationship('unitOfMeasure', 'uom_code')
+                            ->searchable()
+                            ->preload()
                             ->required(),
 
                         TextInput::make('unit_cost')
@@ -117,8 +121,11 @@ class ProductionOrderLineRelationManager extends RelationManager
                         DateTimePicker::make('ending_date_time')
                             ->label('End Date/Time'),
 
-                        TextInput::make('location_code')
-                            ->label('Location'),
+                        Select::make('location_code')
+                            ->label('Location')
+                            ->relationship('location', 'code')
+                            ->searchable()
+                            ->preload(),
 
                         TextInput::make('bin_code')
                             ->label('Bin'),
@@ -191,18 +198,19 @@ class ProductionOrderLineRelationManager extends RelationManager
                             return $data;
                         }),
 
-                    // Logic to mark as finished
-                    Action::make('markAsFinished')
-                        ->label('Mark Finished')
-                        ->icon('heroicon-o-check-badge')
+                    // Standard BC Post Output action
+                    Action::make('post_output')
+                        ->label('Post Output')
+                        ->icon('heroicon-m-archive-box')
                         ->color('success')
-                        ->hidden(fn ($record) => $record->finished)
-                        ->requiresConfirmation()
-                        ->action(function ($record) {
-                            $record->update([
-                                'finished' => true,
-                                'finished_at' => now(),
-                            ]);
+                        ->form([
+                            TextInput::make('quantity')
+                                ->numeric()
+                                ->required()
+                                ->default(fn ($record) => $record->quantity - ($record->produced_quantity ?? 0)),
+                        ])
+                        ->action(function ($record, array $data) {
+                            app(ProductionOrderService::class)->postOutput($record->productionOrder, $data['quantity'], auth()->id());
                         }),
 
                     DeleteAction::make(),

@@ -61,10 +61,9 @@ class WorkCenterForm
                         Grid::make(3)->schema([
                             Select::make('unit_of_measure_code')
                                 ->label('Time Unit')
-                                ->options([
-                                    'MINUTES' => 'Minutes',
-                                    'HOURS' => 'Hours',
-                                ])
+                                ->relationship('unitOfMeasure', 'uom_code')
+                                ->searchable()
+                                ->preload()
                                 ->required()
                                 ->default('MINUTES'),
 
@@ -148,8 +147,11 @@ class WorkCenterForm
 //                                ->suffix(fn ($get): string => $get('unit_of_measure_code')), // Show UoM suffix
                                 ->helperText('Average time waiting to enter this center'),
 
-                            TextInput::make('location_code')
-                                ->label('Location Code')
+                            Select::make('location_code')
+                                ->label('Location')
+                                ->relationship('location', 'code')
+                                ->searchable()
+                                ->preload()
                                 ->maxLength(20),
                         ]),
                     ])

@@ -74,9 +74,18 @@ class ComponentsRelationManager extends RelationManager
                         TextInput::make('description')
                             ->required(),
 
-                        TextInput::make('unit_of_measure_code')
+                        Select::make('unit_of_measure_code')
                             ->label('UOM')
+                            ->relationship('unitOfMeasure', 'uom_code')
+                            ->searchable()
+                            ->preload()
                             ->required(),
+
+                        Select::make('location_code')
+                            ->label('Location')
+                            ->relationship('location', 'code')
+                            ->searchable()
+                            ->preload(),
 
                         TextInput::make('routing_link_code')
                             ->label('Routing Link')
@@ -116,7 +125,7 @@ class ComponentsRelationManager extends RelationManager
                     ->sortable()
                     ->toggleable(),
 
-                TextColumn::make('item.item_no')
+                TextColumn::make('item.item_code')
                     ->label('Item No')
                     ->copyable()
                     ->searchable()

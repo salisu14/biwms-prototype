@@ -12,6 +12,7 @@ use App\Models\InventoryPostingGroup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
+use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\WarehouseActivity;
 use App\Models\WarehouseRequest;
@@ -119,21 +120,26 @@ class ProductionOrder extends Model
     // ==================== RELATIONSHIPS ====================
     // Add to existing ProductionOrder model
 
-    public function warehouseActivities()
+    public function warehouseActivities(): HasMany|ProductionOrder
     {
         return $this->hasMany(WarehouseActivity::class, 'source_no', 'order_no')
             ->where('source_document', 'production_order');
     }
 
-    public function warehouseRequests()
+    public function warehouseRequests(): HasMany|ProductionOrder
     {
         return $this->hasMany(WarehouseRequest::class, 'source_no', 'order_no')
             ->where('source_document', 'production_order');
     }
 
-    public function location()
+    public function location(): BelongsTo
     {
         return $this->belongsTo(Location::class, 'location_code', 'code');
+    }
+
+    public function unitOfMeasure(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'unit_of_measure_code', 'uom_code');
     }
 
     public function item(): BelongsTo
@@ -147,7 +153,7 @@ class ProductionOrder extends Model
     }
 
     // ProductionOrder.php
-    public function getPostingSetup()
+    public function getPostingSetup(): ?GeneralPostingSetup
     {
         return GeneralPostingSetup::where('gen_bus_posting_group', 'MANUFACTURING')
             ->where('gen_prod_posting_group', $this->item->gen_prod_posting_group_code)
@@ -184,15 +190,25 @@ class ProductionOrder extends Model
         return $this->hasMany(ProductionOrderRoutingLine::class, 'production_order_id');
     }
 
-    public function inventoryPostingGroup()
+    public function inventoryPostingGroup(): BelongsTo
     {
         return $this->belongsTo(InventoryPostingGroup::class, 'inventory_posting_group_id');
     }
 
-    public function generalProductPostingGroup()
+    public function generalProductPostingGroup(): BelongsTo
     {
         return $this->belongsTo(GeneralProductPostingGroup::class, 'general_product_posting_group_id');
     }
+
+    //    public function warehouseRequests(): MorphMany
+    //    {
+    //        return $this->morphMany(WarehouseRequest::class, 'source', 'source_document', 'source_id');
+    //    }
+    //
+    //    public function warehouseActivities(): MorphMany
+    //    {
+    //        return $this->morphMany(WarehouseActivity::class, 'source', 'source_document', 'source_id');
+    //    }
 
     public function capacityLedgerEntries(): HasMany
     {

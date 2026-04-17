@@ -3,6 +3,7 @@
 namespace App\Models\Manufacturing;
 
 use App\Models\Item;
+use App\Models\UnitOfMeasure;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -42,6 +43,11 @@ class ProductionBom extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function unitOfMeasure(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'unit_of_measure_code', 'uom_code');
     }
 
     public function lines(): HasMany

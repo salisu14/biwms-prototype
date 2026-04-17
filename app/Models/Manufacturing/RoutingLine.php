@@ -2,6 +2,7 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\UnitOfMeasure;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -84,6 +85,16 @@ class RoutingLine extends Model
     public function machineCenter(): BelongsTo
     {
         return $this->belongsTo(MachineCenter::class, 'machine_center_id');
+    }
+
+    public function setupTimeUnit(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'setup_time_unit', 'uom_code');
+    }
+
+    public function runTimeUnit(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'run_time_unit', 'uom_code');
     }
 
     public function getTotalTimeMinutesAttribute(): float

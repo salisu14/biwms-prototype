@@ -3,6 +3,8 @@
 namespace App\Models\Manufacturing;
 
 use App\Models\ChartOfAccount;
+use App\Models\Location;
+use App\Models\UnitOfMeasure;
 use App\Models\Vendor;
 use App\Models\WorkCenterBin;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -60,6 +62,16 @@ class WorkCenter extends Model
     public function group(): BelongsTo
     {
         return $this->belongsTo(WorkCenterGroup::class, 'work_center_group_id');
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_code', 'code');
+    }
+
+    public function unitOfMeasure(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'unit_of_measure_code', 'uom_code');
     }
 
     public function machineCenters(): HasMany
