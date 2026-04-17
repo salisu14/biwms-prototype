@@ -8,12 +8,16 @@ enum PayCodeType: string implements HasLabel
 {
     case EARNING = 'EARNING';
     case DEDUCTION = 'DEDUCTION';
+    case BENEFIT = 'BENEFIT';
+    case INFORMATIONAL = 'INFORMATIONAL';
 
     public function getLabel(): ?string
     {
         return match ($this) {
-            self::EARNING => 'Earning (Income)',
-            self::DEDUCTION => 'Deduction (Expense)',
+            self::EARNING => 'Earning',
+            self::DEDUCTION => 'Deduction',
+            self::BENEFIT => 'Benefit',
+            self::INFORMATIONAL => 'Informational',
         };
     }
 }

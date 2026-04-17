@@ -1,0 +1,163 @@
+
+   INFO  Seeding database.  
+
+
+   Illuminate\Database\QueryException 
+
+  SQLSTATE[23514]: Check violation: 7 ERROR:  new row for relation "pay_codes" violates check constraint "pay_codes_calculation_method_check"
+DETAIL:  Failing row contains (7, PAYE, Income Tax (PAYE), DEDUCTION, FORMULA, null, 8, 2026-04-17 11:52:06, 2026-04-17 11:52:06, null, t, t). (Connection: pgsql, Host: 127.0.0.1, Port: 5432, Database: biwmsprotodb, SQL: insert into "pay_codes" ("code", "name", "type", "calculation_method", "is_statutory", "gl_account_id", "updated_at", "created_at") values (PAYE, Income Tax (PAYE), DEDUCTION, FORMULA, 1, 8, 2026-04-17 11:52:06, 2026-04-17 11:52:06) returning "id")
+
+  at vendor/laravel/framework/src/Illuminate/Database/Connection.php:841
+    837▕             $exceptionType = ($isUniqueConstraintError = $this->isUniqueConstraintError($e))
+    838▕                 ? UniqueConstraintViolationException::class
+    839▕                 : QueryException::class;
+    840▕ 
+  ➜ 841▕             $exception = new $exceptionType(
+    842▕                 $this->getNameWithReadWriteType(),
+    843▕                 $query,
+    844▕                 $this->prepareBindings($bindings),
+    845▕                 $e,
+
+  1   vendor/laravel/framework/src/Illuminate/Database/Connection.php:426
+      PDOException::("SQLSTATE[23514]: Check violation: 7 ERROR:  new row for relation "pay_codes" violates check constraint "pay_codes_calculation_method_check"
+DETAIL:  Failing row contains (7, PAYE, Income Tax (PAYE), DEDUCTION, FORMULA, null, 8, 2026-04-17 11:52:06, 2026-04-17 11:52:06, null, t, t).")
+
+  2   vendor/laravel/framework/src/Illuminate/Database/Connection.php:426
+      PDOStatement::execute()
+
+  3   vendor/laravel/framework/src/Illuminate/Database/Connection.php:830
+      Illuminate\Database\Connection::{closure:Illuminate\Database\Connection::select():412}()
+
+  4   vendor/laravel/framework/src/Illuminate/Database/Connection.php:797
+      Illuminate\Database\Connection::runQueryCallback()
+
+  5   vendor/laravel/framework/src/Illuminate/Database/Connection.php:412
+      Illuminate\Database\Connection::run()
+
+  6   vendor/laravel/framework/src/Illuminate/Database/Connection.php:398
+      Illuminate\Database\Connection::select()
+
+  7   vendor/laravel/framework/src/Illuminate/Database/Query/Processors/PostgresProcessor.php:24
+      Illuminate\Database\Connection::selectFromWriteConnection()
+
+  8   vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php:4246
+      Illuminate\Database\Query\Processors\PostgresProcessor::processInsertGetId()
+
+  9   vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:2242
+      Illuminate\Database\Query\Builder::insertGetId()
+
+  10  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:1580
+      Illuminate\Database\Eloquent\Builder::__call()
+
+  11  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:1496
+      Illuminate\Database\Eloquent\Model::insertAndSetId()
+
+  12  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:1300
+      Illuminate\Database\Eloquent\Model::performInsert()
+
+  13  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:1224
+      Illuminate\Database\Eloquent\Model::save()
+
+  14  vendor/laravel/framework/src/Illuminate/Support/helpers.php:393
+      Illuminate\Database\Eloquent\Builder::{closure:Illuminate\Database\Eloquent\Builder::create():1223}()
+  15  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:1223
+
+  16  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:730
+      Illuminate\Database\Eloquent\Builder::create()
+
+  17  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:1966
+      Illuminate\Database\Eloquent\Builder::{closure:Illuminate\Database\Eloquent\Builder::createOrFirst():730}()
+
+  18  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:730
+      Illuminate\Database\Eloquent\Builder::withSavepointIfNeeded()
+
+  19  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:715
+      Illuminate\Database\Eloquent\Builder::createOrFirst()
+
+  20  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:745
+      Illuminate\Database\Eloquent\Builder::firstOrCreate()
+
+  21  vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:23
+      Illuminate\Database\Eloquent\Builder::updateOrCreate()
+
+  22  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:2723
+      Illuminate\Database\Eloquent\Model::forwardCallTo()
+
+  23  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:2739
+      Illuminate\Database\Eloquent\Model::__call()
+
+  24  database/seeders/PayrollSetupSeeder.php:53
+      Illuminate\Database\Eloquent\Model::__callStatic()
+
+  25  vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:36
+      Database\Seeders\PayrollSetupSeeder::run()
+
+  26  vendor/laravel/framework/src/Illuminate/Container/Util.php:43
+      Illuminate\Container\BoundMethod::{closure:Illuminate\Container\BoundMethod::call():35}()
+
+  27  vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:96
+      Illuminate\Container\Util::unwrapIfClosure()
+
+  28  vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:35
+      Illuminate\Container\BoundMethod::callBoundMethod()
+
+  29  vendor/laravel/framework/src/Illuminate/Container/Container.php:799
+      Illuminate\Container\BoundMethod::call()
+
+  30  vendor/laravel/framework/src/Illuminate/Database/Seeder.php:184
+      Illuminate\Container\Container::call()
+
+  31  vendor/laravel/framework/src/Illuminate/Database/Seeder.php:193
+      Illuminate\Database\Seeder::{closure:Illuminate\Database\Seeder::__invoke():183}()
+
+  32  vendor/laravel/framework/src/Illuminate/Database/Console/Seeds/SeedCommand.php:71
+      Illuminate\Database\Seeder::__invoke()
+
+  33  vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/GuardsAttributes.php:183
+      Illuminate\Database\Console\Seeds\SeedCommand::{closure:Illuminate\Database\Console\Seeds\SeedCommand::handle():70}()
+
+  34  vendor/laravel/framework/src/Illuminate/Database/Console/Seeds/SeedCommand.php:70
+      Illuminate\Database\Eloquent\Model::unguarded()
+
+  35  vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:36
+      Illuminate\Database\Console\Seeds\SeedCommand::handle()
+
+  36  vendor/laravel/framework/src/Illuminate/Container/Util.php:43
+      Illuminate\Container\BoundMethod::{closure:Illuminate\Container\BoundMethod::call():35}()
+
+  37  vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:96
+      Illuminate\Container\Util::unwrapIfClosure()
+
+  38  vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:35
+      Illuminate\Container\BoundMethod::callBoundMethod()
+
+  39  vendor/laravel/framework/src/Illuminate/Container/Container.php:799
+      Illuminate\Container\BoundMethod::call()
+
+  40  vendor/laravel/framework/src/Illuminate/Console/Command.php:280
+      Illuminate\Container\Container::call()
+
+  41  vendor/symfony/console/Command/Command.php:291
+      Illuminate\Console\Command::execute()
+
+  42  vendor/laravel/framework/src/Illuminate/Console/Command.php:249
+      Symfony\Component\Console\Command\Command::run()
+
+  43  vendor/symfony/console/Application.php:1107
+      Illuminate\Console\Command::run()
+
+  44  vendor/symfony/console/Application.php:356
+      Symfony\Component\Console\Application::doRunCommand()
+
+  45  vendor/symfony/console/Application.php:195
+      Symfony\Component\Console\Application::doRun()
+
+  46  vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php:198
+      Symfony\Component\Console\Application::run()
+
+  47  vendor/laravel/framework/src/Illuminate/Foundation/Application.php:1235
+      Illuminate\Foundation\Console\Kernel::handle()
+
+  48  artisan:16
+      Illuminate\Foundation\Application::handleCommand()
+

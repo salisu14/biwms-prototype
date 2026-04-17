@@ -26,7 +26,7 @@ class PayrollPostingService
 
         DB::transaction(function () use ($document) {
             $documentNumber = $document->document_number;
-            $postingDate = $document->period_end; // Standard practice uses period end
+            $postingDate = $document->period_end;
             $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
 
             foreach ($document->lines as $line) {
@@ -38,29 +38,47 @@ class PayrollPostingService
                     continue;
                 }
 
-                $postingGroup = $employee->employeePostingGroup;
+                $postingGroup = $employee->payrollPostingGroup;
                 if (! $postingGroup) {
-                    throw new Exception("Employee {$employee->employee_number} does not have an active posting group.");
+                    throw new Exception("Employee {$employee->employee_number} does not have an active payroll posting group.");
                 }
 
-                $payablesAccountId = $postingGroup->payables_account_id;
+                $netPayAccount = $postingGroup->net_pay_account_id;
                 $payCodeAccountId = $payCode->gl_account_id;
-
-                if (! $payablesAccountId || ! $payCodeAccountId) {
-                    throw new Exception("Missing GL configuration for Payroll Line ID: {$line->id}");
-                }
 
                 $description = "Payroll {$payCode->name} - {$employee->first_name} {$employee->last_name}";
 
                 if ($payCode->type === PayCodeType::EARNING) {
-                    // Dr Expense/Cost, Cr Payable
-                    $this->createGlEntry($payCodeAccountId, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->createGlEntry($payablesAccountId, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                } else {
-                    // Deduction
-                    // Dr Payable, Cr Tax/Deduction Liability
-                    $this->createGlEntry($payablesAccountId, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->createGlEntry($payCodeAccountId, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    // Dr Salaries/Wages (Expense), Cr Net Pay (Liability)
+                    $expenseAccount = $payCodeAccountId ?? $postingGroup->salaries_account_id;
+                    $this->createGlEntry($expenseAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($netPayAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                } elseif ($payCode->type === PayCodeType::DEDUCTION) {
+                    // Dr Net Pay (Liability), Cr Tax/Deduction Liability
+                    $liabilityAccount = $payCodeAccountId;
+                    
+                    // Priority fallback to posting group standard accounts
+                    if ($payCode->is_statutory) {
+                        if ($payCode->code === 'PAYE') {
+                            $liabilityAccount = $postingGroup->tax_payable_account_id;
+                        } else {
+                            $liabilityAccount = $postingGroup->social_security_account_id;
+                        }
+                    }
+
+                    if (!$liabilityAccount) {
+                        throw new Exception("Missing liability account for deduction: {$payCode->name}");
+                    }
+
+                    $this->createGlEntry($netPayAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($liabilityAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                } elseif ($payCode->type === PayCodeType::BENEFIT) {
+                    // Employer Cost: Dr Expense, Cr Liability
+                    $expenseAccount = $payCodeAccountId ?? $postingGroup->salaries_account_id;
+                    $liabilityAccount = $postingGroup->social_security_account_id;
+
+                    $this->createGlEntry($expenseAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($liabilityAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
                 }
             }
 
@@ -87,7 +105,7 @@ class PayrollPostingService
             'amount' => $amount,
             'debit_amount' => $debit,
             'credit_amount' => $credit,
-            'user_id' => Auth::id() ?? User::first()->id ?? 1,
+            'user_id' => Auth::id() ?? 1,
         ]);
     }
 }

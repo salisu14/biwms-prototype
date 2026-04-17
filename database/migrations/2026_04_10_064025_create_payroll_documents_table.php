@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('document_number', 20)->unique();
             $table->date('period_start');
             $table->date('period_end');
-            $table->enum('status', array_column(PayrollStatus::cases(), 'value'))->default(PayrollStatus::DRAFT->value);
+            $table->enum('status', array_column(PayrollStatus::cases(), 'value'))->default(PayrollStatus::OPEN->value);
             $table->text('remarks')->nullable();
             $table->timestamps();
         });

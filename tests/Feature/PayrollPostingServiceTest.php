@@ -3,9 +3,10 @@
 use App\Enums\CalculationMethod;
 use App\Enums\PayCodeType;
 use App\Enums\PayrollStatus;
+use App\Enums\AccountCategory;
 use App\Models\ChartOfAccount;
 use App\Models\Employee;
-use App\Models\EmployeePostingGroup;
+use App\Models\PayrollPostingGroup;
 use App\Models\GlEntry;
 use App\Models\PayCode;
 use App\Models\PayrollDocument;
@@ -21,13 +22,20 @@ test('posting payroll calculates balanced gl entries for earning and deduction',
     User::factory()->create();
 
     // Setup Accounting
-    $salaryExpenseAccount = ChartOfAccount::factory()->create(['account_type' => 'EXPENSE']);
-    $salaryPayableAccount = ChartOfAccount::factory()->create(['account_type' => 'LIABILITY']);
-    $taxPayableAccount = ChartOfAccount::factory()->create(['account_type' => 'LIABILITY']);
+    $salaryExpenseAccount = ChartOfAccount::factory()->create(['account_category' => AccountCategory::OPERATING_EXPENSE]);
+    $salaryPayableAccount = ChartOfAccount::factory()->create(['account_category' => AccountCategory::LIABILITY]);
+    $taxPayableAccount = ChartOfAccount::factory()->create(['account_category' => AccountCategory::LIABILITY]);
 
     // Setup Employee
-    $postingGroup = EmployeePostingGroup::factory()->create(['payables_account_id' => $salaryPayableAccount->id]);
-    $employee = Employee::factory()->create(['employee_posting_group_id' => $postingGroup->id]);
+    $postingGroup = PayrollPostingGroup::create([
+        'code' => 'TEST',
+        'description' => 'Test Group',
+        'salaries_account_id' => $salaryExpenseAccount->id,
+        'social_security_account_id' => $taxPayableAccount->id,
+        'tax_payable_account_id' => $taxPayableAccount->id,
+        'net_pay_account_id' => $salaryPayableAccount->id,
+    ]);
+    $employee = Employee::factory()->create(['payroll_posting_group_id' => $postingGroup->id]);
 
     // Setup PayCodes
     $salaryCode = PayCode::create([
@@ -51,7 +59,7 @@ test('posting payroll calculates balanced gl entries for earning and deduction',
         'document_number' => 'PRL-001',
         'period_start' => '2026-04-01',
         'period_end' => '2026-04-30',
-        'status' => PayrollStatus::DRAFT,
+        'status' => PayrollStatus::OPEN,
     ]);
 
     PayrollLine::create([

@@ -459,6 +459,10 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-banknotes')
                                         ->url('/admin/pay-codes'),
 
+                                    NavigationItem::make('Payroll Periods')
+                                        ->icon('heroicon-o-calendar-date-range')
+                                        ->url('/admin/payroll-periods'),
+
                                     NavigationItem::make('Payroll Documents')
                                         ->icon('heroicon-o-document-currency-dollar')
                                         ->url('/admin/payroll-documents')
@@ -468,9 +472,9 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-receipt-percent')
                                         ->url('/admin/purchase-receipts'),
 
-                                    NavigationItem::make('Employee Posting Groups')
+                                    NavigationItem::make('Payroll Posting Groups')
                                         ->icon('heroicon-o-archive-box')
-                                        ->url('/admin/employee-posting-groups'),
+                                        ->url('/admin/payroll-posting-groups'),
 
                                     NavigationItem::make('WIP Valuation')
                                         ->icon('heroicon-o-currency-dollar')

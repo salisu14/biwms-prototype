@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Employees\Schemas;
 use App\Enums\EmployeeAssignmentType;
 use App\Models\Dimension;
 use App\Models\DimensionValue;
+use App\Models\Employee;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
@@ -23,7 +24,13 @@ class EmployeeForm
                         ->label('Employee No.')
                         ->required()
                         ->unique(ignoreRecord: true)
-                        ->maxLength(20),
+                        ->maxLength(20)
+                        // Lock the field if the record already exists in the database
+                        ->disabled(fn (?Employee $record) => $record !== null)
+                        // Ensure the value is still sent to the database during creation
+                        ->dehydrated()
+                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                        ->helperText('The number cannot be changed once the Employee is created.'),
                     TextInput::make('first_name')
                         ->required()
                         ->maxLength(255),
@@ -41,9 +48,14 @@ class EmployeeForm
                         ->default(EmployeeAssignmentType::Corporate),
                     TextInput::make('email')
                         ->email()
-                        ->maxLength(255),
+                        ->maxLength(255)
+                        ->unique(ignoreRecord: true)
+                        ->validationMessages([
+                            'unique' => 'This email is already assigned to another employee.',
+                        ]),
                     TextInput::make('phone')
                         ->tel()
+                        ->unique(ignoreRecord: true)
                         ->maxLength(255),
                 ])->columns(2),
 
@@ -103,6 +115,10 @@ class EmployeeForm
                     Select::make('employee_posting_group_id')
                         ->label('Employee Posting Group')
                         ->relationship('employeePostingGroup', 'code')
+                        ->required(),
+                    Select::make('payroll_posting_group_id')
+                        ->label('Payroll Posting Group')
+                        ->relationship('payrollPostingGroup', 'code')
                         ->required(),
                 ]),
         ]);

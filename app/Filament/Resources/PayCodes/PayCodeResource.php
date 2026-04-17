@@ -33,7 +33,7 @@ class PayCodeResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\EmployeePayCodesRelationManager::class,
         ];
     }
 

@@ -29,9 +29,17 @@ class PayrollDocumentForm
                             ->required(),
                         DatePicker::make('period_end')
                             ->required(),
+                        TextInput::make('working_days')
+                            ->numeric()
+                            ->default(30)
+                            ->required(),
+                        Select::make('payroll_period_id')
+                            ->relationship('period', 'id')
+                            ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->start_date->format('Y-m-d')} to {$record->end_date->format('Y-m-d')}")
+                            ->label('Payroll Period'),
                         Select::make('status')
                             ->options(PayrollStatus::class)
-                            ->default(PayrollStatus::DRAFT->value)
+                            ->default(PayrollStatus::OPEN->value)
                             ->required(),
                     ])->columns(2),
                 ])->columnSpan(['lg' => 2]),
@@ -50,9 +58,27 @@ class PayrollDocumentForm
                                     ->relationship('payCode', 'name')
                                     ->required()
                                     ->columnSpan(2),
+                                Select::make('line_type')
+                                    ->options([
+                                        'Earning' => 'Earning',
+                                        'Deduction' => 'Deduction',
+                                        'Benefit' => 'Benefit',
+                                    ])
+                                    ->required()
+                                    ->columnSpan(2),
                                 TextInput::make('amount')
                                     ->numeric()
                                     ->required()
+                                    ->columnSpan(2),
+                                TextInput::make('hours')
+                                    ->numeric()
+                                    ->columnSpan(2),
+                                TextInput::make('rate')
+                                    ->numeric()
+                                    ->columnSpan(2),
+                                TextInput::make('employer_amount')
+                                    ->numeric()
+                                    ->label('Employer Portion')
                                     ->columnSpan(2),
                                 TextInput::make('description')
                                     ->columnSpan(6),

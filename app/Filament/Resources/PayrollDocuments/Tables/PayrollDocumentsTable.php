@@ -28,8 +28,25 @@ class PayrollDocumentsTable
                 TextColumn::make('period_end')
                     ->date()
                     ->sortable(),
+                TextColumn::make('period')
+                    ->label('Period')
+                    ->formatStateUsing(fn (PayrollDocument $record) =>
+                    $record->period
+                        ? "{$record->period->start_date->format('Y-m-d')} to {$record->period->end_date->format('Y-m-d')}"
+                        : '-'
+                    )
+                    ->sortable(),
                 TextColumn::make('status')
                     ->badge(),
+                TextColumn::make('total_earnings')
+                    ->numeric()
+                    ->money('Ksh'),
+                TextColumn::make('total_deductions')
+                    ->numeric()
+                    ->money('Ksh'),
+                TextColumn::make('total_net_pay')
+                    ->numeric()
+                    ->money('Ksh'),
                 TextColumn::make('lines_count')
                     ->counts('lines')
                     ->label('Lines'),
@@ -39,12 +56,35 @@ class PayrollDocumentsTable
             ])
             ->recordActions([
                 EditAction::make(),
+                Action::make('calculate')
+                    ->label('Calculate')
+                    ->icon('heroicon-o-cpu-chip')
+                    ->color('info')
+                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::OPEN)
+                    ->action(function (PayrollDocument $record, Notification $notification) {
+                        try {
+                            app(\App\Services\PayrollCalculationService::class)->calculate($record);
+                            $notification->success()->title('Payroll Calculated!')->send();
+                        } catch (\Exception $e) {
+                            $notification->danger()->title('Calculation Failed')->body($e->getMessage())->send();
+                        }
+                    }),
+                Action::make('approve')
+                    ->label('Approve')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::CALCULATED)
+                    ->action(function (PayrollDocument $record, Notification $notification) {
+                        $record->update(['status' => PayrollStatus::APPROVED]);
+                        $notification->success()->title('Payroll Approved!')->send();
+                    }),
                 Action::make('post')
                     ->label('Post')
                     ->icon('heroicon-o-paper-airplane')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::DRAFT)
+                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::OPEN || $record->status === PayrollStatus::CALCULATED)
                     ->action(function (PayrollDocument $record, Notification $notification) {
                         try {
                             app(PayrollPostingService::class)->post($record);
@@ -52,6 +92,18 @@ class PayrollDocumentsTable
                         } catch (\Exception $e) {
                             $notification->danger()->title('Posting Failed')->body($e->getMessage())->send();
                         }
+                    }),
+                Action::make('export_bank_file')
+                    ->label('Bank File')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('gray')
+                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::POSTED)
+                    ->action(function (PayrollDocument $record) {
+                        $csv = app(\App\Services\PayrollPaymentService::class)->generateBankFile($record);
+                        $filename = "bank_payment_{$record->document_number}.csv";
+                        return response()->streamDownload(function () use ($csv) {
+                            echo $csv;
+                        }, $filename);
                     }),
             ])
             ->toolbarActions([

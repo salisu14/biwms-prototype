@@ -38,60 +38,14 @@ class GeneratePayroll extends Command
                 'document_number' => $docNo,
                 'period_start' => $start->toDateString(),
                 'period_end' => $end->toDateString(),
-                'status' => PayrollStatus::DRAFT,
+                'status' => PayrollStatus::OPEN,
                 'remarks' => 'Auto-generated batch',
             ]);
 
-            $employees = Employee::where('is_active', true)->get();
-
-            // Find default PayCodes
-            $baseSalaryCode = PayCode::where('code', 'BASE')->first();
-            if (! $baseSalaryCode) {
-                $this->error("A PayCode with code 'BASE' must exist to generate standard payroll.");
-
-                return;
-            }
-
-            // Find all auto-applying codes (e.g. standard tax brackets with default amounts > 0)
-            $autoCodes = PayCode::whereNotNull('default_amount')->where('default_amount', '>', 0)->get();
-
-            foreach ($employees as $employee) {
-                $salary = (float) $employee->getCurrentBaseSalary();
-                if ($salary <= 0) {
-                    continue; // Skip employees with no set salary
-                }
-
-                // 1. Add Base Salary
-                PayrollLine::create([
-                    'payroll_document_id' => $doc->id,
-                    'employee_id' => $employee->id,
-                    'pay_code_id' => $baseSalaryCode->id,
-                    'amount' => $salary,
-                    'description' => "Base Salary for {$start->format('M Y')}",
-                ]);
-
-                // 2. Apply Auto Deductions/Earnings
-                foreach ($autoCodes as $code) {
-                    $amount = 0;
-                    if ($code->calculation_method === CalculationMethod::PERCENTAGE) {
-                        $amount = $salary * ($code->default_amount / 100);
-                    } else {
-                        $amount = $code->default_amount;
-                    }
-
-                    if ($amount > 0) {
-                        PayrollLine::create([
-                            'payroll_document_id' => $doc->id,
-                            'employee_id' => $employee->id,
-                            'pay_code_id' => $code->id,
-                            'amount' => round($amount, 2),
-                            'description' => "Auto-applied: {$code->name}",
-                        ]);
-                    }
-                }
-            }
+            // Use PayrollCalculationService to compute lines accurately
+            app(\App\Services\PayrollCalculationService::class)->calculate($doc);
         });
 
-        $this->info("Payroll document {$docNo} created successfully as DRAFT.");
+        $this->info("Payroll document {$docNo} created successfully as OPEN.");
     }
 }

@@ -25,6 +25,7 @@ class Employee extends Model
         'job_title',
         'assignment_type',
         'employee_posting_group_id',
+        'payroll_posting_group_id',
         'business_code',
         'factory_code',
         'department_code',
@@ -84,6 +85,16 @@ class Employee extends Model
         return $this->belongsTo(Department::class);
     }
 
+    public function payrollPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(PayrollPostingGroup::class);
+    }
+
+    public function employeePayCodes(): HasMany
+    {
+        return $this->hasMany(EmployeePayCode::class);
+    }
+
     public function compensations(): Employee|HasMany
     {
         return $this->hasMany(EmployeeCompensation::class);
@@ -111,5 +122,15 @@ class Employee extends Model
     public function salespersonPurchasers(): HasMany
     {
         return $this->hasMany(SalespersonPurchaser::class);
+    }
+
+    public function bankAccounts(): HasMany
+    {
+        return $this->hasMany(EmployeeBankAccount::class);
+    }
+
+    public function ytdBalances(): HasMany
+    {
+        return $this->hasMany(EmployeeYtdBalance::class);
     }
 }

@@ -41,7 +41,9 @@ class EmployeeResource extends Resource
     public static function getRelations(): array
     {
         return [
-            CompensationsRelationManager::class,
+            RelationManagers\CompensationsRelationManager::class,
+            RelationManagers\BankAccountsRelationManager::class,
+            RelationManagers\EmployeePayCodesRelationManager::class,
         ];
     }
 

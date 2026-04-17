@@ -14,8 +14,8 @@ class ChartOfAccountFactory extends Factory
         return [
             'account_number' => $this->faker->unique()->numerify('#####'),
             'name' => $this->faker->words(3, true),
-            'account_type' => 'REVENUE',
-            'account_category' => 'RECEIVABLE',
+            'structural_type' => \App\Enums\AccountStructuralType::POSTING,
+            'account_category' => \App\Enums\AccountCategory::REVENUE,
             'balance' => 0,
             'direct_posting' => true,
             'blocked' => false,
