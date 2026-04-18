@@ -60,9 +60,9 @@ class WorkCenterInfolist
                                 ),
                         ]),
 
-                        Placeholder::make('effective_capacity')
+                        TextEntry::make('effective_capacity')
                             ->label('Effective Capacity')
-                            ->content(function ($record): string {
+                            ->state(function ($record): string {
                                 $cap = $record->capacity ?? 0;
                                 $eff = $record->efficiency ?? 0;
 
@@ -72,7 +72,6 @@ class WorkCenterInfolist
                             })
                             ->columnSpanFull()
                             ->inlineLabel(),
-                        //                            ->inlineLabelColor('primary'),
                     ]),
 
                 Section::make('Costing')
@@ -80,7 +79,7 @@ class WorkCenterInfolist
                     ->schema([
                         TextEntry::make('direct_unit_cost')
                             ->label('Direct Unit Cost')
-                            ->money('USD'),
+                            ->money('NGN'),
 
                         TextEntry::make('indirect_cost_percent')
                             ->label('Indirect Cost %')
@@ -88,7 +87,7 @@ class WorkCenterInfolist
 
                         TextEntry::make('overhead_rate')
                             ->label('Overhead Rate')
-                            ->money('USD'),
+                            ->money('NGN'),
                     ])
                     ->collapsible(),
 
