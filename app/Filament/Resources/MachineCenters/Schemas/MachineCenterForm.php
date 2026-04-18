@@ -127,9 +127,10 @@ class MachineCenterForm
                                     ->label('Indirect Cost %')
                                     ->numeric()
                                     ->default(0)
-                                    ->required()
                                     ->suffix('%')
-                                    ->minValue(0),
+                                    ->minValue(0)
+                                    ->maxValue(100)
+                                    ->rules(['numeric', 'min:0', 'max:100']),
 
                                 Select::make('fixed_asset_id')
                                     ->label('Linked Fixed Asset')

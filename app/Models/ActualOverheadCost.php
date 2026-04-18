@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 
 class ActualOverheadCost extends Model
 {
@@ -50,6 +51,25 @@ class ActualOverheadCost extends Model
         'allocated_amount' => 'decimal:4',
     ];
 
+    /**
+     * Boot logic to handle audit fields automatically.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (ActualOverheadCost $cost) {
+            if (Auth::check()) {
+                $cost->created_by = Auth::id();
+            }
+        });
+
+        static::updating(function (ActualOverheadCost $cost) {
+            if (Auth::check()) {
+                $cost->updated_by = Auth::id();
+            }
+        });
+    }
+
+
     // Relationships
     public function workCenter(): BelongsTo
     {
@@ -63,7 +83,7 @@ class ActualOverheadCost extends Model
 
     public function location(): BelongsTo
     {
-        return $this->belongsTo(LocationMaster::class, 'location_id');
+        return $this->belongsTo(Location::class, 'location_id');
     }
 
     public function glAccount(): BelongsTo

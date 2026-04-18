@@ -416,6 +416,11 @@ class AdminPanelProvider extends PanelProvider
                                         ->url('/admin/work-center-calendars')
                                         ->isActiveWhen(fn () => request()->is('admin/work-center-calendars*')),
 
+                                    NavigationItem::make('Actual Overhead Costs')
+                                        ->icon('heroicon-o-calendar-days')
+                                        ->url('/admin/actual-overhead-costs')
+                                        ->isActiveWhen(fn () => request()->is('admin/actual-overhead-costs*')),
+
                                     NavigationItem::make('Routing')
                                         ->icon('heroicon-o-map')
                                         ->url('/admin/routings')
