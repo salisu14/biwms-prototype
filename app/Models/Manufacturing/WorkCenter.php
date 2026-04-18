@@ -3,6 +3,8 @@
 namespace App\Models\Manufacturing;
 
 use App\Models\ChartOfAccount;
+use App\Models\Employee;
+use App\Models\FixedAsset;
 use App\Models\Location;
 use App\Models\UnitOfMeasure;
 use App\Models\Vendor;
@@ -46,6 +48,8 @@ class WorkCenter extends Model
         'work_center_account_no', // Legacy string (kept for reference)
         'work_center_gl_account_id', // FK to chart_of_accounts
         'subcontractor_id', // If outsourced work center
+        'fixed_asset_id',
+        'operator_employee_id',
     ];
 
     protected $casts = [
@@ -57,6 +61,8 @@ class WorkCenter extends Model
         'indirect_cost_percent' => 'decimal:2',
         'overhead_rate' => 'decimal:4',
         'queue_time' => 'decimal:4',
+        'fixed_asset_id' => 'integer',
+        'operator_employee_id' => 'integer',
     ];
 
     public function group(): BelongsTo
@@ -94,6 +100,16 @@ class WorkCenter extends Model
     {
         // Fixed: lowercase method name and lowercase belongsTo call
         return $this->belongsTo(Vendor::class, 'subcontractor_id');
+    }
+
+    public function fixedAsset(): BelongsTo
+    {
+        return $this->belongsTo(FixedAsset::class, 'fixed_asset_id');
+    }
+
+    public function operatorEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'operator_employee_id');
     }
 
     /**

@@ -130,6 +130,21 @@ class MachineCenterForm
                                     ->required()
                                     ->suffix('%')
                                     ->minValue(0),
+
+                                Select::make('fixed_asset_id')
+                                    ->label('Linked Fixed Asset')
+                                    ->relationship('fixedAsset', 'fa_no')
+                                    ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->fa_no} - {$record->description}")
+                                    ->searchable()
+                                    ->preload(),
+
+                                Select::make('operator_employee_id')
+                                    ->label('Primary Operator')
+                                    ->relationship('operatorEmployee', 'first_name')
+                                    ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->employee_number} - {$record->first_name} {$record->last_name}")
+                                    ->searchable()
+                                    ->preload()
+                                    ->columnSpan(2),
                             ]),
                     ])
                     ->collapsible(),

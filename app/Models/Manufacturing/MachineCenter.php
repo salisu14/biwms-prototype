@@ -2,6 +2,8 @@
 
 namespace App\Models\Manufacturing;
 
+use App\Models\Employee;
+use App\Models\FixedAsset;
 use App\Models\Location;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -34,6 +36,8 @@ class MachineCenter extends Model
 
         // Location
         'location_code',
+        'fixed_asset_id',
+        'operator_employee_id',
     ];
 
     protected $casts = [
@@ -45,6 +49,8 @@ class MachineCenter extends Model
         'setup_time' => 'decimal:4',
         'wait_time' => 'decimal:4',
         'move_time' => 'decimal:4',
+        'fixed_asset_id' => 'integer',
+        'operator_employee_id' => 'integer',
     ];
 
     public function workCenter(): BelongsTo
@@ -55,5 +61,15 @@ class MachineCenter extends Model
     public function location(): BelongsTo
     {
         return $this->belongsTo(Location::class, 'location_code', 'code');
+    }
+
+    public function fixedAsset(): BelongsTo
+    {
+        return $this->belongsTo(FixedAsset::class, 'fixed_asset_id');
+    }
+
+    public function operatorEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'operator_employee_id');
     }
 }

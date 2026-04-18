@@ -7,6 +7,11 @@ namespace App\Models;
 use App\Enums\DepreciationMethod;
 use App\Enums\FAStatus;
 use App\Enums\FixedAssetType;
+use App\Models\Manufacturing\MachineCenter;
+use App\Models\Manufacturing\WorkCenter;
+use App\Services\FixedAsset\DepreciationCalculationService;
+use App\Services\FixedAsset\DisposalService;
+use App\Services\FixedAsset\RevaluationService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -167,6 +172,16 @@ class FixedAsset extends Model
         return $this->hasMany(FAMaintenanceLog::class, 'fixed_asset_id');
     }
 
+    public function workCenters(): HasMany
+    {
+        return $this->hasMany(WorkCenter::class, 'fixed_asset_id');
+    }
+
+    public function machineCenters(): HasMany
+    {
+        return $this->hasMany(MachineCenter::class, 'fixed_asset_id');
+    }
+
     // Calculated attributes
     public function getNetBookValueAttribute(): float
     {
@@ -175,7 +190,10 @@ class FixedAsset extends Model
 
     public function getRemainingLifeMonthsAttribute(): ?float
     {
-        if (!$this->depreciation_ending_date) return null;
+        if (! $this->depreciation_ending_date) {
+            return null;
+        }
+
         return now()->diffInMonths($this->depreciation_ending_date, false);
     }
 
@@ -187,26 +205,26 @@ class FixedAsset extends Model
     public function canDepreciate(): bool
     {
         return $this->status->canDepreciate()
-            && !$this->isFullyDepreciated()
-            && !$this->blocked;
+            && ! $this->isFullyDepreciated()
+            && ! $this->blocked;
     }
 
     // Business methods
     public function calculateDepreciationForPeriod(\DateTime $from, \DateTime $to): float
     {
-        return app(\App\Services\FixedAsset\DepreciationCalculationService::class)
+        return app(DepreciationCalculationService::class)
             ->calculate($this, $from, $to);
     }
 
     public function revalue(float $newAmount, \DateTime $date, string $reason): void
     {
-        app(\App\Services\FixedAsset\RevaluationService::class)
+        app(RevaluationService::class)
             ->revalue($this, $newAmount, $date, $reason);
     }
 
     public function dispose(float $proceeds, \DateTime $date, string $disposalType): void
     {
-        app(\App\Services\FixedAsset\DisposalService::class)
+        app(DisposalService::class)
             ->dispose($this, $proceeds, $date, $disposalType);
     }
 }

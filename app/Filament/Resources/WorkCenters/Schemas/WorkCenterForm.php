@@ -130,8 +130,15 @@ class WorkCenterForm
                                 ->label('Overhead Rate ($/hr)')
                                 ->required()
                                 ->numeric()
-                                ->prefix('₦')
                                 ->step(0.0001),
+
+                            Select::make('fixed_asset_id')
+                                ->label('Linked Fixed Asset')
+                                ->relationship('fixedAsset', 'fa_no')
+                                ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->fa_no} - {$record->description}")
+                                ->searchable()
+                                ->preload()
+                                ->helperText('Used for depreciation absorption calculations.'),
                         ]),
                     ])
                     ->collapsible(),
@@ -152,6 +159,14 @@ class WorkCenterForm
                                 ->relationship('location', 'code')
                                 ->searchable()
                                 ->preload(),
+
+                            Select::make('operator_employee_id')
+                                ->label('Primary Operator')
+                                ->relationship('operatorEmployee', 'first_name')
+                                ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->employee_number} - {$record->first_name} {$record->last_name}")
+                                ->searchable()
+                                ->preload()
+                                ->helperText('Links this center to Payroll for labor costing.'),
                         ]),
                     ])
                     ->collapsible(),
