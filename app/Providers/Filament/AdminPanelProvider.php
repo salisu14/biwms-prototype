@@ -64,7 +64,13 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/chart-of-accounts')
                                     ->isActiveWhen(fn () => request()->is('admin/chart-of-accounts*')),
 
-                                // VAT & Tax
+                                // Account Schedules
+                                NavigationItem::make('Account Schedules')
+                                    ->icon('heroicon-o-calendar-date-range')
+                                    ->url('/admin/account-schedules')
+                                    ->isActiveWhen(fn () => request()->is('admin/account-schedules*')),
+
+                                // Allocation
                                 NavigationItem::make('Allocation')
                                     ->icon('heroicon-o-viewfinder-circle')
                                     ->url('/admin/allocations')
