@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'vendor_item_name',      // Vendor's description (may differ)
     'vendor_item_category',  // Vendor's classification
     'unit_cost',             // Vendor's price (in purchase UOM)
+    'purchase_uom_id',       // New relationship field
     'minimum_order_qty',     // MOQ
     'lead_time_days',        // Vendor-specific lead time
     'is_preferred',          // Is this the preferred vendor for this item?
@@ -25,7 +26,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'expiry_date',           // When this pricing expires
     'last_purchase_date',
     'last_purchase_price',
-    'currency',              // USD, EUR, etc.
+    'currency_id',              // USD, EUR, etc.
     'price_breaks',            // JSON: {"100": 9.50, "500": 8.75, "1000": 8.00}
 ])]
 class VendorItem extends Model
@@ -63,6 +64,11 @@ class VendorItem extends Model
         return $this->belongsTo(Item::class, 'item_id');
     }
 
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'currency_id');
+    }
+
     /**
      * Purchase history with this vendor
      */
@@ -72,15 +78,19 @@ class VendorItem extends Model
     }
 
     /**
-     * Get effective price based on quantity (with price breaks)
+     * The specific Unit of Measure used for purchasing from this vendor.
      */
+    public function purchaseUom(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'purchase_uom_id');
+    }
+
     public function getPriceForQuantity(float $qty): float
     {
         if (empty($this->price_breaks)) {
             return (float) $this->unit_cost;
         }
 
-        // Sort price breaks descending by quantity
         $breaks = collect($this->price_breaks)->sortKeysDesc();
 
         foreach ($breaks as $breakQty => $price) {

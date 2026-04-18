@@ -25,7 +25,20 @@ return new class extends Migration
 
             // Pricing (in vendor's currency)
             $table->decimal('unit_cost', 15, 4);
-            $table->char('currency', 3)->default('USD');
+
+            // Add the missing Purchase UOM link
+            $table->foreignId('purchase_uom_id')
+                ->nullable()
+                ->after('unit_cost')
+                ->constrained('unit_of_measures')
+                ->nullOnDelete();
+
+            $table->foreignId('currency_id')
+                ->nullable()
+                ->after('purchase_uom_id')
+                ->constrained('currencies')
+                ->nullOnDelete();
+
             $table->json('price_breaks')->nullable(); // Quantity discounts
 
             // Ordering constraints
