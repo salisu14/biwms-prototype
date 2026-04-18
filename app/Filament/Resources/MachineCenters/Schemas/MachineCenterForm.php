@@ -77,29 +77,27 @@ class MachineCenterForm
                             ->icon('heroicon-m-clock')
                             ->columnSpan(1)
                             ->schema([
-                                Grid::make(3)
-                                    ->schema([
-                                        TextInput::make('setup_time')
-                                            ->label('Setup')
-                                            ->numeric()
-                                            ->default(0)
-                                            ->required()
-                                            ->suffix('m'),
+                                // Removed the internal 3-column grid to allow fields to take full width of the section
+                                TextInput::make('setup_time')
+                                    ->label('Setup Time')
+                                    ->numeric()
+                                    ->default(0)
+                                    ->required()
+                                    ->suffix('minutes'),
 
-                                        TextInput::make('wait_time')
-                                            ->label('Wait')
-                                            ->numeric()
-                                            ->default(0)
-                                            ->required()
-                                            ->suffix('m'),
+                                TextInput::make('wait_time')
+                                    ->label('Wait Time')
+                                    ->numeric()
+                                    ->default(0)
+                                    ->required()
+                                    ->suffix('minutes'),
 
-                                        TextInput::make('move_time')
-                                            ->label('Move')
-                                            ->numeric()
-                                            ->default(0)
-                                            ->required()
-                                            ->suffix('m'),
-                                    ]),
+                                TextInput::make('move_time')
+                                    ->label('Move Time')
+                                    ->numeric()
+                                    ->default(0)
+                                    ->required()
+                                    ->suffix('minutes'),
                             ]),
                     ]),
 
@@ -114,7 +112,7 @@ class MachineCenterForm
                                     ->numeric()
                                     ->default(0)
                                     ->required()
-                                    ->prefix('$')
+                                    ->prefix('₦')
                                     ->step(0.0001),
 
                                 TextInput::make('overhead_rate')
@@ -122,7 +120,7 @@ class MachineCenterForm
                                     ->numeric()
                                     ->default(0)
                                     ->required()
-                                    ->prefix('$')
+                                    ->prefix('₦')
                                     ->step(0.0001),
 
                                 TextInput::make('indirect_cost_percent')
