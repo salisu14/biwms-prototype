@@ -71,7 +71,7 @@ class ExpenseCategoryForm
                 Section::make('Accounting & Posting Rules')
                     ->description('Configuration for G/L integration.')
                     ->schema([
-                        Grid::make(2)->schema([
+                        Grid::make(3)->schema([
                             Select::make('expense_account_id')
                                 ->label('Primary G/L Account')
                                 ->relationship('expenseAccount', 'name')
@@ -79,6 +79,18 @@ class ExpenseCategoryForm
                                 ->searchable()
                                 ->preload()
                                 ->required(),
+                            Select::make('gen_prod_posting_group_id')
+                                ->label('Gen. Prod. Posting Group')
+                                ->relationship('generalProductPostingGroup', 'code')
+                                ->searchable()
+                                ->preload(),
+                            Select::make('vat_prod_posting_group_id')
+                                ->label('VAT Prod. Posting Group')
+                                ->relationship('vatProductPostingGroup', 'code')
+                                ->searchable()
+                                ->preload(),
+                        ]),
+                        Grid::make(2)->schema([
                             Select::make('contra_account_id')
                                 ->label('Contra / Offset Account')
                                 ->relationship('contraAccount', 'name')

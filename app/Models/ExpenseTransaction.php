@@ -31,7 +31,7 @@ class ExpenseTransaction extends Model
         'customer_id',
         'employee_id',
         'item_id',
-        'product_category_id',
+        'category_id',
         'purchase_order_no',
         'sales_order_no',
         'invoice_no',
@@ -44,6 +44,14 @@ class ExpenseTransaction extends Model
         'reversed_by',
         'posted_by',
         'description',
+        'gen_bus_posting_group_id',
+        'gen_prod_posting_group_id',
+        'vat_bus_posting_group_id',
+        'vat_prod_posting_group_id',
+        'dimension_set_id',
+        'source_type',
+        'source_no',
+        'currency_id',
     ];
 
     protected $casts = [
@@ -57,6 +65,12 @@ class ExpenseTransaction extends Model
         'dimensions' => 'array',
         'posted_by' => 'integer',
         'reversed_by' => 'integer',
+        'dimension_set_id' => 'integer',
+        'gen_bus_posting_group_id' => 'integer',
+        'gen_prod_posting_group_id' => 'integer',
+        'vat_bus_posting_group_id' => 'integer',
+        'vat_prod_posting_group_id' => 'integer',
+        'currency_id' => 'integer',
     ];
 
     /**
@@ -128,7 +142,7 @@ class ExpenseTransaction extends Model
      */
     public function productCategory(): BelongsTo
     {
-        return $this->belongsTo(Category::class, 'product_category_id');
+        return $this->belongsTo(Category::class, 'category_id');
     }
 
     // --- Audit & Sub-system Relationships ---
@@ -146,6 +160,36 @@ class ExpenseTransaction extends Model
     public function reversedTransaction(): BelongsTo
     {
         return $this->belongsTo(self::class, 'reversed_by');
+    }
+
+    public function dimensionSet(): BelongsTo
+    {
+        return $this->belongsTo(DimensionSet::class);
+    }
+
+    public function generalBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralBusinessPostingGroup::class, 'gen_bus_posting_group_id');
+    }
+
+    public function generalProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralProductPostingGroup::class, 'gen_prod_posting_group_id');
+    }
+
+    public function vatBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatBusinessPostingGroup::class, 'vat_bus_posting_group_id');
+    }
+
+    public function vatProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatProductPostingGroup::class, 'vat_prod_posting_group_id');
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 
     // --- Scopes ---
@@ -189,6 +233,6 @@ class ExpenseTransaction extends Model
 
     public function getNetAmount(): float
     {
-        return (float)$this->amount + (float)$this->vat_amount;
+        return (float) $this->amount + (float) $this->vat_amount;
     }
 }

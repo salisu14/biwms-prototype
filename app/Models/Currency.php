@@ -129,6 +129,11 @@ class Currency extends Model
         return $this->hasMany(CurrencyAdjustmentLedger::class);
     }
 
+    public function expenseTransactions(): HasMany
+    {
+        return $this->hasMany(ExpenseTransaction::class);
+    }
+
     // Scopes
     public function scopeActive($query)
     {

@@ -18,13 +18,16 @@ class AllocationsRelationManager extends RelationManager
 {
     protected static string $relationship = 'allocations';
 
-//    protected static ?string $relatedResource = ExpenseTransactionResource::class;
+    //    protected static ?string $relatedResource = ExpenseTransactionResource::class;
 
     protected static ?string $recordTitleAttribute = 'allocated_amount';
 
     protected static ?string $title = 'Expense Allocation';
+
     protected static ?string $inverseRelationship = 'expenseTransaction';
+
     protected static ?string $inverseRelationshipTitle = 'Expense Transaction';
+
     protected static ?string $inverseRecordTitleAttribute = 'expense_transaction_id';
 
     public function form(Schema $schema): Schema
@@ -54,11 +57,16 @@ class AllocationsRelationManager extends RelationManager
                     ->required()
                     ->prefix('$'),
 
+                Select::make('dimension_set_id')
+                    ->label('Target Dimension Set')
+                    ->relationship('dimensionSet', 'id')
+                    ->searchable()
+                    ->preload(),
 
                 Select::make('target_dimension_1')
                     ->label('Target Dept (Dim 1)')
-                    ->options(fn() => DimensionValue::query()
-                        ->where('code', 'DEPARTMENT')
+                    ->options(fn () => DimensionValue::query()
+                        ->whereHas('dimension', fn ($q) => $q->where('code', 'DEPARTMENT'))
                         ->pluck('name', 'code')
                         ->toArray()
                     )
@@ -67,7 +75,7 @@ class AllocationsRelationManager extends RelationManager
 
                 Select::make('target_dimension_2')
                     ->label('Target Project (Dim 2)')
-                    ->options(fn() => DimensionValue::query()
+                    ->options(fn () => DimensionValue::query()
                         ->where('code', 'PROJECT')
                         ->pluck('name', 'code')
                         ->toArray()
@@ -91,6 +99,9 @@ class AllocationsRelationManager extends RelationManager
                 TextColumn::make('allocated_amount')
                     ->money()
                     ->label('Amount'),
+
+                TextColumn::make('dimension_set_id')
+                    ->label('Dim Set'),
 
                 TextColumn::make('target_dimension_1')
                     ->label('Dim 1'),

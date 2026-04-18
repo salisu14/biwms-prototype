@@ -10,7 +10,7 @@ class ExpenseAllocation extends Model
     protected $fillable = [
         'expense_transaction_id', 'allocation_basis', 'allocation_percentage',
         'allocated_amount', 'target_dimension_1', 'target_dimension_2',
-        'target_gl_account_id', 'gl_entry_id',
+        'target_gl_account_id', 'gl_entry_id', 'dimension_set_id',
     ];
 
     protected $casts = [
@@ -26,5 +26,10 @@ class ExpenseAllocation extends Model
     public function targetAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class, 'target_gl_account_id');
+    }
+
+    public function dimensionSet(): BelongsTo
+    {
+        return $this->belongsTo(DimensionSet::class);
     }
 }

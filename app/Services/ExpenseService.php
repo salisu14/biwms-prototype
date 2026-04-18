@@ -15,6 +15,7 @@ use App\Models\ExpenseBudget;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseTransaction;
 use App\Models\FixedAsset;
+use App\Models\GeneralPostingSetup;
 use App\Models\Item;
 use App\Models\Vendor;
 use App\Services\Finance\GeneralLedgerService;
@@ -27,8 +28,85 @@ class ExpenseService
         private readonly NumberSeriesService $numberSeriesService,
         private readonly GeneralLedgerService $glService,
         private readonly CurrencyService $currencyService,
-        private readonly PostingService $postingService
+        private readonly PostingService $postingService,
+        private readonly DimensionManagementService $dimensionService,
+        private readonly VatCalculationService $vatService
     ) {}
+
+    /**
+     * Post a generic expense transaction (BC standard)
+     */
+    public function post(ExpenseTransaction $transaction): void
+    {
+        if ($transaction->status === 'posted') {
+            throw new \RuntimeException('Transaction is already posted');
+        }
+
+        DB::transaction(function () use ($transaction) {
+            $this->resolvePostingAccounts($transaction);
+            $this->calculateTaxes($transaction);
+
+            // 1. Prepare G/L Lines
+            $lines = [];
+            $totalAmount = (float) $transaction->amount;
+            $vatAmount = (float) $transaction->vat_amount;
+            $netAmount = $totalAmount - $vatAmount;
+
+            // Debit Expense Account
+            $lines[] = [
+                'account_id' => $transaction->expense_account_id,
+                'debit' => $netAmount,
+                'credit' => 0,
+                'description' => $transaction->description ?: "Expense: {$transaction->document_no}",
+                'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
+            ];
+
+            // Debit VAT Account (Input VAT)
+            if ($vatAmount > 0) {
+                $vatSetup = $this->resolveVatSetup($transaction);
+                if ($vatSetup && $vatSetup->purchase_vat_account_id) {
+                    $lines[] = [
+                        'account_id' => $vatSetup->purchase_vat_account_id,
+                        'debit' => $vatAmount,
+                        'credit' => 0,
+                        'description' => "VAT for {$transaction->document_no}",
+                        'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
+                    ];
+                }
+            }
+
+            // Credit Offset Account (Bank, Payable, etc.)
+            $offsetAccount = $this->resolveOffsetAccount($transaction);
+            $lines[] = [
+                'account_id' => $offsetAccount->id,
+                'debit' => 0,
+                'credit' => $totalAmount,
+                'description' => $transaction->description ?: "Payment/Payable: {$transaction->document_no}",
+                'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
+            ];
+
+            // 2. Post to Ledger
+            $this->glService->post($lines, [
+                'posting_date' => $transaction->posting_date,
+                'document_number' => $transaction->document_no,
+                'document_type' => $transaction->document_type,
+                'source_type' => $transaction->source_type ?? 'SYSTEM',
+                'source_number' => $transaction->source_no,
+                'description' => $transaction->description,
+            ]);
+
+            // 3. Update Transaction Status
+            $transaction->update([
+                'status' => 'posted',
+                'posted_at' => now(),
+            ]);
+
+            // 4. Handle Allocations
+            if ($transaction->allocations()->exists()) {
+                $this->processAllocations($transaction);
+            }
+        });
+    }
 
     /**
      * Post COGS from inventory transaction
@@ -226,6 +304,7 @@ class ExpenseService
             'amount' => $amount,
             'amount_lcy' => $this->currencyService->toLCY($amount, $currencyCode),
             'currency_code' => $currencyCode,
+            'currency_id' => $currencyCode ? \App\Models\Currency::where('code', $currencyCode)->first()?->id : null,
             'vendor_id' => $vendor->id,
             'category_id' => null, // Or resolve if needed
             'expense_account_id' => $interimAccount->id,
@@ -449,5 +528,130 @@ class ExpenseService
             'shortcut_dimension_1_code' => $alloc['department'],
             'shortcut_dimension_2_code' => $alloc['project'] ?? null,
         ]);
+    }
+
+    private function resolvePostingAccounts(ExpenseTransaction $transaction): void
+    {
+        if (! $transaction->gen_bus_posting_group_id || ! $transaction->gen_prod_posting_group_id) {
+            throw new \RuntimeException("Posting Groups (Business & Product) are required for transaction {$transaction->document_no}");
+        }
+
+        $setup = GeneralPostingSetup::where([
+            'general_business_posting_group_id' => $transaction->gen_bus_posting_group_id,
+            'general_product_posting_group_id' => $transaction->gen_prod_posting_group_id,
+        ])->first();
+
+        if (! $setup) {
+            throw new \RuntimeException("General Posting Setup not found for the selected Posting Groups on transaction {$transaction->document_no}");
+        }
+
+        if (! $setup->purchase_account_id) {
+            throw new \RuntimeException('Purchase Account is not configured in General Posting Setup for the selected groups');
+        }
+
+        $transaction->expense_account_id = $setup->purchase_account_id;
+        $transaction->save();
+    }
+
+    private function calculateTaxes(ExpenseTransaction $transaction): void
+    {
+        if ($transaction->vat_amount > 0) {
+            return; // Already calculated manually
+        }
+
+        if ($transaction->vat_bus_posting_group_id && $transaction->vat_prod_posting_group_id) {
+            try {
+                $busGroup = $transaction->vatBusinessPostingGroup->code;
+                $prodGroup = $transaction->vatProductPostingGroup->code;
+
+                $result = $this->vatService->calculateVat(
+                    (float) $transaction->amount,
+                    $busGroup,
+                    $prodGroup,
+                    false // isSale = false for expenses
+                );
+
+                $transaction->vat_amount = $result['vat_amount'];
+                $transaction->save();
+            } catch (\Exception $e) {
+                // Log or handle error - if setup is missing, we might default to 0
+            }
+        }
+    }
+
+    private function resolveVatSetup(ExpenseTransaction $transaction)
+    {
+        if ($transaction->vat_bus_posting_group_id && $transaction->vat_prod_posting_group_id) {
+            return VatPostingSetup::where([
+                'vat_business_posting_group_id' => $transaction->vat_bus_posting_group_id,
+                'vat_product_posting_group_id' => $transaction->vat_prod_posting_group_id,
+            ])->first();
+        }
+
+        return null;
+    }
+
+    private function resolveOffsetAccount(ExpenseTransaction $transaction): ChartOfAccount
+    {
+        // 1. If linked to a Vendor, use Vendor Posting Group -> Payables Account
+        if ($transaction->vendor) {
+            return $transaction->vendor->getPayablesAccount();
+        }
+
+        // 2. If it's a cash expense from an Employee
+        if ($transaction->employee) {
+            // Check if employee has a clearing account or use a generic "Accrued Wages/Expenses"
+            return $transaction->employee->employeePostingGroup?->payables_account_id
+                ? ChartOfAccount::find($transaction->employee->employeePostingGroup->payables_account_id)
+                : ChartOfAccount::where('account_code', '2100')->first();
+        }
+
+        // 3. Fallback to a default Bank/Suspense account
+        return ChartOfAccount::where('account_number', '10100')->first() // Main Bank
+            ?? ChartOfAccount::where('account_code', '9999')->first(); // Suspense
+    }
+
+    private function processAllocations(ExpenseTransaction $transaction): void
+    {
+        foreach ($transaction->allocations as $allocation) {
+            $amount = $allocation->allocated_amount;
+
+            // Allocation moves money from general account to specific cost center
+            $lines = [];
+
+            // Credit Source Account (same as transaction expense account)
+            $lines[] = [
+                'account_id' => $transaction->expense_account_id,
+                'debit' => 0,
+                'credit' => $amount,
+                'description' => "Allocation OUT: {$transaction->document_no}",
+                'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
+            ];
+
+            // Debit Target Account (with target dimensions)
+            $targetDims = $this->dimensionService->getDimensionSet($allocation->dimension_set_id ?? 0)->toArray();
+            if (empty($targetDims) && ($allocation->target_dimension_1 || $allocation->target_dimension_2)) {
+                // Legacy dimension handling if set_id is missing
+                $targetDims = [
+                    'DEPARTMENT' => $allocation->target_dimension_1,
+                    'PROJECT' => $allocation->target_dimension_2,
+                ];
+            }
+
+            $lines[] = [
+                'account_id' => $allocation->target_gl_account_id ?? $transaction->expense_account_id,
+                'debit' => $amount,
+                'credit' => 0,
+                'description' => "Allocation IN: {$transaction->document_no}",
+                'dimensions' => $targetDims,
+            ];
+
+            $this->glService->post($lines, [
+                'posting_date' => $transaction->posting_date,
+                'document_number' => $transaction->document_no,
+                'document_type' => 'ALLOCATION',
+                'description' => "Expense Allocation for {$transaction->document_no}",
+            ]);
+        }
     }
 }

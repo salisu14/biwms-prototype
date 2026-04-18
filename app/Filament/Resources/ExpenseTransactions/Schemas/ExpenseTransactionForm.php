@@ -5,10 +5,11 @@ namespace App\Filament\Resources\ExpenseTransactions\Schemas;
 use App\Enums\AccountType;
 use App\Models\DimensionValue;
 use App\Models\Employee;
+use App\Models\ExpenseCategory;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
@@ -79,10 +80,22 @@ class ExpenseTransactionForm
                                             $factor = (float) ($get('currency_factor') ?? 1);
                                             $set('amount_lcy', (float) $state * $factor);
                                         }),
-                                    TextInput::make('currency_code')
+                                    Select::make('currency_id')
                                         ->label('Currency')
-                                        ->default('USD')
-                                        ->maxLength(10),
+                                        ->relationship('currency', 'code')
+                                        ->searchable()
+                                        ->preload()
+                                        ->default(fn () => \App\Models\Currency::where('is_lcy', true)->first()?->id)
+                                        ->required()
+                                        ->reactive()
+                                        ->afterStateUpdated(function ($state, $get, $set) {
+                                            $currency = \App\Models\Currency::find($state);
+                                            if ($currency) {
+                                                $set('currency_factor', $currency->exchange_rate ?? 1);
+                                                $amount = (float) ($get('amount') ?? 0);
+                                                $set('amount_lcy', $amount * (float) ($currency->exchange_rate ?? 1));
+                                            }
+                                        }),
                                     TextInput::make('currency_factor')
                                         ->label('Exchange Rate')
                                         ->numeric()
@@ -107,9 +120,16 @@ class ExpenseTransactionForm
                                         ->default(0)
                                         ->prefix('$'),
 
-                                    TextInput::make('vat_bus_posting_group')
+                                    Select::make('vat_bus_posting_group_id')
                                         ->label('VAT Bus. Posting Group')
-                                        ->placeholder('e.g. DOMESTIC'),
+                                        ->relationship('vatBusinessPostingGroup', 'code')
+                                        ->searchable()
+                                        ->preload(),
+                                    Select::make('vat_prod_posting_group_id')
+                                        ->label('VAT Prod. Posting Group')
+                                        ->relationship('vatProductPostingGroup', 'code')
+                                        ->searchable()
+                                        ->preload(),
                                 ]),
                             ]),
 
@@ -122,9 +142,21 @@ class ExpenseTransactionForm
                                         ->options(AccountType::class)
                                         ->required()
                                         ->native(false),
-                                    TextInput::make('category_code')
-                                        ->label('Category Code')
-                                        ->required(),
+                                    Select::make('category_code')
+                                        ->label('Expense Category')
+                                        ->relationship('expenseCategory', 'description')
+                                        ->required()
+                                        ->searchable()
+                                        ->preload()
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, $set) {
+                                            $category = ExpenseCategory::where('category_code', $state)->first();
+                                            if ($category) {
+                                                $set('gen_prod_posting_group_id', $category->gen_prod_posting_group_id);
+                                                $set('vat_prod_posting_group_id', $category->vat_prod_posting_group_id);
+                                                $set('expense_account_id', $category->expense_account_id);
+                                            }
+                                        }),
                                     Select::make('vendor_id')
                                         ->label('Vendor')
                                         ->relationship('vendor', 'vendor_name')
@@ -142,7 +174,7 @@ class ExpenseTransactionForm
                                         ->relationship('item', 'description')
                                         ->label('Inventory Item')
                                         ->searchable(),
-                                    Select::make('product_category_id')
+                                    Select::make('category_id')
                                         ->relationship('productCategory', 'category_name')
                                         ->label('Product Category')
                                         ->searchable()
@@ -153,6 +185,19 @@ class ExpenseTransactionForm
                                             'indirect' => 'Indirect',
                                         ])
                                         ->native(false),
+                                    Grid::make(2)->schema([
+                                        Select::make('source_type')
+                                            ->options([
+                                                'VENDOR' => 'Vendor',
+                                                'CUSTOMER' => 'Customer',
+                                                'EMPLOYEE' => 'Employee',
+                                                'BANK' => 'Bank Account',
+                                                'FIXED_ASSET' => 'Fixed Asset',
+                                            ])
+                                            ->native(false),
+                                        TextInput::make('source_no')
+                                            ->label('Source No.'),
+                                    ]),
                                 ]),
                             ]),
 
@@ -171,17 +216,40 @@ class ExpenseTransactionForm
                                         ->disabled()
                                         ->label('G/L Register Entry'),
 
-                                    Select::make('shortcut_dimension_1_code')
-                                        ->label('Department (Dim 1)')
-                                        ->options(fn() => DimensionValue::where('code', 'DEPARTMENT')->pluck('name', 'code'))
+                                    Grid::make(2)->schema([
+                                        Select::make('gen_bus_posting_group_id')
+                                            ->label('Gen. Bus. Posting Group')
+                                            ->relationship('generalBusinessPostingGroup', 'code')
+                                            ->required()
+                                            ->searchable()
+                                            ->preload(),
+                                        Select::make('gen_prod_posting_group_id')
+                                            ->label('Gen. Prod. Posting Group')
+                                            ->relationship('generalProductPostingGroup', 'code')
+                                            ->required()
+                                            ->searchable()
+                                            ->preload(),
+                                    ]),
+
+                                    Select::make('dimension_set_id')
+                                        ->label('Dimension Set')
+                                        ->relationship('dimensionSet', 'id') // Ideally this would be a custom picker
                                         ->searchable()
                                         ->preload(),
 
-                                    Select::make('shortcut_dimension_2_code')
-                                        ->label('Project (Dim 2)')
-                                        ->options(fn() => DimensionValue::where('code', 'PROJECT')->pluck('name', 'code'))
-                                        ->searchable()
-                                        ->preload(),
+                                    Grid::make(2)->schema([
+                                        Select::make('shortcut_dimension_1_code')
+                                            ->label('Department (Dim 1)')
+                                            ->options(fn () => DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', 'DEPARTMENT'))->pluck('name', 'code'))
+                                            ->searchable()
+                                            ->preload(),
+
+                                        Select::make('shortcut_dimension_2_code')
+                                            ->label('Project (Dim 2)')
+                                            ->options(fn () => DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', 'PROJECT'))->pluck('name', 'code'))
+                                            ->searchable()
+                                            ->preload(),
+                                    ]),
 
                                     TextInput::make('invoice_no')
                                         ->label('Vendor Inv No.'),

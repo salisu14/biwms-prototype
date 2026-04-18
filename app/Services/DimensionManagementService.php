@@ -33,7 +33,7 @@ class DimensionManagementService
         // Normalize: remove empty, sort by code for consistent hashing
         $dimensions = collect($dimensions)
             ->filter(fn ($v) => ! empty($v))
-            ->map(fn ($v, $k) => [strtoupper($k) => $v])
+            ->mapWithKeys(fn ($v, $k) => [strtoupper($k) => $v])
             ->sortKeys()
             ->toArray();
 

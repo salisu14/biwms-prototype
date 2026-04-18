@@ -24,6 +24,7 @@ class ExpenseCategory extends Model
         'expense_account_id', 'contra_account_id',
         'posting_rules',
         'default_dimension_1', 'default_dimension_2',
+        'gen_prod_posting_group_id', 'vat_prod_posting_group_id',
         'is_active',
     ];
 
@@ -60,6 +61,16 @@ class ExpenseCategory extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function generalProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralProductPostingGroup::class, 'gen_prod_posting_group_id');
+    }
+
+    public function vatProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatProductPostingGroup::class, 'vat_prod_posting_group_id');
     }
 
     public function getCategoryEnum()

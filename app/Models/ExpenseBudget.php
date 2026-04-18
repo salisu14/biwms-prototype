@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ExpenseBudget extends Model
 {
@@ -15,7 +16,7 @@ class ExpenseBudget extends Model
         'shortcut_dimension_1_code', 'shortcut_dimension_2_code',
         'january', 'february', 'march', 'april', 'may', 'june',
         'july', 'august', 'september', 'october', 'november', 'december',
-        'annual_total', 'is_active',
+        'annual_total', 'is_active', 'dimension_set_id', 'currency_id',
     ];
 
     protected $casts = [
@@ -46,5 +47,15 @@ class ExpenseBudget extends Model
         ];
 
         return $this->{$months[$month]} ?? 0;
+    }
+
+    public function dimensionSet(): BelongsTo
+    {
+        return $this->belongsTo(DimensionSet::class);
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 }
