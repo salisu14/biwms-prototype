@@ -107,9 +107,16 @@ class WorkCenterInfolist
                     ->collapsible(),
 
                 Section::make('Financial Setup')
+                    ->description('General Ledger integration for WIP and capacity posting.')
                     ->schema([
-                        TextEntry::make('work_center_account_no')
-                            ->label('G/L Account No.'),
+                        TextEntry::make('glAccount.account_number')
+                            ->label('G/L Account')
+                            ->formatStateUsing(function ($state, $record) {
+                                $name = $record->glAccount?->name;
+                                return $name ? "{$state} — {$name}" : $state;
+                            })
+                            ->icon('heroicon-m-building-library')
+                            ->placeholder('No account mapped'),
                     ])
                     ->collapsible(),
             ]);

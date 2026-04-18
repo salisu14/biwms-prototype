@@ -117,7 +117,7 @@ class WorkCenterForm
                                 ->label('Direct Unit Cost')
                                 ->required()
                                 ->numeric()
-                                ->prefix('$')
+                                ->prefix('₦')
                                 ->step(0.0001),
 
                             TextInput::make('indirect_cost_percent')
@@ -130,7 +130,7 @@ class WorkCenterForm
                                 ->label('Overhead Rate ($/hr)')
                                 ->required()
                                 ->numeric()
-                                ->prefix('$')
+                                ->prefix('₦')
                                 ->step(0.0001),
                         ]),
                     ])
@@ -151,8 +151,7 @@ class WorkCenterForm
                                 ->label('Location')
                                 ->relationship('location', 'code')
                                 ->searchable()
-                                ->preload()
-                                ->maxLength(20),
+                                ->preload(),
                         ]),
                     ])
                     ->collapsible(),
