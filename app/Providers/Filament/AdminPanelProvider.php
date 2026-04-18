@@ -178,8 +178,13 @@ class AdminPanelProvider extends PanelProvider
                         NavigationGroup::make('Sales')
 //                            ->icon('heroicon-o-currency-dollar')
                             ->items([
-                                NavigationItem::make('Customers')
+                                NavigationItem::make('Customer Groups')
                                     ->icon('heroicon-o-users')
+                                    ->url('/admin/customer-groups')
+                                    ->isActiveWhen(fn () => request()->is('admin/customer-groups*')),
+
+                                NavigationItem::make('Customers')
+                                    ->icon('heroicon-o-user-circle')
                                     ->url('/admin/customers')
                                     ->isActiveWhen(fn () => request()->is('admin/customers*')),
 
@@ -247,10 +252,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/item-category-assignments')
                                     ->isActiveWhen(fn () => request()->is('admin/item-category-assignments*')),
 
-                                NavigationItem::make('Product Groups')
-                                    ->icon('heroicon-o-squares-plus')
-                                    ->url('/admin/product-groups')
-                                    ->isActiveWhen(fn () => request()->is('admin/product-groups*')),
+//                                NavigationItem::make('Product Groups')
+//                                    ->icon('heroicon-o-squares-plus')
+//                                    ->url('/admin/product-groups')
+//                                    ->isActiveWhen(fn () => request()->is('admin/product-groups*')),
 
                                 NavigationItem::make('Locations')
                                     ->icon('heroicon-o-map-pin')
