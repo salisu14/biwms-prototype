@@ -65,6 +65,12 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn () => request()->is('admin/chart-of-accounts*')),
 
                                 // VAT & Tax
+                                NavigationItem::make('Allocation')
+                                    ->icon('heroicon-o-viewfinder-circle')
+                                    ->url('/admin/allocations')
+                                    ->isActiveWhen(fn () => request()->is('admin/allocations*')),
+
+                                // VAT & Tax
                                 NavigationItem::make('VAT & Tax Setup')
                                     ->icon('heroicon-o-receipt-percent')
                                     ->url('/admin/vat-masters')
