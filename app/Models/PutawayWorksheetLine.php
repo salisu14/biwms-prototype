@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PutawayWorksheetLine extends Model
 {
     protected $fillable = [
+        'line_no',
         'putaway_worksheet_id',
         'warehouse_receipt_id',
         'item_id',

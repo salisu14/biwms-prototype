@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PutawayWorksheet extends Model
 {
     protected $fillable = [
+        'worksheet_number',
         'location_id',
         'user_id',
         'status',

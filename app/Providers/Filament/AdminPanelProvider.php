@@ -65,23 +65,23 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn () => request()->is('admin/chart-of-accounts*')),
 
                                 // Posting Groups Cluster
-//                                NavigationItem::make('Posting Groups')
-//                                    ->icon('heroicon-o-squares-2x2')
-//                                    ->url('/admin/posting-groups')
-//                                    ->isActiveWhen(fn () => request()->is('admin/posting-groups*') ||
-//                                        request()->is('admin/general-business-posting-groups*') ||
-//                                        request()->is('admin/general-product-posting-groups*') ||
-//                                        request()->is('admin/vendor-posting-groups*') ||
-//                                        request()->is('admin/customer-posting-groups*') ||
-//                                        request()->is('admin/vat-posting-groups*')),
+                                //                                NavigationItem::make('Posting Groups')
+                                //                                    ->icon('heroicon-o-squares-2x2')
+                                //                                    ->url('/admin/posting-groups')
+                                //                                    ->isActiveWhen(fn () => request()->is('admin/posting-groups*') ||
+                                //                                        request()->is('admin/general-business-posting-groups*') ||
+                                //                                        request()->is('admin/general-product-posting-groups*') ||
+                                //                                        request()->is('admin/vendor-posting-groups*') ||
+                                //                                        request()->is('admin/customer-posting-groups*') ||
+                                //                                        request()->is('admin/vat-posting-groups*')),
 
                                 // Posting Setups
-//                                NavigationItem::make('Posting Setups')
-//                                    ->icon('heroicon-o-adjustments-horizontal')
-//                                    ->url('/admin/posting-setups')
-//                                    ->isActiveWhen(fn () => request()->is('admin/posting-setups*') ||
-//                                        request()->is('admin/general-posting-setups*') ||
-//                                        request()->is('admin/vat-posting-setups*')),
+                                //                                NavigationItem::make('Posting Setups')
+                                //                                    ->icon('heroicon-o-adjustments-horizontal')
+                                //                                    ->url('/admin/posting-setups')
+                                //                                    ->isActiveWhen(fn () => request()->is('admin/posting-setups*') ||
+                                //                                        request()->is('admin/general-posting-setups*') ||
+                                //                                        request()->is('admin/vat-posting-setups*')),
 
                                 // VAT & Tax
                                 NavigationItem::make('VAT & Tax Setup')
@@ -294,76 +294,98 @@ class AdminPanelProvider extends PanelProvider
 
                                 NavigationItem::make('Item Categories')
                                     ->icon('heroicon-o-folder')
-                                    ->url('/admin/item-category-assignments'),
+                                    ->url('/admin/item-category-assignments')
+                                    ->isActiveWhen(fn () => request()->is('admin/item-category-assignments*')),
 
                                 NavigationItem::make('Product Groups')
                                     ->icon('heroicon-o-squares-plus')
-                                    ->url('/admin/product-groups'),
+                                    ->url('/admin/product-groups')
+                                    ->isActiveWhen(fn () => request()->is('admin/product-groups*')),
 
                                 NavigationItem::make('Locations')
                                     ->icon('heroicon-o-map-pin')
-                                    ->url('/admin/locations'),
+                                    ->url('/admin/locations')
+                                    ->isActiveWhen(fn () => request()->is('admin/locations*')),
 
                                 NavigationItem::make('Zones')
                                     ->icon('heroicon-o-inbox')
-                                    ->url('/admin/zones'),
+                                    ->url('/admin/zones')
+                                    ->isActiveWhen(fn () => request()->is('admin/zones*')),
 
                                 NavigationItem::make('Bins')
-                                    ->icon('heroicon-o-inbox')
-                                    ->url('/admin/bins'),
+                                    ->icon('heroicon-o-bold')
+                                    ->url('/admin/bins')
+                                    ->isActiveWhen(fn () => request()->is('admin/bins*')),
 
                                 NavigationItem::make('Work Center Groups')
                                     ->icon('heroicon-o-hand-raised')
-                                    ->url('/admin/work-center-groups'),
-
+                                    ->url('/admin/work-center-groups')
+                                    ->isActiveWhen(fn () => request()->is('admin/work-center-groups*')),
 
                                 NavigationItem::make('Work Centers')
-                                    ->icon('heroicon-o-hand-raised')
-                                    ->url('/admin/work-centers'),
+                                    ->icon('heroicon-o-calculator')
+                                    ->url('/admin/work-centers')
+                                    ->isActiveWhen(fn () => request()->is('admin/work-centers*')),
 
                                 NavigationItem::make('Warehouse Receipts')
                                     ->icon('heroicon-o-arrow-down-tray')
-                                    ->url('/admin/warehouse-receipts'),
+                                    ->url('/admin/warehouse-receipts')
+                                    ->isActiveWhen(fn () => request()->is('admin/warehouse-receipts*')),
 
                                 NavigationItem::make('Warehouse Activities')
-                                    ->icon('heroicon-o-arrow-down-tray')
-                                    ->url('/admin/warehouse-activities'),
+                                    ->icon('heroicon-o-arrow-right-start-on-rectangle')
+                                    ->url('/admin/warehouse-activities')
+                                    ->isActiveWhen(fn () => request()->is('admin/warehouse-activities*')),
 
                                 NavigationItem::make('Warehouse Entry')
-                                    ->icon('heroicon-o-arrow-down-tray')
-                                    ->url('/admin/warehouse-entries'),
+                                    ->icon('heroicon-o-arrow-right-end-on-rectangle')
+                                    ->url('/admin/warehouse-entries')
+                                    ->isActiveWhen(fn () => request()->is('admin/warehouse-entries*')),
+
+                                NavigationItem::make('Putaway Worksheets')
+                                    ->icon('heroicon-o-arrow-path')
+                                    ->url('/admin/putaway-worksheets')
+                                    ->isActiveWhen(fn () => request()->is('admin/putaway-worksheets*')),
 
                                 NavigationItem::make('Inventory Putaways')
                                     ->icon('heroicon-o-arrow-down-on-square')
-                                    ->url('/admin/inventory-putaways'),
+                                    ->url('/admin/inventory-putaways')
+                                    ->isActiveWhen(fn () => request()->is('admin/inventory-putaways*')),
 
                                 NavigationItem::make('Warehouse Putaways')
-                                    ->icon('heroicon-o-arrow-down-on-square')
-                                    ->url('/admin/warehouse-putaways'),
+                                    ->icon('heroicon-o-arrow-top-right-on-square')
+                                    ->url('/admin/warehouse-putaways')
+                                    ->isActiveWhen(fn () => request()->is('admin/warehouse-putaways*')),
 
                                 NavigationItem::make('Warehouse Shipments')
                                     ->icon('heroicon-o-arrow-up-tray')
-                                    ->url('/admin/warehouse-shipments'),
+                                    ->url('/admin/warehouse-shipments')
+                                    ->isActiveWhen(fn () => request()->is('admin/warehouse-shipments*')),
 
                                 NavigationItem::make('Picks')
                                     ->icon('heroicon-o-hand-raised')
-                                    ->url('/admin/picks'),
+                                    ->url('/admin/picks')
+                                    ->isActiveWhen(fn () => request()->is('admin/picks*')),
 
                                 NavigationItem::make('Inventory Adjustments')
                                     ->icon('heroicon-o-adjustments-vertical')
-                                    ->url('/admin/inventory-adjustments'),
+                                    ->url('/admin/inventory-adjustments')
+                                    ->isActiveWhen(fn () => request()->is('admin/inventory-adjustments*')),
 
                                 NavigationItem::make('Item Ledger Entries')
                                     ->icon('heroicon-o-book-open')
-                                    ->url('/admin/item-ledger-entries'),
+                                    ->url('/admin/item-ledger-entries')
+                                    ->isActiveWhen(fn () => request()->is('admin/item-ledger-entries*')),
 
                                 NavigationItem::make('Physical Inventory')
                                     ->icon('heroicon-o-clipboard')
-                                    ->url('/admin/physical-inventory'),
+                                    ->url('/admin/physical-inventory')
+                                    ->isActiveWhen(fn () => request()->is('admin/physical-inventory*')),
 
                                 NavigationItem::make('Inventory Valuation Report')
                                     ->icon('heroicon-o-presentation-chart-line')
-                                    ->url('/admin/inventory-valuation-report'),
+                                    ->url('/admin/inventory-valuation-report')
+                                    ->isActiveWhen(fn () => request()->is('admin/inventory-valuation-report*')),
                             ])
                     )
 
@@ -374,63 +396,78 @@ class AdminPanelProvider extends PanelProvider
                                 ->items([
                                     NavigationItem::make('Production Orders')
                                         ->icon('heroicon-o-wrench')
-                                        ->url('/admin/production-orders'),
+                                        ->url('/admin/production-orders')
+                                        ->isActiveWhen(fn () => request()->is('admin/production-orders*')),
 
                                     NavigationItem::make('Released Production Orders')
                                         ->icon('heroicon-o-play')
-                                        ->url('/admin/released-production-orders'),
+                                        ->url('/admin/released-production-orders')
+                                        ->isActiveWhen(fn () => request()->is('admin/released-production-orders*')),
 
                                     NavigationItem::make('Finished Production Orders')
                                         ->icon('heroicon-o-check-circle')
-                                        ->url('/admin/finished-production-orders'),
+                                        ->url('/admin/finished-production-orders')
+                                        ->isActiveWhen(fn () => request()->is('admin/finished-production-orders*')),
 
                                     NavigationItem::make('CapEx Projects')
                                         ->icon('heroicon-o-building-office')
-                                        ->url('/admin/capex-projects'),
+                                        ->url('/admin/capex-projects')
+                                        ->isActiveWhen(fn () => request()->is('admin/capex-projects*')),
 
                                     NavigationItem::make('Fixed Assets')
                                         ->icon('heroicon-o-building-office')
-                                        ->url('/admin/fixed-assets'),
+                                        ->url('/admin/fixed-assets')
+                                        ->isActiveWhen(fn () => request()->is('admin/fixed-assets*')),
 
                                     NavigationItem::make('Depreciation Books')
                                         ->icon('heroicon-o-building-office')
-                                        ->url('/admin/depreciation-books'),
+                                        ->url('/admin/depreciation-books')
+                                        ->isActiveWhen(fn () => request()->is('admin/depreciation-books*')),
 
                                     NavigationItem::make('FA Classes')
                                         ->icon('heroicon-o-building-office')
-                                        ->url('/admin/f-a-classes'),
+                                        ->url('/admin/f-a-classes')
+                                        ->isActiveWhen(fn () => request()->is('admin/f-a-classes*')),
 
                                     NavigationItem::make('Machine Centers')
                                         ->icon('heroicon-o-cpu-chip')
-                                        ->url('/admin/machine-centers'),
+                                        ->url('/admin/machine-centers')
+                                        ->isActiveWhen(fn () => request()->is('admin/machine-centers*')),
 
                                     NavigationItem::make('Work Center Groups')
                                         ->icon('heroicon-o-cpu-chip')
-                                        ->url('/admin/work-center-groups'),
+                                        ->url('/admin/work-center-groups')
+                                        ->isActiveWhen(fn () => request()->is('admin/work-center-groups*')),
 
                                     NavigationItem::make('Work Centers')
                                         ->icon('heroicon-o-wrench-screwdriver')
-                                        ->url('/admin/work-centers'),
+                                        ->url('/admin/work-centers')
+                                        ->isActiveWhen(fn () => request()->is('admin/work-centers*')),
 
                                     NavigationItem::make('Work Center Calendars')
                                         ->icon('heroicon-o-calendar')
-                                        ->url('/admin/work-center-calendars'),
+                                        ->url('/admin/work-center-calendars')
+                                        ->isActiveWhen(fn () => request()->is('admin/work-center-calendars*')),
 
                                     NavigationItem::make('Routing')
                                         ->icon('heroicon-o-map')
-                                        ->url('/admin/routings'),
+                                        ->url('/admin/routings')
+                                        ->isActiveWhen(fn () => request()->is('admin/routings*')),
 
                                     NavigationItem::make('Routing Versions')
                                         ->icon('heroicon-o-map')
-                                        ->url('/admin/routing-versions'),
+                                        ->url('/admin/routing-versions')
+                                        ->isActiveWhen(fn () => request()->is('admin/routing-versions*')),
 
                                     NavigationItem::make('Production Bom')
                                         ->icon('heroicon-o-list-bullet')
-                                        ->url('/admin/production-boms'),
+                                        ->url('/admin/production-boms')
+                                        ->isActiveWhen(fn () => request()->is('admin/production-boms*')),
 
                                     NavigationItem::make('Production Bom Version')
                                         ->icon('heroicon-o-list-bullet')
-                                        ->url('/admin/production-bom-versions'),
+                                        ->url('/admin/production-bom-versions')
+                                        ->isActiveWhen(fn () => request()->is('admin/production-bom-versions*')),
 
                                     NavigationItem::make('Production Performance')
                                         ->icon('heroicon-o-presentation-chart-line')

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WarehouseReceipts\Schemas;
 
+use App\Enums\WarehouseReceiptStatus;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -22,13 +23,13 @@ class WarehouseReceiptInfolist
                                 ->copyable(),
                             TextEntry::make('status')
                                 ->badge()
-                                ->color(fn (string $state): string => match ($state) {
-                                    'OPEN' => 'gray',
-                                    'RELEASED' => 'info',
-                                    'PARTIALLY_RECEIVED' => 'warning',
-                                    'RECEIVED' => 'success',
-                                    default => 'gray',
+                                ->color(fn (WarehouseReceiptStatus $state): string => match ($state) {
+                                    WarehouseReceiptStatus::OPEN => 'gray',
+                                    WarehouseReceiptStatus::RELEASED => 'info',
+                                    WarehouseReceiptStatus::PARTIALLY_RECEIVED => 'warning',
+                                    WarehouseReceiptStatus::RECEIVED => 'success',
                                 }),
+
                             TextEntry::make('location.name')
                                 ->label('Receiving Location'),
                         ]),

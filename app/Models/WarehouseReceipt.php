@@ -4,15 +4,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Enums\WarehouseReceiptStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WarehouseReceipt extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'document_number',
         'location_id',
@@ -31,6 +29,7 @@ class WarehouseReceipt extends Model
         'receipt_date' => 'date',
         'expected_receipt_date' => 'date',
         'posted_date' => 'datetime',
+        'status' => WarehouseReceiptStatus::class,
     ];
 
     // Relationships
@@ -91,7 +90,7 @@ class WarehouseReceipt extends Model
     // Scope
     public function scopeOpen($query)
     {
-        return $query->whereIn('status', ['OPEN', 'RELEASED', 'PARTIALLY_RECEIVED']);
+        return $query->whereIn('status', WarehouseReceiptStatus::cases());
     }
 
     public function scopeForVendor($query, int $vendorId)

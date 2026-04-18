@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WarehouseReceipts\Tables;
 
+use App\Enums\WarehouseReceiptStatus;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -24,12 +25,11 @@ class WarehouseReceiptsTable
 
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'OPEN' => 'gray',
-                        'RELEASED' => 'info',
-                        'PARTIALLY_RECEIVED' => 'warning',
-                        'RECEIVED' => 'success',
-                        default => 'gray',
+                    ->color(fn (WarehouseReceiptStatus $state): string => match ($state) {
+                        WarehouseReceiptStatus::OPEN => 'gray',
+                        WarehouseReceiptStatus::RELEASED => 'info',
+                        WarehouseReceiptStatus::PARTIALLY_RECEIVED => 'warning',
+                        WarehouseReceiptStatus::RECEIVED => 'success',
                     }),
 
                 TextColumn::make('vendor.vendor_name')

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WarehouseReceipts\Schemas;
 
+use App\Enums\WarehouseReceiptStatus;
 use App\Models\WarehouseReceipt;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -37,11 +38,13 @@ class WarehouseReceiptForm
                                 ->searchable()
                                 ->preload()
                                 ->required(),
-
-                            TextInput::make('status')
-                                ->default('OPEN')
-                                ->disabled()
-                                ->dehydrated(),
+                            // UPDATED: Now uses the WarehouseReceiptStatus enum
+                            Select::make('status')
+                                ->label('Document Status')
+                                ->options(WarehouseReceiptStatus::class)
+                                ->default(WarehouseReceiptStatus::OPEN)
+                                ->required()
+                                ->native(false),
                         ])->columnSpan(2),
 
                     Section::make('Team Assignment')
@@ -58,10 +61,17 @@ class WarehouseReceiptForm
                     ->description('Tracking links to the originating document.')
                     ->schema([
                         Grid::make(3)->schema([
-                            TextInput::make('source_document')
-                                ->label('Source Type')
-                                ->placeholder('e.g., PURCHASE_ORDER')
-                                ->required(),
+                            Select::make('source_document')
+                                ->label('Source Document Type')
+                                ->options([
+                                    'PURCHASE_ORDER' => 'Purchase Order',
+                                    'SALES_RETURN_ORDER' => 'Sales Return Order',
+                                    'INBOUND_TRANSFER' => 'Inbound Transfer',
+                                ])
+                                ->required()
+                                ->native(false)
+                                ->helperText('Select the originating document type.'),
+
                             TextInput::make('source_document_number')
                                 ->label('Source Doc No.')
                                 ->required(),

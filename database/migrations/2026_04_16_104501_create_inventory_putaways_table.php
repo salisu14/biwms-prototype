@@ -73,14 +73,16 @@ return new class extends Migration
         // 6. Put-away Worksheet (For bulk creation)
         Schema::create('putaway_worksheets', function (Blueprint $table) {
             $table->id();
+            $table->string('worksheet_number', 50)->unique();
             $table->foreignId('location_id')->constrained();
             $table->foreignId('user_id')->constrained();
-            $table->enum('status', ['Open', 'Processed'])->default('Open');
+            $table->enum('status', ['Open', 'Released', 'In Progress', 'Completed'])->default('Open');
             $table->timestamps();
         });
 
         Schema::create('putaway_worksheet_lines', function (Blueprint $table) {
             $table->id();
+            $table->integer('line_no');
             $table->foreignId('putaway_worksheet_id')->constrained()->onDelete('cascade');
             $table->foreignId('warehouse_receipt_id')->constrained();
             $table->foreignId('item_id')->constrained();
