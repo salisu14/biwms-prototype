@@ -19,6 +19,14 @@ class CustomerInfolist
                         ->schema([
                             TextEntry::make('customer_number')->label('Account #')->weight('bold'),
                             TextEntry::make('name')->size('lg')->weight('bold'),
+
+                            // Added: Group display in profile
+                            TextEntry::make('group.name')
+                                ->label('Customer Group')
+                                ->badge()
+                                ->color('info')
+                                ->placeholder('No group assigned'),
+
                             TextEntry::make('email')->icon('heroicon-m-envelope')->copyable(),
                             TextEntry::make('phone')->icon('heroicon-m-phone'),
                             TextEntry::make('address')->columnSpanFull(),

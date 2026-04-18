@@ -24,9 +24,19 @@ class CustomerForm
                                     ->label('Customer No.')
                                     ->required()
                                     ->unique(ignoreRecord: true),
+
                                 TextInput::make('name')
                                     ->required()
                                     ->maxLength(255),
+
+                                // Added: Customer Group selection
+                                Select::make('customer_group_id')
+                                    ->label('Customer Group')
+                                    ->relationship('group', 'name')
+                                    ->searchable()
+                                    ->preload()
+                                    ->placeholder('Select a group'),
+
                                 Grid::make(2)->schema([
                                     TextInput::make('email')
                                         ->email()
@@ -43,7 +53,6 @@ class CustomerForm
                             ->schema([
                                 Toggle::make('blocked')
                                     ->live(),
-                                //                                    ->color('danger'),
 
                                 Select::make('blocked_reason')
                                     ->options([
@@ -54,10 +63,12 @@ class CustomerForm
                                     ])
                                     ->visible(fn ($get) => $get('blocked'))
                                     ->required(fn ($get) => $get('blocked')),
+
                                 TextInput::make('credit_limit')
                                     ->numeric()
                                     ->prefix('$')
                                     ->default(0),
+
                                 Select::make('location_id')
                                     ->relationship('location', 'name')
                                     ->searchable()
