@@ -10,6 +10,7 @@ use App\Enums\ExpenseCategoryEnum;
 use App\Enums\RevenueCategory;
 use App\Models\Category;
 use App\Models\ChartOfAccount;
+use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\ExpenseBudget;
 use App\Models\ExpenseCategory;
@@ -103,6 +104,7 @@ class ExpenseService
 
             // 4. Handle Allocations
             if ($transaction->allocations()->exists()) {
+                $this->validateAllocations($transaction);
                 $this->processAllocations($transaction);
             }
         });
@@ -304,7 +306,7 @@ class ExpenseService
             'amount' => $amount,
             'amount_lcy' => $this->currencyService->toLCY($amount, $currencyCode),
             'currency_code' => $currencyCode,
-            'currency_id' => $currencyCode ? \App\Models\Currency::where('code', $currencyCode)->first()?->id : null,
+            'currency_id' => $currencyCode ? Currency::where('code', $currencyCode)->first()?->id : null,
             'vendor_id' => $vendor->id,
             'category_id' => null, // Or resolve if needed
             'expense_account_id' => $interimAccount->id,
@@ -462,6 +464,7 @@ class ExpenseService
             'description' => $transaction->description,
             'debit_amount' => $transaction->amount > 0 ? (float) $transaction->amount : 0,
             'credit_amount' => $transaction->amount < 0 ? (float) abs($transaction->amount) : 0,
+            'dimension_set_id' => $transaction->dimension_set_id,
             'shortcut_dimension_1_code' => $transaction->shortcut_dimension_1_code,
             'shortcut_dimension_2_code' => $transaction->shortcut_dimension_2_code,
         ]);
@@ -545,11 +548,12 @@ class ExpenseService
             throw new \RuntimeException("General Posting Setup not found for the selected Posting Groups on transaction {$transaction->document_no}");
         }
 
-        if (! $setup->purchase_account_id) {
-            throw new \RuntimeException('Purchase Account is not configured in General Posting Setup for the selected groups');
+        $transaction->expense_account_id = $setup->purchase_account_id ?? $setup->inventory_account_id;
+
+        if (! $transaction->expense_account_id) {
+            throw new \RuntimeException("Purchase Account is not configured in General Posting Setup for {$transaction->document_no}");
         }
 
-        $transaction->expense_account_id = $setup->purchase_account_id;
         $transaction->save();
     }
 
@@ -613,8 +617,19 @@ class ExpenseService
 
     private function processAllocations(ExpenseTransaction $transaction): void
     {
+        $totalAmount = (float) $transaction->amount;
+        $fixedAmountTotal = (float) $transaction->allocations()->where('allocation_type', 'amount')->sum('allocated_amount');
+        $remainingForPercentage = $totalAmount - $fixedAmountTotal;
+
         foreach ($transaction->allocations as $allocation) {
-            $amount = $allocation->allocated_amount;
+            $amount = $allocation->allocation_type === 'amount'
+                ? (float) $allocation->allocated_amount
+                : $remainingForPercentage * ((float) $allocation->allocation_percentage / 100);
+
+            // Update the allocated amount in DB for traceability if it was percentage based
+            if ($allocation->allocation_type === 'percentage') {
+                $allocation->update(['allocated_amount' => $amount]);
+            }
 
             // Allocation moves money from general account to specific cost center
             $lines = [];
@@ -630,13 +645,6 @@ class ExpenseService
 
             // Debit Target Account (with target dimensions)
             $targetDims = $this->dimensionService->getDimensionSet($allocation->dimension_set_id ?? 0)->toArray();
-            if (empty($targetDims) && ($allocation->target_dimension_1 || $allocation->target_dimension_2)) {
-                // Legacy dimension handling if set_id is missing
-                $targetDims = [
-                    'DEPARTMENT' => $allocation->target_dimension_1,
-                    'PROJECT' => $allocation->target_dimension_2,
-                ];
-            }
 
             $lines[] = [
                 'account_id' => $allocation->target_gl_account_id ?? $transaction->expense_account_id,
@@ -652,6 +660,158 @@ class ExpenseService
                 'document_type' => 'ALLOCATION',
                 'description' => "Expense Allocation for {$transaction->document_no}",
             ]);
+        }
+    }
+
+    /**
+     * Merge dimensions from source and category
+     */
+    public function mergeDimensions(ExpenseTransaction $transaction): void
+    {
+        $dimensionSet = [];
+
+        // 1. From Category (Highest Priority)
+        if ($transaction->expenseCategory) {
+            if ($transaction->expenseCategory->default_dimension_1) {
+                $dimensionSet['DEPARTMENT'] = $transaction->expenseCategory->default_dimension_1;
+            }
+            if ($transaction->expenseCategory->default_dimension_2) {
+                $dimensionSet['PROJECT'] = $transaction->expenseCategory->default_dimension_2;
+            }
+        }
+
+        // 2. From Source (Vendor/Employee)
+        $source = $transaction->vendor ?: $transaction->employee;
+        if ($source && method_exists($source, 'dimensionValues')) {
+            foreach ($source->dimensionValues as $dv) {
+                $dimCode = $dv->dimension->code;
+                if (! isset($dimensionSet[$dimCode])) {
+                    $dimensionSet[$dimCode] = $dv->code;
+                }
+            }
+        }
+
+        // 3. Manually set on transaction
+        if ($transaction->shortcut_dimension_1_code) {
+            $dimensionSet['DEPARTMENT'] = $transaction->shortcut_dimension_1_code;
+        }
+        if ($transaction->shortcut_dimension_2_code) {
+            $dimensionSet['PROJECT'] = $transaction->shortcut_dimension_2_code;
+        }
+
+        if (! empty($dimensionSet)) {
+            $set = $this->dimensionService->getOrCreateSet($dimensionSet);
+            $transaction->dimension_set_id = $set->id;
+            $transaction->shortcut_dimension_1_code = $dimensionSet['DEPARTMENT'] ?? null;
+            $transaction->shortcut_dimension_2_code = $dimensionSet['PROJECT'] ?? null;
+            $transaction->save();
+        }
+    }
+
+    /**
+     * Generate actual transactions from all due recurring templates
+     */
+    public function processRecurringExpenses(): void
+    {
+        $dueExpenses = RecurringExpense::where('is_active', true)
+            ->where('next_occurrence_at', '<=', now())
+            ->get();
+
+        foreach ($dueExpenses as $recurring) {
+            DB::transaction(function () use ($recurring) {
+                $this->createFromRecurring($recurring);
+
+                // Update next occurrence
+                $recurring->last_occurrence_at = $recurring->next_occurrence_at;
+                $recurring->next_occurrence_at = $this->calculateNextOccurrence($recurring);
+
+                if ($recurring->end_date && $recurring->next_occurrence_at > $recurring->end_date) {
+                    $recurring->is_active = false;
+                }
+
+                $recurring->save();
+            });
+        }
+    }
+
+    /**
+     * Create a single transaction from a recurring template
+     */
+    public function createFromRecurring(RecurringExpense $recurring): ExpenseTransaction
+    {
+        $transaction = ExpenseTransaction::create([
+            'document_type' => 'recurring',
+            'document_no' => $this->numberSeriesService->getNextNo('RECUR'),
+            'posting_date' => $recurring->next_occurrence_at,
+            'document_date' => now(),
+            'account_type' => AccountType::DIRECT_EXPENSE, // Default for now
+            'category_code' => $recurring->category_code ?? $recurring->category?->category_code,
+            'amount' => $recurring->amount,
+            'amount_lcy' => $this->currencyService->toLCY($recurring->amount, $recurring->currency?->code),
+            'currency_id' => $recurring->currency_id,
+            'vendor_id' => $recurring->vendor_id,
+            'category_id' => $recurring->category_id,
+            'shortcut_dimension_1_code' => $recurring->shortcut_dimension_1_code,
+            'shortcut_dimension_2_code' => $recurring->shortcut_dimension_2_code,
+            'dimension_set_id' => $recurring->dimension_set_id,
+            'status' => 'open',
+            'description' => "Recurring: {$recurring->description} ({$recurring->code})",
+        ]);
+
+        // Auto-merge dimensions to ensure consistency
+        $this->mergeDimensions($transaction);
+
+        if ($recurring->auto_post) {
+            try {
+                $this->post($transaction);
+            } catch (\Exception $e) {
+                // Log failure but keep transaction as 'open'
+                \Log::error("Failed to auto-post recurring expense {$recurring->code}: ".$e->getMessage());
+            }
+        }
+
+        return $transaction;
+    }
+
+    private function calculateNextOccurrence(RecurringExpense $recurring): \DateTime
+    {
+        $date = clone $recurring->next_occurrence_at;
+        $interval = $recurring->interval ?: 1;
+
+        return match ($recurring->frequency) {
+            'daily' => $date->add(new \DateInterval("P{$interval}D")),
+            'weekly' => $date->add(new \DateInterval("P{$interval}W")),
+            'monthly' => $date->add(new \DateInterval("P{$interval}M")),
+            'quarterly' => $date->add(new \DateInterval('P'.($interval * 3).'M')),
+            'yearly' => $date->add(new \DateInterval("P{$interval}Y")),
+            default => $date->add(new \DateInterval('P1M')),
+        };
+    }
+
+    private function validateAllocations(ExpenseTransaction $transaction): void
+    {
+        $allocations = $transaction->allocations;
+        $totalAmount = (float) $transaction->amount;
+
+        $fixedAllocations = $allocations->where('allocation_type', 'amount');
+        $percentageAllocations = $allocations->where('allocation_type', 'percentage');
+
+        $fixedSum = (float) $fixedAllocations->sum('allocated_amount');
+        $percentageSum = (float) $percentageAllocations->sum('allocation_percentage');
+
+        // Rule 1: Fixed amounts cannot exceed the total amount
+        if ($fixedSum > $totalAmount + 0.001) {
+            throw new \RuntimeException("Fixed allocation sum ({$fixedSum}) exceeds transaction total ({$totalAmount})");
+        }
+
+        // Rule 2: If percentage allocations exist, they MUST sum to 100% of the REMAINING balance
+        if ($percentageAllocations->isNotEmpty() && abs($percentageSum - 100) > 0.001) {
+            throw new \RuntimeException("Percentage allocations must sum to 100%. Current: {$percentageSum}%");
+        }
+
+        // Rule 3: If NO percentage allocations exist, fixed amounts MUST EQUAL total amount
+        if ($percentageAllocations->isEmpty() && abs($fixedSum - $totalAmount) > 0.01) {
+            throw new \RuntimeException("Total allocated amount ({$fixedSum}) does not equal transaction total ({$totalAmount})");
         }
     }
 }

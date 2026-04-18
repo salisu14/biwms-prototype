@@ -102,6 +102,11 @@ class BinForm
                             ->icon('heroicon-m-scale')
                             ->schema([
                                 Grid::make(3)->schema([
+                                    Select::make('uom_id')
+                                        ->label('Unit of Measure (Capacity)')
+                                        ->relationship('uom', 'uom_code')
+                                        ->searchable()
+                                        ->preload(),
                                     TextInput::make('maximum_weight')
                                         ->numeric()
                                         ->suffix('kg')

@@ -81,7 +81,7 @@ class SalesInvoiceForm
                             ->schema([
                                 Select::make('item_id')
                                     ->label('Item')
-                                    ->options(Item::query()->whereNotNull('item_code')->pluck('item_code', 'id'))
+                                    ->relationship('item', 'item_code', fn ($query) => $query->finishedGoods()->where('blocked', false))
                                     ->searchable()
                                     ->preload()
                                     ->required()

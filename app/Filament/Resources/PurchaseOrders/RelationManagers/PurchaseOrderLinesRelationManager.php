@@ -38,8 +38,8 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                 Grid::make(4)->schema([
                     Select::make('item_id')
                         ->label('Item')
-                        // Ensure this relationship points to the unified Item model
-                        ->relationship('item', 'item_code', fn ($query) => $query->where('blocked', false))
+                        // Only show Raw Materials and Packaging in Purchase Orders
+                        ->relationship('item', 'item_code', fn ($query) => $query->rawMaterials()->where('blocked', false))
                         ->searchable()
                         ->preload()
                         ->required()

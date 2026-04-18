@@ -15,6 +15,7 @@ class PutawayWorksheetLine extends Model
         'putaway_worksheet_id',
         'warehouse_receipt_id',
         'item_id',
+        'bin_id',
         'quantity',
         'qty_to_handle',
         'source_no',
@@ -38,5 +39,10 @@ class PutawayWorksheetLine extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function bin(): BelongsTo
+    {
+        return $this->belongsTo(Bin::class);
     }
 }

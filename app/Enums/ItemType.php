@@ -12,6 +12,8 @@ enum ItemType: string
     case SPARE_PART = 'SPARE_PART';
     case SERVICE = 'SERVICE';
 
+    const string INVENTORY = 'INVENTORY';
+
     public function label(): string
     {
         return match ($this) {
@@ -20,6 +22,7 @@ enum ItemType: string
             self::PACKAGING => 'Packaging Material',
             self::SPARE_PART => 'Spare Part',
             self::SERVICE => 'Service',
+            self::INVENTORY => 'Inventory',
         };
     }
 
@@ -31,6 +34,7 @@ enum ItemType: string
             self::PACKAGING => 'Materials used for packaging finished goods',
             self::SPARE_PART => 'Replacement parts for equipment maintenance',
             self::SERVICE => 'Non-physical service items',
+            self::INVENTORY => 'Inventory items',
         };
     }
 
@@ -42,6 +46,7 @@ enum ItemType: string
             self::PACKAGING => 'heroicon-m-box',
             self::SPARE_PART => 'heroicon-m-wrench',
             self::SERVICE => 'heroicon-m-wrench-screwdriver',
+            self::INVENTORY => 'heroicon-m-cube',
         };
     }
 
@@ -52,7 +57,7 @@ enum ItemType: string
             self::FINISHED_GOOD => 'success',
             self::PACKAGING => 'info',
             self::SPARE_PART => 'secondary',
-            self::SERVICE => 'primary',
+            self::SERVICE, self::INVENTORY => 'primary',
         };
     }
 

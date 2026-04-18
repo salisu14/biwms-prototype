@@ -1,98 +1,110 @@
 <x-filament-panels::page>
-    <div class="space-y-6 fi-report-container">
-        <!-- Filter Section: Hidden on Print -->
-        <x-filament::section class="print:hidden">
-            <form wire:submit="generateReport">
-                {{ $this->form }}
-                <div class="mt-4 flex justify-end gap-x-3">
-                    <x-filament::button color="gray" wire:click="form.fill" type="button">
-                        Reset
-                    </x-filament::button>
-                    <x-filament::button type="submit">
-                        Update Report
-                    </x-filament::button>
-                </div>
-            </form>
+    <div class="space-y-8 fi-report-container font-sans antialiased">
+        <!-- Premium Filter Section -->
+        <x-filament::section class="print:hidden border-none shadow-xl bg-white/50 dark:bg-gray-900/50 backdrop-blur-md rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl">
+            <template x-if="true"> {{-- Animation wrapper --}}
+                <form wire:submit="generateReport" class="p-2">
+                    {{ $this->form }}
+                    <div class="mt-6 flex justify-end items-center gap-x-4 border-t border-gray-100 dark:border-white/5 pt-6">
+                        <button type="button" wire:click="form.fill" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                            Reset Filters
+                        </button>
+                        <x-filament::button type="submit" size="lg" class="rounded-xl shadow-lg shadow-primary-500/20 px-8 transition-transform active:scale-95">
+                            Update Analysis
+                        </x-filament::button>
+                    </div>
+                </form>
+            </template>
         </x-filament::section>
 
         @if($reportData)
-            <!-- Executive Summary Cards: Visible on Screen, Hidden on Print (usually) -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
-                <x-filament::section>
-                    <div class="flex flex-col">
-                        <span class="text-sm text-gray-500 font-medium">Total Revenue</span>
-                        <span class="text-2xl font-bold text-gray-950 dark:text-white">
-                            {{ $reportData['totals']['revenue'] ?? $reportData['summary']['total_revenue'] ?? '0.00' }}
-                        </span>
-                    </div>
-                </x-filament::section>
+            <!-- Executive Analytics Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 print:hidden">
+                @php
+                    $indicators = [
+                        ['label' => 'Total Revenue', 'value' => $reportData['totals']['revenue'], 'compare' => $reportData['totals']['compare_revenue'] ?? null, 'color' => 'indigo'],
+                        ['label' => 'Gross Profit', 'value' => $reportData['totals']['gross_profit'], 'compare' => $reportData['totals']['compare_gross_profit'] ?? null, 'color' => 'emerald'],
+                        ['label' => 'Operating Expenses', 'value' => $reportData['totals']['operating_expenses'], 'compare' => $reportData['totals']['compare_operating_expenses'] ?? null, 'color' => 'amber'],
+                        ['label' => 'Net Income', 'value' => $reportData['totals']['net_income'], 'compare' => $reportData['totals']['compare_net_income'] ?? null, 'color' => 'ruby'],
+                    ];
+                @endphp
 
-                <x-filament::section>
-                    <div class="flex flex-col">
-                        <span class="text-sm text-gray-500 font-medium">Gross Profit</span>
-                        <span class="text-2xl font-bold text-emerald-600">
-                            {{ $reportData['totals']['gross_profit'] ?? $reportData['summary']['gross_profit'] ?? '0.00' }}
-                        </span>
+                @foreach($indicators as $card)
+                    @php
+                        $isLoss = $card['label'] === 'Net Income' && str_contains((string)$card['value'], '-');
+                        $cardColor = $isLoss ? 'ruby' : $card['color'];
+                        $val = (float) str_replace(',', '', $card['value']);
+                        $compVal = $card['compare'] ? (float) str_replace(',', '', $card['compare']) : null;
+                        $growth = $compVal && $compVal != 0 ? (($val - $compVal) / abs($compVal)) * 100 : null;
+                    @endphp
+                    <div class="relative group">
+                        <div class="absolute -inset-0.5 bg-gradient-to-r from-{{ $cardColor }}-500 to-{{ $cardColor }}-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
+                        <div class="relative flex flex-col p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 transition-transform duration-300 group-hover:-translate-y-1">
+                            <span class="text-xs font-bold uppercase tracking-widest text-{{ $cardColor }}-600 mb-1">{{ $card['label'] }}</span>
+                            <div class="flex items-baseline gap-x-2">
+                                <span class="text-3xl font-black text-gray-900 dark:text-white tabular-nums">
+                                    {{ $card['value'] }}
+                                </span>
+                            </div>
+                            @if($growth !== null)
+                                <div class="mt-2 flex items-center gap-x-1 text-xs">
+                                    <span class="font-bold {{ $growth >= 0 ? ($card['label'] === 'Operating Expenses' ? 'text-ruby-600' : 'text-emerald-600') : ($card['label'] === 'Operating Expenses' ? 'text-emerald-600' : 'text-ruby-600') }}">
+                                        {{ $growth >= 0 ? '+' : '' }}{{ number_format($growth, 1) }}%
+                                    </span>
+                                    <span class="text-gray-400">vs prior</span>
+                                </div>
+                            @endif
+                        </div>
                     </div>
-                </x-filament::section>
-
-                <x-filament::section>
-                    <div class="flex flex-col">
-                        <span class="text-sm text-gray-500 font-medium">Operating Expenses</span>
-                        <span class="text-2xl font-bold text-amber-600">
-                            {{ $reportData['totals']['operating_expenses'] ?? $reportData['summary']['operating_expenses'] ?? '0.00' }}
-                        </span>
-                    </div>
-                </x-filament::section>
-
-                <x-filament::section>
-                    <div class="flex flex-col">
-                        <span class="text-sm text-gray-500 font-medium">Net Income</span>
-                        @php
-                            $netIncome = $reportData['totals']['net_income'] ?? $reportData['summary']['net_income'] ?? 0;
-                            $isLoss = str_contains((string)$netIncome, '-');
-                        @endphp
-                        <span class="text-2xl font-bold {{ $isLoss ? 'text-ruby-600' : 'text-emerald-600' }}">
-                            {{ $netIncome }}
-                        </span>
-                    </div>
-                </x-filament::section>
+                @endforeach
             </div>
 
-            <!-- Main Report -->
-            <x-filament::section>
-                <!-- Print Header -->
-                <div class="hidden print:block mb-8 border-b pb-4">
-                    <div class="flex justify-between items-start">
+            <!-- Premium Financial Statement -->
+            <x-filament::section class="border-none shadow-2xl rounded-3xl overflow-hidden bg-white dark:bg-gray-900 p-0">
+                <!-- Specialized Header -->
+                <div class="p-8 md:p-12 border-b border-gray-100 dark:border-white/5 bg-gradient-to-b from-gray-50/50 to-transparent dark:from-white/5">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                         <div>
-                            <h1 class="text-2xl font-bold tracking-tight text-gray-950">
-                                {{ $reportData['report_name'] ?? 'Profit & Loss Statement' }}
-                            </h1>
-                            <p class="text-lg font-medium text-gray-700">{{ config('app.company_name', 'BIWMS') }}</p>
+                            <div class="flex items-center gap-x-3 mb-2">
+                                <div class="w-10 h-10 rounded-xl bg-primary-600 flex items-center justify-center text-white shadow-lg shadow-primary-500/30">
+                                    <x-filament::icon icon="heroicon-m-document-chart-bar" class="w-6 h-6" />
+                                </div>
+                                <h1 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white">
+                                    {{ $reportData['report_name'] ?? 'Profit & Loss Statement' }}
+                                </h1>
+                            </div>
+                            <p class="text-lg font-semibold text-gray-400 leading-none uppercase tracking-widest pl-1">{{ config('app.company_name', 'BIWMS ERP') }}</p>
                         </div>
-                        <div class="text-right text-sm text-gray-500 space-y-1">
-                            <p><strong>Period:</strong> {{ $reportData['period'] }}</p>
+                        <div class="flex flex-col items-end gap-y-1 text-right">
+                            <div class="px-4 py-2 rounded-full bg-gray-100 dark:bg-white/5 text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-x-2">
+                                <span class="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></span>
+                                PERIOD: {{ $reportData['period'] }}
+                            </div>
                             @if(isset($formData['dimension1']))
-                                <p><strong>Department:</strong> {{ $formData['dimension1'] }}</p>
+                                <span class="text-xs font-bold text-gray-400 uppercase tracking-wide">DEPT: {{ $formData['dimension1'] }}</span>
                             @endif
-                            <p><strong>Currency:</strong> LCY</p>
+                            @if(isset($formData['dimension2']))
+                                <span class="text-xs font-bold text-gray-400 uppercase tracking-wide">PROJ: {{ $formData['dimension2'] }}</span>
+                            @endif
+                            <span class="text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em] mt-1 italic">CURRENCY: LCY</span>
                         </div>
                     </div>
                 </div>
 
+                <!-- Interactive Data Table -->
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left border-collapse min-w-[600px]">
+                    <table class="w-full text-sm text-left border-collapse">
                         <thead>
-                            <tr class="border-b-2 border-gray-950 dark:border-white print:border-black">
-                                <th class="py-3 px-4 font-bold uppercase tracking-wider text-gray-950 dark:text-white">Description</th>
-                                <th class="py-3 px-4 text-right font-bold uppercase tracking-wider text-gray-950 dark:text-white">Amount</th>
-                                @if(isset($reportData['lines'][0]['compare_amount']))
-                                    <th class="py-3 px-4 text-right font-bold uppercase tracking-wider text-gray-900 dark:text-gray-300">Prior Period</th>
-                                    <th class="py-3 px-4 text-right font-bold uppercase tracking-wider text-gray-900 dark:text-gray-300">Variance</th>
+                            <tr class="border-b border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/5">
+                                <th class="py-5 px-8 font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">G/L Description</th>
+                                <th class="py-5 px-8 text-right font-black uppercase tracking-[0.15em] text-gray-900 dark:text-white text-[11px]">Current Amount</th>
+                                @if(isset($reportData['compare_period']))
+                                    <th class="py-5 px-8 text-right font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">Prior Period</th>
+                                    <th class="py-5 px-8 text-right font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">Variance</th>
                                 @endif
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100 dark:divide-white/5 print:divide-gray-200">
+                        <tbody class="divide-y divide-gray-50 dark:divide-white/5">
                             @foreach($reportData['lines'] as $line)
                                 @php
                                     $isBold = $line['bold'] ?? false;
@@ -100,33 +112,37 @@
                                     $amount = $line['amount'] ?? '0.00';
                                     $isNegative = str_contains((string)$amount, '-');
                                 @endphp
-                                <tr class="group hover:bg-gray-50 dark:hover:bg-white/5 transition-colors {{ $isBold ? 'font-bold bg-gray-50/30 dark:bg-white/5' : '' }}">
-                                    <td class="py-2 px-4 relative">
-                                        @if($indent > 0)
-                                            <div class="absolute left-0 top-0 bottom-0 border-l border-gray-200 dark:border-gray-700 print:border-gray-300" style="margin-left: {{ $indent * 0.75 }}rem"></div>
-                                        @endif
-                                        <span style="padding-left: {{ $indent * 1.5 }}rem" class="inline-block">
-                                            {{ $line['description'] }}
-                                        </span>
+                                <tr class="group transition-all duration-200 {{ $isBold ? 'bg-gray-50/30 dark:bg-white/[0.02] font-extrabold' : 'hover:bg-primary-500/5 cursor-default' }}">
+                                    <td class="py-3 px-8 relative">
+                                        {{-- Indentation Guides --}}
+                                        @for($i = 0; $i < $indent; $i++)
+                                            <div class="absolute top-0 bottom-0 border-l border-gray-200 dark:border-gray-800" style="left: {{ 2 + ($i * 1.5) }}rem"></div>
+                                        @endfor
+                                        <div style="padding-left: {{ $indent * 1.5 }}rem" class="flex items-center gap-x-2">
+                                            @if($isBold)
+                                                <div class="w-1.5 h-1.5 rounded-full bg-primary-500 mr-1"></div>
+                                            @endif
+                                            <span class="{{ $isBold ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400' }} tracking-wide">
+                                                {{ $line['description'] }}
+                                            </span>
+                                        </div>
                                     </td>
-                                    <td class="py-2 px-4 text-right {{ $isNegative ? 'text-ruby-600 font-medium' : 'text-gray-900 dark:text-gray-100' }}">
+                                    <td class="py-3 px-8 text-right tabular-nums font-semibold {{ $isNegative ? 'text-ruby-600' : 'text-gray-900 dark:text-white' }}">
                                         {{ $isNegative ? '(' . ltrim($amount, '-') . ')' : $amount }}
                                     </td>
-                                    @if(isset($line['compare_amount']))
-                                        <td class="py-2 px-4 text-right text-gray-500 dark:text-gray-400">
-                                            {{ $line['compare_amount'] }}
+                                    @if(isset($reportData['compare_period']))
+                                        <td class="py-3 px-8 text-right tabular-nums text-gray-500 dark:text-gray-500 italic">
+                                            {{ $line['compare_amount'] ? (str_contains($line['compare_amount'], '-') ? '(' . ltrim($line['compare_amount'], '-') . ')' : $line['compare_amount']) : '—' }}
                                         </td>
-                                        <td class="py-2 px-4 text-right">
+                                        <td class="py-3 px-8 text-right">
                                             @if($line['variance_percent'])
-                                                <div class="flex items-center justify-end gap-x-1">
-                                                    @php
-                                                        $varPercent = (float) rtrim($line['variance_percent'], '%');
-                                                        $isVarNegative = $varPercent < 0;
-                                                    @endphp
-                                                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full {{ $isVarNegative ? 'bg-ruby-50 text-ruby-700 dark:bg-ruby-500/10 dark:text-ruby-400' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' }}">
-                                                        {{ $line['variance_percent'] }}
-                                                    </span>
-                                                </div>
+                                                @php
+                                                    $varVal = (float) rtrim($line['variance_percent'], '%');
+                                                    $isBad = ($varVal > 0 && str_contains(strtolower($line['description']), 'expense')) || ($varVal < 0 && !str_contains(strtolower($line['description']), 'expense'));
+                                                @endphp
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest {{ $isBad ? 'bg-ruby-100 text-ruby-700 dark:bg-ruby-900/30 dark:text-ruby-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' }}">
+                                                    {{ $line['variance_percent'] }}
+                                                </span>
                                             @endif
                                         </td>
                                     @endif
@@ -135,13 +151,20 @@
                         </tbody>
                         <tfoot>
                             @if(isset($reportData['totals']['net_income']))
-                                <tr class="border-t-2 border-gray-950 dark:border-white print:border-black">
-                                    <td class="py-4 px-4 font-black uppercase text-base text-gray-950 dark:text-white">Net Income / (Loss)</td>
-                                    <td class="py-4 px-4 text-right font-black text-lg text-gray-950 dark:text-white border-b-4 border-double border-gray-950 dark:border-white print:border-black">
-                                        {{ $reportData['totals']['net_income'] }}
+                                @php
+                                    $netInc = $reportData['totals']['net_income'];
+                                    $isNetNegative = str_contains((string)$netInc, '-');
+                                @endphp
+                                <tr class="bg-gray-950 dark:bg-black group border-t-4 border-primary-500">
+                                    <td class="py-6 px-8 font-black uppercase tracking-[0.25em] text-white text-base">Net Income / (Loss)</td>
+                                    <td class="py-6 px-8 text-right font-black text-xl text-white tabular-nums border-b-[6px] border-double border-white/30">
+                                        {{ $isNetNegative ? '(' . ltrim($netInc, '-') . ')' : $netInc }}
                                     </td>
-                                    @if(isset($reportData['lines'][0]['compare_amount']))
-                                        <td colspan="2"></td>
+                                    @if(isset($reportData['compare_period']))
+                                        <td class="py-6 px-8 text-right font-bold text-gray-400 tabular-nums">
+                                            {{ str_contains($reportData['totals']['compare_net_income'], '-') ? '(' . ltrim($reportData['totals']['compare_net_income'], '-') . ')' : $reportData['totals']['compare_net_income'] }}
+                                        </td>
+                                        <td></td>
                                     @endif
                                 </tr>
                             @endif
@@ -149,68 +172,83 @@
                     </table>
                 </div>
 
-                <div class="mt-12 pt-4 border-t border-gray-100 dark:border-white/5 flex justify-between items-center text-[10px] text-gray-400 uppercase tracking-widest print:mt-8">
+                <!-- Professional Footer -->
+                <div class="p-8 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] font-black uppercase tracking-[0.3em] text-gray-400 bg-gray-50/50 dark:bg-white/5">
                     <div>
-                        Printed on {{ $reportData['printed_at'] ?? now()->format('Y-m-d H:i') }}
+                        GENERATED ON {{ $reportData['printed_at'] ?? now()->format('Y-m-d H:i') }}
+                    </div>
+                    <div class="flex items-center gap-x-4">
+                        <span>CONFIDENTIAL FINANCIAL DATA</span>
+                        <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+                        <span>{{ config('app.name', 'BIWMS') }}</span>
                     </div>
                     <div>
-                        {{ config('app.name', 'BIWMS ERP') }} | Financial Statement
-                    </div>
-                    <div>
-                        Page 1 of 1
+                        PAGE 01 / 01
                     </div>
                 </div>
             </x-filament::section>
         @else
-            <x-filament::section>
-                <div class="py-12 flex flex-col items-center justify-center text-gray-400">
-                    <x-filament::icon icon="heroicon-o-document-chart-bar" class="w-12 h-12 mb-4 opacity-20" />
-                    <p>Select report parameters and click "Update Report" to view data.</p>
+            <!-- Empty State -->
+            <div class="py-24 flex flex-col items-center justify-center animate-pulse">
+                <div class="w-24 h-24 rounded-3xl bg-gray-100 dark:bg-white/5 flex items-center justify-center mb-6">
+                    <x-filament::icon icon="heroicon-o-presentation-chart-line" class="w-12 h-12 text-gray-300 dark:text-gray-700" />
                 </div>
-            </x-filament::section>
+                <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Awaiting Analysis Parameters</h3>
+                <p class="text-gray-500 dark:text-gray-400 text-center max-w-sm">Configure your reporting period and dimensions above to generate a comprehensive financial breakdown.</p>
+            </div>
         @endif
     </div>
 
     <style>
+        {{-- Custom Typography & Polish --}}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+        
+        .fi-report-container {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+
         @media print {
+            @page {
+                size: A4 portrait;
+                margin: 0;
+            }
             body { 
                 background: white !important;
                 color: black !important;
+                padding: 1.5cm;
             }
-            .fi-main-ctn { padding: 0 !important; }
-            .fi-sidebar, .fi-topbar, .fi-header, .print\:hidden, x-filament-actions { 
-                display: none !important; 
-            }
+            .print\:hidden { display: none !important; }
             .fi-section {
                 border: none !important;
                 box-shadow: none !important;
                 background: transparent !important;
                 padding: 0 !important;
             }
-            table { 
-                font-size: 10pt !important; 
-                width: 100% !important;
-            }
-            th { border-bottom: 2px solid black !important; }
-            td { border-bottom: 1px solid #eee !important; }
-            .border-double { border-bottom-style: double !important; }
+            .rounded-3xl { border-radius: 0 !important; }
+            .bg-gray-950 { background-color: transparent !important; color: black !important; }
+            .text-white { color: black !important; }
+            .border-white\/30 { border-color: black !important; }
+            tr { page-break-inside: avoid; }
             
-            /* Ensure colors remain in print */
-            .text-ruby-600 { color: #dc2626 !important; }
-            .text-emerald-600 { color: #059669 !important; }
-            .bg-ruby-50 { background-color: #fef2f2 !important; }
-            .bg-emerald-50 { background-color: #ecfdf5 !important; }
+            {{-- Print specific typography --}}
+            table { font-size: 9pt !important; }
+            h1 { font-size: 18pt !important; }
         }
 
-        /* Hierarchy Guides */
-        .indent-guide {
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 1px;
-            background-color: currentColor;
-            opacity: 0.1;
+        {{-- Custom scrollbar for data tables --}}
+        .overflow-x-auto::-webkit-scrollbar {
+            height: 4px;
+        }
+        .overflow-x-auto::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .overflow-x-auto::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
         }
     </style>
 </x-filament-panels::page>

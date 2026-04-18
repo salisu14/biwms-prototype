@@ -37,6 +37,8 @@ class GeneralPostingSetup extends Model
         'capacity_variance_account_id',
         'capacity_overhead_variance_account_id',
         'manufacturing_overhead_variance_account_id',
+        'purchase_account_id',
+        'purchase_credit_memo_account_id',
     ];
 
     protected $casts = [
@@ -132,6 +134,16 @@ class GeneralPostingSetup extends Model
         return $this->belongsTo(ChartOfAccount::class, 'manufacturing_overhead_variance_account_id');
     }
 
+    public function purchaseAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'purchase_account_id');
+    }
+
+    public function purchaseCreditMemoAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'purchase_credit_memo_account_id');
+    }
+
     // ============== HELPER METHODS FOR POSTINGSERVICE ==============
 
     /**
@@ -163,9 +175,7 @@ class GeneralPostingSetup extends Model
      */
     public function getPurchaseAccount(): ?ChartOfAccount
     {
-        // If you have a separate purchase_account_id, add it
-        // For now, return inventory account as fallback
-        return $this->inventoryAccount;
+        return $this->purchaseAccount ?? $this->inventoryAccount;
     }
 
     /**

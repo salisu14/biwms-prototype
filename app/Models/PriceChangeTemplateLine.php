@@ -13,6 +13,19 @@ class PriceChangeTemplateLine extends Model
         'category_id',
         'business_id',
         'customer_group_id',
+        'current_unit_price',
+        'new_unit_price',
+        'adjustment_percent',
+        'adjustment_amount',
+        'applied_at',
+    ];
+
+    protected $casts = [
+        'current_unit_price' => 'decimal:4',
+        'new_unit_price' => 'decimal:4',
+        'adjustment_percent' => 'decimal:4',
+        'adjustment_amount' => 'decimal:4',
+        'applied_at' => 'datetime',
     ];
 
     public function template(): BelongsTo

@@ -3,9 +3,11 @@
 namespace App\Filament\Resources\ExpenseTransactions\Schemas;
 
 use App\Enums\AccountType;
+use App\Models\Currency;
 use App\Models\DimensionValue;
 use App\Models\Employee;
 use App\Models\ExpenseCategory;
+use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -85,11 +87,11 @@ class ExpenseTransactionForm
                                         ->relationship('currency', 'code')
                                         ->searchable()
                                         ->preload()
-                                        ->default(fn () => \App\Models\Currency::where('is_lcy', true)->first()?->id)
+                                        ->default(fn () => Currency::where('is_lcy', true)->first()?->id)
                                         ->required()
                                         ->reactive()
                                         ->afterStateUpdated(function ($state, $get, $set) {
-                                            $currency = \App\Models\Currency::find($state);
+                                            $currency = Currency::find($state);
                                             if ($currency) {
                                                 $set('currency_factor', $currency->exchange_rate ?? 1);
                                                 $amount = (float) ($get('amount') ?? 0);
@@ -149,24 +151,41 @@ class ExpenseTransactionForm
                                         ->searchable()
                                         ->preload()
                                         ->live()
-                                        ->afterStateUpdated(function ($state, $set) {
+                                        ->afterStateUpdated(function ($state, Set $set, ExpenseService $service) {
                                             $category = ExpenseCategory::where('category_code', $state)->first();
                                             if ($category) {
                                                 $set('gen_prod_posting_group_id', $category->gen_prod_posting_group_id);
                                                 $set('vat_prod_posting_group_id', $category->vat_prod_posting_group_id);
                                                 $set('expense_account_id', $category->expense_account_id);
+                                                $set('shortcut_dimension_1_code', $category->default_dimension_1);
+                                                $set('shortcut_dimension_2_code', $category->default_dimension_2);
                                             }
                                         }),
                                     Select::make('vendor_id')
                                         ->label('Vendor')
                                         ->relationship('vendor', 'vendor_name')
                                         ->searchable()
-                                        ->preload(),
+                                        ->preload()
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, Set $set) {
+                                            $vendor = Vendor::find($state);
+                                            if ($vendor) {
+                                                $set('gen_bus_posting_group_id', $vendor->gen_bus_posting_group_id);
+                                                $set('vat_bus_posting_group_id', $vendor->vat_bus_posting_group_id);
+                                            }
+                                        }),
                                     Select::make('employee_id')
                                         ->relationship('employee', 'employee_number')
                                         ->getOptionLabelFromRecordUsing(fn (Employee $record) => "{$record->employee_number} - {$record->first_name} {$record->last_name}")
                                         ->searchable()
-                                        ->preload(),
+                                        ->preload()
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, Set $set) {
+                                            $employee = Employee::find($state);
+                                            if ($employee) {
+                                                $set('gen_bus_posting_group_id', $employee->employeePostingGroup?->id); // Assuming EmployeePostingGroup can map to Gen. Bus. Posting Group or similar
+                                            }
+                                        }),
                                     Select::make('customer_id')
                                         ->relationship('customer', 'name')
                                         ->searchable(),

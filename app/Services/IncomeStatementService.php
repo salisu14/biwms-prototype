@@ -279,18 +279,28 @@ class IncomeStatementService
 
     private function calculateSummary(Collection $rows): array
     {
-        $revenue = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::REVENUE, 'REVENUE', 'revenue']))->sum('net_change');
-        $cogs = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::COGS, 'COGS', 'cogs']))->sum('net_change');
-        $operatingExp = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::EXPENSE, 'EXPENSE', 'expense']))->sum('net_change');
+        $currentRevenue = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::REVENUE, 'REVENUE', 'revenue']))->sum('net_change');
+        $currentCogs = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::COGS, 'COGS', 'cogs']))->sum('net_change');
+        $currentExp = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::EXPENSE, 'EXPENSE', 'expense']))->sum('net_change');
+
+        $compareRevenue = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::REVENUE, 'REVENUE', 'revenue']))->sum('compare_amount');
+        $compareCogs = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::COGS, 'COGS', 'cogs']))->sum('compare_amount');
+        $compareExp = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::EXPENSE, 'EXPENSE', 'expense']))->sum('compare_amount');
 
         return [
-            'total_revenue' => $revenue,
-            'total_cogs' => $cogs,
-            'gross_profit' => $revenue - $cogs,
-            'gross_profit_margin' => $revenue > 0 ? (($revenue - $cogs) / $revenue) * 100 : 0,
-            'operating_expenses' => $operatingExp,
-            'operating_income' => ($revenue - $cogs) - $operatingExp,
-            'net_income' => $rows->sum('net_change'), // Should equal revenue - all expenses
+            'total_revenue' => $currentRevenue,
+            'total_cogs' => $currentCogs,
+            'gross_profit' => $currentRevenue - $currentCogs,
+            'gross_profit_margin' => $currentRevenue > 0 ? (($currentRevenue - $currentCogs) / $currentRevenue) * 100 : 0,
+            'operating_expenses' => $currentExp,
+            'operating_income' => ($currentRevenue - $currentCogs) - $currentExp,
+            'net_income' => $rows->sum('net_change'),
+
+            'compare_total_revenue' => $compareRevenue,
+            'compare_total_cogs' => $compareCogs,
+            'compare_gross_profit' => $compareRevenue - $compareCogs,
+            'compare_operating_expenses' => $compareExp,
+            'compare_net_income' => $rows->sum('compare_amount'),
         ];
     }
 

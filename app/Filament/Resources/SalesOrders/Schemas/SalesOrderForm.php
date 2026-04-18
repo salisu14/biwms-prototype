@@ -86,7 +86,7 @@ class SalesOrderForm
                                                             ->schema([
                                                                 Select::make('item_id')
                                                                     ->label('Item No.')
-                                                                    ->relationship('item', 'item_code', fn ($query) => $query->where('item_type', 'FINISHED_GOOD'))
+                                                                    ->relationship('item', 'item_code', fn ($query) => $query->finishedGoods()->where('blocked', false))
                                                                     ->searchable()
                                                                     ->preload()
                                                                     ->required()

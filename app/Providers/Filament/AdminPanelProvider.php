@@ -64,25 +64,6 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/chart-of-accounts')
                                     ->isActiveWhen(fn () => request()->is('admin/chart-of-accounts*')),
 
-                                // Posting Groups Cluster
-                                //                                NavigationItem::make('Posting Groups')
-                                //                                    ->icon('heroicon-o-squares-2x2')
-                                //                                    ->url('/admin/posting-groups')
-                                //                                    ->isActiveWhen(fn () => request()->is('admin/posting-groups*') ||
-                                //                                        request()->is('admin/general-business-posting-groups*') ||
-                                //                                        request()->is('admin/general-product-posting-groups*') ||
-                                //                                        request()->is('admin/vendor-posting-groups*') ||
-                                //                                        request()->is('admin/customer-posting-groups*') ||
-                                //                                        request()->is('admin/vat-posting-groups*')),
-
-                                // Posting Setups
-                                //                                NavigationItem::make('Posting Setups')
-                                //                                    ->icon('heroicon-o-adjustments-horizontal')
-                                //                                    ->url('/admin/posting-setups')
-                                //                                    ->isActiveWhen(fn () => request()->is('admin/posting-setups*') ||
-                                //                                        request()->is('admin/general-posting-setups*') ||
-                                //                                        request()->is('admin/vat-posting-setups*')),
-
                                 // VAT & Tax
                                 NavigationItem::make('VAT & Tax Setup')
                                     ->icon('heroicon-o-receipt-percent')
@@ -93,25 +74,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-text')
                                     ->url('/admin/journal-templates'),
 
-                                NavigationItem::make('Gen. Posting Setups')
-                                    ->icon('heroicon-o-tag')
-                                    ->url('/admin/general-posting-setups'),
-
-                                NavigationItem::make('Gen. Business Posting Group')
-                                    ->icon('heroicon-o-briefcase')
-                                    ->url('/admin/general-business-posting-groups'),
-
-                                NavigationItem::make('Vat Posting Setups')
-                                    ->icon('heroicon-o-eye-slash')
-                                    ->url('/admin/vat-posting-setups'),
-
-                                NavigationItem::make('Vat Buss. Posting Groups')
-                                    ->icon('heroicon-o-device-tablet')
-                                    ->url('/admin/vat-business-posting-groups'),
-
-                                NavigationItem::make('Vat Product Posting Groups')
-                                    ->icon('heroicon-o-rectangle-group')
-                                    ->url('/admin/vat-product-posting-groups'),
+                                NavigationItem::make('Posting Groups')
+                                    ->icon('heroicon-o-squares-2x2')
+                                    ->url('/admin/posting-groups')
+                                    ->isActiveWhen(fn () => request()->is('admin/posting-groups*')),
 
                                 NavigationItem::make('Bank Accounts')
                                     ->icon('heroicon-o-document-currency-dollar')
@@ -121,55 +87,39 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/payments'),
 
-                                NavigationItem::make('FA Posting Groups')
-                                    ->icon('heroicon-o-adjustments-vertical')
-                                    ->url('/admin/f-a-posting-groups'),
-
                                 NavigationItem::make('Inventory Valuation Report')
                                     ->icon('heroicon-o-presentation-chart-line')
                                     ->url('/admin/inventory-valuation-report'),
-
-                                NavigationItem::make('Financial Reports')
-                                    ->icon('heroicon-o-chart-bar')
-                                    ->url('/admin/financial-reports'),
                             ])
                     )
                     // Finance Module
                     ->group(
                         NavigationGroup::make('Finance')
                             ->items([
-                                // Expense Transactions
                                 NavigationItem::make('Expenses')
                                     ->icon('heroicon-o-credit-card')
                                     ->url('/admin/expense-transactions')
-                                    ->isActiveWhen(fn () => request()->is('admin/expense-transactions*')),
+                                    ->isActiveWhen(fn () => request()->is('admin/expense-transaction*')),
 
-                                // Expense Categories
                                 NavigationItem::make('Expenses Categories')
                                     ->icon('heroicon-o-list-bullet')
                                     ->url('/admin/expense-categories')
-                                    ->isActiveWhen(fn () => request()->is('admin/expense-categories*')),
+                                    ->isActiveWhen(fn () => request()->is('admin/expense-categorie*')),
 
-                                // Currencies
                                 NavigationItem::make('Currencies')
                                     ->icon('heroicon-o-currency-dollar')
                                     ->url('/admin/currencies')
-                                    ->isActiveWhen(fn () => request()->is('admin/currencies*')),
+                                    ->isActiveWhen(fn () => request()->is('admin/currenc*')),
 
                                 NavigationItem::make('Currency Adjustments')
                                     ->icon('heroicon-o-presentation-chart-bar')
                                     ->url('/admin/currency-adjustment-ledgers')
-                                    ->isActiveWhen(fn () => request()->is('admin/currency-adjustment-ledgers*')),
+                                    ->isActiveWhen(fn () => request()->is('admin/currency-adjustment-ledger*')),
 
-                                NavigationItem::make('Profit and Loss Report')
-                                    ->icon('heroicon-o-chart-bar-square')
-                                    ->url('/admin/profit-and-loss-report')
-                                    ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*')),
-
-                                NavigationItem::make('Financial Reports')
-                                    ->icon('heroicon-o-chart-bar')
-                                    ->url('/admin/financial-reports')
-                                    ->isActiveWhen(fn () => request()->is('admin/financial-reports*')),
+                                NavigationItem::make('Profit & Loss Report')
+                                    ->icon('heroicon-o-document-chart-bar')
+                                    ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report'))
+                                    ->url('/admin/profit-and-loss-report'),
                             ])
                     )
                     // Purchasing Module

@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\Shared\RelationManagers;
 
 use App\Models\BlanketOrder;
+use App\Models\ChartOfAccount;
+use App\Models\Item;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -36,9 +38,56 @@ class BlanketOrderLineRelationManager extends RelationManager
                         ])
                         ->default('ITEM')
                         ->required(),
-                    TextInput::make('no')
+                    Select::make('no')
                         ->label('No.')
-                        ->required(),
+                        ->required()
+                        ->searchable()
+                        ->preload()
+                        ->options(function (Get $get) use ($isSales) {
+                            $type = $get('type');
+                            if ($type === 'GL_ACCOUNT') {
+                                return ChartOfAccount::where('blocked', false)
+                                    ->where('direct_posting', true)
+                                    ->pluck('account_number', 'account_number');
+                            }
+
+                            if ($type === 'ITEM') {
+                                $query = Item::where('blocked', false);
+                                if ($isSales) {
+                                    $query->finishedGoods();
+                                } else {
+                                    $query->rawMaterials();
+                                }
+
+                                return $query->pluck('item_code', 'item_code');
+                            }
+
+                            return [];
+                        })
+                        ->live()
+                        ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                            if (! $state) {
+                                return;
+                            }
+                            $type = $get('type');
+                            if ($type === 'ITEM') {
+                                $item = Item::where('item_code', $state)->first();
+                                if ($item) {
+                                    $set('description', $item->description);
+                                    $set('unit_of_measure', $item->base_unit_of_measure);
+                                    if ($get('order_type') === 'Sales') {
+                                        $set('unit_price', $item->unit_price);
+                                    } else {
+                                        $set('direct_unit_cost', $item->current_standard_cost);
+                                    }
+                                }
+                            } elseif ($type === 'GL_ACCOUNT') {
+                                $account = ChartOfAccount::where('account_number', $state)->first();
+                                if ($account) {
+                                    $set('description', $account->name);
+                                }
+                            }
+                        }),
                 ]),
 
                 TextInput::make('description')

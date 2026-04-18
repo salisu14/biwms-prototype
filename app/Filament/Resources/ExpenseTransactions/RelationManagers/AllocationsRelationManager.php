@@ -45,17 +45,31 @@ class AllocationsRelationManager extends RelationManager
                     ->placeholder('e.g. Sales, Headcount')
                     ->maxLength(50),
 
+                Select::make('allocation_type')
+                    ->label('Type')
+                    ->options([
+                        'percentage' => 'Percentage',
+                        'amount' => 'Fixed Amount',
+                    ])
+                    ->default('percentage')
+                    ->required()
+                    ->live(),
+
                 TextInput::make('allocation_percentage')
                     ->numeric()
                     ->label('Allocation %')
                     ->suffix('%')
                     ->maxValue(100)
-                    ->minValue(0),
+                    ->minValue(0)
+                    ->visible(fn ($get) => $get('allocation_type') === 'percentage')
+                    ->required(fn ($get) => $get('allocation_type') === 'percentage'),
 
                 TextInput::make('allocated_amount')
                     ->numeric()
-                    ->required()
-                    ->prefix('$'),
+                    ->label('Allocated Amount')
+                    ->prefix('$')
+                    ->visible(fn ($get) => $get('allocation_type') === 'amount')
+                    ->required(fn ($get) => $get('allocation_type') === 'amount'),
 
                 Select::make('dimension_set_id')
                     ->label('Target Dimension Set')
@@ -92,13 +106,20 @@ class AllocationsRelationManager extends RelationManager
                 TextColumn::make('targetAccount.name')
                     ->label('Target G/L'),
 
+                TextColumn::make('allocation_type')
+                    ->label('Type')
+                    ->badge()
+                    ->color(fn ($state) => $state === 'amount' ? 'success' : 'info'),
+
                 TextColumn::make('allocation_percentage')
                     ->label('%')
-                    ->suffix('%'),
+                    ->suffix('%')
+                    ->placeholder('-'),
 
                 TextColumn::make('allocated_amount')
                     ->money()
-                    ->label('Amount'),
+                    ->label('Amount')
+                    ->placeholder('-'),
 
                 TextColumn::make('dimension_set_id')
                     ->label('Dim Set'),

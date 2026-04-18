@@ -8,10 +8,10 @@ use App\Enums\ItemType;
 use App\Enums\PriceCalculationMethod;
 use App\Enums\UomType;
 use App\Models\Category;
+use App\Models\Currency;
 use App\Models\Item;
 use App\Models\UnitOfMeasure;
 use App\Models\Vendor;
-use App\Models\Currency;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -22,8 +22,6 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
-
-;
 
 class ItemForm
 {
@@ -58,6 +56,17 @@ class ItemForm
                                         ->default(ItemType::FINISHED_GOOD)
                                         ->native(false)
                                         ->live(),
+
+                                    TextInput::make('sku')
+                                        ->label('Base SKU')
+                                        ->maxLength(20)
+                                        ->placeholder('Base/Global SKU'),
+
+                                    Select::make('item_category_id')
+                                        ->label('Primary Category')
+                                        ->relationship('primaryCategory', 'category_name')
+                                        ->searchable()
+                                        ->preload(),
 
                                     TextInput::make('description')
                                         ->required()
@@ -148,6 +157,12 @@ class ItemForm
                                         ->options(PriceCalculationMethod::class)
                                         ->default(PriceCalculationMethod::STANDARD)
                                         ->native(false),
+
+                                    Select::make('currency_id')
+                                        ->label('Default Currency')
+                                        ->relationship('currency', 'code')
+                                        ->searchable()
+                                        ->preload(),
 
                                     TextInput::make('default_price_list_code')
                                         ->label('Price List Ref')
@@ -309,10 +324,18 @@ class ItemForm
                                         ->label('Default Location')
                                         ->relationship('location', 'name')
                                         ->searchable()
-                                        ->preload(),
+                                        ->preload()
+                                        ->live(),
+
+                                    Select::make('inventory_bin_id')
+                                        ->label('Default Bin')
+                                        ->relationship('inventoryBin', 'bin_code', fn ($query, $get) => $query->where('location_id', $get('location_id')))
+                                        ->searchable()
+                                        ->preload()
+                                        ->hidden(fn ($get) => ! $get('location_id')),
 
                                     TextInput::make('bin_code')
-                                        ->label('Default Bin')
+                                        ->label('Default Bin (Legacy)')
                                         ->placeholder('Pick/Put-away default'),
 
                                     TextInput::make('item_tracking_code')
@@ -356,10 +379,7 @@ class ItemForm
                                         ->searchable()
                                         ->preload(),
 
-                                    TextInput::make('vat_prod_posting_group')
-                                        ->label('VAT Prod. Posting Code (Old)')
-                                        ->placeholder('Legacy text mapping')
-                                        ->helperText('Use the relationship dropdown above for new entries.'),
+                                    // Removed legacy vat_prod_posting_group text field
                                 ]),
                             ]),
 

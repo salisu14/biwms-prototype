@@ -3,15 +3,18 @@
 namespace App\Filament\Pages\Finance;
 
 use App\Models\AccountSchedule;
-use App\Models\Department;
+use App\Models\DimensionValue;
 use App\Services\IncomeStatementService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Carbon;
 
@@ -45,23 +48,49 @@ class ProfitAndLossReport extends Page implements HasForms
     {
         return $schema
             ->schema([
-                Grid::make(4)->schema([
-                    DatePicker::make('startDate')
-                        ->label('Start Date')
-                        ->required(),
-                    DatePicker::make('endDate')
-                        ->label('End Date')
-                        ->required(),
-                    Select::make('scheduleId')
-                        ->label('Account Schedule')
-                        ->options(AccountSchedule::pluck('name', 'id'))
-                        ->placeholder('Standard COA Layout')
-                        ->searchable(),
-                    Select::make('dimension1')
-                        ->label('Department')
-                        ->options(Department::pluck('name', 'department_code'))
-                        ->placeholder('All Departments'),
-                ]),
+                Tabs::make('Filters')
+                    ->tabs([
+                        Tab::make('General')
+                            ->icon('heroicon-m-adjustments-horizontal')
+                            ->schema([
+                                Grid::make(4)->schema([
+                                    DatePicker::make('startDate')
+                                        ->label('Start Date')
+                                        ->required(),
+                                    DatePicker::make('endDate')
+                                        ->label('End Date')
+                                        ->required(),
+                                    Select::make('scheduleId')
+                                        ->label('Account Schedule')
+                                        ->options(AccountSchedule::pluck('name', 'id'))
+                                        ->placeholder('Standard COA Layout')
+                                        ->searchable(),
+                                    Select::make('dimension1')
+                                        ->label('Department')
+                                        ->options(DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', 'DEPARTMENT'))->pluck('name', 'code'))
+                                        ->placeholder('All Departments')
+                                        ->searchable(),
+                                ]),
+                            ]),
+                        Tab::make('Comparison & Dimensions')
+                            ->icon('heroicon-m-presentation-chart-line')
+                            ->schema([
+                                Grid::make(4)->schema([
+                                    DatePicker::make('compareStartDate')
+                                        ->label('Comparison Start Date'),
+                                    DatePicker::make('compareEndDate')
+                                        ->label('Comparison End Date'),
+                                    Select::make('dimension2')
+                                        ->label('Project')
+                                        ->options(DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', 'PROJECT'))->pluck('name', 'code'))
+                                        ->placeholder('All Projects')
+                                        ->searchable(),
+                                    Toggle::make('showBudget')
+                                        ->label('Show Budget')
+                                        ->inline(false),
+                                ]),
+                            ]),
+                    ]),
             ])
             ->statePath('formData');
     }
@@ -88,12 +117,16 @@ class ProfitAndLossReport extends Page implements HasForms
         $start = Carbon::parse($this->formData['startDate']);
         $end = Carbon::parse($this->formData['endDate']);
 
+        $compareStart = ! empty($this->formData['compareStartDate']) ? Carbon::parse($this->formData['compareStartDate']) : null;
+        $compareEnd = ! empty($this->formData['compareEndDate']) ? Carbon::parse($this->formData['compareEndDate']) : null;
+
         if (! empty($this->formData['scheduleId'])) {
             $rows = $service->generateFromSchedule(
                 (int) $this->formData['scheduleId'],
                 $start,
                 $end,
-                $this->formData['dimension1'] ?? null
+                $this->formData['dimension1'] ?? null,
+                $this->formData['dimension2'] ?? null
             );
 
             $this->reportData = [
@@ -103,13 +136,22 @@ class ProfitAndLossReport extends Page implements HasForms
             ];
         } else {
             $report = $service->generate(
-                $start,
-                $end,
-                $this->formData['dimension1'] ?? null
+                fromDate: $start,
+                toDate: $end,
+                globalDimension1: $this->formData['dimension1'] ?? null,
+                globalDimension2: $this->formData['dimension2'] ?? null,
+                compareFrom: $compareStart,
+                compareTo: $compareEnd,
+                showBudget: $this->formData['showBudget'] ?? false
             );
 
             $this->reportData = $report->toBcFormat();
             $this->reportData['is_custom'] = false;
+
+            // Add comparison period to report data for the UI
+            if ($compareStart && $compareEnd) {
+                $this->reportData['compare_period'] = "{$compareStart->format('Y-m-d')}..{$compareEnd->format('Y-m-d')}";
+            }
         }
     }
 }

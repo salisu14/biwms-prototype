@@ -28,6 +28,16 @@ class ItemsTable
                     ->sortable()
                     ->copyable()
                     ->weight('bold'),
+                TextColumn::make('sku')
+                    ->label('SKU')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+                TextColumn::make('primaryCategory.category_name')
+                    ->label('Category')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
 
                 TextColumn::make('description')
                     ->label('Description')
@@ -54,7 +64,7 @@ class ItemsTable
 
                 TextColumn::make('unit_price')
                     ->label('Price')
-                    ->money('NGN', locale: 'ng' )
+                    ->money('NGN', locale: 'ng')
                     ->alignRight()
                     ->sortable(),
 

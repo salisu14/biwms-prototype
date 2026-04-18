@@ -69,7 +69,7 @@ class ProductionOrderForm
 
                         Select::make('item_id')
                             ->label('Item')
-                            ->relationship('item', 'description')
+                            ->relationship('item', 'item_code', fn ($query) => $query->finishedGoods()->where('blocked', false))
                             ->searchable()
                             ->preload()
                             ->required()

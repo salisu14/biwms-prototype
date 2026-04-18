@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\InventoryPostingSetups\Schemas;
 
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
+use App\Models\ChartOfAccount;
+use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class InventoryPostingSetupForm
@@ -12,27 +14,58 @@ class InventoryPostingSetupForm
     {
         return $schema
             ->components([
-                TextInput::make('code')
-                    ->required(),
-                TextInput::make('description')
-                    ->required(),
-                TextInput::make('inventory_account')
-                    ->required(),
-                TextInput::make('inventory_adjmt_account')
-                    ->required(),
-                TextInput::make('invt_accrual_account'),
-                TextInput::make('cogs_account')
-                    ->required(),
-                TextInput::make('direct_cost_applied_account'),
-                TextInput::make('overhead_applied_account'),
-                TextInput::make('purchase_variance_account'),
-                TextInput::make('material_variance_account'),
-                TextInput::make('capacity_variance_account'),
-                TextInput::make('subcontracted_variance_account'),
-                TextInput::make('cap_overhead_variance_account'),
-                TextInput::make('mfg_overhead_variance_account'),
-                Toggle::make('is_active')
-                    ->required(),
+                Section::make('Setup Identification')
+                    ->description('Define the combination of location and inventory posting group for this setup.')
+                    ->columns(2)
+                    ->schema([
+                        Select::make('location_id')
+                            ->label('Location')
+                            ->relationship('location', 'name')
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('Default (All Locations)')
+                            ->helperText('Leave blank to apply these accounts to all locations for this group.'),
+
+                        Select::make('inventory_posting_group_id')
+                            ->label('Inventory Posting Group')
+                            ->relationship('inventoryPostingGroup', 'code')
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->helperText('The category of items this setup applies to.'),
+                    ]),
+
+                Section::make('G/L Account Assignments')
+                    ->description('Map the inventory transactions to specific accounts in the Chart of Accounts.')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            Select::make('inventory_account_id')
+                                ->label('Inventory Account')
+                                ->relationship('inventoryAccount', 'account_number')
+                                ->getOptionLabelFromRecordUsing(fn (ChartOfAccount $record) => "{$record->account_number} – {$record->name}")
+                                ->searchable()
+                                ->preload()
+                                ->required()
+                                ->helperText('The balance sheet account for on-hand inventory.'),
+
+                            Select::make('inventory_account_interim_id')
+                                ->label('Inventory Account (Interim)')
+                                ->relationship('inventoryAccountInterim', 'account_number')
+                                ->getOptionLabelFromRecordUsing(fn (ChartOfAccount $record) => "{$record->account_number} – {$record->name}")
+                                ->searchable()
+                                ->preload()
+                                ->helperText('Used for received but not yet invoiced transactions.'),
+
+                            Select::make('wip_account_id')
+                                ->label('WIP Account')
+                                ->relationship('wipAccount', 'account_number')
+                                ->getOptionLabelFromRecordUsing(fn (ChartOfAccount $record) => "{$record->account_number} – {$record->name}")
+                                ->searchable()
+                                ->preload()
+                                ->columnSpanFull()
+                                ->helperText('Work-in-Process account used during manufacturing or assembly.'),
+                        ]),
+                    ]),
             ]);
     }
 }

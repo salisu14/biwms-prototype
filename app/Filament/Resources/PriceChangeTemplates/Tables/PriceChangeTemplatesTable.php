@@ -2,12 +2,14 @@
 
 namespace App\Filament\Resources\PriceChangeTemplates\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\ViewAction;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
+use App\Models\PriceChangeTemplate;
+use App\Services\Inventory\ItemService;
+use Filament\Notifications\Notification;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Actions\BulkActionGroup;
+use Filament\Tables\Actions\DeleteBulkAction;
+use Filament\Tables\Actions\EditAction;
+use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Table;
 
 class PriceChangeTemplatesTable
@@ -64,11 +66,33 @@ class PriceChangeTemplatesTable
                         'applied' => 'Applied',
                     ]),
             ])
-            ->recordActions([
+            ->actions([
+                Action::make('apply')
+                    ->label('Apply Template')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->visible(fn (PriceChangeTemplate $record): bool => $record->status === 'approved' || $record->status === 'draft')
+                    ->action(function (PriceChangeTemplate $record, ItemService $service) {
+                        try {
+                            $service->applyPriceTemplate($record);
+
+                            Notification::make()
+                                ->title('Price Template Applied')
+                                ->success()
+                                ->send();
+                        } catch (\Exception $e) {
+                            Notification::make()
+                                ->title('Error Applying Template')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
                 ViewAction::make(),
                 EditAction::make(),
             ])
-            ->toolbarActions([
+            ->bulkActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),

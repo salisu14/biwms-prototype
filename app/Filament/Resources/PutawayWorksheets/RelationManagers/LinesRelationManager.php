@@ -2,12 +2,14 @@
 
 namespace App\Filament\Resources\PutawayWorksheets\RelationManagers;
 
+use App\Models\Bin;
 use App\Models\Item;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
@@ -63,7 +65,47 @@ class LinesRelationManager extends RelationManager
                     ->numeric()
                     ->required()
                     ->default(0)
+                    ->live()
                     ->helperText('Quantity currently being moved to the bin.'),
+
+                Select::make('bin_id')
+                    ->label('Target Bin')
+                    ->relationship('bin', 'bin_code')
+                    ->searchable()
+                    ->preload()
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(function ($state, $get, $set) {
+                        $bin = Bin::find($state);
+                        $item = Item::find($get('item_id'));
+                        $qty = (float) $get('qty_to_handle');
+
+                        if ($bin && $item) {
+                            $validation = $bin->validateCapacity($item, $qty);
+                            if ($validation['status'] === 'warning') {
+                                // Filament doesn't have a native 'warning' state for fields,
+                                // but we can use helper text or a notification.
+                                Notification::make()
+                                    ->title($validation['message'])
+                                    ->warning()
+                                    ->send();
+                            }
+                        }
+                    })
+                    ->rules([
+                        fn ($get) => function (string $attribute, $value, \Closure $fail) use ($get) {
+                            $bin = Bin::find($value);
+                            $item = Item::find($get('item_id'));
+                            $qty = (float) $get('qty_to_handle');
+
+                            if ($bin && $item) {
+                                $validation = $bin->validateCapacity($item, $qty);
+                                if ($validation['status'] === 'error') {
+                                    $fail($validation['message']);
+                                }
+                            }
+                        },
+                    ]),
             ]);
     }
 
@@ -95,6 +137,11 @@ class LinesRelationManager extends RelationManager
                     ->numeric(decimalPlaces: 4)
                     ->alignment('right')
                     ->color('info'),
+
+                TextColumn::make('bin.bin_code')
+                    ->label('Target Bin')
+                    ->badge()
+                    ->color('success'),
             ])
             // FIX: Explicitly sort by ID to ensure it uses a valid column
             ->defaultSort('id', 'desc')
