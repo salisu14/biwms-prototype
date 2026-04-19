@@ -279,7 +279,7 @@
                     </div>
                 </a>
 
-                <a href="/admin/payroll-posting-groups" class="hub-card">
+                <a href="{{ \App\Filament\Resources\PayrollPostingGroups\PayrollPostingGroupResource::getUrl('index') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-banknotes style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['payroll_posting_group'] }} Groups</div>
