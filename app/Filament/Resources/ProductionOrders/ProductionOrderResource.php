@@ -61,10 +61,10 @@ class ProductionOrderResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\ProductionOrderLineRelationManager::class,
-            RelationManagers\ComponentsRelationManager::class,
-            RelationManagers\RoutingRelationManager::class,
-            RelationManagers\GlEntriesRelationManager::class,
+            'lines' => RelationManagers\ProductionOrderLineRelationManager::class,
+            'components' => RelationManagers\ComponentsRelationManager::class,
+            'routing' => RelationManagers\RoutingRelationManager::class,
+            'glEntries' => RelationManagers\GlEntriesRelationManager::class,
         ];
     }
 

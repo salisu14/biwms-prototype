@@ -4,7 +4,9 @@ namespace App\Filament\Resources\ProductionOrders\Tables;
 
 use App\Enums\ProductionOrderStatus;
 use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
+use App\Filament\Resources\ProductionOrders\FinishedProductionOrderResource;
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
+use App\Filament\Resources\ProductionOrders\ReleasedProductionOrderResource;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -69,7 +71,18 @@ class ProductionOrdersTable
                 Action::make('view_entries')
                     ->label('View Entries')
                     ->icon('heroicon-m-document-text')
-//                    ->url(fn($record) => ProductionOrderResource::getUrl('entries', ['record' => $record]))
+                    ->url(function ($record): string {
+                        $resource = match ($record->status) {
+                            ProductionOrderStatus::RELEASED => ReleasedProductionOrderResource::class,
+                            ProductionOrderStatus::FINISHED => FinishedProductionOrderResource::class,
+                            default => ProductionOrderResource::class,
+                        };
+
+                        return $resource::getUrl('view', [
+                            'record' => $record,
+                            'relation' => 'glEntries',
+                        ]);
+                    })
                     ->openUrlInNewTab(),
             ])
             ->toolbarActions([
