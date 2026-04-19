@@ -1,16 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use App\Contracts\Approvable;
 use App\Enums\ApprovalStatus;
+use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class PurchaseCreditMemo extends Model
+class PurchaseCreditMemo extends Model implements Approvable
 {
-    use HasFactory;
+    use ApprovableTrait, HasFactory;
 
     protected $fillable = [
         'document_number',
@@ -71,42 +75,6 @@ class PurchaseCreditMemo extends Model
         return $this->belongsTo(Location::class);
     }
 
-    // Approval Logic
-    public function submitForApproval(): void
-    {
-        if ($this->status !== ApprovalStatus::DRAFT) {
-            throw new \Exception('Only draft credit memos can be submitted for approval.');
-        }
-
-        $this->update(['status' => ApprovalStatus::PENDING]);
-    }
-
-    public function approve(int $userId): void
-    {
-        if ($this->status !== ApprovalStatus::PENDING) {
-            throw new \Exception('Only pending credit memos can be approved.');
-        }
-
-        $this->update([
-            'status' => ApprovalStatus::APPROVED,
-            'approver_id' => $userId,
-            'approved_at' => now(),
-        ]);
-    }
-
-    public function reject(int $userId, string $reason): void
-    {
-        if ($this->status !== ApprovalStatus::PENDING) {
-            throw new \Exception('Only pending credit memos can be rejected.');
-        }
-
-        $this->update([
-            'status' => ApprovalStatus::REJECTED,
-            'approver_id' => $userId,
-            'rejection_reason' => $reason,
-        ]);
-    }
-
     public static function generateNumber(): string
     {
         $prefix = 'D-PCM'; // Draft Purchase Credit Memo
@@ -130,4 +98,40 @@ class PurchaseCreditMemo extends Model
             }
         });
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Approvable Interface
+    |--------------------------------------------------------------------------
+    */
+
+    public function getApprovalAmount(): float
+    {
+        return (float) ($this->grand_total ?? 0);
+    }
+
+    public function getApprovalDocumentType(): string
+    {
+        return 'Purchase Order'; // Credit memos use the same template type
+    }
+
+    public function getApprovalRequestorId(): int
+    {
+        return (int) ($this->created_by ?? auth()->id());
+    }
+
+    public function getApprovalPostingGroupId(): ?int
+    {
+        return $this->vendor?->vendor_posting_group_id;
+    }
+
+    public function markAsReleased(): void
+    {
+        $this->update([
+            'status' => ApprovalStatus::APPROVED,
+            'approved_at' => now(),
+            'approver_id' => auth()->id(),
+        ]);
+    }
 }
+

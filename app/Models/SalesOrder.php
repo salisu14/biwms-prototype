@@ -1,18 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use App\Contracts\Approvable;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
+use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class SalesOrder extends Model
+class SalesOrder extends Model implements Approvable
 {
-    use HasFactory;
+    use ApprovableTrait, HasFactory;
 
     protected $fillable = [
         'order_number',
@@ -130,43 +134,6 @@ class SalesOrder extends Model
         });
     }
 
-    /**
-     * Submit order for approval
-     */
-    public function submitForApproval(): void
-    {
-        if ($this->status !== SalesOrderStatus::DRAFT) {
-            throw new \Exception('Only draft orders can be submitted for approval.');
-        }
-
-        $this->status = SalesOrderStatus::PENDING_APPROVAL;
-        $this->save();
-    }
-
-    /**
-     * Approve the order
-     */
-    public function approve(int $userId): void
-    {
-        if ($this->status !== SalesOrderStatus::PENDING_APPROVAL) {
-            throw new \Exception('Only orders pending approval can be approved.');
-        }
-
-        $this->status = SalesOrderStatus::APPROVED;
-        $this->approved_by = $userId;
-        $this->approved_at = now();
-        $this->save();
-    }
-
-    /**
-     * Reject or Return to Draft
-     */
-    public function returnToDraft(): void
-    {
-        $this->status = SalesOrderStatus::DRAFT;
-        $this->save();
-    }
-
     public function isPosted(): bool
     {
         return in_array($this->status, [
@@ -176,6 +143,7 @@ class SalesOrder extends Model
             SalesOrderStatus::CANCELLED,
         ]);
     }
+
 
     /**
      * Populate posting groups and default customer info
@@ -376,5 +344,40 @@ class SalesOrder extends Model
             ->count() + 1;
 
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Approvable Interface
+    |--------------------------------------------------------------------------
+    */
+
+    public function getApprovalAmount(): float
+    {
+        return (float) ($this->grand_total ?? 0);
+    }
+
+    public function getApprovalDocumentType(): string
+    {
+        return 'Sales Order';
+    }
+
+    public function getApprovalRequestorId(): int
+    {
+        return (int) ($this->created_by ?? auth()->id());
+    }
+
+    public function getApprovalPostingGroupId(): ?int
+    {
+        return $this->customer_posting_group_id;
+    }
+
+    public function markAsReleased(): void
+    {
+        $this->update([
+            'status' => SalesOrderStatus::APPROVED,
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+        ]);
     }
 }

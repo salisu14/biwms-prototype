@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PurchaseQuotes\Pages;
 
 use App\Filament\Resources\PurchaseQuotes\PurchaseQuoteResource;
+use App\Filament\Shared\Actions\ApprovalActions;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
@@ -16,6 +17,7 @@ class EditPurchaseQuote extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            ...ApprovalActions::all(),
             ViewAction::make(),
             DeleteAction::make(),
             ForceDeleteAction::make(),

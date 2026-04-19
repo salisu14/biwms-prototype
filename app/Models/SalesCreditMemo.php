@@ -1,13 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use App\Contracts\Approvable;
 use App\Enums\ApprovalStatus;
+use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class SalesCreditMemo extends Model
+class SalesCreditMemo extends Model implements Approvable
 {
+    use ApprovableTrait;
+
     protected $fillable = [
         'customer_id',
         'memo_number',
@@ -88,45 +94,46 @@ class SalesCreditMemo extends Model
         return $this->status === ApprovalStatus::POSTED;
     }
 
-    public function submitForApproval(): void
-    {
-        if ($this->status !== ApprovalStatus::DRAFT) {
-            throw new \Exception('Only draft credit memos can be submitted for approval.');
-        }
-
-        $this->update(['status' => ApprovalStatus::PENDING]);
-    }
-
-    public function approve(int $userId): void
-    {
-        if ($this->status !== ApprovalStatus::PENDING) {
-            throw new \Exception('Only pending credit memos can be approved.');
-        }
-
-        $this->update([
-            'status' => ApprovalStatus::APPROVED,
-            'approver_id' => $userId,
-            'approved_at' => now(),
-        ]);
-    }
-
-    public function reject(int $userId, string $reason): void
-    {
-        if ($this->status !== ApprovalStatus::PENDING) {
-            throw new \Exception('Only pending credit memos can be rejected.');
-        }
-
-        $this->update([
-            'status' => ApprovalStatus::REJECTED,
-            'approver_id' => $userId,
-            'rejection_reason' => $reason,
-        ]);
-    }
-
     public function refreshTotal(): void
     {
         $this->update([
             'total_amount' => $this->items()->sum('total'),
         ]);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Approvable Interface
+    |--------------------------------------------------------------------------
+    */
+
+    public function getApprovalAmount(): float
+    {
+        return (float) ($this->total_amount ?? 0);
+    }
+
+    public function getApprovalDocumentType(): string
+    {
+        return 'Sales Order'; // Credit memos fall under the same approval template
+    }
+
+    public function getApprovalRequestorId(): int
+    {
+        return (int) ($this->posted_by ?? auth()->id());
+    }
+
+    public function getApprovalPostingGroupId(): ?int
+    {
+        return null;
+    }
+
+    public function markAsReleased(): void
+    {
+        $this->update([
+            'status' => ApprovalStatus::APPROVED,
+            'approved_at' => now(),
+            'approver_id' => auth()->id(),
+        ]);
+    }
 }
+

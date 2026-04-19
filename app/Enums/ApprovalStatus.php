@@ -1,15 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Enums;
 
+use App\Contracts\ApprovableStatus;
 use Filament\Support\Contracts\HasLabel;
 
 /**
  * Enhanced ApprovalStatus Enum
- * * Provides utility methods for labels, UI colors, and
+ *
+ * Provides utility methods for labels, UI colors, and
  * collection formatting for frontend components.
  */
-enum ApprovalStatus: string implements HasLabel
+enum ApprovalStatus: string implements ApprovableStatus, HasLabel
 {
     case DRAFT = 'draft';
     case PENDING = 'pending';
@@ -19,21 +23,10 @@ enum ApprovalStatus: string implements HasLabel
     case CANCELLED = 'cancelled';
     case ARCHIVED = 'archived';
 
-    /**
-     * Get the human-readable label for the status.
-     */
-    //    public function label(): string
-    //    {
-    //        return match($this) {
-    //            self::DRAFT     => 'Draft',
-    //            self::PENDING   => 'Pending Review',
-    //            self::APPROVED  => 'Approved',
-    //            self::REJECTED  => 'Rejected',
-    //            self::POSTED    => 'Posted',
-    //            self::CANCELLED => 'Cancelled',
-    //            self::ARCHIVED  => 'Archived',
-    //        };
-    //    }
+    // Aliases used by the generic ApprovalService status mapping
+    public const OPEN = self::DRAFT;
+    public const PENDING_APPROVAL = self::PENDING;
+    public const RELEASED = self::APPROVED;
 
     public function getLabel(): string
     {
@@ -80,19 +73,32 @@ enum ApprovalStatus: string implements HasLabel
         };
     }
 
-    /**
-     * Helper to check if the status is currently Pending.
-     */
-    public function isPending(): bool
+    // ── ApprovableStatus contract ────────────────────────────
+
+    public function canSubmitForApproval(): bool
+    {
+        return $this === self::DRAFT;
+    }
+
+    public function canEdit(): bool
+    {
+        return in_array($this, [self::DRAFT, self::REJECTED], true);
+    }
+
+    public function isPendingApproval(): bool
     {
         return $this === self::PENDING;
     }
 
+    public function isReleased(): bool
+    {
+        return $this === self::APPROVED;
+    }
+
     /**
      * Returns an array of all options formatted for a select dropdown.
-     * Use: ApprovalStatus::options()
      *
-     * * @return array<int, array{label: string, value: string, color: string, icon: string}>
+     * @return array<int, array{label: string, value: string, color: string, icon: string}>
      */
     public static function options(): array
     {

@@ -1,9 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\SalesCreditMemos\Tables;
 
+use App\Contracts\ApprovableStatus;
 use App\Enums\ApprovalStatus;
 use App\Models\SalesCreditMemo;
+use App\Services\Approval\ApprovalService;
 use App\Services\Sales\SalesCreditMemoService;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -15,6 +19,7 @@ use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 class SalesCreditMemosTable
 {
@@ -63,9 +68,9 @@ class SalesCreditMemosTable
                     ->label('Submit')
                     ->icon('heroicon-o-paper-airplane')
                     ->color('info')
-                    ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::DRAFT)
+                    ->visible(fn (SalesCreditMemo $record) => $record->status instanceof ApprovableStatus && $record->status->canSubmitForApproval())
                     ->action(function (SalesCreditMemo $record) {
-                        app(SalesCreditMemoService::class)->submitForApproval($record);
+                        app(ApprovalService::class)->submitForApproval($record);
                         Notification::make()->title('Credit memo submitted for approval')->success()->send();
                     }),
 
@@ -73,9 +78,16 @@ class SalesCreditMemosTable
                     ->label('Approve')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::PENDING && auth()->user()->hasRole('super_admin'))
+                    ->visible(function (SalesCreditMemo $record): bool {
+                        $entry = $record->currentApprovalEntry;
+
+                        return $entry && ($entry->approver_id === Auth::id() || Auth::user()?->hasRole('super_admin'));
+                    })
                     ->action(function (SalesCreditMemo $record) {
-                        app(SalesCreditMemoService::class)->approve($record, auth()->id());
+                        $entry = $record->currentApprovalEntry;
+                        if ($entry) {
+                            app(ApprovalService::class)->approve($entry);
+                        }
                         Notification::make()->title('Credit memo approved')->success()->send();
                     }),
 
@@ -83,12 +95,19 @@ class SalesCreditMemosTable
                     ->label('Reject')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
-                    ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::PENDING && auth()->user()->hasRole('super_admin'))
+                    ->visible(function (SalesCreditMemo $record): bool {
+                        $entry = $record->currentApprovalEntry;
+
+                        return $entry && ($entry->approver_id === Auth::id() || Auth::user()?->hasRole('super_admin'));
+                    })
                     ->form([
                         Textarea::make('reason')->required(),
                     ])
                     ->action(function (SalesCreditMemo $record, array $data) {
-                        app(SalesCreditMemoService::class)->reject($record, auth()->id(), $data['reason']);
+                        $entry = $record->currentApprovalEntry;
+                        if ($entry) {
+                            app(ApprovalService::class)->reject($entry, $data['reason']);
+                        }
                         Notification::make()->title('Credit memo rejected')->danger()->send();
                     }),
 
@@ -112,3 +131,4 @@ class SalesCreditMemosTable
             ]);
     }
 }
+

@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Enums;
 
+use App\Contracts\ApprovableStatus;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasIcon;
 use Filament\Support\Contracts\HasLabel;
@@ -9,7 +12,7 @@ use Filament\Support\Contracts\HasLabel;
 /**
  * Enum for Sales Order Status with capitalized labels
  */
-enum SalesOrderStatus: string implements HasColor, HasIcon, HasLabel
+enum SalesOrderStatus: string implements ApprovableStatus, HasColor, HasIcon, HasLabel
 {
     case DRAFT = 'DRAFT';
     case PENDING_APPROVAL = 'PENDING_APPROVAL';
@@ -22,6 +25,9 @@ enum SalesOrderStatus: string implements HasColor, HasIcon, HasLabel
     case PARTIALLY_INVOICED = 'PARTIALLY_INVOICED';
     case CLOSED = 'CLOSED';
     case CANCELLED = 'CANCELLED';
+
+    // Alias used by the generic ApprovalService
+    public const OPEN = self::DRAFT;
 
     public function getLabel(): ?string
     {
@@ -68,4 +74,27 @@ enum SalesOrderStatus: string implements HasColor, HasIcon, HasLabel
             default => null,
         };
     }
+
+    // ── ApprovableStatus contract ────────────────────────────
+
+    public function canSubmitForApproval(): bool
+    {
+        return $this === self::DRAFT;
+    }
+
+    public function canEdit(): bool
+    {
+        return in_array($this, [self::DRAFT, self::PENDING_APPROVAL], true);
+    }
+
+    public function isPendingApproval(): bool
+    {
+        return $this === self::PENDING_APPROVAL;
+    }
+
+    public function isReleased(): bool
+    {
+        return in_array($this, [self::APPROVED, self::RELEASED], true);
+    }
 }
+

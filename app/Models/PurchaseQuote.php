@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Contracts\Approvable;
+use App\Traits\Approvable as ApprovableTrait;
 use App\Enums\PurchaseLineType;
 use App\Enums\PurchaseQuoteStatus;
 use App\Services\Purchase\PurchaseQuoteCalculationService;
@@ -12,10 +14,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Auth;
 
-class PurchaseQuote extends Model
+class PurchaseQuote extends Model implements Approvable
 {
-    use HasFactory, SoftDeletes;
+    use ApprovableTrait, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'document_no',
@@ -359,6 +362,48 @@ class PurchaseQuote extends Model
         $lastLineNo = $this->lines()->max('line_no') ?? 0;
 
         return $lastLineNo + 10000;
+    }
+
+    // Approvable Interface Implementation
+
+    public function getApprovalAmount(): float
+    {
+        return (float) $this->amount_including_vat;
+    }
+
+    public function getApprovalDocumentType(): string
+    {
+        return 'Purchase Order'; // Template uses 'Purchase Order' for quotes/orders in this system? 
+        // Wait, let's check ApprovalTemplateForm again.
+    }
+
+    public function getApprovalLocationCode(): ?string
+    {
+        return $this->location_code;
+    }
+
+    public function getApprovalDimensions(): array
+    {
+        return $this->dimensions ?? [];
+    }
+
+    public function getApprovalRequestorId(): int
+    {
+        return (int) ($this->buyer_id ?? Auth::id());
+    }
+
+    public function getApprovalPostingGroupId(): ?int
+    {
+        return $this->vendor?->vendor_posting_group_id;
+    }
+
+    public function markAsReleased(): void
+    {
+        $this->update([
+            'status' => PurchaseQuoteStatus::RELEASED,
+            'released_at' => now(),
+            'released_by' => auth()->id(),
+        ]);
     }
 
     protected static function booted()

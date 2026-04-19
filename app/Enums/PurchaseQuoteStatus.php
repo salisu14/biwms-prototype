@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
-enum PurchaseQuoteStatus: string
+use App\Contracts\ApprovableStatus;
+
+enum PurchaseQuoteStatus: string implements ApprovableStatus
 {
     case OPEN = 'open';
     case PENDING_APPROVAL = 'pending_approval';
@@ -32,7 +34,7 @@ enum PurchaseQuoteStatus: string
 
     public function canEdit(): bool
     {
-        return in_array($this, [self::OPEN,  self::RELEASED, self::PENDING_APPROVAL], true);
+        return in_array($this, [self::OPEN, self::RELEASED, self::PENDING_APPROVAL], true);
     }
 
     public function canRelease(): bool
@@ -53,5 +55,15 @@ enum PurchaseQuoteStatus: string
     public function canSubmitForApproval(): bool
     {
         return $this === self::OPEN;
+    }
+
+    public function isPendingApproval(): bool
+    {
+        return $this === self::PENDING_APPROVAL;
+    }
+
+    public function isReleased(): bool
+    {
+        return $this === self::RELEASED;
     }
 }
