@@ -3,16 +3,21 @@
 namespace App\Filament\Resources\PurchaseQuotes\Tables;
 
 use App\Enums\PurchaseQuoteStatus;
+use App\Services\Approval\ApprovalService;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 class PurchaseQuotesTable
 {
@@ -59,6 +64,74 @@ class PurchaseQuotesTable
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
+
+                Action::make('submit')
+                    ->label('Submit')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->color('info')
+                    ->visible(fn ($record) => $record->isPendingApproval() === false)
+                    ->action(function ($record) {
+                        app(ApprovalService::class)->submitForApproval($record);
+                        Notification::make()->title('Submitted for approval')->success()->send();
+                    }),
+
+                Action::make('approve')
+                    ->label('Approve')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->visible(fn ($record) => $record->approvalEntries()->where('status', 'created')
+                        ->where(function ($q) {
+                            $q->where('approver_id', Auth::id())->orWhere('delegated_to', Auth::id());
+                        })
+                        ->exists())
+                    ->requiresConfirmation()
+                    ->action(function ($record) {
+                        $entry = $record->approvalEntries()->where('status', 'created')
+                            ->where(function ($q) {
+                                $q->where('approver_id', Auth::id())->orWhere('delegated_to', Auth::id());
+                            })
+                            ->orderBy('sequence_no')
+                            ->first();
+
+                        if (! $entry) {
+                            Notification::make()->title('No pending approval')->danger()->send();
+
+                            return;
+                        }
+
+                        app(ApprovalService::class)->approve($entry);
+                        Notification::make()->title('Approved')->success()->send();
+                    }),
+
+                Action::make('reject')
+                    ->label('Reject')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(fn ($record) => $record->approvalEntries()->where('status', 'created')
+                        ->where(function ($q) {
+                            $q->where('approver_id', Auth::id())->orWhere('delegated_to', Auth::id());
+                        })
+                        ->exists())
+                    ->form([
+                        Textarea::make('reason')->required(),
+                    ])
+                    ->action(function ($record, array $data) {
+                        $entry = $record->approvalEntries()->where('status', 'created')
+                            ->where(function ($q) {
+                                $q->where('approver_id', Auth::id())->orWhere('delegated_to', Auth::id());
+                            })
+                            ->orderBy('sequence_no')
+                            ->first();
+
+                        if (! $entry) {
+                            Notification::make()->title('No pending approval')->danger()->send();
+
+                            return;
+                        }
+
+                        app(ApprovalService::class)->reject($entry, $data['reason']);
+                        Notification::make()->title('Rejected')->danger()->send();
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

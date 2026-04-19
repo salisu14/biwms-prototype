@@ -134,7 +134,7 @@ class ProductionOrder extends Model
 
     public function location(): BelongsTo
     {
-        return $this->belongsTo(Location::class, 'location_code', 'code');
+        return $this->belongsTo(Location::class, 'location_id', 'id');
     }
 
     public function unitOfMeasure(): BelongsTo

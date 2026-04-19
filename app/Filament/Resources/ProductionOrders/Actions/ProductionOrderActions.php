@@ -51,7 +51,7 @@ class ProductionOrderActions
             ->icon('heroicon-m-archive-box')
             ->color('info')
             ->visible(fn ($record) => $record->status === ProductionOrderStatus::RELEASED)
-            ->form([
+            ->schema([
                 TextInput::make('quantity')
                     ->numeric()
                     ->required()

@@ -56,6 +56,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Currency
+    |--------------------------------------------------------------------------
+    |
+    | This currency code is used for money formatting in reports and views that
+    | are not tied to a document-specific currency.
+    |
+    */
+
+    'currency' => env('APP_CURRENCY', 'USD'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

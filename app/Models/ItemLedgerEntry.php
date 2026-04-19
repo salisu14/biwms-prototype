@@ -70,7 +70,7 @@ class ItemLedgerEntry extends Model
 
     public function location(): BelongsTo
     {
-        return $this->belongsTo(Location::class);
+        return $this->belongsTo(Location::class, 'location_id');
     }
 
     public function generalBusinessPostingGroup(): BelongsTo

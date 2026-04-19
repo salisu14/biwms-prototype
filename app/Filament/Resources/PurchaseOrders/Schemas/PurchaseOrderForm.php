@@ -9,7 +9,6 @@ use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -29,14 +28,11 @@ class PurchaseOrderForm
                         Grid::make(3)->schema([
                             Select::make('order_type')
                                 ->label('Order Type')
-                                // Use Enum options method directly
                                 ->options(PurchaseOrderType::options())
                                 ->default('purchase_order')
                                 ->required()
                                 ->live()
-                                ->afterStateUpdated(fn ($state, callable $set) =>
-                                    // Auto-generate a preview if number is empty (optional UX enhancement)
-                                $set('order_number_preview', PurchaseOrderType::from($state)?->seriesCode().'-AUTO')
+                                ->afterStateUpdated(fn ($state, callable $set) => $set('order_number_preview', PurchaseOrderType::from($state)?->seriesCode().'-AUTO')
                                 ),
 
                             TextInput::make('order_number')
@@ -44,10 +40,7 @@ class PurchaseOrderForm
                                 ->required()
                                 ->unique(ignoreRecord: true)
                                 ->helperText('Leave blank to auto-generate based on Series.')
-                                // Lock the field if the record already exists in the database
-                                ->disabled(fn ($context) => $context === 'create')
                                 ->disabled(fn (?PurchaseOrder $record) => $record !== null)
-                                // Ensure the value is still sent to the database during creation
                                 ->dehydrated(),
 
                             Select::make('vendor_id')
@@ -86,20 +79,19 @@ class PurchaseOrderForm
                                 ->options(PurchaseOrderStatus::options())
                                 ->default('PENDING')
                                 ->required()
-                                ->disabled(fn ($record) => ! $record?->canEdit), // Disable if model says not editable
+                                ->disabled(fn ($record) => $record && ! $record->canEdit),
                         ]),
 
-                        // Store the vendor name denormalized field, hidden from user interaction or read-only
                         TextInput::make('vendor_name')
-                            ->label('Vendor Name (Denormalized)')
+                            ->label('Vendor Name (Reference)')
                             ->required()
-                            ->disabled() // Populated by the vendor_id selection
-                            ->dehydrated(true), // Ensure it saves to DB
+                            ->disabled()
+                            ->dehydrated(true),
                     ]),
 
                 Section::make('Dates & Terms')
                     ->schema([
-                        Grid::make(3)->schema([
+                        Grid::make(4)->schema([
                             DatePicker::make('due_date')
                                 ->label('Due Date')
                                 ->native(false),
@@ -116,20 +108,20 @@ class PurchaseOrderForm
                                 ->label('Payment Terms')
                                 ->maxLength(50),
                         ]),
-                    ])
-                    ->columns(2),
+                    ]),
 
                 Section::make('Financials')
-                    ->description('Order totals. These are typically calculated from line items.')
+                    ->description('Summary of order totals. Values are often calculated from individual line items.')
                     ->schema([
                         Grid::make(3)->schema([
                             TextInput::make('total_amount')
-                                ->label('Total Amount (Excl. VAT)')
+                                ->label('Total Excl. VAT')
                                 ->required()
                                 ->numeric()
                                 ->prefix('$')
                                 ->default(0)
-                                ->disabled(fn ($record) => $record && $record->id !== null), // Read-only on edit if calculated by lines
+                                ->disabled(fn ($record) => $record && $record->id !== null)
+                                ->extraInputAttributes(['class' => 'text-xl font-semibold']),
 
                             TextInput::make('total_vat')
                                 ->label('Total VAT')
@@ -137,7 +129,8 @@ class PurchaseOrderForm
                                 ->numeric()
                                 ->prefix('$')
                                 ->default(0)
-                                ->disabled(fn ($record) => $record && $record->id !== null),
+                                ->disabled(fn ($record) => $record && $record->id !== null)
+                                ->extraInputAttributes(['class' => 'text-xl font-semibold text-warning-600']),
 
                             TextInput::make('grand_total')
                                 ->label('Grand Total')
@@ -145,23 +138,26 @@ class PurchaseOrderForm
                                 ->numeric()
                                 ->prefix('$')
                                 ->default(0)
-                                ->disabled(fn ($record) => $record && $record->id !== null),
+                                ->disabled(fn ($record) => $record && $record->id !== null)
+                                ->extraInputAttributes(['class' => 'text-2xl font-black text-primary-600']),
                         ]),
 
-                        // Visual helper for calculated Grand Total
-                        Placeholder::make('total_preview')
-                            ->label('Grand Total Preview')
-                            ->content(function ($get) {
-                                $amount = (float) $get('total_amount');
-                                $vat = (float) $get('total_vat');
+                        TextInput::make('total_summary')
+                            ->label('Consolidated Total')
+                            ->prefix('$')
+                            ->readOnly()
+                            ->dehydrated(false) // 🔥 important: don't save to DB
+                            ->formatStateUsing(function ($state, $get) {
+                                $amount = (float) ($get('total_amount') ?? 0);
+                                $vat = (float) ($get('total_vat') ?? 0);
+                                $total = $amount + $vat;
 
-                                return '$'.number_format($amount + $vat, 4);
+                                return number_format($total, 4);
                             })
-                            ->visible(fn ($context) => $context === 'create'),
-                    ])
-                    ->columns(2),
+                            ->reactive(),
+                    ]),
 
-                Section::make('Approval')
+                Section::make('Approval Information')
                     ->schema([
                         Grid::make(2)->schema([
                             Select::make('approved_by')
@@ -169,7 +165,7 @@ class PurchaseOrderForm
                                 ->relationship('approver', 'name')
                                 ->searchable()
                                 ->preload()
-                                ->visible(fn ($record) => $record && $record->status !== PurchaseOrderStatus::PENDING),
+                                ->visible(fn ($record) => $record && $record->status !== 'PENDING'),
 
                             DateTimePicker::make('approved_at')
                                 ->label('Approved At')
@@ -179,14 +175,15 @@ class PurchaseOrderForm
                         ]),
                     ])
                     ->collapsible()
-                    ->visible(fn ($record) => $record !== null), // Only show in Edit mode
+                    ->visible(fn ($record) => $record !== null),
 
                 Section::make('Notes')
                     ->schema([
                         Textarea::make('comment')
-                            ->label('Comments / Internal Notes')
+                            ->label('Internal Comments')
                             ->rows(3)
-                            ->columnSpanFull(),
+                            ->columnSpanFull()
+                            ->placeholder('Enter any internal instructions or vendor notes here...'),
                     ]),
 
                 Hidden::make('created_by')

@@ -40,7 +40,8 @@ class PurchaseOrderResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\LinesRelationManager::class,
+            //            RelationManagers\LinesRelationManager::class,
+            RelationManagers\PurchaseOrderLinesRelationManager::class,
         ];
     }
 

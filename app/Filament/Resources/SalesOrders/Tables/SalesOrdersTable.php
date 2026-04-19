@@ -4,6 +4,7 @@ namespace App\Filament\Resources\SalesOrders\Tables;
 
 use App\Enums\SalesOrderStatus;
 use App\Models\SalesOrder;
+use App\Services\Approval\ApprovalService;
 use App\Services\Print\ProformaInvoiceService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -107,7 +108,7 @@ class SalesOrdersTable
                     ->color('info')
                     ->visible(fn ($record) => $record instanceof SalesOrder && $record->status === SalesOrderStatus::DRAFT)
                     ->action(function (SalesOrder $record) {
-                        $record->submitForApproval();
+                        app(ApprovalService::class)->submitForApproval($record);
                         Notification::make()
                             ->title('Submitted for Approval')
                             ->success()
@@ -120,11 +121,28 @@ class SalesOrdersTable
                     ->color('success')
                     ->visible(fn ($record) => $record instanceof SalesOrder &&
                         $record->status === SalesOrderStatus::PENDING_APPROVAL &&
-                        (auth()->user()?->can('approve:order') || auth()->user()?->hasRole('SUPER_ADMIN'))
+                        $record->approvalEntries()->where('status', 'created')
+                            ->where(function ($q) {
+                                $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                            })
+                            ->exists()
                     )
                     ->requiresConfirmation()
                     ->action(function (SalesOrder $record) {
-                        $record->approve(auth()->id());
+                        $entry = $record->approvalEntries()->where('status', 'created')
+                            ->where(function ($q) {
+                                $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                            })
+                            ->orderBy('sequence_no')
+                            ->first();
+
+                        if (! $entry) {
+                            Notification::make()->title('No pending approval')->danger()->send();
+
+                            return;
+                        }
+
+                        app(ApprovalService::class)->approve($entry);
                         Notification::make()
                             ->title('Order Approved')
                             ->success()

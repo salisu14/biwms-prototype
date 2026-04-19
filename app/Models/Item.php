@@ -88,8 +88,35 @@ class Item extends Model
 
     public function uoms(): BelongsToMany
     {
-        return $this->belongsToMany(UnitOfMeasure::class, 'item_uom_assignments')
+        return $this->belongsToMany(
+            UnitOfMeasure::class,
+            'item_uom_assignments', // Pivot table
+            'item_id',             // Foreign key on pivot for Item
+            'uom_id'               // Foreign key on pivot for Unit of Measure (FIXED)
+        )
             ->withPivot(['uom_type', 'conversion_factor', 'is_default'])
+            ->withTimestamps();
+    }
+    //    public function uoms(): BelongsToMany
+    //    {
+    //        return $this->belongsToMany(UnitOfMeasure::class, 'item_uom_assignments')
+    //            ->withPivot(['uom_type', 'conversion_factor', 'is_default'])
+    //            ->withTimestamps();
+    //    }
+
+    public function unitOfMeasures(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            UnitOfMeasure::class,
+            'item_uom_assignments',
+            'item_id',          // FK to items
+            'uom_id'            // 🔥 CHANGE THIS to your actual column name
+        )
+            ->withPivot([
+                'uom_type',
+                'conversion_factor',
+                'is_default',
+            ])
             ->withTimestamps();
     }
 
@@ -295,5 +322,15 @@ class Item extends Model
             ->toArray();
 
         return $this->skus()->update($data);
+    }
+
+    public function scopeRawMaterials($query)
+    {
+        return $query->where('item_type', 'RAW_MATERIAL');
+    }
+
+    public function scopeFinishedGoods($query)
+    {
+        return $query->where('item_type', ItemType::FINISHED_GOOD);
     }
 }

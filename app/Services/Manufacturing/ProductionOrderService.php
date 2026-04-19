@@ -599,7 +599,7 @@ class ProductionOrderService
 
     protected function createWipGlEntries(ProductionOrder $order, Item $item, float $amount, \DateTime $postingDate, string $description): void
     {
-        $location = Location::where('location_code', $order->location_code)->first();
+        $location = Location::where('code', $order->location_code)->first();
         $locationId = $location?->id;
 
         // 1. Inventory Account (Credit) - for the component being consumed
@@ -657,7 +657,7 @@ class ProductionOrderService
 
     protected function createCapacityGlEntries(ProductionOrder $order, float $directCost, float $indirectCost, \DateTime $postingDate, string $description): void
     {
-        $location = Location::where('location_code', $order->location_code)->first();
+        $location = Location::where('code', $order->location_code)->first();
         $locationId = $location?->id;
 
         // 1. WIP Account (Debit)
@@ -744,7 +744,7 @@ class ProductionOrderService
 
     protected function createFinishGlEntries(ProductionOrder $order, float $totalWip, \DateTime $postingDate): void
     {
-        $location = Location::where('location_code', $order->location_code)->first();
+        $location = Location::where('code', $order->location_code)->first();
         $locationId = $location?->id;
 
         // 1. Inventory Account (Debit) - for the finished good
@@ -804,7 +804,7 @@ class ProductionOrderService
             return;
         }
 
-        $location = Location::where('location_code', $order->location_code)->first();
+        $location = Location::where('code', $order->location_code)->first();
         $locationId = $location?->id;
 
         // 1. WIP Account (to clear remaining WIP)
@@ -873,10 +873,23 @@ class ProductionOrderService
      */
     protected function getAvailableInventory(int $itemId, ?string $locationCode): float
     {
-        return ItemLedgerEntry::where('item_id', $itemId)
-            ->where('location_code', $locationCode)
-            ->where('open', true)
-            ->sum('remaining_quantity');
+        $query = ItemLedgerEntry::query()
+            ->where('item_id', $itemId)
+            ->where('open', true);
+
+        if (filled($locationCode)) {
+            $locationId = Location::query()
+                ->where('code', $locationCode)
+                ->value('id');
+
+            if (! $locationId) {
+                return 0;
+            }
+
+            $query->where('location_id', $locationId);
+        }
+
+        return $query->sum('remaining_quantity');
     }
 
     /**

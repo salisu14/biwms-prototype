@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PurchaseOrders\RelationManagers;
 
+use App\Enums\ItemType;
 use App\Enums\PurchaseLineType;
 use App\Enums\UomType;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
@@ -26,6 +27,7 @@ use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 class LinesRelationManager extends RelationManager
 {
@@ -43,17 +45,33 @@ class LinesRelationManager extends RelationManager
                     ->required()
                     ->default(PurchaseLineType::ITEM)
                     ->live()
-                    ->afterStateUpdated(fn ($set) => $set('item_id', null) && $set('asset_id', null)),
+                    ->afterStateUpdated(fn ($set) => $set('item_id', null) && $set('item_code', null) && $set('asset_id', null)),
 
                 Grid::make(4)->schema([
-                    Select::make('item_id')
-                        ->label('Item')
-                        ->relationship('item', 'item_code', fn ($query) => $query->where('blocked', false))
+                    // HIDDEN: The original ID selector (now handled by item_code dropdown below)
+                    // Select::make('item_id')
+                    //    ->label('Item')
+                    //    ->relationship('item', 'item_code', fn ($query) => $query->where('blocked', false))
+                    //    ->searchable()
+                    //    ->preload()
+                    //    ...
+
+                    // FIXED: Converted to Select, filters RAW_MATERIALS, and sets item_id automatically
+                    Select::make('item_code')
+                        ->label('Item Code')
+                        ->relationship(
+                            name: 'item',
+                            titleAttribute: 'item_code',
+                            modifyQueryUsing: fn ($query) => $query
+                                ->where('blocked', false)
+                                ->where('item_type', ItemType::RAW_MATERIAL->value)
+                        )
                         ->searchable()
                         ->preload()
                         ->required(fn ($get) => $get('type') === PurchaseLineType::ITEM->value)
                         ->visible(fn ($get) => $get('type') === PurchaseLineType::ITEM->value)
-                        ->lazy()
+                        ->dehydrated(false) // Prevent saving ID to the 'item_code' string column
+                        ->live()
                         ->afterStateUpdated(function ($state, callable $set, callable $get) {
                             if (! $state) {
                                 return;
@@ -61,11 +79,19 @@ class LinesRelationManager extends RelationManager
 
                             $item = Item::find($state);
                             if ($item) {
-                                $set('description', $item->description);
+                                // 1. Set the hidden Database ID (Fixes SQL Not Null constraint)
+                                $set('item_id', $item->id);
+
+                                // 2. Set the Code string for display/storage
                                 $set('item_code', $item->item_code);
+
+                                // 3. Set Description
+                                $set('description', $item->description);
+
+                                // 4. Set VAT Group
                                 $set('vat_product_posting_group_id', $item->vat_product_posting_group_id);
 
-                                // Resolve VAT percentage
+                                // 5. Resolve VAT percentage
                                 $vatBusGroup = $this->getOwnerRecord()->vat_business_posting_group_id;
                                 $vatProdGroup = $item->vat_product_posting_group_id;
 
@@ -77,11 +103,11 @@ class LinesRelationManager extends RelationManager
                                     $set('vat_percentage', 0);
                                 }
 
-                                // Logic to set the ACTIVE unit_of_measure field using Item model method
+                                // 6. Set UOM
                                 $baseUom = $item->getDefaultUom(UomType::BASE);
                                 $set('unit_of_measure', $baseUom?->uom_code ?? '');
 
-                                // Using the accessor from Item model
+                                // 7. Set Cost
                                 $set('unit_cost', $item->current_standard_cost ?? 0);
                             }
                         }),
@@ -93,7 +119,7 @@ class LinesRelationManager extends RelationManager
                         ->preload()
                         ->required(fn ($get) => $get('type') === PurchaseLineType::FIXED_ASSET->value)
                         ->visible(fn ($get) => $get('type') === PurchaseLineType::FIXED_ASSET->value)
-                        ->lazy()
+                        ->live()
                         ->afterStateUpdated(function ($state, callable $set) {
                             if (! $state) {
                                 return;
@@ -103,8 +129,8 @@ class LinesRelationManager extends RelationManager
                             if ($asset) {
                                 $set('description', $asset->description);
                                 $set('item_code', $asset->fa_no);
-                                $set('unit_of_measure', 'pcs'); // Default for assets
-                                $set('unit_cost', 0); // User likely input cost on PO
+                                $set('unit_of_measure', 'pcs');
+                                $set('unit_cost', 0);
                             }
                         }),
 
@@ -113,7 +139,7 @@ class LinesRelationManager extends RelationManager
                         ->required()
                         ->numeric()
                         ->default(1)
-                        ->live() // Using live to update previews immediately
+                        ->live()
                         ->step(0.0001),
 
                     Select::make('unit_of_measure')
@@ -132,7 +158,7 @@ class LinesRelationManager extends RelationManager
                         ->label('Unit Cost')
                         ->required()
                         ->numeric()
-                        ->live() // Using live to update previews immediately
+                        ->live()
                         ->step(0.0001),
 
                     TextInput::make('vat_percentage')
@@ -149,8 +175,10 @@ class LinesRelationManager extends RelationManager
                     ->columnSpanFull(),
 
                 Grid::make(2)->schema([
+                    // This field now holds the display value set by the dropdown
                     TextInput::make('item_code')
                         ->label('Item Code')
+                        // Disabled allows user to see it but not edit it directly
                         ->disabled()
                         ->dehydrated(true),
 
@@ -258,14 +286,27 @@ class LinesRelationManager extends RelationManager
             ->headerActions([
                 CreateAction::make()
                     ->mutateDataUsing(function (array $data, RelationManager $livewire): array {
+                        // 1. Server-Side Validation
+                        if ($data['type'] === PurchaseLineType::ITEM->value && empty($data['item_id'])) {
+                            throw ValidationException::withMessages([
+                                'item_id' => 'The Item field is required when Type is Item.',
+                            ]);
+                        }
+
+                        if ($data['type'] === PurchaseLineType::FIXED_ASSET->value && empty($data['asset_id'])) {
+                            throw ValidationException::withMessages([
+                                'asset_id' => 'The Fixed Asset field is required when Type is Fixed Asset.',
+                            ]);
+                        }
+
                         /** @var PurchaseOrder $purchaseOrder */
                         $purchaseOrder = $livewire->getOwnerRecord();
 
-                        // 1. Calculate sequential Line Number
+                        // 2. Calculate sequential Line Number
                         $maxLineNumber = $purchaseOrder->lines()->max('line_number') ?? 0;
                         $data['line_number'] = $maxLineNumber + 1;
 
-                        // 2. Mirroring Service Logic: Ensure item/asset metadata and Posting Groups are set
+                        // 3. Mirroring Service Logic
                         if ($data['type'] === PurchaseLineType::ITEM->value && isset($data['item_id'])) {
                             $item = Item::find($data['item_id']);
                             if ($item) {
@@ -279,7 +320,7 @@ class LinesRelationManager extends RelationManager
                             }
                         }
 
-                        // 3. Pre-calculate totals for database storage (Calculated fields)
+                        // 4. Pre-calculate totals
                         $qty = (float) ($data['quantity'] ?? 0);
                         $cost = (float) ($data['unit_cost'] ?? 0);
                         $vatRate = (float) ($data['vat_percentage'] ?? 0);
@@ -299,7 +340,6 @@ class LinesRelationManager extends RelationManager
             ->recordActions([
                 EditAction::make()
                     ->mutateDataUsing(function (array $data): array {
-                        // Recalculate line totals on edit
                         $qty = (float) ($data['quantity'] ?? 0);
                         $cost = (float) ($data['unit_cost'] ?? 0);
                         $vatRate = (float) ($data['vat_percentage'] ?? 0);

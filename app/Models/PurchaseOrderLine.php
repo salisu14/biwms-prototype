@@ -88,6 +88,11 @@ class PurchaseOrderLine extends Model
         return $this->belongsTo(PurchaseOrder::class);
     }
 
+    public function vendor(): BelongsTo
+    {
+        return $this->belongsTo(Vendor::class, 'vendor_id');
+    }
+
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class, 'item_id');
