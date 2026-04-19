@@ -16,7 +16,7 @@ class InventoryReportService
     public function getMovementSummary(Carbon $startDate, Carbon $endDate, ?int $locationId = null): Builder
     {
         $query = Item::query()
-            ->with(['uom'])
+            ->with(['uoms'])
             ->select('items.*');
 
         // Opening Balance (Qty & Value)

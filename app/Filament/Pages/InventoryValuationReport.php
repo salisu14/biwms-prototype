@@ -29,19 +29,13 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
 
     protected string $view = 'filament.pages.inventory-valuation-report';
 
-    public ?string $startDate = null;
-
-    public ?string $endDate = null;
-
-    public ?int $locationId = null;
+    public ?array $formData = [];
 
     public function mount(): void
     {
-        $this->startDate = now()->startOfMonth()->toDateString();
-        $this->endDate = now()->toDateString();
         $this->form->fill([
-            'startDate' => $this->startDate,
-            'endDate' => $this->endDate,
+            'startDate' => now()->startOfMonth()->toDateString(),
+            'endDate' => now()->toDateString(),
         ]);
     }
 
@@ -63,17 +57,20 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                     ->placeholder('All Locations')
                     ->live(),
             ])
-            ->columns(3);
+            ->columns(3)
+            ->statePath('formData');
     }
 
     public function table(Table $table): Table
     {
         $service = app(InventoryReportService::class);
-        $start = Carbon::parse($this->startDate);
-        $end = Carbon::parse($this->endDate);
+        $state = $this->form->getState();
+        $start = Carbon::parse($state['startDate'] ?? $this->formData['startDate'] ?? now()->startOfMonth()->toDateString());
+        $end = Carbon::parse($state['endDate'] ?? $this->formData['endDate'] ?? now()->toDateString());
+        $locationId = $state['locationId'] ?? $this->formData['locationId'] ?? null;
 
         return $table
-            ->query($service->getMovementSummary($start, $end, $this->locationId))
+            ->query($service->getMovementSummary($start, $end, $locationId))
             ->columns([
                 TextColumn::make('item_code')
                     ->label('Item No.')
@@ -81,7 +78,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                     ->sortable()
                     ->description(fn (Item $record): string => $record->description),
 
-                TextColumn::make('uom.uom_code')
+                TextColumn::make('uoms.uom_code')
                     ->label('UoM'),
 
                 // Opening
@@ -162,6 +159,12 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                     ]),
             ])
             ->paginated([50, 100, 200, 'all']);
+    }
+
+    public function generateReport(): void
+    {
+        // Ensure we capture the current form state so table() can use it immediately.
+        $this->formData = $this->form->getState();
     }
 
     protected function getHeaderWidgets(): array

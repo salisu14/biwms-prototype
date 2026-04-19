@@ -1,8 +1,16 @@
 <x-filament-panels::page>
     <div class="space-y-6">
         <x-filament::section>
-            <form wire:submit="mount">
+            <form wire:submit="generateReport" class="p-2">
                 {{ $this->form }}
+                <div class="mt-4 flex justify-end items-center gap-x-4 border-t border-gray-100 dark:border-white/5 pt-4">
+                    <button type="button" wire:click="form.fill" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                        Reset Filters
+                    </button>
+                    <x-filament::button type="submit" size="lg" class="rounded-xl shadow-lg shadow-primary-500/20 px-6">
+                        Update Analysis
+                    </x-filament::button>
+                </div>
             </form>
         </x-filament::section>
 
