@@ -107,4 +107,9 @@ class ProductionOrderRoutingLine extends Model
     {
         return $this->hasMany(CapacityLedgerEntry::class, 'routing_line_id');
     }
+
+    public function getTotalTimeMinutesAttribute(): float
+    {
+        return (float) $this->setup_time + (float) $this->run_time;
+    }
 }

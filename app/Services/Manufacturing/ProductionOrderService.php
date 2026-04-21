@@ -2,6 +2,7 @@
 
 namespace App\Services\Manufacturing;
 
+use App\Enums\DocumentType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\LineType;
 use App\Enums\ProductionOrderStatus;
@@ -153,11 +154,19 @@ class ProductionOrderService
                     'dimensions' => $order->dimension_set_id,
                     'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
                     'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
+                    'general_product_posting_group_id' => $component->item->general_product_posting_group_id,
+                    'inventory_posting_group_id' => $component->item->inventory_posting_group_id,
+                    'entry_date' => now(),
                 ]);
 
                 $component->actual_quantity_consumed += $qty;
                 $component->actual_scrap_quantity += $scrapQty;
                 $component->save();
+
+                // Update CapEx Project if linked
+                if ($order->capex_project_id && $order->capexProject) {
+                    $order->capexProject->increment('actual_amount', $qty * $actualUnitCost);
+                }
 
                 // G/L Integration: Dr. WIP, Cr. Inventory
                 $this->createWipGlEntries(
@@ -211,6 +220,9 @@ class ProductionOrderService
                 'dimensions' => $order->dimension_set_id,
                 'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
                 'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
+                'general_product_posting_group_id' => $order->general_product_posting_group_id,
+                'inventory_posting_group_id' => $order->inventory_posting_group_id,
+                'entry_date' => now(),
             ]);
 
             if ($routingLineId) {
@@ -271,6 +283,8 @@ class ProductionOrderService
                 'routing_line_id' => $routingLineId,
                 'work_center_id' => $routingLine->work_center_id,
                 'machine_center_id' => $routingLine->machine_center_id,
+                'fixed_asset_id' => $center?->fixed_asset_id,
+                'capex_project_id' => $order->capex_project_id,
                 'posting_date' => now(),
                 'setup_time' => $setupTime,
                 'run_time' => $runTime,
@@ -281,6 +295,11 @@ class ProductionOrderService
                 'total_cost' => $totalCost,
                 'document_number' => $order->document_number,
             ]);
+
+            // Update CapEx Project if linked
+            if ($order->capex_project_id && $order->capexProject) {
+                $order->capexProject->increment('actual_amount', $totalCost);
+            }
 
             // G/L Integration: Dr. WIP, Cr. Direct Cost Applied, Cr. Overhead Applied
             $this->createCapacityGlEntries(
@@ -340,6 +359,11 @@ class ProductionOrderService
             $variance = $totalActualCost - $totalInventoryCost;
             if (abs($variance) > 0.01) {
                 $this->createVarianceGlEntries($order, $variance, $postingDate);
+
+                // Update CapEx Project for variance if linked
+                if ($order->capex_project_id && $order->capexProject) {
+                    $order->capexProject->increment('actual_amount', $variance);
+                }
             }
 
             $this->changeStatus($order, ProductionOrderStatus::FINISHED, $userId);
@@ -431,13 +455,26 @@ class ProductionOrderService
             $order->components()->delete();
         }
 
+        // Check for active version if not set
+        if (! $order->production_bom_version_id && $order->productionBom) {
+            $version = $order->productionBom->getActiveVersion($order->starting_date_time ?? now());
+            if ($version) {
+                $order->production_bom_version_id = $version->id;
+                $order->save();
+            }
+        }
+
         $bom = $order->productionBom;
+        $version = $order->production_bom_version_id ? \App\Models\Manufacturing\ProductionBomVersion::find($order->production_bom_version_id) : null;
+
         if (! $bom) {
             return;
         }
 
+        $lines = $version ? $version->lines : $bom->lines;
+
         $lineNo = 10000;
-        foreach ($bom->lines as $bomLine) {
+        foreach ($lines as $bomLine) {
             $expectedQty = $bomLine->quantity_per * $order->quantity * (1 + $bomLine->scrap_percent / 100);
 
             $order->components()->create([
@@ -470,13 +507,26 @@ class ProductionOrderService
             $order->routingLines()->delete();
         }
 
+        // Check for active version if not set
+        if (! $order->routing_version_id && $order->routing) {
+            $version = $order->routing->getActiveVersion($order->starting_date_time ?? now());
+            if ($version) {
+                $order->routing_version_id = $version->id;
+                $order->save();
+            }
+        }
+
         $routing = $order->routing;
+        $version = $order->routing_version_id ? \App\Models\Manufacturing\RoutingVersion::find($order->routing_version_id) : null;
+
         if (! $routing) {
             return;
         }
 
+        $lines = $version ? $version->lines : $routing->lines;
+
         $lineNo = 10000;
-        foreach ($routing->lines as $routingLine) {
+        foreach ($lines as $routingLine) {
             $order->routingLines()->create([
                 'line_number' => $lineNo,
                 'operation_no' => $routingLine->operation_no,
@@ -497,26 +547,38 @@ class ProductionOrderService
         }
     }
 
-    protected function scheduleOrder(ProductionOrder $order, bool $forward = false): void
+    protected function scheduleOrder(ProductionOrder $order, bool $forward = true): void
     {
         if ($forward) {
-            $currentDate = $order->starting_date_time ?? now();
+            $currentDateTime = $order->starting_date_time ?? now();
             foreach ($order->routingLines()->orderBy('line_number')->get() as $routingLine) {
-                $routingLine->starting_date_time = $currentDate;
-                $routingLine->ending_date_time = $currentDate->copy()->addMinutes($routingLine->total_time_minutes);
-                $routingLine->save();
-                $currentDate = $routingLine->ending_date_time->copy()->addMinutes($routingLine->move_time);
+                $workCenter = $routingLine->workCenter;
+                if ($workCenter) {
+                    $availableStart = $workCenter->getNextWorkingDateTime($currentDateTime, true);
+                    if ($availableStart) {
+                        $routingLine->starting_date_time = $availableStart;
+                        $routingLine->ending_date_time = \Carbon\Carbon::instance($availableStart)->addMinutes($routingLine->total_time_minutes);
+                        $routingLine->save();
+                        $currentDateTime = $routingLine->ending_date_time->copy()->addMinutes($routingLine->move_time);
+                    }
+                }
             }
-            $order->ending_date_time = $currentDate;
+            $order->ending_date_time = $currentDateTime;
         } else {
-            $currentDate = $order->due_date?->copy()->subDay() ?? now();
+            $currentDateTime = $order->due_date?->copy()->subDay() ?? now();
             foreach ($order->routingLines()->orderByDesc('line_number')->get() as $routingLine) {
-                $routingLine->ending_date_time = $currentDate;
-                $routingLine->starting_date_time = $currentDate->copy()->subMinutes($routingLine->total_time_minutes);
-                $routingLine->save();
-                $currentDate = $routingLine->starting_date_time->copy()->subMinutes($routingLine->wait_time);
+                $workCenter = $routingLine->workCenter;
+                if ($workCenter) {
+                    $availableEnd = $workCenter->getNextWorkingDateTime($currentDateTime, false);
+                    if ($availableEnd) {
+                        $routingLine->ending_date_time = $availableEnd;
+                        $routingLine->starting_date_time = \Carbon\Carbon::instance($availableEnd)->subMinutes($routingLine->total_time_minutes);
+                        $routingLine->save();
+                        $currentDateTime = $routingLine->starting_date_time->copy()->subMinutes($routingLine->wait_time);
+                    }
+                }
             }
-            $order->starting_date_time = $currentDate;
+            $order->starting_date_time = $currentDateTime;
         }
 
         $order->save();
@@ -625,6 +687,7 @@ class ProductionOrderService
             'amount' => $amount,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
+            'document_type' => DocumentType::PRODUCTION_ORDER,
             'document_number' => $order->document_number,
             'description' => $description,
             'sourceable_type' => ProductionOrder::class,
@@ -644,6 +707,7 @@ class ProductionOrderService
             'amount' => -$amount,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
+            'document_type' => DocumentType::PRODUCTION_ORDER,
             'document_number' => $order->document_number,
             'description' => $description,
             'sourceable_type' => ProductionOrder::class,
@@ -691,6 +755,7 @@ class ProductionOrderService
             'amount' => $totalCost,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
+            'document_type' => DocumentType::PRODUCTION_ORDER,
             'document_number' => $order->document_number,
             'description' => $description,
             'sourceable_type' => ProductionOrder::class,
@@ -710,6 +775,7 @@ class ProductionOrderService
             'amount' => -$directCost,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
+            'document_type' => DocumentType::PRODUCTION_ORDER,
             'document_number' => $order->document_number,
             'description' => $description.' (Direct)',
             'sourceable_type' => ProductionOrder::class,
@@ -730,7 +796,8 @@ class ProductionOrderService
                 'amount' => -$indirectCost,
                 'posting_date' => $postingDate,
                 'document_date' => $postingDate,
-                'document_number' => $order->document_number,
+                'document_type' => DocumentType::PRODUCTION_ORDER,
+            'document_number' => $order->document_number,
                 'description' => $description.' (Overhead)',
                 'sourceable_type' => ProductionOrder::class,
                 'sourceable_id' => $order->id,
@@ -768,6 +835,7 @@ class ProductionOrderService
             'amount' => $totalWip,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
+            'document_type' => DocumentType::PRODUCTION_ORDER,
             'document_number' => $order->document_number,
             'description' => "Finish Production: {$order->document_number}",
             'sourceable_type' => ProductionOrder::class,
@@ -787,6 +855,7 @@ class ProductionOrderService
             'amount' => -$totalWip,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
+            'document_type' => DocumentType::PRODUCTION_ORDER,
             'document_number' => $order->document_number,
             'description' => "Finish Production: {$order->document_number}",
             'sourceable_type' => ProductionOrder::class,
@@ -838,6 +907,7 @@ class ProductionOrderService
             'amount' => -$variance,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
+            'document_type' => DocumentType::PRODUCTION_ORDER,
             'document_number' => $order->document_number,
             'description' => "Production Variance: {$order->document_number}",
             'sourceable_type' => ProductionOrder::class,
@@ -857,6 +927,7 @@ class ProductionOrderService
             'amount' => $variance,
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
+            'document_type' => DocumentType::PRODUCTION_ORDER,
             'document_number' => $order->document_number,
             'description' => "Production Variance: {$order->document_number}",
             'sourceable_type' => ProductionOrder::class,

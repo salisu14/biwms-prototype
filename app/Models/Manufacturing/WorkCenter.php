@@ -131,4 +131,56 @@ class WorkCenter extends Model
             ->where('is_working_day', true)
             ->sum('capacity');
     }
+
+    /**
+     * Get calendar entry for a specific date
+     */
+    public function getCalendarForDate($date): ?WorkCenterCalendar
+    {
+        $dateStr = ($date instanceof \DateTime) ? $date->format('Y-m-d') : $date;
+        
+        return $this->calendarEntries()
+            ->whereDate('date', $dateStr)
+            ->first();
+    }
+
+    /**
+     * Get the next available working date/time starting from a given point
+     */
+    public function getNextWorkingDateTime(\DateTime $startFrom, bool $forward = true): ?\DateTime
+    {
+        $current = \Carbon\Carbon::instance($startFrom);
+
+        // Limit search to 365 days to prevent infinite loops
+        for ($i = 0; $i < 365; $i++) {
+            $dateStr = $current->format('Y-m-d');
+            $calendar = $this->getCalendarForDate($dateStr);
+
+            if ($calendar && $calendar->is_working_day) {
+                // If we are looking forward and the start time is before the end of the shift
+                if ($forward) {
+                    $shiftEnd = \Carbon\Carbon::parse($calendar->end_time)->setDate($current->year, $current->month, $current->day);
+                    if ($current->lt($shiftEnd)) {
+                        $shiftStart = \Carbon\Carbon::parse($calendar->start_time)->setDate($current->year, $current->month, $current->day);
+                        return $current->lt($shiftStart) ? $shiftStart->toDateTime() : $current->toDateTime();
+                    }
+                } else {
+                    // Backward
+                    $shiftStart = \Carbon\Carbon::parse($calendar->start_time)->setDate($current->year, $current->month, $current->day);
+                    if ($current->gt($shiftStart)) {
+                        $shiftEnd = \Carbon\Carbon::parse($calendar->end_time)->setDate($current->year, $current->month, $current->day);
+                        return $current->gt($shiftEnd) ? $shiftEnd->toDateTime() : $current->toDateTime();
+                    }
+                }
+            }
+
+            if ($forward) {
+                $current->addDay()->startOfDay();
+            } else {
+                $current->subDay()->endOfDay();
+            }
+        }
+
+        return null;
+    }
 }

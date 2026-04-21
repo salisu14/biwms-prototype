@@ -19,6 +19,7 @@ class ChartOfAccountFactory extends Factory
             'balance' => 0,
             'direct_posting' => true,
             'blocked' => false,
+            'income_balance' => \App\Enums\IncomeBalanceType::BALANCE_SHEET,
         ];
     }
 }

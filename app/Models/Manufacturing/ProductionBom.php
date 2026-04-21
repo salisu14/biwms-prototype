@@ -82,6 +82,27 @@ class ProductionBom extends Model
         return $cost;
     }
 
+    /**
+     * Get active/certified version for a specific date
+     */
+    public function getActiveVersion(?\DateTime $date = null): ?ProductionBomVersion
+    {
+        $checkDate = $date ?? now();
+
+        return $this->versions()
+            ->where('status', 'CERTIFIED')
+            ->where(function ($query) use ($checkDate) {
+                $query->whereNull('starting_date')
+                    ->orWhere('starting_date', '<=', $checkDate);
+            })
+            ->where(function ($query) use ($checkDate) {
+                $query->whereNull('ending_date')
+                    ->orWhere('ending_date', '>=', $checkDate);
+            })
+            ->orderByDesc('starting_date')
+            ->first();
+    }
+
     protected static function booted(): void
     {
         static::creating(function ($routing) {

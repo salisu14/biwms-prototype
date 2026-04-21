@@ -179,6 +179,30 @@ class GeneralPostingSetup extends Model
     }
 
     /**
+     * Get direct cost applied account (for manufacturing)
+     */
+    public function getDirectCostAppliedAccount(): ?ChartOfAccount
+    {
+        return $this->directCostAppliedAccount;
+    }
+
+    /**
+     * Get overhead applied account (for manufacturing)
+     */
+    public function getOverheadAppliedAccount(): ?ChartOfAccount
+    {
+        return $this->overheadAppliedAccount;
+    }
+
+    /**
+     * Get inventory adjustment account
+     */
+    public function getInventoryAdjustmentAccount(): ?ChartOfAccount
+    {
+        return $this->inventoryAdjAccount;
+    }
+
+    /**
      * Get sales credit memo account
      */
     public function getSalesCreditMemoAccount(): ?ChartOfAccount

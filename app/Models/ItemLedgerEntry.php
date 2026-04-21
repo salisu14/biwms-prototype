@@ -40,7 +40,7 @@ class ItemLedgerEntry extends Model
         'open',
         'source_type',
         'source_id',
-        'document_no',
+        'document_number',
         'unit_of_measure_code',
     ];
 

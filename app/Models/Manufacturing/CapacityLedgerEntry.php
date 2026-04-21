@@ -34,6 +34,10 @@ class CapacityLedgerEntry extends Model
 
         // Type
         'type', // SETUP, RUN, STOP, OUTPUT
+
+        // Links
+        'fixed_asset_id',
+        'capex_project_id',
     ];
 
     protected $casts = [
@@ -43,6 +47,8 @@ class CapacityLedgerEntry extends Model
         'direct_cost' => 'decimal:4',
         'overhead_cost' => 'decimal:4',
         'total_cost' => 'decimal:4',
+        'fixed_asset_id' => 'integer',
+        'capex_project_id' => 'integer',
     ];
 
     public function productionOrder(): BelongsTo

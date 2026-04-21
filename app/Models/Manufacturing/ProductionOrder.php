@@ -50,6 +50,7 @@ class ProductionOrder extends Model
 
         // Posting Groups (from WMS Posting Groups Setup)
         'inventory_posting_group_id',
+        'general_business_posting_group_id',
         'general_product_posting_group_id',
 
         // BOM and Routing
@@ -155,8 +156,8 @@ class ProductionOrder extends Model
     // ProductionOrder.php
     public function getPostingSetup(): ?GeneralPostingSetup
     {
-        return GeneralPostingSetup::where('gen_bus_posting_group', 'MANUFACTURING')
-            ->where('gen_prod_posting_group', $this->item->gen_prod_posting_group_code)
+        return GeneralPostingSetup::where('general_business_posting_group_id', $this->general_business_posting_group_id)
+            ->where('general_product_posting_group_id', $this->general_product_posting_group_id)
             ->first();
     }
 

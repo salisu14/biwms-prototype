@@ -60,15 +60,18 @@ class InventoryPostingSetup extends Model
     // Get most specific setup
     public static function getFor(int $inventoryPostingGroupId, ?int $locationId = null): ?self
     {
-        $query = self::where('inventory_posting_group_id', $inventoryPostingGroupId);
-
         if ($locationId) {
-            $specific = $query->where('location_id', $locationId)->first();
+            $specific = self::where('inventory_posting_group_id', $inventoryPostingGroupId)
+                ->where('location_id', $locationId)
+                ->first();
+            
             if ($specific) {
                 return $specific;
             }
         }
 
-        return $query->whereNull('location_id')->first();
+        return self::where('inventory_posting_group_id', $inventoryPostingGroupId)
+            ->whereNull('location_id')
+            ->first();
     }
 }

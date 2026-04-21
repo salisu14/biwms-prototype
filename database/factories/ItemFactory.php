@@ -1,0 +1,27 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Item;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<Item>
+ */
+class ItemFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            'item_code' => $this->faker->unique()->bothify('ITEM-####'),
+            'description' => $this->faker->words(3, true),
+            'base_unit_of_measure' => 'PCS',
+            'unit_cost' => 10,
+        ];
+    }
+}
