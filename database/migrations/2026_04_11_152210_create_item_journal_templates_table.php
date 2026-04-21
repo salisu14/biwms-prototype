@@ -69,7 +69,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('item_journal_lines');
+//        Schema::dropIfExists('item_journal_lines');
         Schema::dropIfExists('item_journal_batches');
         Schema::dropIfExists('item_journal_templates');
     }
