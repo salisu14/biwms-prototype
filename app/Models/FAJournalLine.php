@@ -14,6 +14,12 @@ class FAJournalLine extends Model
 {
     use HasFactory;
 
+    /**
+     * FIXED: Explicitly define the table name to prevent Laravel
+     * from looking for "f_a_journal_lines".
+     */
+    protected $table = 'fa_journal_lines';
+
     protected $fillable = [
         'batch_id', 'line_no', 'fixed_asset_id', 'fa_no', 'posting_date',
         'fa_posting_type', 'document_no', 'description', 'amount',

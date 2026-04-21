@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SourceCode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class FAJournalTemplate extends Model
 {
     use HasFactory;
+
+    /**
+     * FIXED: Explicitly define the table name to prevent Laravel
+     * from looking for "f_a_journal_templates".
+     */
+    protected $table = 'fa_journal_templates';
 
     protected $fillable = [
         'name', 'description', 'template_type', 'number_series_id',
@@ -28,6 +35,21 @@ class FAJournalTemplate extends Model
     public function batches(): HasMany
     {
         return $this->hasMany(FAJournalBatch::class, 'template_id');
+    }
+
+    public function numberSeries(): BelongsTo
+    {
+        return $this->belongsTo(NumberSeries::class, 'number_series_id');
+    }
+
+    public function postingNumberSeries(): BelongsTo
+    {
+        return $this->belongsTo(NumberSeries::class, 'posting_number_series_id');
+    }
+
+    public function sourceCode(): BelongsTo
+    {
+        return $this->belongsTo(SourceCode::class, 'source_code');
     }
 
     public function defaultDepreciationBook(): BelongsTo

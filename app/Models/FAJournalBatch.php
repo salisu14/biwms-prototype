@@ -14,6 +14,12 @@ class FAJournalBatch extends Model
 {
     use HasFactory;
 
+    /**
+     * FIXED: Explicitly define the table name to prevent Laravel
+     * from looking for "f_a_journal_batches".
+     */
+    protected $table = 'fa_journal_batches';
+
     protected $fillable = [
         'template_id', 'name', 'description', 'assigned_user_id',
         'status', 'depreciation_book_id', 'posting_date', 'calculate_depreciation',

@@ -136,7 +136,7 @@ class AdminPanelProvider extends PanelProvider
                                 NavigationItem::make('Currencies')
                                     ->icon('heroicon-o-currency-dollar')
                                     ->url('/admin/currencies')
-                                    ->isActiveWhen(fn () => request()->is('admin/currenc*')),
+                                    ->isActiveWhen(fn () => request()->is('admin/currencies*')),
 
                                 NavigationItem::make('Currency Adjustments')
                                     ->icon('heroicon-o-presentation-chart-bar')
@@ -157,6 +157,16 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-chart-bar')
                                     ->isActiveWhen(fn () => request()->is('admin/item-journal-batches*'))
                                     ->url('/admin/item-journal-batches'),
+
+                                NavigationItem::make('FA Journal Templates')
+                                    ->icon('heroicon-o-document-chart-bar')
+                                    ->isActiveWhen(fn () => request()->is('admin/fa-journal-templates*'))
+                                    ->url('/admin/fa-journal-templates'),
+
+                                NavigationItem::make('FA Journal Batches')
+                                    ->icon('heroicon-o-document-chart-bar')
+                                    ->isActiveWhen(fn () => request()->is('admin/fa-journal-batches*'))
+                                    ->url('/admin/fa-journal-batches'),
 
                                 NavigationItem::make('Gen. Journal Templates')
                                     ->icon('heroicon-o-document-chart-bar')
