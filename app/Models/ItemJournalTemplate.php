@@ -73,6 +73,16 @@ class ItemJournalTemplate extends Model
         return $this->hasMany(ItemJournalBatch::class, 'template_id');
     }
 
+    public function postingNumberSeries(): BelongsTo
+    {
+        return $this->belongsTo(NumberSeries::class, 'posting_number_series_id');
+    }
+
+    public function defaultInventoryAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'default_inventory_account_id');
+    }
+
     public function requiresItemTracking(): bool
     {
         return $this->item_tracking_mandatory

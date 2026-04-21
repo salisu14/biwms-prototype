@@ -148,6 +148,16 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*'))
                                     ->url('/admin/profit-and-loss-report'),
 
+                                NavigationItem::make('Item Journal Templates')
+                                    ->icon('heroicon-o-document-chart-bar')
+                                    ->isActiveWhen(fn () => request()->is('admin/item-journal-templates*'))
+                                    ->url('/admin/item-journal-templates'),
+
+                                NavigationItem::make('Item Journal Batches')
+                                    ->icon('heroicon-o-document-chart-bar')
+                                    ->isActiveWhen(fn () => request()->is('admin/item-journal-batches*'))
+                                    ->url('/admin/item-journal-batches'),
+
                                 NavigationItem::make('Gen. Journal Templates')
                                     ->icon('heroicon-o-document-chart-bar')
                                     ->isActiveWhen(fn () => request()->is('admin/general-journal-templates*'))
