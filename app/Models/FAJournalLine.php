@@ -6,6 +6,7 @@ use App\Enums\FAPostingType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Model for FA Journal Lines
@@ -58,5 +59,74 @@ class FAJournalLine extends Model
     public function postingGroup(): BelongsTo
     {
         return $this->belongsTo(FAPostingGroup::class, 'fa_posting_group_id');
+    }
+
+    // Post based on FA posting type
+
+    /**
+     * @throws \Throwable
+     */
+    public function post()
+    {
+        DB::transaction(function() {
+            $fa = $this->fixedAsset;
+            $book = $fa->depreciationBooks()->where('code', $this->depreciation_book_code)->first();
+
+            match($this->fa_posting_type) {
+                'Acquisition' => $this->postAcquisition($fa, $book),
+                'Depreciation' => $this->postDepreciation($fa, $book),
+                'Write-Down' => $this->postWriteDown($fa, $book),
+                'Appreciation' => $this->postAppreciation($fa, $book),
+                'Disposal' => $this->postDisposal($fa, $book),
+                default => throw new \Exception("Unknown FA posting type: {$this->fa_posting_type}"),
+            };
+        });
+    }
+
+    protected function postAcquisition($fa, $book)
+    {
+        // Update FA acquisition cost
+        $book->increment('acquisition_cost', $this->amount);
+        $book->update(['depreciation_start_date' => $this->journalLine->posting_date]);
+
+        // Post to G/L: Debit FA Account, Credit AP/Cash
+        $this->createFAGLEntries([
+            'debit_account' => $book->fa_posting_group->acquisition_cost_account,
+            'credit_account' => $this->journalLine->bal_account_no,
+            'amount' => $this->amount,
+        ]);
+    }
+
+    protected function postDepreciation($fa, $book)
+    {
+        $depreciationAmount = $this->depreciation_amount ?? $this->calculateDepreciation($fa, $book);
+
+        // Update accumulated depreciation
+        $book->increment('accumulated_depreciation', $depreciationAmount);
+
+        // Post to G/L: Debit Depreciation Expense, Credit Accumulated Depreciation
+        $this->createFAGLEntries([
+            'debit_account' => $book->fa_posting_group->depreciation_expense_account,
+            'credit_account' => $book->fa_posting_group->accumulated_depreciation_account,
+            'amount' => $depreciationAmount,
+        ]);
+    }
+
+    protected function calculateDepreciation($fa, $book)
+    {
+        return match($book->depreciation_method) {
+            'Straight-Line' => $this->straightLineDepreciation($fa, $book),
+            'Declining-Balance' => $this->decliningBalanceDepreciation($fa, $book),
+            'DB1/SL' => $this->db1SlDepreciation($fa, $book),
+            'Manual' => $this->amount,
+            default => 0,
+        };
+    }
+
+    protected function straightLineDepreciation($fa, $book)
+    {
+        $depreciableBase = $book->acquisition_cost - $book->salvage_value;
+        $annualDepreciation = $depreciableBase / $book->depreciation_years;
+        return round($annualDepreciation / 12, 4); // Monthly
     }
 }

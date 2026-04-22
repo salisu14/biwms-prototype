@@ -170,4 +170,71 @@ class ItemJournalLine extends Model
             // but location-specific tracking (if implemented) would be updated here.
         }
     }
+
+    // Calculate cost using selected method (FIFO, Average, Standard, LIFO)
+    public function calculateUnitCost()
+    {
+        $item = $this->item;
+
+        return match($item->costing_method) {
+            'FIFO' => $item->getFIFOCost($this->quantity),
+            'Average' => $item->average_cost,
+            'Standard' => $item->standard_cost,
+            'LIFO' => $item->getLIFOCost($this->quantity),
+            default => $item->last_direct_cost,
+        };
+    }
+
+    // Post to Item Ledger and G/L
+    public function postToLedgerAndGL()
+    {
+        DB::transaction(function() {
+            // 1. Create Item Ledger Entry
+            $itemLedgerEntry = ItemLedgerEntry::create([
+                'item_id' => $this->item_id,
+                'entry_type' => $this->entry_type,
+                'quantity' => $this->quantity,
+                'remaining_quantity' => $this->quantity,
+                'unit_cost' => $this->unit_amount,
+                'total_cost' => $this->amount,
+                'location_id' => $this->location_id,
+                'bin_code' => $this->bin_code,
+                'posting_date' => $this->journalLine->posting_date,
+                'document_no' => $this->journalLine->document_no,
+                'serial_no' => $this->serial_no,
+                'lot_no' => $this->lot_no,
+            ]);
+
+            $this->update(['item_ledger_entry_id' => $itemLedgerEntry->id]);
+
+            // 2. Update inventory valuation
+            $this->item->recalculateInventory();
+
+            // 3. Post to G/L via posting group
+            $this->postToGeneralLedger($itemLedgerEntry);
+        });
+    }
+    protected function postToGeneralLedger($itemLedgerEntry)
+    {
+        $postingGroup = InventoryPostingGroup::find($this->inventory_posting_group);
+
+        // Determine G/L accounts based on entry type
+        $accounts = match($this->entry_type) {
+            'Purchase', 'Positive Adjmt.' => [
+                'debit' => $postingGroup->inventory_account,
+                'credit' => $postingGroup->direct_cost_applied_account,
+            ],
+            'Sale', 'Negative Adjmt.' => [
+                'debit' => $postingGroup->inventory_adjmt_account,
+                'credit' => $postingGroup->inventory_account,
+            ],
+            'Transfer' => null, // No G/L impact for transfers
+            default => $postingGroup->getDefaultAccounts(),
+        };
+
+        if ($accounts) {
+            // Create G/L entries
+            $this->createGLEntries($accounts, $this->amount);
+        }
+    }
 }

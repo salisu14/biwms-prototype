@@ -125,4 +125,63 @@ class GeneralJournalLine extends Model
 
         return $errors;
     }
+
+    // Create reversing entry after posting
+    public function createReversingEntry()
+    {
+        if ($this->entry_type !== 'Reversing') return null;
+
+        $reversingLine = $this->journalLine->replicate();
+        $reversingLine->debit_amount = $this->journalLine->credit_amount;
+        $reversingLine->credit_amount = $this->journalLine->debit_amount;
+        $reversingLine->posting_date = $this->reversal_date;
+        $reversingLine->description = "Reversal of {$this->journalLine->document_no}";
+        $reversingLine->save();
+
+        return $reversingLine;
+    }
+
+    // Generate next recurring line
+    public function generateNextRecurring()
+    {
+        if ($this->entry_type !== 'Recurring') return null;
+        if ($this->expiration_date && now()->gt($this->expiration_date)) return null;
+
+        $nextDate = $this->calculateNextDate($this->journalLine->posting_date, $this->recurring_frequency);
+
+        $nextLine = $this->journalLine->replicate();
+        $nextLine->posting_date = $nextDate;
+        $nextLine->document_no = null; // Get new number
+        $nextLine->status = 'Open';
+        $nextLine->posted_at = null;
+        $nextLine->posted_document_no = null;
+        $nextLine->save();
+
+        // Create associated general journal line
+        GeneralJournalLine::create([
+            'journal_line_id' => $nextLine->id,
+            'entry_type' => 'Recurring',
+            'recurring_frequency' => $this->recurring_frequency,
+            'expiration_date' => $this->expiration_date,
+        ]);
+
+        return $nextLine;
+    }
+
+    protected function calculateNextDate($currentDate, $frequency)
+    {
+        // Parse BC date formula: 1M, 1D, 1Y, 1W, CM (current month), CQ (current quarter)
+        $number = (int) preg_replace('/[^0-9]/', '', $frequency);
+        $unit = preg_replace('/[0-9]/', '', $frequency);
+
+        return match($unit) {
+            'D' => $currentDate->copy()->addDays($number),
+            'W' => $currentDate->copy()->addWeeks($number),
+            'M' => $currentDate->copy()->addMonths($number),
+            'Y' => $currentDate->copy()->addYears($number),
+            'CM' => $currentDate->copy()->endOfMonth(),
+            'CQ' => $currentDate->copy()->endOfQuarter(),
+            default => $currentDate->copy()->addMonth(),
+        };
+    }
 }

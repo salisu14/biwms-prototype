@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\JournalLineStatus;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 class WarehouseJournalLine extends Model
 {
-    use HasFactory;
-
     protected $table = 'warehouse_journal_lines';
 
     protected $fillable = [
@@ -107,5 +105,52 @@ class WarehouseJournalLine extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    // Register (not post) - only creates warehouse entries
+    public function register()
+    {
+        DB::transaction(function() {
+            // Update bin contents
+            if ($this->entry_type === 'Movement') {
+                $this->moveBetweenBins();
+            } else {
+                $this->adjustBinQuantity();
+            }
+
+            // Create warehouse entry
+            WarehouseEntry::create([
+                'item_id' => $this->item_id,
+                'location_id' => $this->location_id,
+                'zone_code' => $this->zone_code,
+                'bin_code' => $this->to_bin_code ?? $this->from_bin_code,
+                'quantity' => $this->quantity,
+                'entry_type' => $this->entry_type,
+                'posting_date' => $this->journalLine->posting_date,
+                'registering_employee_id' => $this->registering_employee_id,
+                'source_document' => $this->whse_document_type,
+                'source_no' => $this->whse_document_no,
+            ]);
+
+            $this->update(['registering_date' => now()]);
+        });
+    }
+
+    protected function moveBetweenBins()
+    {
+        // Decrease from bin
+        BinContent::where([
+            'bin_id' => $this->getBinId($this->from_bin_code),
+            'item_id' => $this->item_id,
+        ])->decrement('quantity', $this->quantity);
+
+        // Increase to bin
+        BinContent::updateOrCreate(
+            [
+                'bin_id' => $this->getBinId($this->to_bin_code),
+                'item_id' => $this->item_id,
+            ],
+            ['quantity' => DB::raw("quantity + {$this->quantity}")]
+        );
     }
 }

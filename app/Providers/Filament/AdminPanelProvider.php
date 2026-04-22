@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\PurchaseHistory;
 use App\Filament\Pages\SalesHistory;
 use Filament\Http\Middleware\Authenticate;
@@ -148,35 +149,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*'))
                                     ->url('/admin/profit-and-loss-report'),
 
-                                NavigationItem::make('Item Journal Templates')
-                                    ->icon('heroicon-o-document-chart-bar')
-                                    ->isActiveWhen(fn () => request()->is('admin/item-journal-templates*'))
-                                    ->url('/admin/item-journal-templates'),
-
-                                NavigationItem::make('Item Journal Batches')
-                                    ->icon('heroicon-o-document-chart-bar')
-                                    ->isActiveWhen(fn () => request()->is('admin/item-journal-batches*'))
-                                    ->url('/admin/item-journal-batches'),
-
-                                NavigationItem::make('FA Journal Templates')
-                                    ->icon('heroicon-o-document-chart-bar')
-                                    ->isActiveWhen(fn () => request()->is('admin/fa-journal-templates*'))
-                                    ->url('/admin/fa-journal-templates'),
-
-                                NavigationItem::make('FA Journal Batches')
-                                    ->icon('heroicon-o-document-chart-bar')
-                                    ->isActiveWhen(fn () => request()->is('admin/fa-journal-batches*'))
-                                    ->url('/admin/fa-journal-batches'),
-
-                                NavigationItem::make('Gen. Journal Templates')
-                                    ->icon('heroicon-o-document-chart-bar')
-                                    ->isActiveWhen(fn () => request()->is('admin/general-journal-templates*'))
-                                    ->url('/admin/general-journal-templates'),
-
-                                NavigationItem::make('Gen. Journal Batches')
-                                    ->icon('heroicon-o-document-chart-bar')
-                                    ->isActiveWhen(fn () => request()->is('admin/general-journal-batches*'))
-                                    ->url('/admin/general-journal-batches'),
+                                NavigationItem::make('Journals')
+                                    ->icon('heroicon-o-book-open')
+                                    ->url(GeneralJournals::getUrl())
+                                    ->isActiveWhen(fn () => request()->routeIs('filament.admin.pages.journals')),
                             ])
                     )
                     // Purchasing Module
