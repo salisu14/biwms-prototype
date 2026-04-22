@@ -9,13 +9,13 @@ use App\Enums\ApprovalStatus;
 use App\Models\SalesCreditMemo;
 use App\Services\Approval\ApprovalService;
 use App\Services\Sales\SalesCreditMemoService;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
-use Filament\Tables\Actions\Action;
-use Filament\Tables\Actions\BulkActionGroup;
-use Filament\Tables\Actions\DeleteBulkAction;
-use Filament\Tables\Actions\EditAction;
-use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -59,7 +59,7 @@ class SalesCreditMemosTable
                 SelectFilter::make('customer_id')
                     ->relationship('customer', 'name'),
             ])
-            ->actions([
+            ->recordActions([
                 ViewAction::make(),
                 EditAction::make()
                     ->hidden(fn (SalesCreditMemo $record) => $record->isPosted()),
@@ -100,7 +100,7 @@ class SalesCreditMemosTable
 
                         return $entry && ($entry->approver_id === Auth::id() || Auth::user()?->hasRole('super_admin'));
                     })
-                    ->form([
+                    ->schema([
                         Textarea::make('reason')->required(),
                     ])
                     ->action(function (SalesCreditMemo $record, array $data) {
