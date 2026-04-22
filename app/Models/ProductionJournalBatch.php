@@ -5,15 +5,13 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\JournalBatchStatus;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Manufacturing\ProductionOrder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProductionJournalBatch extends Model
 {
-    use HasFactory;
-
     protected $table = 'production_journal_batches';
 
     protected $fillable = [

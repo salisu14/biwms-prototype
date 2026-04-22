@@ -149,6 +149,21 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*'))
                                     ->url('/admin/profit-and-loss-report'),
 
+                                NavigationItem::make('WIP Valuation')
+                                    ->icon('heroicon-o-currency-dollar')
+                                    ->url('/admin/wip-valuation-report')
+                                    ->isActiveWhen(fn () => request()->is('admin/wip-valuation-report*')),
+
+                                NavigationItem::make('Yield Report')
+                                    ->icon('heroicon-o-beaker')
+                                    ->url('/admin/yield-report')
+                                    ->isActiveWhen(fn () => request()->is('admin/yield-report*')),
+
+                                NavigationItem::make('Production Journal Template')
+                                    ->icon('heroicon-o-beaker')
+                                    ->url('/admin/production-journal-templates')
+                                    ->isActiveWhen(fn () => request()->is('admin/production-journal-templates*')),
+
                                 NavigationItem::make('Journals')
                                     ->icon('heroicon-o-book-open')
                                     ->url(GeneralJournals::getUrl())

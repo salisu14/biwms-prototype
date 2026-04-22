@@ -6,17 +6,16 @@ namespace App\Models;
 
 use App\Enums\FlushingMethod;
 use App\Enums\JournalLineStatus;
+use App\Enums\ProductionJournalEntryType;
 use App\Models\Manufacturing\MachineCenter;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Manufacturing\RoutingLine;
 use App\Models\Manufacturing\WorkCenter;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProductionJournalLine extends Model
 {
-    use HasFactory;
-
     protected $table = 'production_journal_lines';
 
     protected $fillable = [
@@ -88,6 +87,7 @@ class ProductionJournalLine extends Model
         'flushed' => 'boolean',
         'dimension_set_entry' => 'array',
         'line_status' => JournalLineStatus::class,
+        'entry_type' => ProductionJournalEntryType::class,
     ];
 
     public function batch(): BelongsTo
@@ -102,7 +102,7 @@ class ProductionJournalLine extends Model
 
     public function routingLine(): BelongsTo
     {
-        return $this->belongsTo(ProductionRoutingLine::class, 'routing_line_id');
+        return $this->belongsTo(RoutingLine::class, 'routing_line_id');
     }
 
     public function workCenter(): BelongsTo

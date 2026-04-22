@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProductionJournalTemplate extends Model
@@ -87,5 +88,20 @@ class ProductionJournalTemplate extends Model
     public function batches(): HasMany
     {
         return $this->hasMany(ProductionJournalBatch::class, 'template_id');
+    }
+
+    public function numberSeries(): BelongsTo
+    {
+        return $this->belongsTo(NumberSeries::class, 'number_series_id');
+    }
+
+    public function postingNumberSeries(): BelongsTo
+    {
+        return $this->belongsTo(NumberSeries::class, 'posting_number_series_id');
+    }
+
+    public function defaultWipAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'default_wip_account_id');
     }
 }
