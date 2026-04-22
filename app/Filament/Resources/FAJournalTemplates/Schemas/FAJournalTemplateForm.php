@@ -28,9 +28,11 @@ class FAJournalTemplateForm
                         Select::make('template_type')
                             ->label('Journal Type')
                             ->options([
-                                'Assets' => 'Fixed Assets',
-                                'Insurance' => 'Insurance',
-                                'Maintenance' => 'Maintenance',
+                                'acquisition' => 'Acquisition (Fixed Assets)',
+                                'depreciation' => 'Depreciation',
+                                'revaluation' => 'Revaluation',
+                                'disposal' => 'Disposal',
+                                'maintenance' => 'Maintenance',
                             ])
                             ->required()
                             ->native(false),

@@ -57,7 +57,7 @@ class LinesRelationManager extends RelationManager
                         ->searchable()
                         ->preload()
                         ->required()
-                        ->reactive()
+                        ->live()
                         ->afterStateUpdated(function ($state, $set) {
                             if (!$state) return;
                             $asset = FixedAsset::find($state);
@@ -136,10 +136,32 @@ class LinesRelationManager extends RelationManager
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->label('Add Asset Transaction'),
+                    ->label('Add Asset Transaction')
+                    ->mutateDataUsing(function (array $data): array {
+                        // Server-side safety: If form state didn't reach the server, fetch it now
+                        if (isset($data['fixed_asset_id'])) {
+                            $asset = FixedAsset::find($data['fixed_asset_id']);
+                            if ($asset) {
+                                $data['fa_no'] = $asset->fa_no;
+                                $data['fa_posting_group_id'] = $asset->fa_posting_group_id;
+                                $data['description'] = $data['description'] ?? $asset->description;
+                            }
+                        }
+                        return $data;
+                    }),
             ])
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->mutateDataUsing(function (array $data): array {
+                        if (isset($data['fixed_asset_id'])) {
+                            $asset = FixedAsset::find($data['fixed_asset_id']);
+                            if ($asset) {
+                                $data['fa_no'] = $asset->fa_no;
+                                $data['fa_posting_group_id'] = $asset->fa_posting_group_id;
+                            }
+                        }
+                        return $data;
+                    }),
                 DeleteAction::make(),
             ])
             ->defaultSort('line_no', 'asc');

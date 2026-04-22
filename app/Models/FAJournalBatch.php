@@ -44,4 +44,14 @@ class FAJournalBatch extends Model
     {
         return $this->belongsTo(DepreciationBook::class);
     }
+
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

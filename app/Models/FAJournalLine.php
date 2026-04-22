@@ -6,6 +6,7 @@ use App\Enums\FAPostingType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -46,9 +47,67 @@ class FAJournalLine extends Model
         'dimension_set_entry' => 'json',
     ];
 
+    /**
+     * The "booted" method of the model.
+     * Automatically handles the assignment of the creator's ID.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (FAJournalLine $line) {
+            if (Auth::check()) {
+                $line->created_by = Auth::id();
+            }
+        });
+    }
+
     public function batch(): BelongsTo
     {
         return $this->belongsTo(FAJournalBatch::class, 'batch_id');
+    }
+
+    public function journalLine(): BelongsTo
+    {
+        return $this->belongsTo(GeneralJournalLine::class, 'journal_line_id');
+    }
+
+    public function faLedgerEntry(): BelongsTo
+    {
+        return $this->belongsTo(FALedgerEntry::class, 'fa_ledger_entry_id');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function overrideAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'override_account_id');
+    }
+
+    public function shortcutDimension1(): BelongsTo
+    {
+        return $this->belongsTo(Dimension::class, 'shortcut_dimension_1_code');
+    }
+
+    public function shortcutDimension2(): BelongsTo
+    {
+        return $this->belongsTo(Dimension::class, 'shortcut_dimension_2_code');
+    }
+
+    public function dimensionSetEntry(): BelongsTo
+    {
+        return $this->belongsTo(DimensionSetEntry::class, 'dimension_set_entry_id');
+    }
+
+    public function template(): BelongsTo
+    {
+        return $this->belongsTo(FAJournalTemplate::class, 'template_id');
+    }
+
+    public function depreciationBook(): BelongsTo
+    {
+        return $this->belongsTo(DepreciationBook::class, 'depreciation_book_code');
     }
 
     public function fixedAsset(): BelongsTo
@@ -66,7 +125,7 @@ class FAJournalLine extends Model
     /**
      * @throws \Throwable
      */
-    public function post()
+    public function post(): void
     {
         DB::transaction(function() {
             $fa = $this->fixedAsset;
@@ -83,7 +142,7 @@ class FAJournalLine extends Model
         });
     }
 
-    protected function postAcquisition($fa, $book)
+    protected function postAcquisition($fa, $book): void
     {
         // Update FA acquisition cost
         $book->increment('acquisition_cost', $this->amount);
@@ -97,7 +156,7 @@ class FAJournalLine extends Model
         ]);
     }
 
-    protected function postDepreciation($fa, $book)
+    protected function postDepreciation($fa, $book): void
     {
         $depreciationAmount = $this->depreciation_amount ?? $this->calculateDepreciation($fa, $book);
 
@@ -123,7 +182,7 @@ class FAJournalLine extends Model
         };
     }
 
-    protected function straightLineDepreciation($fa, $book)
+    protected function straightLineDepreciation($fa, $book): float
     {
         $depreciableBase = $book->acquisition_cost - $book->salvage_value;
         $annualDepreciation = $depreciableBase / $book->depreciation_years;
