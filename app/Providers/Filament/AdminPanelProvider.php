@@ -83,12 +83,6 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/vat-masters')
                                     ->isActiveWhen(fn () => request()->is('admin/vat-masters*')),
 
-                                // Journal Template
-                                NavigationItem::make('Journal Templates')
-                                    ->icon('heroicon-o-document-text')
-                                    ->url('/admin/journal-templates')
-                                    ->isActiveWhen(fn () => request()->is('admin/journal-templates*')),
-
                                 // Approval Templates
                                 NavigationItem::make('Approval Templates')
                                     ->icon('heroicon-o-paper-clip')
@@ -144,6 +138,26 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/currency-adjustment-ledgers')
                                     ->isActiveWhen(fn () => request()->is('admin/currency-adjustment-ledger*')),
 
+                                // Dimensions
+                                NavigationItem::make('Dimensions')
+                                    ->icon('heroicon-o-square-3-stack-3d')
+                                    ->url('/admin/dimensions'),
+
+                                // Payment Terms
+                                NavigationItem::make('Payment Terms')
+                                    ->icon('heroicon-o-calendar-days')
+                                    ->url('/admin/payment-terms'),
+
+                                // Units of Measure
+                                NavigationItem::make('Units of Measure')
+                                    ->icon('heroicon-o-scale')
+                                    ->url('/admin/unit-of-measures'),
+
+                                // Number Series
+                                NavigationItem::make('Number Series')
+                                    ->icon('heroicon-o-hashtag')
+                                    ->url('/admin/number-series'),
+
                                 NavigationItem::make('Profit & Loss Report')
                                     ->icon('heroicon-o-document-chart-bar')
                                     ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*'))
@@ -180,10 +194,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/vendors')
                                     ->isActiveWhen(fn () => request()->is('admin/vendors*')),
 
-                                NavigationItem::make('Vendor Contacts')
-                                    ->icon('heroicon-o-users')
-                                    ->url('/admin/vendor-contacts')
-                                    ->isActiveWhen(fn () => request()->is('admin/vendor-contacts*')),
+//                                NavigationItem::make('Vendor Contacts')
+//                                    ->icon('heroicon-o-users')
+//                                    ->url('/admin/vendor-contacts')
+//                                    ->isActiveWhen(fn () => request()->is('admin/vendor-contacts*')),
 
                                 NavigationItem::make('Raw Materials')
                                     ->icon('heroicon-o-shopping-bag')
@@ -213,11 +227,6 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-check')
                                     ->url(PurchaseHistory::getUrl())
                                     ->isActiveWhen(fn () => request()->routeIs('filament.admin.pages.purchases-history')),
-
-                                NavigationItem::make('Vendor Contacts')
-                                    ->icon('heroicon-o-users')
-                                    ->url('/admin/vendor-contacts')
-                                    ->isActiveWhen(fn () => request()->is('admin/vendor-contacts*')),
                             ])
                     )
 
@@ -273,6 +282,15 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-arrow-uturn-left')
                                     ->url('/admin/sales-credit-memos'),
 
+                                // Shipping
+                                NavigationItem::make('Shipping Agents')
+                                    ->icon('heroicon-o-truck')
+                                    ->url('/admin/shipping-agents'),
+
+                                NavigationItem::make('Shipment Methods')
+                                    ->icon('heroicon-o-paper-airplane')
+                                    ->url('/admin/shipment-methods'),
+
                                 NavigationItem::make('History')
                                     ->icon('heroicon-o-document-check')
                                     ->url(SalesHistory::getUrl())
@@ -299,11 +317,6 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-folder')
                                     ->url('/admin/item-category-assignments')
                                     ->isActiveWhen(fn () => request()->is('admin/item-category-assignments*')),
-
-                                //                                NavigationItem::make('Product Groups')
-                                //                                    ->icon('heroicon-o-squares-plus')
-                                //                                    ->url('/admin/product-groups')
-                                //                                    ->isActiveWhen(fn () => request()->is('admin/product-groups*')),
 
                                 NavigationItem::make('Locations')
                                     ->icon('heroicon-o-map-pin')
@@ -553,7 +566,7 @@ class AdminPanelProvider extends PanelProvider
 
                     // Setup & Administration
                         ->group(
-                            NavigationGroup::make('Setup')
+                            NavigationGroup::make('Auth')
 //                            ->icon('heroicon-o-cog')
                                 ->collapsible()
                                 ->items([
@@ -561,35 +574,6 @@ class AdminPanelProvider extends PanelProvider
                                     NavigationItem::make('Company Information')
                                         ->icon('heroicon-o-building-office-2')
                                         ->url('/admin/company-information'),
-
-                                    // Dimensions
-                                    NavigationItem::make('Dimensions')
-                                        ->icon('heroicon-o-square-3-stack-3d')
-                                        ->url('/admin/dimensions'),
-
-                                    // Payment Terms
-                                    NavigationItem::make('Payment Terms')
-                                        ->icon('heroicon-o-calendar-days')
-                                        ->url('/admin/payment-terms'),
-
-                                    // Shipping
-                                    NavigationItem::make('Shipping Agents')
-                                        ->icon('heroicon-o-truck')
-                                        ->url('/admin/shipping-agents'),
-
-                                    NavigationItem::make('Shipment Methods')
-                                        ->icon('heroicon-o-paper-airplane')
-                                        ->url('/admin/shipment-methods'),
-
-                                    // Units of Measure
-                                    NavigationItem::make('Units of Measure')
-                                        ->icon('heroicon-o-scale')
-                                        ->url('/admin/unit-of-measures'),
-
-                                    // Number Series
-                                    NavigationItem::make('Number Series')
-                                        ->icon('heroicon-o-hashtag')
-                                        ->url('/admin/number-series'),
 
                                     // Users & Permissions
                                     NavigationItem::make('Users')
