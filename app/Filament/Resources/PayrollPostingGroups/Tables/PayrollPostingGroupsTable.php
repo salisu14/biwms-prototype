@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PayrollPostingGroups\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
 class PayrollPostingGroupsTable
@@ -13,15 +14,42 @@ class PayrollPostingGroupsTable
     {
         return $table
             ->columns([
-                \Filament\Tables\Columns\TextColumn::make('code')
+                TextColumn::make('code')
+                    ->label('Group Code')
                     ->searchable()
+                    ->sortable()
+                    ->weight('bold')
+                    ->copyable(),
+
+                TextColumn::make('description')
+                    ->label('Description')
+                    ->searchable()
+                    ->limit(50),
+
+                TextColumn::make('employees_count')
+                    ->label('Active Employees')
+                    ->counts('employees')
+                    ->badge()
+                    ->color('info')
                     ->sortable(),
-                \Filament\Tables\Columns\TextColumn::make('description')
-                    ->searchable(),
-                \Filament\Tables\Columns\TextColumn::make('salariesAccount.name')
-                    ->label('Salaries Account'),
-                \Filament\Tables\Columns\TextColumn::make('netPayAccount.name')
-                    ->label('Net Pay Account'),
+
+                TextColumn::make('salariesAccount.account_number')
+                    ->label('Salaries Account')
+                    ->description(fn ($record) => $record->salariesAccount?->name)
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('netPayAccount.account_number')
+                    ->label('Net Pay Account')
+                    ->description(fn ($record) => $record->netPayAccount?->name)
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('updated_at')
+                    ->label('Last Modified')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 //
@@ -33,6 +61,6 @@ class PayrollPostingGroupsTable
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])->defaultSort('code', 'asc');
     }
 }
