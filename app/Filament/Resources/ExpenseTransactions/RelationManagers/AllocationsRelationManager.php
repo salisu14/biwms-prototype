@@ -10,6 +10,8 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -34,68 +36,94 @@ class AllocationsRelationManager extends RelationManager
     {
         return $schema
             ->schema([
-                Select::make('target_gl_account_id')
-                    ->label('Target Account')
-                    ->relationship('targetAccount', 'name')
-                    ->required()
-                    ->searchable()
-                    ->preload(),
+                Section::make('Allocation Details')
+                    ->schema([
+                        Grid::make(3)->schema([
+                            Select::make('target_gl_account_id')
+                                ->label('Target Account')
+                                ->relationship('targetAccount', 'name')
+                                ->searchable()
+                                ->preload()
+                                ->required(),
 
-                TextInput::make('allocation_basis')
-                    ->placeholder('e.g. Sales, Headcount')
-                    ->maxLength(50),
+                            Select::make('allocation_type')
+                                ->label('Type')
+                                ->options([
+                                    'percentage' => 'Percentage',
+                                    'amount' => 'Fixed Amount',
+                                ])
+                                ->default('percentage')
+                                ->required()
+                                ->live(),
 
-                Select::make('allocation_type')
-                    ->label('Type')
-                    ->options([
-                        'percentage' => 'Percentage',
-                        'amount' => 'Fixed Amount',
-                    ])
-                    ->default('percentage')
-                    ->required()
-                    ->live(),
+                            TextInput::make('allocation_basis')
+                                ->label('Allocation Basis')
+                                ->placeholder('e.g. Sales, Headcount')
+                                ->maxLength(50)
+                                ->columnSpan(1),
+                        ]),
 
-                TextInput::make('allocation_percentage')
-                    ->numeric()
-                    ->label('Allocation %')
-                    ->suffix('%')
-                    ->maxValue(100)
-                    ->minValue(0)
-                    ->visible(fn ($get) => $get('allocation_type') === 'percentage')
-                    ->required(fn ($get) => $get('allocation_type') === 'percentage'),
+                        Grid::make(2)->schema([
+                            TextInput::make('allocation_percentage')
+                                ->label('Allocation Percentage')
+                                ->numeric()
+                                ->suffix('%')
+                                ->maxValue(100)
+                                ->minValue(0)
+                                ->step(0.01)
+                                ->visible(fn ($get) => $get('allocation_type') === 'percentage')
+                                ->required(fn ($get) => $get('allocation_type') === 'percentage'),
 
-                TextInput::make('allocated_amount')
-                    ->numeric()
-                    ->label('Allocated Amount')
-                    ->prefix('$')
-                    ->visible(fn ($get) => $get('allocation_type') === 'amount')
-                    ->required(fn ($get) => $get('allocation_type') === 'amount'),
+                            TextInput::make('allocated_amount')
+                                ->label('Allocated Amount')
+                                ->numeric()
+                                ->prefix('$')
+                                ->step(0.0001)
+                                ->visible(fn ($get) => $get('allocation_type') === 'amount')
+                                ->required(fn ($get) => $get('allocation_type') === 'amount'),
 
-                Select::make('dimension_set_id')
-                    ->label('Target Dimension Set')
-                    ->relationship('dimensionSet', 'id')
-                    ->searchable()
-                    ->preload(),
+                            Select::make('dimension_set_id')
+                                ->label('Target Dimension Set')
+                                ->relationship('dimensionSet', 'id')
+                                ->searchable()
+                                ->preload(),
 
-                Select::make('target_dimension_1')
-                    ->label('Target Dept (Dim 1)')
-                    ->options(fn () => DimensionValue::query()
-                        ->whereHas('dimension', fn ($q) => $q->where('code', 'DEPARTMENT'))
-                        ->pluck('name', 'code')
-                        ->toArray()
-                    )
-                    ->searchable()
-                    ->preload(),
+                            Select::make('gl_entry_id')
+                                ->label('G/L Entry')
+                                ->relationship('glEntry', 'entry_number')
+                                ->searchable()
+                                ->preload()
+                                ->disabled() // Usually set during posting, not manual entry
+                                ->dehydrated(false),
+                        ]),
+                    ]),
 
-                Select::make('target_dimension_2')
-                    ->label('Target Project (Dim 2)')
-                    ->options(fn () => DimensionValue::query()
-                        ->where('code', 'PROJECT')
-                        ->pluck('name', 'code')
-                        ->toArray()
-                    )
-                    ->searchable()
-                    ->preload(),
+                Section::make('Dimensions')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            Select::make('target_dimension_1')
+                                ->label('Department (Dim 1)')
+                                ->options(function () {
+                                    return DimensionValue::query()
+                                        ->whereHas('dimension', fn ($q) => $q->where('code', 'DEPARTMENT'))
+                                        ->pluck('name', 'code')
+                                        ->toArray();
+                                })
+                                ->searchable()
+                                ->preload(),
+
+                            Select::make('target_dimension_2')
+                                ->label('Project (Dim 2)')
+                                ->options(function () {
+                                    return DimensionValue::query()
+                                        ->whereHas('dimension', fn ($q) => $q->where('code', 'PROJECT'))
+                                        ->pluck('name', 'code')
+                                        ->toArray();
+                                })
+                                ->searchable()
+                                ->preload(),
+                        ]),
+                    ]),
             ]);
     }
 
@@ -104,38 +132,69 @@ class AllocationsRelationManager extends RelationManager
         return $table
             ->columns([
                 TextColumn::make('targetAccount.name')
-                    ->label('Target G/L'),
+                    ->label('Target G/L')
+                    ->searchable()
+                    ->sortable(),
 
                 TextColumn::make('allocation_type')
                     ->label('Type')
                     ->badge()
-                    ->color(fn ($state) => $state === 'amount' ? 'success' : 'info'),
+                    ->color(fn ($state) => match($state) {
+                        'amount' => 'success',
+                        'percentage' => 'info',
+                        default => 'gray',
+                    }),
 
                 TextColumn::make('allocation_percentage')
                     ->label('%')
                     ->suffix('%')
+                    ->numeric(decimalPlaces: 2)
                     ->placeholder('-'),
 
                 TextColumn::make('allocated_amount')
-                    ->money()
+                    ->money('NGN')
                     ->label('Amount')
                     ->placeholder('-'),
 
-                TextColumn::make('dimension_set_id')
-                    ->label('Dim Set'),
+                TextColumn::make('allocation_basis')
+                    ->label('Basis')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('target_dimension_1')
-                    ->label('Dim 1'),
+                    ->label('Dim 1 (Dept)'),
 
                 TextColumn::make('target_dimension_2')
-                    ->label('Dim 2'),
+                    ->label('Dim 2 (Proj)'),
+
+                TextColumn::make('glEntry.entry_number')
+                    ->label('G/L Entry')
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
-                CreateAction::make(),
+                CreateAction::make()
+                    ->mutateDataUsing(function (array $data): array {
+                        // FIX: Ensure non-visible fields are not null to satisfy DB constraints
+                        if (($data['allocation_type'] ?? 'percentage') === 'percentage') {
+                            $data['allocated_amount'] = 0;
+                        } else {
+                            $data['allocation_percentage'] = 0;
+                        }
+                        return $data;
+                    }),
             ])
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->mutateDataUsing(function (array $data): array {
+                        // Ensure non-visible fields are not null during Edit
+                        if (($data['allocation_type'] ?? 'percentage') === 'percentage') {
+                            $data['allocated_amount'] = 0;
+                        } else {
+                            $data['allocation_percentage'] = 0;
+                        }
+                        return $data;
+                    }),
                 DeleteAction::make(),
-            ]);
+            ])
+            ->defaultSort('created_at', 'desc');
     }
 }

@@ -10,10 +10,14 @@ class ListCapExProjects extends ListRecords
 {
     protected static string $resource = CapExProjectResource::class;
 
+    protected static ?string $title = 'CapEx Projects';
+
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->icon('heroicon-s-plus')
+                ->label('Create CapEx Project'),
         ];
     }
 }

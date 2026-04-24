@@ -41,6 +41,7 @@ class ExpenseTransactionResource extends Resource
     {
         return [
             RelationManagers\AllocationsRelationManager::class,
+            RelationManagers\GlEntryRelationManager::class,
         ];
     }
 

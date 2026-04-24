@@ -8,6 +8,7 @@ use App\Enums\SourceType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 
 class GlEntry extends Model
 {
@@ -132,6 +133,10 @@ class GlEntry extends Model
     protected static function booted(): void
     {
         static::creating(function ($entry) {
+            if (Auth::check()) {
+                $entry->user_id = $entry->user_id ?? Auth::id();
+            }
+
             if (! $entry->entry_number) {
                 $entry->entry_number = (static::max('entry_number') ?? 0) + 1;
             }

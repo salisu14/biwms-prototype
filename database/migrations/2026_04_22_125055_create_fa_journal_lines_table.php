@@ -76,6 +76,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('f_a_journal_lines');
+        Schema::dropIfExists('fa_journal_lines');
     }
 };

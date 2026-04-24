@@ -6,6 +6,7 @@ use App\Enums\AccountType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
 
@@ -107,9 +108,9 @@ class ExpenseTransaction extends Model
     /**
      * The resulting G/L entry if posted.
      */
-    public function glEntry(): BelongsTo
+    public function glEntries(): MorphMany
     {
-        return $this->belongsTo(GlEntry::class, 'gl_entry_id');
+        return $this->morphMany(GlEntry::class, 'sourceable');
     }
 
     // --- Source/Tracking Relationships ---

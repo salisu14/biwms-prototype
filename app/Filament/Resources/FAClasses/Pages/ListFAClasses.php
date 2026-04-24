@@ -10,10 +10,14 @@ class ListFAClasses extends ListRecords
 {
     protected static string $resource = FAClassResource::class;
 
+    protected static ?string $title = 'FA Classes';
+
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->icon('heroicon-s-plus')
+                ->label('Create FA Class'),
         ];
     }
 }

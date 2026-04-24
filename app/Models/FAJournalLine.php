@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\FAPostingType;
+use App\Models\DepreciationBook;
+use App\Services\FixedAsset\FAPostingService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -65,6 +67,128 @@ class FAJournalLine extends Model
         return $this->belongsTo(FAJournalBatch::class, 'batch_id');
     }
 
+    public function depreciationBook(): BelongsTo
+    {
+        // If the journal lines table stores a code column, use it; otherwise
+        // fall back to attempting to use an integer FK if present. If neither
+        // exists, the relation will be resolved via the asset at runtime.
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'depreciation_book_code')) {
+                return $this->belongsTo(DepreciationBook::class, 'depreciation_book_code', 'code');
+            }
+        } catch (\Throwable $e) {
+            // Schema inspection may fail in some test contexts; ignore and continue
+        }
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'depreciation_book_id')) {
+                return $this->belongsTo(DepreciationBook::class, 'depreciation_book_id');
+            }
+        } catch (\Throwable $e) {
+        }
+
+        // No direct FK on lines table; return a dummy relation to allow callers
+        // to call ->first() safely (will be null). We rely on FixedAsset relation
+        // as a fallback in posting logic.
+        return $this->belongsTo(DepreciationBook::class, 'depreciation_book_id');
+    }
+
+    /**
+     * Backwards-compatible virtual attribute: allow callers (and Filament)
+     * to set `depreciation_book_id` or `depreciation_book_code`. If the
+     * corresponding column does not exist on the table, do not set an
+     * attribute (to avoid SQL errors) and cache the value in-memory so
+     * other code can read it during the request lifecycle.
+     */
+    protected ?string $tempDepreciationBookCode = null;
+    protected ?int $tempDepreciationBookId = null;
+
+    public function setDepreciationBookIdAttribute($value): void
+    {
+        // If table has integer FK column, set it normally
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'depreciation_book_id')) {
+                $this->attributes['depreciation_book_id'] = $value;
+                return;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        // Otherwise, attempt to resolve to a code and store in-memory only
+        if (empty($value)) {
+            $this->tempDepreciationBookId = null;
+            $this->tempDepreciationBookCode = null;
+            return;
+        }
+
+        if (is_numeric($value)) {
+            $book = DepreciationBook::find((int) $value);
+            $this->tempDepreciationBookId = (int) $value;
+            $this->tempDepreciationBookCode = $book?->code ?? null;
+        } else {
+            $this->tempDepreciationBookId = null;
+            $this->tempDepreciationBookCode = (string) $value;
+        }
+    }
+
+    public function setDepreciationBookCodeAttribute($value): void
+    {
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'depreciation_book_code')) {
+                $this->attributes['depreciation_book_code'] = $value;
+                return;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $this->tempDepreciationBookCode = $value ? (string) $value : null;
+    }
+
+    public function getDepreciationBookIdAttribute(): ?int
+    {
+        // Prefer real column if present
+        try {
+            if (isset($this->attributes['depreciation_book_id'])) {
+                return $this->attributes['depreciation_book_id'];
+            }
+            if (isset($this->attributes['depreciation_book_code'])) {
+                $code = $this->attributes['depreciation_book_code'];
+                $book = DepreciationBook::where('code', $code)->first();
+                return $book?->id ?? null;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        // Fall back to the temporary cached values
+        if ($this->tempDepreciationBookId) {
+            return $this->tempDepreciationBookId;
+        }
+        if ($this->tempDepreciationBookCode) {
+            $book = DepreciationBook::where('code', $this->tempDepreciationBookCode)->first();
+            return $book?->id ?? null;
+        }
+
+        // As final fallback, try to use the asset's depreciation book
+        return $this->fixedAsset?->depreciation_book_id ?? null;
+    }
+
+    public function getDepreciationBookCodeAttribute(): ?string
+    {
+        try {
+            if (isset($this->attributes['depreciation_book_code'])) {
+                return $this->attributes['depreciation_book_code'];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        if ($this->tempDepreciationBookCode) {
+            return $this->tempDepreciationBookCode;
+        }
+
+        // Fallback to asset's book code when possible
+        return $this->fixedAsset?->depreciationBook?->code ?? null;
+    }
+
     public function journalLine(): BelongsTo
     {
         return $this->belongsTo(GeneralJournalLine::class, 'journal_line_id');
@@ -105,10 +229,10 @@ class FAJournalLine extends Model
         return $this->belongsTo(FAJournalTemplate::class, 'template_id');
     }
 
-    public function depreciationBook(): BelongsTo
-    {
-        return $this->belongsTo(DepreciationBook::class, 'depreciation_book_code');
-    }
+//    public function depreciationBook(): BelongsTo
+//    {
+//        return $this->belongsTo(DepreciationBook::class, 'depreciation_book_code');
+//    }
 
     public function fixedAsset(): BelongsTo
     {
@@ -129,63 +253,90 @@ class FAJournalLine extends Model
     {
         DB::transaction(function() {
             $fa = $this->fixedAsset;
-            $book = $fa->depreciationBooks()->where('code', $this->depreciation_book_code)->first();
+            // Determine the depreciation book to use:
+            // - prefer the code set on the journal line (`depreciation_book_code`),
+            // - fall back to the asset's `depreciationBook` relation.
+            $book = null;
+            if (! empty($this->depreciation_book_code)) {
+                $book = DepreciationBook::where('code', $this->depreciation_book_code)->first();
+            }
+
+            if (! $book) {
+                $book = $fa->depreciationBook;
+            }
+
+            if (! $book) {
+                throw new \RuntimeException("No depreciation book found for FA journal line {$this->line_no} (asset {$fa?->fa_no}).");
+            }
 
             match($this->fa_posting_type) {
-                'Acquisition' => $this->postAcquisition($fa, $book),
-                'Depreciation' => $this->postDepreciation($fa, $book),
-                'Write-Down' => $this->postWriteDown($fa, $book),
-                'Appreciation' => $this->postAppreciation($fa, $book),
-                'Disposal' => $this->postDisposal($fa, $book),
-                default => throw new \Exception("Unknown FA posting type: {$this->fa_posting_type}"),
+                FAPostingType::ACQUISITION => $this->postAcquisition($fa, $book),
+                FAPostingType::DEPRECIATION => $this->postDepreciation($fa, $book),
+                FAPostingType::WRITE_DOWN => $this->postWriteDown($fa, $book),
+                FAPostingType::APPRECIATION => $this->postAppreciation($fa, $book),
+                FAPostingType::DISPOSAL => $this->postDisposal($fa, $book),
+                default => throw new \Exception(sprintf('Unknown FA posting type: %s', $this->fa_posting_type->value ?? (string) $this->fa_posting_type)),
             };
         });
     }
 
     protected function postAcquisition($fa, $book): void
     {
-        // Update FA acquisition cost
-        $book->increment('acquisition_cost', $this->amount);
-        $book->update(['depreciation_start_date' => $this->journalLine->posting_date]);
-
-        // Post to G/L: Debit FA Account, Credit AP/Cash
-        $this->createFAGLEntries([
-            'debit_account' => $book->fa_posting_group->acquisition_cost_account,
-            'credit_account' => $this->journalLine->bal_account_no,
-            'amount' => $this->amount,
-        ]);
+        // Update FA acquisition cost on the asset (denormalized fields live on FixedAsset)
+        $fa->increment('acquisition_cost', $this->amount);
+        $fa->update(['depreciation_starting_date' => $this->posting_date ?? $this->journalLine?->posting_date ?? now()]);
+        // Create FA ledger + G/L entries via the central posting service
+        $postingService = app(FAPostingService::class);
+        $postingService->postEntry(
+            $fa,
+            $this->fa_posting_type,
+            (float) $this->amount,
+            $this->description ?? '',
+            $this->document_no ?? null,
+            $this->posting_date?->toDateTime() ?? now(),
+            ['journal_batch_id' => $this->batch_id ?? null, 'document_line_no' => $this->line_no ?? null]
+        );
     }
 
     protected function postDepreciation($fa, $book): void
     {
         $depreciationAmount = $this->depreciation_amount ?? $this->calculateDepreciation($fa, $book);
-
-        // Update accumulated depreciation
-        $book->increment('accumulated_depreciation', $depreciationAmount);
-
-        // Post to G/L: Debit Depreciation Expense, Credit Accumulated Depreciation
-        $this->createFAGLEntries([
-            'debit_account' => $book->fa_posting_group->depreciation_expense_account,
-            'credit_account' => $book->fa_posting_group->accumulated_depreciation_account,
-            'amount' => $depreciationAmount,
-        ]);
+        // Update accumulated depreciation on the asset
+        $fa->increment('accumulated_depreciation', $depreciationAmount);
+        // Create FA ledger + G/L entries via the central posting service
+        $postingService = app(FAPostingService::class);
+        $postingService->postEntry(
+            $fa,
+            $this->fa_posting_type,
+            (float) $depreciationAmount,
+            $this->description ?? '',
+            $this->document_no ?? null,
+            $this->posting_date?->toDateTime() ?? now(),
+            ['journal_batch_id' => $this->batch_id ?? null, 'document_line_no' => $this->line_no ?? null]
+        );
     }
 
     protected function calculateDepreciation($fa, $book)
     {
-        return match($book->depreciation_method) {
-            'Straight-Line' => $this->straightLineDepreciation($fa, $book),
-            'Declining-Balance' => $this->decliningBalanceDepreciation($fa, $book),
-            'DB1/SL' => $this->db1SlDepreciation($fa, $book),
-            'Manual' => $this->amount,
+        // If an explicit amount is provided on the journal line, use it
+        if (! empty($this->amount) && (float) $this->amount > 0) {
+            return (float) $this->amount;
+        }
+        // Use the asset's configured depreciation method and useful life where appropriate
+        return match((string) $fa->depreciation_method) {
+            'Straight-Line', 'straight_line' => $this->straightLineDepreciation($fa, $book),
+            'Declining-Balance', 'declining_balance' => $this->decliningBalanceDepreciation($fa, $book),
+            'DB1/SL', 'db1_sl' => $this->db1SlDepreciation($fa, $book),
+            'Manual', 'manual' => $this->amount,
             default => 0,
         };
     }
 
     protected function straightLineDepreciation($fa, $book): float
     {
-        $depreciableBase = $book->acquisition_cost - $book->salvage_value;
-        $annualDepreciation = $depreciableBase / $book->depreciation_years;
+        $depreciableBase = ($fa->acquisition_cost ?? 0) - ($fa->salvage_value ?? 0);
+        $years = $fa->useful_life_years ?: 1;
+        $annualDepreciation = $depreciableBase / $years;
         return round($annualDepreciation / 12, 4); // Monthly
     }
 }

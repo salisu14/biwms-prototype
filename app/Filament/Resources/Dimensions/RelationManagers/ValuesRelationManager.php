@@ -17,7 +17,6 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
@@ -38,22 +37,48 @@ class ValuesRelationManager extends RelationManager
                         ->required()
                         ->unique(ignoreRecord: true)
                         ->maxLength(20),
+
                     TextInput::make('name')
                         ->required()
                         ->maxLength(100),
                 ]),
+
                 Grid::make(2)->schema([
                     Select::make('dimension_value_type')
                         ->label('Value Type')
                         ->options(DimensionValueType::class)
                         ->default(DimensionValueType::Standard)
-                        ->required(),
-                    Select::make('parent_id')
-                        ->label('Parent Value')
-                        ->relationship('parent', 'name', fn ($query) => $query->where('dimension_id', $this->getOwnerRecord()->id))
-                        ->searchable()
-                        ->placeholder('Root Level'),
+                        ->required()
+                        ->live()
+                        ->afterStateUpdated(function ($state, callable $set, $get) {
+                            // Auto-manage indentation based on type
+                            // Headings usually have 0 indentation
+                            if ($state === DimensionValueType::Heading) {
+                                $set('indentation', 0);
+                            }
+                        }),
+
+                    // MISSING FIELD ADDED:
+                    TextInput::make('indentation')
+                        ->label('Indentation Level')
+                        ->numeric()
+                        ->default(0)
+                        ->minValue(0)
+                        ->helperText('0 for top-level, 1 for sub-level, etc.'),
                 ]),
+
+                Section::make('Hierarchy')
+                    ->description('Define structure for visual reporting.')
+                    ->schema([
+                        Select::make('parent_id')
+                            ->label('Parent Value')
+                            ->relationship('parent', 'name', fn ($query) => $query->where('dimension_id', $this->getOwnerRecord()->id))
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('Root Level (No Parent)')
+                            ->visible(fn ($get) => $get('dimension_value_type') !== DimensionValueType::Total), // Totals usually don't have parents
+                    ])->compact(),
+
                 Section::make('Availability')
                     ->schema([
                         Grid::make(2)->schema([
@@ -77,18 +102,31 @@ class ValuesRelationManager extends RelationManager
                     ->weight('bold')
                     ->searchable()
                     ->sortable(),
+
                 TextColumn::make('name')
                     ->label('Name')
                     ->searchable()
                     ->sortable()
-                    // Visually represent hierarchy with indentation
-                    ->formatStateUsing(fn ($record, $state) => str_repeat('— ', $record->indentation).$state),
+                    // Visual hierarchy: Indent name based on indentation value
+                    ->formatStateUsing(fn ($record, $state) => str_repeat('—— ', $record->indentation ?? 0) . $state),
+
                 TextColumn::make('dimension_value_type')
                     ->label('Type')
-                    ->badge(),
+                    ->badge()
+                    ->color(fn ($state) => match($state) {
+                        DimensionValueType::Standard => 'gray',
+                        DimensionValueType::Heading => 'warning',
+                        DimensionValueType::Total => 'danger',
+                    }),
+
+                TextColumn::make('indentation')
+                    ->label('Level')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 IconColumn::make('blocked')
                     ->boolean()
                     ->alignCenter(),
+
                 TextColumn::make('starting_date')
                     ->date()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -96,8 +134,6 @@ class ValuesRelationManager extends RelationManager
             ->defaultSort('code')
             ->filters([
                 TernaryFilter::make('blocked'),
-                SelectFilter::make('dimension_value_type')
-                    ->options(DimensionValueType::class),
             ])
             ->headerActions([
                 CreateAction::make(),

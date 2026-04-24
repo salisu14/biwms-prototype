@@ -6,13 +6,11 @@ use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
+use Exception;
 use Illuminate\Database\Seeder;
 
 class GeneralPostingSetupSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         // Get posting groups by code
@@ -24,10 +22,8 @@ class GeneralPostingSetupSeeder extends Seeder
 
         $setups = [
             // ============================================
-            // SALES POSTING (Customer Group + Product Group)
+            // SALES POSTING
             // ============================================
-
-            // Domestic Sales of Finished Goods
             [
                 'general_business_posting_group_id' => $busGroups['DOMESTIC'],
                 'general_product_posting_group_id' => $prodGroups['FINISHED'],
@@ -35,11 +31,8 @@ class GeneralPostingSetupSeeder extends Seeder
                 'sales_credit_memo_account_id' => $accounts['sales_domestic'],
                 'cogs_account_id' => $accounts['cogs_domestic'],
                 'cogs_credit_memo_account_id' => $accounts['cogs_domestic'],
-                'inventory_account_id' => $accounts['inventory_finished'],      // Inventory asset account
-                'inventory_adj_account_id' => $accounts['inventory_adjustment'], // For adjustments
             ],
 
-            // Export Sales of Finished Goods
             [
                 'general_business_posting_group_id' => $busGroups['EXPORT'],
                 'general_product_posting_group_id' => $prodGroups['FINISHED'],
@@ -47,26 +40,19 @@ class GeneralPostingSetupSeeder extends Seeder
                 'sales_credit_memo_account_id' => $accounts['sales_export'],
                 'cogs_account_id' => $accounts['cogs_export'],
                 'cogs_credit_memo_account_id' => $accounts['cogs_export'],
-                'inventory_account_id' => $accounts['inventory_finished'],
-                'inventory_adj_account_id' => $accounts['inventory_adjustment'],
             ],
 
             // ============================================
-            // PURCHASE POSTING (Vendor Group + Product Group)
+            // PURCHASE POSTING (Raw Materials)
             // ============================================
-
-            // Purchase of Raw Materials - Domestic
             [
                 'general_business_posting_group_id' => $busGroups['DOMESTIC'],
                 'general_product_posting_group_id' => $prodGroups['RAWMAT'],
-                // Purchase accounts
-                'inventory_account_id' => $accounts['inventory_rawmat'],        // Raw material inventory
-                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_mat'], // Applied to production
-                'purchase_variance_account_id' => $accounts['purchase_variance'], // Price variances
-                // Note: No sales/COGS accounts for purchase-only setups
+                'inventory_account_id' => $accounts['inventory_rawmat'],
+                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_mat'],
+                'purchase_variance_account_id' => $accounts['purchase_variance'],
             ],
 
-            // Purchase of Raw Materials - Import
             [
                 'general_business_posting_group_id' => $busGroups['FOREIGN'],
                 'general_product_posting_group_id' => $prodGroups['RAWMAT'],
@@ -75,66 +61,45 @@ class GeneralPostingSetupSeeder extends Seeder
                 'purchase_variance_account_id' => $accounts['purchase_variance'],
             ],
 
-            // Purchase of Finished Goods (for resale)
+            // ============================================
+            // PURCHASE POSTING (Expenses / Assets)
+            // ============================================
+            // FIX: This is likely the combination you need for EXPT-002
+            // It uses the 'EXPENSE' product group (ID 9) + DOMESTIC
             [
                 'general_business_posting_group_id' => $busGroups['DOMESTIC'],
-                'general_product_posting_group_id' => $prodGroups['FINISHED'],
-                'inventory_account_id' => $accounts['inventory_finished'],      // Finished goods inventory
-                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_mat'],
-                'purchase_variance_account_id' => $accounts['purchase_variance'],
+                'general_product_posting_group_id' => $prodGroups['EXPENSE'], // Assuming ID 9 is EXPENSE
+                'purch_account_id' => $accounts['expense_account'], // Use a specific expense account
+                // Sales/COGS are irrelevant for pure expense purchases
             ],
 
             // ============================================
-            // PRODUCTION POSTING (Manufacturing Group + Product Group)
+            // PRODUCTION POSTING
             // ============================================
-
-            // Production Output - Finished Goods
             [
                 'general_business_posting_group_id' => $busGroups['MANUFACTURING'],
                 'general_product_posting_group_id' => $prodGroups['FINISHED'],
-                'inventory_account_id' => $accounts['inventory_finished'],      // Finished goods produced
-                'inventory_adj_account_id' => $accounts['wip_account'],          // WIP clearing
-                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_mat'],
-                'overhead_applied_account_id' => $accounts['overhead_applied'],
-                'purchase_variance_account_id' => $accounts['purchase_variance'], // Production variances
+                'inventory_account_id' => $accounts['inventory_finished'],
+                'inventory_adj_account_id' => $accounts['wip_account'],
             ],
 
-            // Production Consumption - Raw Materials
             [
                 'general_business_posting_group_id' => $busGroups['MANUFACTURING'],
                 'general_product_posting_group_id' => $prodGroups['RAWMAT'],
-                'inventory_account_id' => $accounts['inventory_rawmat'],        // Raw materials consumed
-                'inventory_adj_account_id' => $accounts['wip_account'],          // To WIP
-                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_mat'],
+                'inventory_account_id' => $accounts['inventory_rawmat'],
+                'inventory_adj_account_id' => $accounts['wip_account'],
             ],
 
-            // Work in Process (WIP) Account
             [
                 'general_business_posting_group_id' => $busGroups['MANUFACTURING'],
                 'general_product_posting_group_id' => $prodGroups['WIP'],
-                'inventory_account_id' => $accounts['wip_account'],              // WIP inventory
-                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_mat'],
-                'overhead_applied_account_id' => $accounts['overhead_applied'],
+                'inventory_account_id' => $accounts['wip_account'],
             ],
 
-            // Capacity/Labor posting in Production
             [
                 'general_business_posting_group_id' => $busGroups['MANUFACTURING'],
                 'general_product_posting_group_id' => $prodGroups['CAPACITY'],
-                'inventory_adj_account_id' => $accounts['wip_account'],          // Labor to WIP
-                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_cap'],
-                'overhead_applied_account_id' => $accounts['overhead_applied'],
-            ],
-
-            // Add the missing combination to your seeder
-            [
-                'general_business_posting_group_id' => 1, // DOMESTIC
-                'general_product_posting_group_id' => 3,  // Whatever group 3 is
-                'sales_account_id' => $accounts['sales_domestic'],
-                'sales_credit_memo_account_id' => $accounts['sales_domestic'],
-                'cogs_account_id' => $accounts['cogs_domestic'],
-                'cogs_credit_memo_account_id' => $accounts['cogs_domestic'],
-                'inventory_account_id' => $accounts['inventory_finished'],
+                'inventory_adj_account_id' => $accounts['wip_account'],
             ],
         ];
 
@@ -149,6 +114,9 @@ class GeneralPostingSetupSeeder extends Seeder
         }
     }
 
+    /**
+     * @throws Exception
+     */
     private function getBusinessPostingGroups(): array
     {
         $codes = ['DOMESTIC', 'EXPORT', 'FOREIGN', 'MANUFACTURING'];
@@ -157,7 +125,7 @@ class GeneralPostingSetupSeeder extends Seeder
         foreach ($codes as $code) {
             $group = GeneralBusinessPostingGroup::where('code', $code)->first();
             if (! $group) {
-                throw new \Exception("GeneralBusinessPostingGroup '{$code}' not found. Run GeneralBusinessPostingGroupSeeder first.");
+                throw new Exception("GeneralBusinessPostingGroup '{$code}' not found.");
             }
             $groups[$code] = $group->id;
         }
@@ -165,15 +133,20 @@ class GeneralPostingSetupSeeder extends Seeder
         return $groups;
     }
 
+    /**
+     * @throws Exception
+     */
     private function getProductPostingGroups(): array
     {
-        $codes = ['RAWMAT', 'WIP', 'FINISHED', 'CAPACITY'];
+        // ADDED 'EXPENSE' to the list of codes to fetch
+        // If ID 9 is actually 'DTA', 'ASSET', or 'SERVICES', add it here instead.
+        $codes = ['RAWMAT', 'WIP', 'FINISHED', 'CAPACITY', 'EXPENSE'];
         $groups = [];
 
         foreach ($codes as $code) {
             $group = GeneralProductPostingGroup::where('code', $code)->first();
             if (! $group) {
-                throw new \Exception("GeneralProductPostingGroup '{$code}' not found. Run GeneralProductPostingGroupSeeder first.");
+                throw new Exception("GeneralProductPostingGroup '{$code}' not found.");
             }
             $groups[$code] = $group->id;
         }
@@ -181,28 +154,26 @@ class GeneralPostingSetupSeeder extends Seeder
         return $groups;
     }
 
+    /**
+     * @throws Exception
+     */
     private function getAccounts(): array
     {
         $accountMap = [
-            // Sales accounts
             'sales_domestic' => '40100',
             'sales_export' => '40200',
-
-            // COGS accounts
             'cogs_domestic' => '50100',
             'cogs_export' => '50200',
-
-            // Inventory accounts (ASSET accounts - Balance Sheet)
-            'inventory_finished' => '13200',  // Finished Goods Inventory
-            'inventory_rawmat' => '13100',    // Raw Materials Inventory
-            'wip_account' => '13300',         // Work in Process
-
-            // Cost/Variance accounts
+            'inventory_finished' => '13200',
+            'inventory_rawmat' => '13100',
+            'wip_account' => '13300',
             'direct_cost_applied_mat' => '52100',
             'direct_cost_applied_cap' => '62100',
             'overhead_applied' => '62200',
             'purchase_variance' => '50300',
-            'inventory_adjustment' => '50400', // Inventory adjustment expense
+            'inventory_adjustment' => '50400',
+            // ADDED: Generic Expense Account for the EXPENSE setup
+            'expense_account' => '60100',
         ];
 
         $accounts = [];
@@ -210,7 +181,7 @@ class GeneralPostingSetupSeeder extends Seeder
         foreach ($accountMap as $key => $accountNumber) {
             $account = ChartOfAccount::where('account_number', $accountNumber)->first();
             if (! $account) {
-                throw new \Exception("ChartOfAccount '{$accountNumber}' ({$key}) not found. Run ChartOfAccountSeeder first.");
+                throw new Exception("ChartOfAccount '{$accountNumber}' ({$key}) not found.");
             }
             $accounts[$key] = $account->id;
         }

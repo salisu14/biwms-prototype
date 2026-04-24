@@ -13,6 +13,8 @@ enum ValuePosting: string
     case SameCode = 'same_code';
     case NoCode = 'no_code';
 
+    case Manual = 'Manual';
+
     public function label(): string
     {
         return match ($this) {
@@ -20,6 +22,7 @@ enum ValuePosting: string
             self::CodeMandatory => 'Code Mandatory', // Any value allowed, but must exist
             self::SameCode => 'Same Code',           // Must be this specific value
             self::NoCode => 'No Code',               // Must be empty
+            self::Manual => 'Manual',
         };
     }
 

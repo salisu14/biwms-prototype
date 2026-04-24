@@ -87,14 +87,22 @@ class ChartOfAccount extends Model
         return $this->belongsTo(GeneralProductPostingGroup::class, 'gen_prod_posting_group_id');
     }
 
+    /**
+     * VAT Product Posting Group relationship
+     * FIX: The foreign key for 'vatProdPostingGroup' should be 'vat_prod_posting_group_id', not 'vat_bus_posting_group_id'
+     */
     public function vatProdPostingGroup(): BelongsTo
     {
-        return $this->belongsTo(VatBusinessPostingGroup::class, 'vat_bus_posting_group_id');
+        return $this->belongsTo(VatProductPostingGroup::class, 'vat_prod_posting_group_id');
     }
 
+    /**
+     * VAT Business Posting Group relationship
+     * FIX: The foreign key for 'vatBusPostingGroup' should be 'vat_bus_posting_group_id', not 'vat_prod_posting_group_id'
+     */
     public function vatBusPostingGroup(): BelongsTo
     {
-        return $this->belongsTo(VatProductPostingGroup::class, 'vat_prod_posting_group_id');
+        return $this->belongsTo(VatBusinessPostingGroup::class, 'vat_bus_posting_group_id');
     }
 
     public function parentAccount(): BelongsTo

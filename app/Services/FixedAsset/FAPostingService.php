@@ -23,22 +23,52 @@ class FAPostingService
     ): FALedgerEntry {
         $date = $postingDate ?? now();
 
+        // Determine next entry_no for this asset/book combination
+        $lastEntryNo = (int) FALedgerEntry::where('fixed_asset_id', $asset->id)
+            ->where('depreciation_book_id', $asset->depreciation_book_id)
+            ->max('entry_no');
+        $nextEntryNo = $lastEntryNo + 1;
+
+        // Compute derived ledger fields
+        $currentAccum = (float) $asset->accumulated_depreciation;
+        $currentAcq = (float) $asset->acquisition_cost;
+        $deprAmount = $postingType === FAPostingType::DEPRECIATION ? $amount : 0.0;
+        $newAccum = $currentAccum + $deprAmount;
+        $bookValueAfter = $currentAcq - $newAccum;
+
         $entry = FALedgerEntry::create([
             'fixed_asset_id' => $asset->id,
             'depreciation_book_id' => $asset->depreciation_book_id,
+            'entry_no' => $nextEntryNo,
             'fa_posting_type' => $postingType,
             'posting_date' => $date,
             'document_no' => $documentNo,
             'amount' => $amount,
             'amount_lcy' => $amount,
+            'depreciation_amount' => $deprAmount,
+            'accumulated_depreciation' => $newAccum,
+            'book_value_after' => $bookValueAfter,
             'description' => $description,
-            'created_by' => Auth::id(),
+            'created_by' => Auth::id() ?? $asset->created_by ?? 1,
             'entry_timestamp' => now(),
             ...$additionalData,
         ]);
 
         // Create corresponding GL entry
         $this->createGLEntry($asset, $postingType, $amount, $date, $description, $documentNo);
+
+        // Update denormalized fields on the asset for certain posting types
+        try {
+            if ($postingType === FAPostingType::DEPRECIATION) {
+                $asset->increment('accumulated_depreciation', $amount);
+            }
+
+            if ($postingType === FAPostingType::ACQUISITION) {
+                $asset->increment('acquisition_cost', $amount);
+            }
+        } catch (\Throwable $e) {
+            // Non-fatal: asset denormalization failures should not prevent ledger creation
+        }
 
         return $entry;
     }
@@ -55,26 +85,34 @@ class FAPostingService
 
         // Debit entry
         GlEntry::create([
-            'entry_number' => $accounts['debit'],
+            'chart_of_account_id' => $accounts['debit'],
             'posting_date' => $date,
             'document_type' => 'FA ' . $postingType->name,
-            'transaction_number' => $documentNo ?? 'FA-' . time(),
+            'document_number' => $documentNo ?? 'FA-' . time(),
+            'document_date' => $date,
+            'transaction_number' => time(),
             'debit_amount' => $amount > 0 ? $amount : 0,
             'credit_amount' => $amount < 0 ? abs($amount) : 0,
+            'amount' => $amount,
+            'amount_lcy' => $amount,
             'description' => $description,
-            'user_id' => Auth::id(),
+            'user_id' => Auth::id() ?? $asset->created_by ?? 1,
         ]);
 
         // Credit entry
         GlEntry::create([
-            'entry_number' => $accounts['credit'],
+            'chart_of_account_id' => $accounts['credit'],
             'posting_date' => $date,
             'document_type' => 'FA ' . $postingType->name,
-            'transaction_number' => $documentNo ?? 'FA-' . time(),
+            'document_number' => $documentNo ?? 'FA-' . time(),
+            'document_date' => $date,
+            'transaction_number' => time(),
             'debit_amount' => $amount < 0 ? abs($amount) : 0,
             'credit_amount' => $amount > 0 ? $amount : 0,
+            'amount' => $amount,
+            'amount_lcy' => $amount,
             'description' => $description . ' (Offset)',
-            'user_id' => Auth::id(),
+            'user_id' => Auth::id() ?? $asset->created_by ?? 1,
         ]);
     }
 

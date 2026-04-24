@@ -18,6 +18,8 @@ use App\Models\ExpenseTransaction;
 use App\Models\FixedAsset;
 use App\Models\GeneralPostingSetup;
 use App\Models\Item;
+use App\Models\RecurringExpense;
+use App\Models\VatPostingSetup;
 use App\Models\Vendor;
 use App\Services\Finance\GeneralLedgerService;
 use Illuminate\Support\Facades\Auth;
@@ -26,16 +28,17 @@ use Illuminate\Support\Facades\DB;
 class ExpenseService
 {
     public function __construct(
-        private readonly NumberSeriesService $numberSeriesService,
-        private readonly GeneralLedgerService $glService,
-        private readonly CurrencyService $currencyService,
-        private readonly PostingService $postingService,
-        private readonly DimensionManagementService $dimensionService,
-        private readonly VatCalculationService $vatService
+        private NumberSeriesService        $numberSeriesService,
+        private GeneralLedgerService       $glService,
+        private CurrencyService            $currencyService,
+        private PostingService             $postingService,
+        private DimensionManagementService $dimensionService,
+        private VatCalculationService      $vatService
     ) {}
 
     /**
      * Post a generic expense transaction (BC standard)
+     * @throws \Throwable
      */
     public function post(ExpenseTransaction $transaction): void
     {
@@ -46,23 +49,30 @@ class ExpenseService
         DB::transaction(function () use ($transaction) {
             $this->resolvePostingAccounts($transaction);
             $this->calculateTaxes($transaction);
+            $this->mergeDimensions($transaction);
 
-            // 1. Prepare G/L Lines
-            $lines = [];
             $totalAmount = (float) $transaction->amount;
             $vatAmount = (float) $transaction->vat_amount;
             $netAmount = $totalAmount - $vatAmount;
+            $lcyFactor = $transaction->currency_factor ?: 1.0;
 
-            // Debit Expense Account
+            $lines = [];
+
+            // 1. Debit Expense Account
             $lines[] = [
                 'account_id' => $transaction->expense_account_id,
                 'debit' => $netAmount,
                 'credit' => 0,
                 'description' => $transaction->description ?: "Expense: {$transaction->document_no}",
+                'currency_id' => $transaction->currency_id,
+                'debit_amount_lcy' => $netAmount * $lcyFactor,
+                'credit_amount_lcy' => 0,
+                'shortcut_dimension_1_code' => $transaction->shortcut_dimension_1_code,
+                'shortcut_dimension_2_code' => $transaction->shortcut_dimension_2_code,
                 'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
             ];
 
-            // Debit VAT Account (Input VAT)
+            // 2. Debit VAT Account (Input VAT)
             if ($vatAmount > 0) {
                 $vatSetup = $this->resolveVatSetup($transaction);
                 if ($vatSetup && $vatSetup->purchase_vat_account_id) {
@@ -71,38 +81,44 @@ class ExpenseService
                         'debit' => $vatAmount,
                         'credit' => 0,
                         'description' => "VAT for {$transaction->document_no}",
-                        'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
+                        'currency_id' => $transaction->currency_id,
+                        'debit_amount_lcy' => $vatAmount * $lcyFactor,
+                        'credit_amount_lcy' => 0,
+                        'dimensions' => [],
                     ];
                 }
             }
 
-            // Credit Offset Account (Bank, Payable, etc.)
+            // 3. Credit Offset Account (Bank/Payable)
             $offsetAccount = $this->resolveOffsetAccount($transaction);
             $lines[] = [
                 'account_id' => $offsetAccount->id,
                 'debit' => 0,
                 'credit' => $totalAmount,
-                'description' => $transaction->description ?: "Payment/Payable: {$transaction->document_no}",
+                'description' => $transaction->description ?: "Offset: {$transaction->document_no}",
+                'currency_id' => $transaction->currency_id,
+                'debit_amount_lcy' => 0,
+                'credit_amount_lcy' => $totalAmount * $lcyFactor,
+                'shortcut_dimension_1_code' => $transaction->shortcut_dimension_1_code,
+                'shortcut_dimension_2_code' => $transaction->shortcut_dimension_2_code,
                 'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
             ];
 
-            // 2. Post to Ledger
             $this->glService->post($lines, [
                 'posting_date' => $transaction->posting_date,
                 'document_number' => $transaction->document_no,
                 'document_type' => $transaction->document_type,
-                'source_type' => $transaction->source_type ?? 'SYSTEM',
-                'source_number' => $transaction->source_no,
+                'source_type' => 'EXPENSE',
+                'sourceable_type' => ExpenseTransaction::class, // CRITICAL: Polymorphic Link
+                'sourceable_id' => $transaction->id,
                 'description' => $transaction->description,
             ]);
 
-            // 3. Update Transaction Status
             $transaction->update([
                 'status' => 'posted',
                 'posted_at' => now(),
             ]);
 
-            // 4. Handle Allocations
             if ($transaction->allocations()->exists()) {
                 $this->validateAllocations($transaction);
                 $this->processAllocations($transaction);
@@ -111,7 +127,107 @@ class ExpenseService
     }
 
     /**
+     * Post to GL - Unified helper to ensure sourceable links are always created.
+     */
+    private function postToGL(ExpenseTransaction $transaction): void
+    {
+        // Balanced entry: Debit Account (Amount), Credit Offset (Amount)
+        $offsetAccount = $this->resolveOffsetAccount($transaction);
+        $amount = (float) $transaction->amount;
+
+        $lines = [
+            [
+                'account_id' => $transaction->expense_account_id,
+                'debit' => $amount > 0 ? $amount : 0,
+                'credit' => $amount < 0 ? abs($amount) : 0,
+                'description' => $transaction->description,
+                'shortcut_dimension_1_code' => $transaction->shortcut_dimension_1_code,
+                'shortcut_dimension_2_code' => $transaction->shortcut_dimension_2_code,
+                'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
+            ],
+            [
+                'account_id' => $offsetAccount->id,
+                'debit' => $amount < 0 ? abs($amount) : 0,
+                'credit' => $amount > 0 ? $amount : 0,
+                'description' => "Offset: " . $transaction->document_no,
+                'dimensions' => [],
+            ]
+        ];
+
+        $this->glService->post($lines, [
+            'posting_date' => $transaction->posting_date,
+            'document_number' => $transaction->document_no,
+            'document_type' => $transaction->document_type,
+            'sourceable_type' => ExpenseTransaction::class,
+            'sourceable_id' => $transaction->id,
+        ]);
+    }
+
+    /**
+     * Allocate indirect expense to cost centers
+     */
+    private function processAllocations(ExpenseTransaction $transaction): void
+    {
+        foreach ($transaction->allocations as $allocation) {
+            $amount = $allocation->allocation_type === 'amount'
+                ? (float) $allocation->allocated_amount
+                : (float) $transaction->amount * ((float) $allocation->allocation_percentage / 100);
+
+            $lines = [
+                [
+                    'account_id' => $transaction->expense_account_id,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'description' => "Allocation OUT: {$transaction->document_no}",
+                    'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
+                ],
+                [
+                    'account_id' => $allocation->target_gl_account_id ?? $transaction->expense_account_id,
+                    'debit' => $amount,
+                    'credit' => 0,
+                    'description' => "Allocation IN: {$transaction->document_no}",
+                    'dimensions' => $this->dimensionService->getDimensionSet($allocation->dimension_set_id ?? 0)->toArray(),
+                ]
+            ];
+
+            $this->glService->post($lines, [
+                'posting_date' => $transaction->posting_date,
+                'document_number' => $transaction->document_no,
+                'document_type' => 'ALLOCATION',
+                'sourceable_type' => ExpenseTransaction::class, // Establish link for allocations too
+                'sourceable_id' => $transaction->id,
+            ]);
+        }
+    }
+
+    private function reverseCOGS(Item $item, float $quantity, string $documentNo): void
+    {
+        $amount = $quantity * ($item->unit_cost ?? 0);
+        $cogsAccount = $this->resolveCOGSAccount($item);
+        $inventoryAccount = $item->getInventoryAccount();
+
+        if ($amount > 0 && $cogsAccount && $inventoryAccount) {
+            $lines = [
+                ['account_id' => $inventoryAccount->id, 'debit' => $amount, 'credit' => 0, 'description' => "Rev COGS: {$item->item_code}"],
+                ['account_id' => $cogsAccount->id, 'debit' => 0, 'credit' => $amount, 'description' => "Rev COGS: {$item->item_code}"]
+            ];
+
+            // Use doc number to find the transaction if we want to link it
+            $transaction = ExpenseTransaction::where('document_no', $documentNo)->first();
+
+            $this->glService->post($lines, [
+                'posting_date' => now(),
+                'document_number' => $documentNo,
+                'document_type' => 'SALES_RETURN',
+                'sourceable_type' => $transaction ? ExpenseTransaction::class : null,
+                'sourceable_id' => $transaction?->id,
+            ]);
+        }
+    }
+
+    /**
      * Post COGS from inventory transaction
+     * @throws \Throwable
      */
     public function postCOGS(
         Item $item,
@@ -294,7 +410,7 @@ class ExpenseService
         ?string $currencyCode = null
     ): ExpenseTransaction {
         $category = COGSCategory::PURCHASE_ACCOUNT;
-        $interimAccount = ChartOfAccount::where('account_code', '2100')->first(); // Purchase interim
+        $interimAccount = ChartOfAccount::where('account_number', '2100')->first(); // Purchase interim
 
         return ExpenseTransaction::create([
             'document_type' => 'purchase_order',
@@ -317,6 +433,7 @@ class ExpenseService
 
     /**
      * Allocate indirect expense to cost centers
+     * @throws \Throwable
      */
     public function allocateIndirectExpense(
         ExpenseTransaction $expense,
@@ -445,64 +562,12 @@ class ExpenseService
         // Priority: Item posting setup > Product category > Default
         return $item->inventoryPostingSetup?->cogs_account
             ?? $category?->cogs_account // This might be null if Category doesn't have cogs_account. Let's check Category model.
-            ?? ChartOfAccount::where('account_code', '5100')->first();
+            ?? ChartOfAccount::where('account_number', '5100')->first();
     }
 
     private function resolveAdjustmentAccount(ExpenseCategory $category): ChartOfAccount
     {
-        return ChartOfAccount::where('account_code', '5150')->first(); // Inventory adjustments
-    }
-
-    private function postToGL(ExpenseTransaction $transaction): void
-    {
-        // Debit expense/COGS account
-        $this->postingService->createGlEntry([
-            'chart_of_account_id' => $transaction->expense_account_id,
-            'posting_date' => $transaction->posting_date,
-            'document_type' => $transaction->document_type,
-            'document_number' => $transaction->document_no,
-            'description' => $transaction->description,
-            'debit_amount' => $transaction->amount > 0 ? (float) $transaction->amount : 0,
-            'credit_amount' => $transaction->amount < 0 ? (float) abs($transaction->amount) : 0,
-            'dimension_set_id' => $transaction->dimension_set_id,
-            'shortcut_dimension_1_code' => $transaction->shortcut_dimension_1_code,
-            'shortcut_dimension_2_code' => $transaction->shortcut_dimension_2_code,
-        ]);
-    }
-
-    private function reverseCOGS(Item $item, float $quantity, string $documentNo): void
-    {
-        $amount = $quantity * ($item->unit_cost ?? 0);
-        $cogsAccount = $this->resolveCOGSAccount($item);
-        $inventoryAccount = $item->getInventoryAccount();
-
-        if ($amount > 0 && $cogsAccount && $inventoryAccount) {
-            // 1. Debit Inventory (Increase)
-            $this->postingService->createGlEntry([
-                'chart_of_account_id' => $inventoryAccount->id,
-                'debit_amount' => $amount,
-                'credit_amount' => 0,
-                'source_type' => 'ITEM',
-                'source_number' => $item->item_code,
-                'document_type' => 'SALES_RETURN',
-                'document_number' => $documentNo,
-                'posting_date' => now(),
-                'description' => "Reverse COGS (Inv): {$item->item_code}",
-            ]);
-
-            // 2. Credit COGS (Decrease)
-            $this->postingService->createGlEntry([
-                'chart_of_account_id' => $cogsAccount->id,
-                'debit_amount' => 0,
-                'credit_amount' => $amount,
-                'source_type' => 'ITEM',
-                'source_number' => $item->item_code,
-                'document_type' => 'SALES_RETURN',
-                'document_number' => $documentNo,
-                'posting_date' => now(),
-                'description' => "Reverse COGS (Exp): {$item->item_code}",
-            ]);
-        }
+        return ChartOfAccount::where('account_number', '5150')->first(); // Inventory adjustments
     }
 
     private function postAllocationToGL(ExpenseTransaction $expense, array $alloc, float $amount): void
@@ -531,30 +596,6 @@ class ExpenseService
             'shortcut_dimension_1_code' => $alloc['department'],
             'shortcut_dimension_2_code' => $alloc['project'] ?? null,
         ]);
-    }
-
-    private function resolvePostingAccounts(ExpenseTransaction $transaction): void
-    {
-        if (! $transaction->gen_bus_posting_group_id || ! $transaction->gen_prod_posting_group_id) {
-            throw new \RuntimeException("Posting Groups (Business & Product) are required for transaction {$transaction->document_no}");
-        }
-
-        $setup = GeneralPostingSetup::where([
-            'general_business_posting_group_id' => $transaction->gen_bus_posting_group_id,
-            'general_product_posting_group_id' => $transaction->gen_prod_posting_group_id,
-        ])->first();
-
-        if (! $setup) {
-            throw new \RuntimeException("General Posting Setup not found for the selected Posting Groups on transaction {$transaction->document_no}");
-        }
-
-        $transaction->expense_account_id = $setup->purchase_account_id ?? $setup->inventory_account_id;
-
-        if (! $transaction->expense_account_id) {
-            throw new \RuntimeException("Purchase Account is not configured in General Posting Setup for {$transaction->document_no}");
-        }
-
-        $transaction->save();
     }
 
     private function calculateTaxes(ExpenseTransaction $transaction): void
@@ -593,74 +634,6 @@ class ExpenseService
         }
 
         return null;
-    }
-
-    private function resolveOffsetAccount(ExpenseTransaction $transaction): ChartOfAccount
-    {
-        // 1. If linked to a Vendor, use Vendor Posting Group -> Payables Account
-        if ($transaction->vendor) {
-            return $transaction->vendor->getPayablesAccount();
-        }
-
-        // 2. If it's a cash expense from an Employee
-        if ($transaction->employee) {
-            // Check if employee has a clearing account or use a generic "Accrued Wages/Expenses"
-            return $transaction->employee->employeePostingGroup?->payables_account_id
-                ? ChartOfAccount::find($transaction->employee->employeePostingGroup->payables_account_id)
-                : ChartOfAccount::where('account_code', '2100')->first();
-        }
-
-        // 3. Fallback to a default Bank/Suspense account
-        return ChartOfAccount::where('account_number', '10100')->first() // Main Bank
-            ?? ChartOfAccount::where('account_code', '9999')->first(); // Suspense
-    }
-
-    private function processAllocations(ExpenseTransaction $transaction): void
-    {
-        $totalAmount = (float) $transaction->amount;
-        $fixedAmountTotal = (float) $transaction->allocations()->where('allocation_type', 'amount')->sum('allocated_amount');
-        $remainingForPercentage = $totalAmount - $fixedAmountTotal;
-
-        foreach ($transaction->allocations as $allocation) {
-            $amount = $allocation->allocation_type === 'amount'
-                ? (float) $allocation->allocated_amount
-                : $remainingForPercentage * ((float) $allocation->allocation_percentage / 100);
-
-            // Update the allocated amount in DB for traceability if it was percentage based
-            if ($allocation->allocation_type === 'percentage') {
-                $allocation->update(['allocated_amount' => $amount]);
-            }
-
-            // Allocation moves money from general account to specific cost center
-            $lines = [];
-
-            // Credit Source Account (same as transaction expense account)
-            $lines[] = [
-                'account_id' => $transaction->expense_account_id,
-                'debit' => 0,
-                'credit' => $amount,
-                'description' => "Allocation OUT: {$transaction->document_no}",
-                'dimensions' => $this->dimensionService->getDimensionSet($transaction->dimension_set_id ?? 0)->toArray(),
-            ];
-
-            // Debit Target Account (with target dimensions)
-            $targetDims = $this->dimensionService->getDimensionSet($allocation->dimension_set_id ?? 0)->toArray();
-
-            $lines[] = [
-                'account_id' => $allocation->target_gl_account_id ?? $transaction->expense_account_id,
-                'debit' => $amount,
-                'credit' => 0,
-                'description' => "Allocation IN: {$transaction->document_no}",
-                'dimensions' => $targetDims,
-            ];
-
-            $this->glService->post($lines, [
-                'posting_date' => $transaction->posting_date,
-                'document_number' => $transaction->document_no,
-                'document_type' => 'ALLOCATION',
-                'description' => "Expense Allocation for {$transaction->document_no}",
-            ]);
-        }
     }
 
     /**
@@ -710,6 +683,7 @@ class ExpenseService
 
     /**
      * Generate actual transactions from all due recurring templates
+     * @throws \Throwable
      */
     public function processRecurringExpenses(): void
     {
@@ -773,6 +747,9 @@ class ExpenseService
         return $transaction;
     }
 
+    /**
+     * @throws \DateMalformedIntervalStringException
+     */
     private function calculateNextOccurrence(RecurringExpense $recurring): \DateTime
     {
         $date = clone $recurring->next_occurrence_at;
@@ -812,6 +789,48 @@ class ExpenseService
         // Rule 3: If NO percentage allocations exist, fixed amounts MUST EQUAL total amount
         if ($percentageAllocations->isEmpty() && abs($fixedSum - $totalAmount) > 0.01) {
             throw new \RuntimeException("Total allocated amount ({$fixedSum}) does not equal transaction total ({$totalAmount})");
+        }
+    }
+
+    private function resolveOffsetAccount(ExpenseTransaction $transaction): ChartOfAccount
+    {
+        if ($transaction->vendor) {
+            $account = $transaction->vendor->getPayablesAccount();
+            if ($account) return $account;
+        }
+
+        if ($transaction->employee) {
+            $account = $transaction->employee->employeePostingGroup?->payables_account_id
+                ? ChartOfAccount::find($transaction->employee->employeePostingGroup->payables_account_id)
+                : ChartOfAccount::where('account_number', '2100')->first();
+            if ($account) return $account;
+        }
+
+        $account = ChartOfAccount::where('account_number', '10100')->first() ?? ChartOfAccount::where('account_number', '9999')->first();
+
+        if (!$account) {
+            throw new \RuntimeException("No Offset Account found for {$transaction->document_no}. Check COA setup.");
+        }
+
+        return $account;
+    }
+
+    private function resolvePostingAccounts(ExpenseTransaction $transaction): void
+    {
+        if (!$transaction->gen_bus_posting_group_id || !$transaction->gen_prod_posting_group_id) {
+            // If missing, we don't throw error here to allow manual account overrides if already set
+            if ($transaction->expense_account_id) return;
+            throw new \RuntimeException("Posting Groups required for {$transaction->document_no}");
+        }
+
+        $setup = GeneralPostingSetup::where([
+            'general_business_posting_group_id' => $transaction->gen_bus_posting_group_id,
+            'general_product_posting_group_id' => $transaction->gen_prod_posting_group_id,
+        ])->first();
+
+        if ($setup) {
+            $transaction->expense_account_id = $setup->purchase_account_id ?? $setup->inventory_account_id;
+            $transaction->save();
         }
     }
 }

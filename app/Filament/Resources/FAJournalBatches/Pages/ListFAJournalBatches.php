@@ -10,10 +10,13 @@ class ListFAJournalBatches extends ListRecords
 {
     protected static string $resource = FAJournalBatchResource::class;
 
+    protected static ?string $title = 'FA Journal Batches';
+
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->label('Create FAJ Batch'),
         ];
     }
 }

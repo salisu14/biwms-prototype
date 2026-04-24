@@ -78,7 +78,7 @@ class ExpenseTransactionForm
                                         ->label('Amount')
                                         ->numeric()
                                         ->required()
-                                        ->prefix('$')
+                                        ->prefix('₦')
                                         ->reactive()
                                         ->afterStateUpdated(function ($state, $get, $set) {
                                             $factor = (float) ($get('currency_factor') ?? 1);
@@ -116,13 +116,13 @@ class ExpenseTransactionForm
                                         ->numeric()
                                         ->required()
                                         ->readOnly()
-                                        ->prefix('$'),
+                                        ->prefix('₦'),
 
                                     TextInput::make('vat_amount')
                                         ->label('VAT Amount')
                                         ->numeric()
                                         ->default(0)
-                                        ->prefix('$'),
+                                        ->prefix('₦'),
 
                                     Select::make('vat_bus_posting_group_id')
                                         ->label('VAT Bus. Posting Group')
@@ -185,7 +185,7 @@ class ExpenseTransactionForm
                                         ->afterStateUpdated(function ($state, Set $set) {
                                             $employee = Employee::find($state);
                                             if ($employee) {
-                                                $set('gen_bus_posting_group_id', $employee->employeePostingGroup?->id); // Assuming EmployeePostingGroup can map to Gen. Bus. Posting Group or similar
+                                                $set('gen_bus_posting_group_id', $employee->employeePostingGroup?->id);
                                             }
                                         }),
                                     Select::make('customer_id')
@@ -232,10 +232,20 @@ class ExpenseTransactionForm
                                         ->required()
                                         ->searchable()
                                         ->preload(),
-                                    Select::make('gl_entry_id')
-                                        ->relationship('glEntry', 'id')
+
+                                    TextInput::make('gl_entries_count')
+                                        ->label('G/L Ledger Status')
                                         ->disabled()
-                                        ->label('G/L Register Entry'),
+                                        ->dehydrated(false) // prevent saving to DB
+                                        ->formatStateUsing(function ($record) {
+                                            if (! $record) {
+                                                return 'No entries yet';
+                                            }
+
+                                            $count = $record->glEntries->count(); // uses loaded relationship if available
+
+                                            return "{$count} linked entries found.";
+                                        }),
 
                                     Grid::make(2)->schema([
                                         Select::make('gen_bus_posting_group_id')

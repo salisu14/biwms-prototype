@@ -30,13 +30,13 @@ class ExpenseTransactionsTable
                     ->sortable(),
 
                 TextColumn::make('amount')
-                    ->money()
+                    ->money('NGN')
                     ->sortable()
                     ->alignment('right'),
 
                 TextColumn::make('amount_lcy')
                     ->label('Total (LCY)')
-                    ->money()
+                    ->money('NGN')
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('vendor.vendor_name')

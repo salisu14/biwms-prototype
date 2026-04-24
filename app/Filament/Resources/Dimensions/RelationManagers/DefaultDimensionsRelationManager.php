@@ -4,7 +4,8 @@ namespace App\Filament\Resources\Dimensions\RelationManagers;
 
 use App\Enums\ValuePosting;
 use App\Filament\Resources\Dimensions\DimensionResource;
-use App\Models\DimensionValue;
+use App\Models\DimensionValue; // Ensure this is imported
+use App\Models\Dimension; // <--- Import this model to look up ID
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -41,12 +42,23 @@ class DefaultDimensionsRelationManager extends RelationManager
                 Select::make('dimension_value_code')
                     ->label('Default Value')
                     ->options(function (Get $get) {
+                        // FIX: The incoming value is a string code (e.g. 'PROJ001'),
+                        // but dimension_id is an Integer. We must look up the ID.
                         $dimCode = $get('dimension_code');
+
                         if (! $dimCode) {
                             return [];
                         }
 
-                        return DimensionValue::whereHas('dimension', fn ($q) => $q->where('code', $dimCode))
+                        // Find the Dimension Model to get its Integer ID
+                        $dimension = Dimension::where('code', $dimCode)->first();
+
+                        if (! $dimension) {
+                            return [];
+                        }
+
+                        // Now use the Integer ID for the query
+                        return DimensionValue::where('dimension_id', $dimension->id)
                             ->pluck('name', 'code');
                     })
                     ->searchable()
@@ -87,7 +99,6 @@ class DefaultDimensionsRelationManager extends RelationManager
             ])
             ->headerActions([
                 CreateAction::make()
-                    // Logic to handle the custom table_id/no link
                     ->mutateDataUsing(function (array $data): array {
                         $data['table_id'] = $this->getOwnerRecord()->getTable();
                         $data['no'] = $this->getOwnerRecord()->id;
