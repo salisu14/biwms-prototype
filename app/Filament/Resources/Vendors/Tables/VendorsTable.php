@@ -8,6 +8,8 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
 class VendorsTable
@@ -17,51 +19,64 @@ class VendorsTable
         return $table
             ->columns([
                 TextColumn::make('vendor_code')
-                    ->searchable(),
-                TextColumn::make('vendor_name')
-                    ->searchable(),
-                TextColumn::make('contact_person')
-                    ->searchable(),
-                TextColumn::make('email')
-                    ->label('Email address')
-                    ->searchable(),
-                TextColumn::make('phone')
-                    ->searchable(),
-                TextColumn::make('mobile')
-                    ->searchable(),
-                TextColumn::make('city')
-                    ->searchable(),
-                TextColumn::make('state')
-                    ->searchable(),
-                TextColumn::make('postal_code')
-                    ->searchable(),
-                TextColumn::make('country')
-                    ->searchable(),
-                TextColumn::make('tax_id')
-                    ->searchable(),
-                TextColumn::make('payment_terms')
-                    ->searchable(),
-                TextColumn::make('currency')
-                    ->searchable(),
-                TextColumn::make('lead_time_days')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('minimum_order_amount')
-                    ->numeric()
-                    ->sortable(),
-                IconColumn::make('is_active')
-                    ->boolean(),
-                TextColumn::make('created_at')
-                    ->dateTime()
+                    ->label('No.')
+                    ->searchable()
                     ->sortable()
+                    ->weight('bold'),
+
+                TextColumn::make('vendor_name')
+                    ->label('Name')
+                    ->searchable()
+                    ->sortable()
+                    ->limit(30),
+
+                TextColumn::make('balance')
+                    ->money()
+                    ->alignment('right')
+                    ->sortable(),
+
+                TextColumn::make('vendorPostingGroup.code')
+                    ->label('Group')
+                    ->badge()
+                    ->color('gray')
+                    ->toggleable(),
+
+                TextColumn::make('city')
+                    ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('country')
+                    ->searchable()
+                    ->toggleable(),
+
+                IconColumn::make('is_active')
+                    ->label('Active')
+                    ->boolean()
+                    ->sortable(),
+
+                IconColumn::make('blocked')
+                    ->label('Blocked')
+                    ->boolean()
+                    ->trueColor('danger')
+                    ->falseColor('success')
+                    ->sortable(),
+
                 TextColumn::make('updated_at')
+                    ->label('Modified')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('vendor_posting_group_id')
+                    ->label('Posting Group')
+                    ->relationship('vendorPostingGroup', 'code'),
+
+                TernaryFilter::make('blocked')
+                    ->label('Blocked Status'),
+
+                TernaryFilter::make('is_active')
+                    ->label('Active Status'),
             ])
             ->recordActions([
                 ViewAction::make(),
@@ -71,6 +86,6 @@ class VendorsTable
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])->defaultSort('vendor_code', 'asc');
     }
 }
