@@ -1,12 +1,11 @@
 <?php
 
-// app/Models/GeneralBusinessPostingGroup.php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GeneralBusinessPostingGroup extends Model
 {
@@ -17,7 +16,7 @@ class GeneralBusinessPostingGroup extends Model
     protected $fillable = [
         'code',
         'description',
-        'default_vat_bus_posting_group',
+        'default_vat_business_posting_group_id', // ✅ FIXED
         'auto_create_vat_bus_posting_group',
         'blocked',
     ];
@@ -27,7 +26,17 @@ class GeneralBusinessPostingGroup extends Model
         'blocked' => 'boolean',
     ];
 
-    // Relationships
+    /**
+     * ✅ FIXED: Link to VAT Business Posting Group
+     */
+    public function defaultVatBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(
+            VatBusinessPostingGroup::class,
+            'default_vat_business_posting_group_id'
+        );
+    }
+
     public function customers(): HasMany
     {
         return $this->hasMany(Customer::class);
@@ -53,7 +62,9 @@ class GeneralBusinessPostingGroup extends Model
         return $this->hasMany(ItemLedgerEntry::class);
     }
 
-    // Get all product groups this business group is configured with
+    /**
+     * Product group mapping (correct)
+     */
     public function configuredProductGroups()
     {
         return $this->belongsToMany(
@@ -64,7 +75,6 @@ class GeneralBusinessPostingGroup extends Model
         )->withPivot('id', 'blocked');
     }
 
-    // Check if combination exists
     public function hasSetupWith(GeneralProductPostingGroup $productGroup): bool
     {
         return $this->generalPostingSetups()
@@ -72,7 +82,6 @@ class GeneralBusinessPostingGroup extends Model
             ->exists();
     }
 
-    // Get or create setup with product group
     public function getSetupWith(GeneralProductPostingGroup $productGroup): ?GeneralPostingSetup
     {
         return $this->generalPostingSetups()
@@ -80,7 +89,6 @@ class GeneralBusinessPostingGroup extends Model
             ->first();
     }
 
-    // Scope
     public function scopeActive($query)
     {
         return $query->where('blocked', false);
@@ -89,5 +97,28 @@ class GeneralBusinessPostingGroup extends Model
     public function scopeCode($query, $code)
     {
         return $query->where('code', $code);
+    }
+
+    private function getBusinessPostingGroups(): array
+    {
+        $codes = ['DOMESTIC', 'EXPORT', 'FOREIGN', 'MANUFACTURING'];
+
+        $groups = [];
+
+        foreach ($codes as $code) {
+            $group = GeneralBusinessPostingGroup::firstOrCreate(
+                ['code' => $code],
+                [
+                    'description' => $code . ' Auto-created',
+                    'default_vat_business_posting_group_id' => null,
+                    'auto_create_vat_bus_posting_group' => false,
+                    'blocked' => false,
+                ]
+            );
+
+            $groups[$code] = $group->id;
+        }
+
+        return $groups;
     }
 }

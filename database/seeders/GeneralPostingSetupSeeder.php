@@ -69,7 +69,7 @@ class GeneralPostingSetupSeeder extends Seeder
             [
                 'general_business_posting_group_id' => $busGroups['DOMESTIC'],
                 'general_product_posting_group_id' => $prodGroups['EXPENSE'], // Assuming ID 9 is EXPENSE
-                'purch_account_id' => $accounts['expense_account'], // Use a specific expense account
+                'purchase_account_id' => $accounts['expense_account'], // Use a specific expense account
                 // Sales/COGS are irrelevant for pure expense purchases
             ],
 
@@ -125,7 +125,15 @@ class GeneralPostingSetupSeeder extends Seeder
         foreach ($codes as $code) {
             $group = GeneralBusinessPostingGroup::where('code', $code)->first();
             if (! $group) {
-                throw new Exception("GeneralBusinessPostingGroup '{$code}' not found.");
+                $group = GeneralBusinessPostingGroup::firstOrCreate(
+                    ['code' => $code],
+                    [
+                        'description' => $code . ' Auto-created (missing seed)',
+                        'default_vat_business_posting_group_id' => null,
+                        'auto_create_vat_bus_posting_group' => false,
+                        'blocked' => false,
+                    ]
+                );
             }
             $groups[$code] = $group->id;
         }

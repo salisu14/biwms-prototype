@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\GeneralBusinessPostingGroups\Tables;
+namespace App\Filament\Resources\GeneralProductPostingGroups\Tables;
 
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -12,7 +12,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
-class GeneralBusinessPostingGroupsTable
+class GeneralProductPostingGroupsTable
 {
     public static function configure(Table $table): Table
     {
@@ -29,24 +29,23 @@ class GeneralBusinessPostingGroupsTable
                     ->searchable()
                     ->limit(50),
 
-                TextColumn::make('defaultVatBusinessPostingGroup.code')
+                TextColumn::make('defaultVatProductPostingGroup.code')
                     ->label('Default VAT Group')
                     ->badge()
                     ->color('info')
                     ->placeholder('None')
                     ->sortable(),
 
-                TextColumn::make('customers_count')
-                    ->label('Customers')
-                    ->counts('customers')
+                TextColumn::make('items_count')
+                    ->label('Linked Items')
+                    ->counts('items')
                     ->badge()
                     ->color('gray'),
 
-                TextColumn::make('vendors_count')
-                    ->label('Vendors')
-                    ->counts('vendors')
-                    ->badge()
-                    ->color('gray'),
+                IconColumn::make('auto_create_vat_prod_posting_group')
+                    ->label('Auto-VAT')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 IconColumn::make('blocked')
                     ->label('Status')
@@ -64,9 +63,9 @@ class GeneralBusinessPostingGroupsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                SelectFilter::make('default_vat_business_posting_group_id')
+                SelectFilter::make('default_vat_product_posting_group_id')
                     ->label('VAT Group')
-                    ->relationship('defaultVatBusinessPostingGroup', 'code'),
+                    ->relationship('defaultVatProductPostingGroup', 'code'),
 
                 TernaryFilter::make('blocked')
                     ->label('Usage Status')

@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources\GeneralPostingSetups\Schemas;
 
+use App\Models\GeneralProductPostingGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Validation\Rule;
 
 class GeneralPostingSetupForm
 {
@@ -24,12 +26,29 @@ class GeneralPostingSetupForm
                             ->searchable()
                             ->preload()
                             ->required(),
+
                         Select::make('general_product_posting_group_id')
-                            ->label('Prod. Posting Group')
-                            ->relationship('generalProductPostingGroup', 'code')
-                            ->searchable()
-                            ->preload()
-                            ->required(),
+                            ->options(function ($get) {
+                                return GeneralProductPostingGroup::whereDoesntHave('generalPostingSetups', function ($q) use ($get) {
+                                    $q->where('general_business_posting_group_id', $get('general_business_posting_group_id'));
+                                })->pluck('code', 'id');
+                            }),
+
+//                        Select::make('general_product_posting_group_id')
+//                            ->label('Prod. Posting Group') // Added Label
+//                            // FIX: Added relationship so Filament knows what to load
+//                            ->relationship('generalProductPostingGroup', 'code')
+//                            ->searchable()
+//                            ->preload()
+//                            ->required()
+//                            ->rules([
+//                                fn ($get, $record) => Rule::unique('general_posting_setups')
+//                                    ->where(fn ($query) =>
+//                                    $query->where('general_business_posting_group_id', $get('general_business_posting_group_id'))
+//                                    )
+//                                    ->ignore($record?->id),
+//                            ]),
+
                         Toggle::make('blocked')
                             ->label('Blocked')
                             ->inline(false),
@@ -91,7 +110,7 @@ class GeneralPostingSetupForm
                                 ->relationship('purchaseAccount', 'name')
                                 ->searchable()
                                 ->preload()
-                                ->required(), // Marked required to prevent the error you are seeing
+                                ->required(), // Marked required to prevent error you are seeing
                             Select::make('purchase_credit_memo_account_id')
                                 ->label('Purch. Credit Memo Account')
                                 ->relationship('purchaseCreditMemoAccount', 'name')
@@ -123,7 +142,7 @@ class GeneralPostingSetupForm
                         Select::make('purchase_variance_account_id')
                             ->relationship('purchaseVarianceAccount', 'name')
                             ->searchable(),
-                        // Added the missing variance fields from your model
+                        // Added => missing variance fields from your model
                         Select::make('material_variance_account_id')
                             ->relationship('materialVarianceAccount', 'name')
                             ->searchable(),

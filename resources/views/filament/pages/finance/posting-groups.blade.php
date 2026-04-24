@@ -97,7 +97,7 @@
             transition: transform 0.3s;
         }
         .hub-card:hover .card-icon { transform: scale(1.1); }
-        
+
         .counter {
             font-size: 0.875rem;
             font-weight: 700;
@@ -185,6 +185,20 @@
                     <div class="card-body">
                         <h3>General Business Groups</h3>
                         <p>Categorize customers and vendors for financial posting.</p>
+                    </div>
+                    <div class="card-footer text-indigo-600 dark:text-indigo-400">
+                        Manage Groups <x-heroicon-m-arrow-right class="w-3 h-3" />
+                    </div>
+                </a>
+
+                <a href="/admin/general-product-posting-groups" class="hub-card">
+                    <div class="card-top">
+                        <div class="card-icon"><x-heroicon-o-archive-box style="width: 1rem; height: 1rem;" /></div>
+                        <div class="counter">{{ $counts['gen_prod_posting_group'] }} Groups</div>
+                    </div>
+                    <div class="card-body">
+                        <h3>General Product Groups</h3>
+                        <p>Categorize Items for financial posting.</p>
                     </div>
                     <div class="card-footer text-indigo-600 dark:text-indigo-400">
                         Manage Groups <x-heroicon-m-arrow-right class="w-3 h-3" />

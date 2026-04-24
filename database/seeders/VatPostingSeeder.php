@@ -10,12 +10,9 @@ use Illuminate\Database\Seeder;
 
 class VatPostingSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        // 1. VAT Business Posting Groups
+        // 1. Business Groups
         $domestic = VatBusinessPostingGroup::firstOrCreate(
             ['code' => 'DOMESTIC'],
             ['description' => 'Domestic Customers and Vendors']
@@ -26,7 +23,7 @@ class VatPostingSeeder extends Seeder
             ['description' => 'Export Customers and Vendors']
         );
 
-        // 2. VAT Product Posting Groups
+        // 2. Product Groups
         $standard = VatProductPostingGroup::firstOrCreate(
             ['code' => 'STANDARD'],
             ['description' => 'Standard Rate VAT (15%)']
@@ -42,69 +39,46 @@ class VatPostingSeeder extends Seeder
             ['description' => 'Zero Rate VAT (0%)']
         );
 
-        // 3. Resolve VAT G/L Accounts
+        $exempt = VatProductPostingGroup::firstOrCreate(
+            ['code' => 'EXEMPT'],
+            ['description' => 'VAT Exempt']
+        );
+
+        $reverse = VatProductPostingGroup::firstOrCreate(
+            ['code' => 'REVERSE'],
+            ['description' => 'Reverse Charge VAT']
+        );
+
+        // 3. Accounts
         $salesVatAcc = ChartOfAccount::where('account_number', '20100')->first();
         $purchaseVatAcc = ChartOfAccount::where('account_number', '14100')->first();
 
-        // 4. VAT Posting Setup Matrix
-        // Domestic + Standard
-        VatPostingSetup::updateOrCreate(
-            [
-                'vat_business_posting_group_id' => $domestic->id,
-                'vat_product_posting_group_id' => $standard->id,
-                'vat_calculation_type' => 'normal',
-            ],
-            [
-                'vat_percent' => 15.00,
-                'sales_vat_account_id' => $salesVatAcc?->id,
-                'purchase_vat_account_id' => $purchaseVatAcc?->id,
-                'vat_calculation_type' => 'normal',
-            ]
-        );
+        // 4. Helper function to reduce repetition
+        $setup = function ($business, $product, $percent) use ($salesVatAcc, $purchaseVatAcc) {
+            VatPostingSetup::updateOrCreate(
+                [
+                    'vat_business_posting_group_id' => $business->id,
+                    'vat_product_posting_group_id' => $product->id,
+                    'vat_calculation_type' => 'normal', // ✅ ONLY VALID VALUE
+                ],
+                [
+                    'vat_percent' => $percent,
+                    'sales_vat_account_id' => $salesVatAcc?->id,
+                    'purchase_vat_account_id' => $purchaseVatAcc?->id,
+                ]
+            );
+        };
 
-        // Domestic + Reduced
-        VatPostingSetup::updateOrCreate(
-            [
-                'vat_business_posting_group_id' => $domestic->id,
-                'vat_product_posting_group_id' => $reduced->id,
-                'vat_calculation_type' => 'normal',
-            ],
-            [
-                'vat_percent' => 5.00,
-                'sales_vat_account_id' => $salesVatAcc?->id,
-                'purchase_vat_account_id' => $purchaseVatAcc?->id,
-                'vat_calculation_type' => 'normal',
-            ]
-        );
+        // 5. Valid combinations only
+        $setup($domestic, $standard, 15.00);
+        $setup($domestic, $reduced, 5.00);
+        $setup($domestic, $zero, 0.00);
 
-        // Export + Standard (Tax free for export)
-        VatPostingSetup::updateOrCreate(
-            [
-                'vat_business_posting_group_id' => $export->id,
-                'vat_product_posting_group_id' => $standard->id,
-                'vat_calculation_type' => 'normal',
-            ],
-            [
-                'vat_percent' => 0.00,
-                'sales_vat_account_id' => $salesVatAcc?->id,
-                'purchase_vat_account_id' => $purchaseVatAcc?->id,
-                'vat_calculation_type' => 'normal',
-            ]
-        );
+        $setup($export, $standard, 0.00);
+        $setup($export, $zero, 0.00);
 
-        // Domestic + Zero
-        VatPostingSetup::updateOrCreate(
-            [
-                'vat_business_posting_group_id' => $domestic->id,
-                'vat_product_posting_group_id' => $zero->id,
-                'vat_calculation_type' => 'normal',
-            ],
-            [
-                'vat_percent' => 0.00,
-                'sales_vat_account_id' => $salesVatAcc?->id,
-                'purchase_vat_account_id' => $purchaseVatAcc?->id,
-                'vat_calculation_type' => 'normal',
-            ]
-        );
+        // Optional: treat exempt & reverse as ZERO-rated logic
+        $setup($domestic, $exempt, 0.00);
+        $setup($domestic, $reverse, 0.00);
     }
 }

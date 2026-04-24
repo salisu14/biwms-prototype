@@ -15,8 +15,17 @@ return new class extends Migration
             $table->id();
             $table->string('code', 20)->unique(); // DOMESTIC, EXPORT, EU
             $table->string('description');
-            $table->string('default_vat_bus_posting_group', 20)->nullable();
-            $table->boolean('auto_create_vat_bus_posting_group')->default(false);
+
+            // IMPROVEMENT: Aligned naming with the "Default" logic for better clarity
+            $table->foreignId('default_vat_business_posting_group_id')
+                ->nullable()
+                ->constrained('vat_business_posting_groups')
+                ->nullOnDelete();
+
+            $table->boolean('auto_create_vat_bus_posting_group')
+                ->default(false)
+                ->comment('Automatically assign default VAT business group');
+
             $table->boolean('blocked')->default(false);
             $table->timestamps();
         });

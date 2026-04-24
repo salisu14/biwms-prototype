@@ -4,20 +4,17 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GeneralProductPostingGroup extends Model
 {
-    use HasFactory;
-
     protected $table = 'general_product_posting_groups';
 
     protected $fillable = [
         'code',
         'description',
-        'default_vat_prod_posting_group',
+        'default_vat_product_posting_group_id', // ✅ FIXED
         'auto_create_vat_prod_posting_group',
         'blocked',
     ];
@@ -27,7 +24,15 @@ class GeneralProductPostingGroup extends Model
         'blocked' => 'boolean',
     ];
 
-    // Relationships
+    // ✅ Correct relationship
+    public function defaultVatProductPostingGroup()
+    {
+        return $this->belongsTo(
+            VatProductPostingGroup::class,
+            'default_vat_product_posting_group_id'
+        );
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(Item::class);
@@ -38,12 +43,16 @@ class GeneralProductPostingGroup extends Model
         return $this->hasMany(GeneralPostingSetup::class);
     }
 
+    public function itemJournalLines(): HasMany
+    {
+        return $this->hasMany(ItemJournalLine::class);
+    }
+
     public function itemLedgerEntries(): HasMany
     {
         return $this->hasMany(ItemLedgerEntry::class);
     }
 
-    // Get all business groups this product group is configured with
     public function configuredBusinessGroups()
     {
         return $this->belongsToMany(
@@ -54,7 +63,6 @@ class GeneralProductPostingGroup extends Model
         )->withPivot('id', 'blocked');
     }
 
-    // Check if combination exists
     public function hasSetupWith(GeneralBusinessPostingGroup $businessGroup): bool
     {
         return $this->generalPostingSetups()
@@ -62,7 +70,6 @@ class GeneralProductPostingGroup extends Model
             ->exists();
     }
 
-    // Get posting setup with business group
     public function getSetupWith(GeneralBusinessPostingGroup $businessGroup): ?GeneralPostingSetup
     {
         return $this->generalPostingSetups()
@@ -70,7 +77,6 @@ class GeneralProductPostingGroup extends Model
             ->first();
     }
 
-    // Get account for specific line type
     public function getAccountFor(
         GeneralBusinessPostingGroup $businessGroup,
         string $lineType
@@ -86,7 +92,6 @@ class GeneralProductPostingGroup extends Model
         return $line?->chartOfAccount;
     }
 
-    // Scope
     public function scopeActive($query)
     {
         return $query->where('blocked', false);

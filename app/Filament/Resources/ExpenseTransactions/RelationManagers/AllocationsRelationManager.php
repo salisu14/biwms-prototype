@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\ExpenseTransactions\RelationManagers;
 
-use App\Filament\Resources\ExpenseTransactions\ExpenseTransactionResource;
+use App\Models\ChartOfAccount;
 use App\Models\DimensionValue;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -16,21 +16,14 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
+
 class AllocationsRelationManager extends RelationManager
 {
     protected static string $relationship = 'allocations';
 
-    //    protected static ?string $relatedResource = ExpenseTransactionResource::class;
-
     protected static ?string $recordTitleAttribute = 'allocated_amount';
 
-    protected static ?string $title = 'Expense Allocation';
-
-    protected static ?string $inverseRelationship = 'expenseTransaction';
-
-    protected static ?string $inverseRelationshipTitle = 'Expense Transaction';
-
-    protected static ?string $inverseRecordTitleAttribute = 'expense_transaction_id';
+    protected static ?string $title = 'Expense Allocations (Splits)';
 
     public function form(Schema $schema): Schema
     {
@@ -41,26 +34,30 @@ class AllocationsRelationManager extends RelationManager
                         Grid::make(3)->schema([
                             Select::make('target_gl_account_id')
                                 ->label('Target Account')
-                                ->relationship('targetAccount', 'name')
+                                ->relationship('targetAccount', 'account_number')
+                                ->getOptionLabelFromRecordUsing(fn (ChartOfAccount $record) => "{$record->account_number} – {$record->name}")
                                 ->searchable()
                                 ->preload()
                                 ->required(),
 
                             Select::make('allocation_type')
-                                ->label('Type')
+                                ->label('Split Type')
                                 ->options([
-                                    'percentage' => 'Percentage',
-                                    'amount' => 'Fixed Amount',
+                                    'percentage' => 'Percentage (%)',
+                                    'amount' => 'Fixed Amount ($)',
                                 ])
                                 ->default('percentage')
                                 ->required()
-                                ->live(),
+                                ->live()
+                                ->afterStateUpdated(function ($state, callable $set) {
+                                    $set('allocated_amount', 0);
+                                    $set('allocation_percentage', 0);
+                                }),
 
                             TextInput::make('allocation_basis')
-                                ->label('Allocation Basis')
-                                ->placeholder('e.g. Sales, Headcount')
-                                ->maxLength(50)
-                                ->columnSpan(1),
+                                ->label('Basis/Reason')
+                                ->placeholder('e.g. Sales Split')
+                                ->maxLength(50),
                         ]),
 
                         Grid::make(2)->schema([
@@ -72,7 +69,12 @@ class AllocationsRelationManager extends RelationManager
                                 ->minValue(0)
                                 ->step(0.01)
                                 ->visible(fn ($get) => $get('allocation_type') === 'percentage')
-                                ->required(fn ($get) => $get('allocation_type') === 'percentage'),
+                                ->required(fn ($get) => $get('allocation_type') === 'percentage')
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(function ($state, $set) {
+                                    $parentAmount = (float) $this->getOwnerRecord()->amount;
+                                    $set('allocated_amount', round($parentAmount * ($state / 100), 4));
+                                }),
 
                             TextInput::make('allocated_amount')
                                 ->label('Allocated Amount')
@@ -81,24 +83,11 @@ class AllocationsRelationManager extends RelationManager
                                 ->step(0.0001)
                                 ->visible(fn ($get) => $get('allocation_type') === 'amount')
                                 ->required(fn ($get) => $get('allocation_type') === 'amount'),
-
-                            Select::make('dimension_set_id')
-                                ->label('Target Dimension Set')
-                                ->relationship('dimensionSet', 'id')
-                                ->searchable()
-                                ->preload(),
-
-                            Select::make('gl_entry_id')
-                                ->label('G/L Entry')
-                                ->relationship('glEntry', 'entry_number')
-                                ->searchable()
-                                ->preload()
-                                ->disabled() // Usually set during posting, not manual entry
-                                ->dehydrated(false),
                         ]),
                     ]),
 
                 Section::make('Dimensions')
+                    ->description('Assign cost centers for this specific split.')
                     ->schema([
                         Grid::make(2)->schema([
                             Select::make('target_dimension_1')
@@ -131,8 +120,9 @@ class AllocationsRelationManager extends RelationManager
     {
         return $table
             ->columns([
-                TextColumn::make('targetAccount.name')
-                    ->label('Target G/L')
+                TextColumn::make('targetAccount.account_number')
+                    ->label('Account')
+                    ->description(fn ($record) => $record->targetAccount?->name)
                     ->searchable()
                     ->sortable(),
 
@@ -149,50 +139,36 @@ class AllocationsRelationManager extends RelationManager
                     ->label('%')
                     ->suffix('%')
                     ->numeric(decimalPlaces: 2)
-                    ->placeholder('-'),
+                    ->alignment('right'),
 
                 TextColumn::make('allocated_amount')
-                    ->money('NGN')
+                    ->money()
                     ->label('Amount')
-                    ->placeholder('-'),
-
-                TextColumn::make('allocation_basis')
-                    ->label('Basis')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->weight('bold')
+                    ->alignment('right'),
 
                 TextColumn::make('target_dimension_1')
-                    ->label('Dim 1 (Dept)'),
+                    ->label('Dept')
+                    ->badge()
+                    ->color('gray')
+                    ->toggleable(),
 
                 TextColumn::make('target_dimension_2')
-                    ->label('Dim 2 (Proj)'),
-
-                TextColumn::make('glEntry.entry_number')
-                    ->label('G/L Entry')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->label('Project')
+                    ->toggleable(),
             ])
             ->headerActions([
                 CreateAction::make()
                     ->mutateDataUsing(function (array $data): array {
-                        // FIX: Ensure non-visible fields are not null to satisfy DB constraints
                         if (($data['allocation_type'] ?? 'percentage') === 'percentage') {
-                            $data['allocated_amount'] = 0;
-                        } else {
-                            $data['allocation_percentage'] = 0;
+                            $parentAmount = (float) $this->getOwnerRecord()->amount;
+                            $data['allocated_amount'] = round($parentAmount * (($data['allocation_percentage'] ?? 0) / 100), 4);
                         }
                         return $data;
                     }),
             ])
             ->recordActions([
-                EditAction::make()
-                    ->mutateDataUsing(function (array $data): array {
-                        // Ensure non-visible fields are not null during Edit
-                        if (($data['allocation_type'] ?? 'percentage') === 'percentage') {
-                            $data['allocated_amount'] = 0;
-                        } else {
-                            $data['allocation_percentage'] = 0;
-                        }
-                        return $data;
-                    }),
+                EditAction::make(),
                 DeleteAction::make(),
             ])
             ->defaultSort('created_at', 'desc');

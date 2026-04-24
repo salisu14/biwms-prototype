@@ -7,6 +7,7 @@ use App\Models\EmployeePostingGroup;
 use App\Models\FAPostingGroup;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralPostingSetup;
+use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
 use App\Models\InventoryPostingSetup;
 use App\Models\PayrollPostingGroup;
@@ -35,6 +36,7 @@ class PostingGroups extends Page
             'counts' => [
                 'gen_posting_setup' => GeneralPostingSetup::count(),
                 'gen_bus_posting_group' => GeneralBusinessPostingGroup::count(),
+                'gen_prod_posting_group' => GeneralProductPostingGroup::count(),
                 'vat_posting_setup' => VatPostingSetup::count(),
                 'vat_bus_posting_group' => VatBusinessPostingGroup::count(),
                 'vat_prod_posting_group' => VatProductPostingGroup::count(),

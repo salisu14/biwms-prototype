@@ -126,17 +126,6 @@ return new class extends Migration {
             $table->string('source_type', 30)->nullable()->comment('VENDOR, CUSTOMER, EMPLOYEE, BANK, FA');
             $table->string('source_no', 50)->nullable();
 
-            // Data migration: Populate currency_id based on currency_code
-            $transactions = DB::table('expense_transactions')->whereNotNull('currency_code')->get();
-            foreach ($transactions as $transaction) {
-                $currency = DB::table('currencies')->where('code', $transaction->currency_code)->first();
-                if ($currency) {
-                    DB::table('expense_transactions')
-                        ->where('id', $transaction->id)
-                        ->update(['currency_id' => $currency->id]);
-                }
-            }
-
             $table->timestamps();
             $table->softDeletes();
 
