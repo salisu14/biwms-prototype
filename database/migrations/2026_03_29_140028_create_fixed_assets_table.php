@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -38,6 +37,10 @@ return new class extends Migration
             $table->integer('fiscal_year_start')->nullable();
 
             $table->boolean('is_active')->default(true);
+
+            $table->decimal('acquisition_cost', 15, 4)->default(0)->after('is_active');
+            $table->decimal('accumulated_depreciation', 15, 4)->default(0)->after('acquisition_cost');
+
             $table->timestamps();
         });
 
@@ -202,7 +205,7 @@ return new class extends Migration
             $table->index(['reversed_entry_fixed_asset_id', 'reversed_entry_depreciation_book_id', 'reversed_entry_no']);
         });
 
-       // NOW add the foreign key constraint (columns exist)
+        // NOW add the foreign key constraint (columns exist)
         Schema::table('fa_ledger_entries', function (Blueprint $table) {
             $table->foreign(['reversed_entry_fixed_asset_id', 'reversed_entry_depreciation_book_id', 'reversed_entry_no'])
                 ->references(['fixed_asset_id', 'depreciation_book_id', 'entry_no'])

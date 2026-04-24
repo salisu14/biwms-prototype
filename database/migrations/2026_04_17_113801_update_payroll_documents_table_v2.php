@@ -18,6 +18,7 @@ return new class extends Migration
             $table->decimal('total_deductions', 12, 2)->default(0)->after('total_earnings');
             $table->decimal('total_net_pay', 12, 2)->default(0)->after('total_deductions');
             $table->foreignId('approved_by')->nullable()->after('total_net_pay')->constrained('employees');
+            $table->decimal('working_days', 8, 2)->default(30);
             $table->timestamp('approved_at')->nullable()->after('approved_by');
         });
     }

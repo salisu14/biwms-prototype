@@ -38,6 +38,8 @@ return new class extends Migration
             $table->foreignId('capacity_variance_account_id')->nullable()->constrained('chart_of_accounts');
             $table->foreignId('capacity_overhead_variance_account_id')->nullable()->constrained('chart_of_accounts');
             $table->foreignId('manufacturing_overhead_variance_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('purchase_account_id')->nullable()->constrained('chart_of_accounts');
+            $table->foreignId('purchase_credit_memo_account_id')->nullable()->constrained('chart_of_accounts');
 
             $table->boolean('blocked')->default(false);
             $table->timestamps();

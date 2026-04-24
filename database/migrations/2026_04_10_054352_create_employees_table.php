@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -25,6 +24,19 @@ return new class extends Migration
             $table->string('business_code')->nullable()->index();
             $table->string('factory_code')->nullable()->index();
             $table->string('department_code')->nullable()->index();
+
+            $table->foreignId('employee_posting_group_id')
+                ->nullable()
+                ->constrained('employee_posting_groups')
+                ->nullOnDelete();
+
+            $table->foreignId('payroll_posting_group_id')
+                ->nullable()
+                ->constrained('payroll_posting_groups')
+                ->nullOnDelete();
+
+
+            $table->string('assignment_type')->default('corporate')->after('job_title')->index();
 
             $table->boolean('is_active')->default(true);
             $table->timestamps();

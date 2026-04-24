@@ -18,6 +18,8 @@ return new class extends Migration
             $table->foreignId('routing_line_id')->nullable()->constrained('production_order_routing_lines');
             $table->foreignId('work_center_id')->nullable()->constrained('work_centers');
             $table->foreignId('machine_center_id')->nullable()->constrained('machine_centers');
+            $table->foreignId('fixed_asset_id')->nullable()->constrained('fixed_assets')->nullOnDelete();
+            $table->foreignId('capex_project_id')->nullable()->constrained('capex_projects')->nullOnDelete();
 
             $table->date('posting_date');
             $table->string('document_number');

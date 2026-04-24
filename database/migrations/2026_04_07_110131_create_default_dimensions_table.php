@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ValuePosting;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -17,7 +18,10 @@ return new class extends Migration
             $table->string('no', 50); // Entity number (customer_no, item_no, etc.)
             $table->string('dimension_code', 20);
             $table->string('dimension_value_code', 20)->nullable();
-            $table->enum('value_posting', ['same_code', 'no_code', 'code_mandatory', 'same_code_mandatory'])->default('same_code');
+
+            $table->enum('value_posting', array_column(ValuePosting::cases(), 'value'))
+                ->default('same_code');
+
             $table->boolean('blocked')->default(false);
             $table->timestamps();
 

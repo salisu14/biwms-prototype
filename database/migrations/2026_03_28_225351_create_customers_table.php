@@ -66,6 +66,8 @@ return new class extends Migration
             $table->decimal('maximum_discount_percent', 5, 2)->nullable();
             $table->boolean('price_includes_vat')->default(false);
 
+            $table->string('customer_type')->nullable()->after('customer_number');
+
             $table->timestamps();
         });
     }

@@ -15,10 +15,10 @@ return new class extends Migration
             $table->id();
             $table->string('jurisdiction', 50);
             $table->date('effective_date');
-            $table->decimal('from_amount', 12, 2);
-            $table->decimal('to_amount', 12, 2);
-            $table->decimal('base_tax', 12, 2);
-            $table->decimal('percentage', 5, 2);
+            $table->string('name')->nullable()->after('id');
+            $table->string('country_code', 10)->nullable()->after('name');
+            $table->string('state_code', 10)->nullable()->after('country_code');
+
             $table->timestamps();
         });
     }

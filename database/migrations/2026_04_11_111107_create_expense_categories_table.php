@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -42,6 +41,11 @@ return new class extends Migration
             // Dimensions default
             $table->string('default_dimension_1', 20)->nullable(); // Default department
             $table->string('default_dimension_2', 20)->nullable(); // Default project
+
+
+            $table->foreignId('gen_prod_posting_group_id')->nullable()->constrained('general_product_posting_groups');
+            $table->foreignId('vat_prod_posting_group_id')->nullable()->constrained('vat_product_posting_groups');
+
 
             $table->boolean('is_active')->default(true);
             $table->timestamps();
@@ -85,6 +89,8 @@ return new class extends Migration
             $table->foreignId('item_id')->nullable()->constrained('items');
             $table->foreignId('product_category_id')->nullable()->constrained('categories');
 
+            $table->foreignId('currency_id')->nullable()->constrained('currencies');
+
             // Reference documents
             $table->string('purchase_order_no', 20)->nullable();
             $table->string('sales_order_no', 20)->nullable();
@@ -106,6 +112,30 @@ return new class extends Migration
             // User tracking
             $table->foreignId('posted_by')->constrained('users');
             $table->text('description')->nullable();
+
+            // Posting Groups
+            $table->foreignId('gen_bus_posting_group_id')->nullable()->constrained('general_business_posting_groups');
+            $table->foreignId('gen_prod_posting_group_id')->nullable()->constrained('general_product_posting_groups');
+            $table->foreignId('vat_bus_posting_group_id')->nullable()->constrained('vat_business_posting_groups');
+            $table->foreignId('vat_prod_posting_group_id')->nullable()->constrained('vat_product_posting_groups');
+
+            // Dimensions
+            $table->foreignId('dimension_set_id')->nullable()->constrained('dimension_sets');
+
+            // Traceability
+            $table->string('source_type', 30)->nullable()->comment('VENDOR, CUSTOMER, EMPLOYEE, BANK, FA');
+            $table->string('source_no', 50)->nullable();
+
+            // Data migration: Populate currency_id based on currency_code
+            $transactions = DB::table('expense_transactions')->whereNotNull('currency_code')->get();
+            foreach ($transactions as $transaction) {
+                $currency = DB::table('currencies')->where('code', $transaction->currency_code)->first();
+                if ($currency) {
+                    DB::table('expense_transactions')
+                        ->where('id', $transaction->id)
+                        ->update(['currency_id' => $currency->id]);
+                }
+            }
 
             $table->timestamps();
             $table->softDeletes();
@@ -132,6 +162,10 @@ return new class extends Migration
             $table->foreignId('target_gl_account_id')->constrained('chart_of_accounts');
 
             $table->foreignId('gl_entry_id')->nullable()->constrained('gl_entries');
+
+            $table->string('allocation_type')
+                ->default('percentage')
+                ->comment('percentage, amount');
 
             $table->timestamps();
         });
@@ -160,6 +194,8 @@ return new class extends Migration
             $table->decimal('november', 18, 4)->default(0);
             $table->decimal('december', 18, 4)->default(0);
             $table->decimal('annual_total', 18, 4)->default(0);
+
+            $table->foreignId('currency_id')->nullable()->constrained('currencies');
 
             $table->boolean('is_active')->default(true);
             $table->timestamps();

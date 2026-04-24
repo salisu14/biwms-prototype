@@ -26,6 +26,27 @@ return new class extends Migration
             $table->string('credit_appl_acc', 20)->nullable();
             $table->string('prepayment_account', 20)->nullable();
             $table->boolean('blocked')->default(false);
+
+            $table->foreignId('payables_account_id')
+                ->nullable()
+                ->after('payables_account')
+                ->constrained('chart_of_accounts');
+
+            $table->foreignId('payment_disc_debit_account_id')
+                ->nullable()
+                ->after('payment_disc_debit_acc')
+                ->constrained('chart_of_accounts');
+
+            $table->foreignId('payment_disc_credit_account_id')
+                ->nullable()
+                ->after('payment_disc_credit_acc')
+                ->constrained('chart_of_accounts');
+
+            $table->foreignId('invoice_rounding_account_id')
+                ->nullable()
+                ->after('invoice_rounding_account')
+                ->constrained('chart_of_accounts');
+
             $table->timestamps();
         });
     }

@@ -11,9 +11,6 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('bins', function (Blueprint $table) {
-            $table->foreignId('uom_id')->nullable()->constrained('unit_of_measures')->onDelete('set null')->after('location_id');
-        });
 
         Schema::table('items', function (Blueprint $table) {
             $table->foreignId('inventory_bin_id')->nullable()->constrained('bins')->onDelete('set null')->after('bin_code');
@@ -33,11 +30,6 @@ return new class extends Migration
             $table->dropForeign(['currency_id']);
             $table->dropForeign(['item_category_id']);
             $table->dropColumn(['inventory_bin_id', 'sku', 'currency_id', 'item_category_id']);
-        });
-
-        Schema::table('bins', function (Blueprint $table) {
-            $table->dropForeign(['uom_id']);
-            $table->dropColumn('uom_id');
         });
     }
 };

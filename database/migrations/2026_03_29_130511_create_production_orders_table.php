@@ -66,6 +66,11 @@ return new class extends Migration
             $table->foreignId('created_by')->constrained('users');
             $table->foreignId('last_modified_by')->nullable()->constrained('users');
 
+            $table->foreignId('general_business_posting_group_id')
+                ->after('inventory_posting_group_id')
+                ->nullable()
+                ->constrained('general_business_posting_groups');
+
             $table->boolean('reserved_from_stock')->default(false);
 
             $table->timestamps();
