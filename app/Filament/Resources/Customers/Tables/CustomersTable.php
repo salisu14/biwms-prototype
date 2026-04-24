@@ -40,7 +40,7 @@ class CustomersTable
                     ->getStateUsing(fn ($record) => $record->blocked ? ($record->blocked_reason ?? 'Blocked') : 'Active')
                     ->color(fn ($record) => $record->blocked ? 'danger' : 'success')
                     ->formatStateUsing(fn ($state) => ucfirst(strtolower($state))),
-                TextColumn::make('customerPostingGroup.id')
+                TextColumn::make('group.code')
                     ->label('Group')
                     ->toggleable(),
                 TextColumn::make('location.name')
