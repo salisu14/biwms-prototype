@@ -139,22 +139,22 @@ class AdminPanelProvider extends PanelProvider
                                     ->isActiveWhen(fn() => request()->is('admin/currency-adjustment-ledger*')),
 
                                 NavigationItem::make('CapEx Projects')
-                                    ->icon('heroicon-o-building-office')
+                                    ->icon('heroicon-o-banknotes')
                                     ->url('/admin/capex-projects')
                                     ->isActiveWhen(fn() => request()->is('admin/capex-projects*')),
 
                                 NavigationItem::make('Fixed Assets')
-                                    ->icon('heroicon-o-building-office')
+                                    ->icon('heroicon-o-adjustments-vertical')
                                     ->url('/admin/fixed-assets')
                                     ->isActiveWhen(fn() => request()->is('admin/fixed-assets*')),
 
                                 NavigationItem::make('Depreciation Books')
-                                    ->icon('heroicon-o-building-office')
+                                    ->icon('heroicon-o-minus-circle')
                                     ->url('/admin/depreciation-books')
                                     ->isActiveWhen(fn() => request()->is('admin/depreciation-books*')),
 
                                 NavigationItem::make('FA Classes')
-                                    ->icon('heroicon-o-building-office')
+                                    ->icon('heroicon-o-arrow-right-circle')
                                     ->url('/admin/f-a-classes')
                                     ->isActiveWhen(fn() => request()->is('admin/f-a-classes*')),
 
