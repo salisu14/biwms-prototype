@@ -71,7 +71,9 @@ return new class extends Migration
             $table->string('bin_code', 20)->nullable();
 
             // Physical & WMS Attributes
-            $table->string('base_unit_of_measure', 20)->default('PCS');
+//            $table->string('base_unit_of_measure', 20)->default('PCS');
+            $table->foreignId('base_uom_id')->nullable()->constrained('unit_of_measures');
+
             $table->decimal('weight', 10, 4)->nullable();
             $table->decimal('volume', 10, 4)->nullable();
             $table->string('shelf_no', 20)->nullable();

@@ -33,6 +33,19 @@ class ItemUomAssignment extends Pivot
         'sort_order' => 'integer',
     ];
 
+    protected static function booted(): void
+    {
+        static::saving(function (self $assignment) {
+            if (empty($assignment->uom_type)) {
+                throw new \InvalidArgumentException(
+                    'uom_type is required for ItemUomAssignment. ' .
+                    'Use base_uom_id on Item for the base unit, ' .
+                    'or explicitly set uom_type when creating assignments.'
+                );
+            }
+        });
+    }
+
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class, 'item_id');

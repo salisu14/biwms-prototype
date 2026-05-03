@@ -99,9 +99,11 @@ class ItemForm
                                         ->native(false),
 
                                     // Added: Missing uom_id (Base Unit of Measure) relationship
-                                    Select::make('uom_id')
+                                    // In ItemForm.php, General tab, replace the uom_id field:
+
+                                    Select::make('base_uom_id')
                                         ->label('Base Unit of Measure')
-                                        ->relationship('uom', 'uom_code')
+                                        ->relationship('baseUom', 'uom_code')
                                         ->required()
                                         ->searchable()
                                         ->preload(),
@@ -135,6 +137,7 @@ class ItemForm
 
                                     TextInput::make('standard_cost')
                                         ->label('Standard Cost (Fixed)')
+                                        ->required()
                                         ->numeric()
                                         ->prefix('$')
                                         ->step(0.0001),
@@ -267,6 +270,12 @@ class ItemForm
                                                         ->required()
                                                         ->helperText('The unit used by the vendor for this price.'),
 
+                                                    // In ItemForm.php — Relationships tab, inside the UOM Repeater
+                                                    Select::make('uom_type')
+                                                        ->options(UomType::class)
+                                                        ->required()  // ← Ensure this is present
+                                                        ->native(false),
+
                                                     Select::make('currency_id')
                                                         ->label('Currency')
                                                         ->relationship('currency', 'code')
@@ -308,6 +317,7 @@ class ItemForm
                                 Grid::make(3)->schema([
                                     TextInput::make('inventory')
                                         ->label('Initial Inventory')
+                                        ->required()
                                         ->numeric()
                                         ->disabledOn('edit')
                                         ->helperText('Opening balance (Create only).'),

@@ -44,7 +44,7 @@ class Item extends Model
         'reorder_quantity',
         'location_id',
         'bin_code',
-        'base_unit_of_measure',
+//        'base_unit_of_measure',
         'weight',
         'volume',
         'shelf_no',
@@ -54,6 +54,7 @@ class Item extends Model
         'blocked',
         'sales_blocked',
         'purchasing_blocked',
+        'base_uom_id',
     ];
 
     protected $casts = [
@@ -86,23 +87,52 @@ class Item extends Model
         return $this->hasMany(ItemUomAssignment::class);
     }
 
+    // In Item model, add:
+    public function baseUom(): BelongsTo
+    {
+        return $this->belongsTo(UnitOfMeasure::class, 'base_uom_id');
+    }
+
+    /**
+     * Additional UOM assignments (excluding base UOM)
+     * Use uomAssignments() HasMany for full control, or this for convenience
+     */
     public function uoms(): BelongsToMany
     {
         return $this->belongsToMany(
             UnitOfMeasure::class,
-            'item_uom_assignments', // Pivot table
-            'item_id',             // Foreign key on pivot for Item
-            'uom_id'               // Foreign key on pivot for Unit of Measure (FIXED)
+            'item_uom_assignments',
+            'item_id',
+            'uom_id'
         )
+            ->using(ItemUomAssignment::class)
             ->withPivot(['uom_type', 'conversion_factor', 'is_default'])
             ->withTimestamps();
     }
-    //    public function uoms(): BelongsToMany
-    //    {
-    //        return $this->belongsToMany(UnitOfMeasure::class, 'item_uom_assignments')
-    //            ->withPivot(['uom_type', 'conversion_factor', 'is_default'])
-    //            ->withTimestamps();
-    //    }
+
+// Remove the duplicate unitOfMeasures() method — it's identical to uoms()
+
+//    public function uoms(): BelongsToMany
+//    {
+//        return $this->belongsToMany(
+//            UnitOfMeasure::class,
+//            'item_uom_assignments', // Pivot table
+//            'item_id',             // Foreign key on pivot for Item
+//            'uom_id'               // Foreign key on pivot for Unit of Measure (FIXED)
+//        )
+//            ->withPivot(['uom_type', 'conversion_factor', 'is_default'])
+//            ->withTimestamps();
+//    }
+
+    public function primaryCategory(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'item_category_id');
+    }
+
+    public function categoryAssignments(): HasMany
+    {
+        return $this->hasMany(ItemCategoryAssignment::class);
+    }
 
     public function unitOfMeasures(): BelongsToMany
     {
@@ -332,5 +362,10 @@ class Item extends Model
     public function scopeFinishedGoods($query)
     {
         return $query->where('item_type', ItemType::FINISHED_GOOD);
+    }
+
+    public function vatProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatProductPostingGroup::class);
     }
 }

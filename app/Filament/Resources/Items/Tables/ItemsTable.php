@@ -57,7 +57,7 @@ class ItemsTable
                     ->summarize(Sum::make()->label('Total Stock'))
                     ->sortable(),
 
-                TextColumn::make('uom.uom_code')
+                TextColumn::make('uoms.uom_code')
                     ->label('Base UoM')
                     ->sortable()
                     ->toggleable(),
