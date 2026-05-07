@@ -82,11 +82,11 @@ class CustomerForm
                     ->schema([
                         Select::make('general_business_posting_group_id')
                             ->label('Gen. Bus. Posting Group')
-                            ->relationship('generalBusinessPostingGroup', 'id')
+                            ->relationship('generalBusinessPostingGroup', 'description')
                             ->required(),
                         Select::make('customer_posting_group_id')
                             ->label('Customer Posting Group')
-                            ->relationship('customerPostingGroup', 'id')
+                            ->relationship('customerPostingGroup', 'description')
                             ->required(),
                         TextInput::make('vat_bus_posting_group')
                             ->label('VAT Bus. Posting Group'),

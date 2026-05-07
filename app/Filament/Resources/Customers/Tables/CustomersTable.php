@@ -46,6 +46,7 @@ class CustomersTable
                 TextColumn::make('location.name')
                     ->placeholder('N/A'),
             ])
+            ->defaultSort('created_at', 'desc')
             ->filters([
                 TernaryFilter::make('blocked')
                     ->label('Blocked Status'),
