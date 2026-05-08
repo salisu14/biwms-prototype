@@ -37,6 +37,33 @@ class CustomerPostingGroup extends Model
         return $this->belongsTo(ChartOfAccount::class, 'receivables_account_id');
     }
 
+    public function paymentDiscDebitAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'payment_disc_debit_account_id');
+    }
+
+    public function paymentDiscCreditAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'payment_disc_credit_account_id');
+    }
+
+    public function invoiceRoundingAccount(): BelongsTo
+    {
+
+        return $this->belongsTo(ChartOfAccount::class, 'invoice_rounding_account_id');
+    }
+
+    public function debitRoundingAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'debit_rounding_account_id');
+    }
+
+    public function creditRoundingAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'credit_rounding_account_id');
+    }
+
+
     public function customers(): HasMany
     {
         return $this->hasMany(Customer::class);

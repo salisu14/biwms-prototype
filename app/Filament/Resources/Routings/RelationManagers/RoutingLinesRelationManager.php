@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Routings\RelationManagers;
 
 use App\Filament\Resources\Routings\RoutingResource;
+use App\Models\Manufacturing\RoutingLine;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -10,12 +11,10 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -25,100 +24,159 @@ class RoutingLinesRelationManager extends RelationManager
 
     protected static ?string $relatedResource = RoutingResource::class;
 
+    protected static ?string $navigationIcon = 'heroicon-o-collection';
+    protected static ?string $pluralLabel = 'Routing Lines';
+
+    protected static ?string $title = 'Routing Lines';
+
     public function form(Schema $schema): Schema
     {
         return $schema
             ->schema([
-                Grid::make(4)->schema([
-                    TextInput::make('operation_no')
-                        ->label('Operation No.')
-                        ->numeric()
-                        ->required()
-                        ->default(fn ($record) => $record ? $record->operation_no : (static::getNextOperationNumber($this->getOwnerRecord()->lines->max('operation_no') ?? 0))),
-
-                    TextInput::make('description')
-                        ->label('Description')
-                        ->required()
-                        ->columnSpan(2),
-
-                    Select::make('type') // Assuming RoutingLine has a type
-                        ->label('Type')
-                        ->options([
-                            'MACHINE' => 'Machine Center',
-                            'MANUAL' => 'Manual',
-                            'VENDOR' => 'Vendor',
-                        ])
-                        ->default('MANUAL'),
-
-                    Toggle::make('blocking')
-                        ->label('Blocking')
-                        ->default(false),
-                ]),
-
-                Section::make('Times & Costs')
-                    ->description('Setup and run times for this operation.')
+                Section::make('General Information')
+                    ->columns(12)
                     ->schema([
-                        Grid::make(3)->schema([
-                            Grid::make(2)->schema([
-                                TextInput::make('setup_time')
-                                    ->label('Setup Time')
-                                    ->numeric()
-                                    ->default(0),
-                                Select::make('setup_time_unit')
-                                    ->label('Setup UOM')
-                                    ->relationship('setupTimeUnit', 'uom_code')
-                                    ->searchable()
-                                    ->preload()
-                                    ->default('MINUTES'),
-                            ]),
+                        TextInput::make('operation_no')
+                            ->label('Op. No.')
+                            ->numeric()
+                            ->required()
+                            ->default(fn() => static::getNextOperationNumber($this->getOwnerRecord()->lines->max('operation_no') ?? 0))
+                            ->columnSpan(2),
 
-                            Grid::make(2)->schema([
-                                TextInput::make('run_time')
-                                    ->label('Run Time')
-                                    ->numeric()
-                                    ->required(),
-                                Select::make('run_time_unit')
-                                    ->label('Run UOM')
-                                    ->relationship('runTimeUnit', 'uom_code')
-                                    ->searchable()
-                                    ->preload()
-                                    ->default('MINUTES'),
-                            ]),
+                        TextInput::make('description')
+                            ->label('Operation Description')
+                            ->required()
+                            ->placeholder('e.g., Cutting, Assembly, QC...')
+                            ->columnSpan(7),
 
-                            TextInput::make('wait_time')
-                                ->label('Wait Time')
-                                ->numeric()
-                                ->suffix('mins')
-                                ->default(0),
-
-                            TextInput::make('move_time')
-                                ->label('Move Time')
-                                ->numeric()
-                                ->suffix('mins')
-                                ->default(0),
-
-                            TextInput::make('cost')
-                                ->label('Cost')
-                                ->numeric()
-                                ->prefix('$')
-                                ->default(0),
-                        ]),
+                        TextInput::make('routing_link_code')
+                            ->label('Link Code')
+                            ->helperText('Connects to BOM components')
+                            ->columnSpan(3),
                     ]),
 
-                Section::make('Work Center & Next Operations')
+                Section::make('Work & Machine Centers')
+                    ->columns(2)
                     ->schema([
-                        Grid::make(2)->schema([
-                            Select::make('work_center_id')
-                                ->label('Work Center')
-                                ->relationship(name: 'workCenter', titleAttribute: 'name')
-                                ->searchable()
-                                ->preload()
-                                ->required(),
+                        Select::make('work_center_id')
+                            ->label('Work Center')
+                            ->relationship(name: 'workCenter', titleAttribute: 'name')
+                            ->searchable()
+                            ->preload()
+                            ->required(),
 
-                            TextInput::make('next_operation_code')
-                                ->label('Next Operation Code')
-                                ->helperText('Code of the next routing link'),
-                        ]),
+                        Select::make('machine_center_id')
+                            ->label('Machine Center')
+                            ->relationship(name: 'machineCenter', titleAttribute: 'name')
+                            ->searchable()
+                            ->preload(),
+                    ]),
+
+                // Section 1: Times & Capacities - Full Width, 2 columns for larger fields
+                Section::make('Times & Capacities')
+                    ->description('Production duration and capacity.')
+                    ->columns(2)
+                    ->schema([
+                        // Setup Time - Full width row
+                        Group::make()->schema([
+                            TextInput::make('setup_time')
+                                ->numeric()
+                                ->label('Setup Time')
+                                ->default(0)
+                                ->columnSpan(2),
+                            Select::make('setup_time_unit')
+                                ->label('Unit')
+                                ->relationship('setupTimeUnit', 'uom_code')
+                                ->default('MINUTES')
+                                ->columnSpan(1),
+                        ])->columns(3)->columnSpanFull(),
+
+                        // Run Time - Full width row
+                        Group::make()->schema([
+                            TextInput::make('run_time')
+                                ->numeric()
+                                ->label('Run Time')
+                                ->required()
+                                ->default(0)
+                                ->columnSpan(2),
+                            Select::make('run_time_unit')
+                                ->label('Unit')
+                                ->relationship('runTimeUnit', 'uom_code')
+                                ->default('MINUTES')
+                                ->columnSpan(1),
+                        ])->columns(3)->columnSpanFull(),
+
+                        // Row 1: Wait | Move | Queue
+                        TextInput::make('wait_time')
+                            ->label('Wait Time')
+                            ->numeric()
+                            ->suffix('mins'),
+
+                        TextInput::make('move_time')
+                            ->label('Move Time')
+                            ->numeric()
+                            ->suffix('mins'),
+
+                        TextInput::make('queue_time')
+                            ->label('Queue Time')
+                            ->numeric()
+                            ->suffix('mins'),
+
+                        // Row 2: Concurrent Cap | Lot Size | Fixed Scrap
+                        TextInput::make('concurrent_capacities')
+                            ->label('Concurrent Cap.')
+                            ->numeric()
+                            ->default(1),
+
+                        TextInput::make('lot_size')
+                            ->label('Lot Size')
+                            ->numeric()
+                            ->default(1),
+
+                        TextInput::make('fixed_scrap_quantity')
+                            ->label('Fixed Scrap')
+                            ->numeric(),
+                    ]),
+
+                // Section 2: Costing & Outsourcing - Full Width, 2 columns for larger fields
+                Section::make('Costing & Outsourcing')
+                    ->description('Financial and external vendor details.')
+                    ->columns(2)
+                    ->schema([
+                        // Row 1: Direct Cost | Indirect %
+                        TextInput::make('direct_unit_cost')
+                            ->label('Direct Unit Cost')
+                            ->numeric()
+                            ->prefix('$'),
+
+                        TextInput::make('indirect_cost_percent')
+                            ->label('Indirect %')
+                            ->numeric()
+                            ->suffix('%'),
+
+                        // Row 2: Overhead Rate | Scrap %
+                        TextInput::make('overhead_rate')
+                            ->label('Overhead Rate')
+                            ->numeric(),
+
+                        TextInput::make('scrap_factor_percent')
+                            ->label('Scrap %')
+                            ->numeric()
+                            ->suffix('%'),
+
+                        // Row 3: Subcontractor (full width for long names)
+                        Select::make('subcontractor_id')
+                            ->label('Subcontractor (Vendor)')
+                            ->relationship('routing', 'created_by')
+                            ->searchable()
+                            ->columnSpanFull(),
+
+                        // Row 4: Subcontracting Cost (full width)
+                        TextInput::make('subcontracting_cost')
+                            ->label('Subcon. Cost')
+                            ->numeric()
+                            ->prefix('$')
+                            ->columnSpanFull(),
                     ]),
             ]);
     }
@@ -129,52 +187,42 @@ class RoutingLinesRelationManager extends RelationManager
             ->defaultSort('operation_no', 'asc')
             ->columns([
                 TextColumn::make('operation_no')
-                    ->label('No.')
+                    ->label('Op.')
                     ->sortable()
                     ->weight('bold'),
 
                 TextColumn::make('description')
                     ->searchable()
-                    ->sortable(),
+                    ->wrap()
+                    ->description(fn(RoutingLine $record) => $record->routing_link_code ? "Link: {$record->routing_link_code}" : null),
 
-                TextColumn::make('type')
-                    ->label('Type')
-                    ->badge()
-                    ->color(fn ($state) => match ($state) {
-                        'MACHINE' => 'primary',
-                        'MANUAL' => 'warning',
-                        'VENDOR' => 'success',
-                        default => 'gray',
-                    }),
-
-                TextColumn::make('work_center.name')
+                TextColumn::make('workCenter.name')
                     ->label('Work Center')
                     ->toggleable(),
 
                 TextColumn::make('setup_time')
                     ->label('Setup')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->formatStateUsing(fn($state, $record) => "{$state} {$record->setup_time_unit}")
+                    ->toggleable(),
 
                 TextColumn::make('run_time')
-                    ->label('Run Time')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->label('Run')
+                    ->formatStateUsing(fn($state, $record) => "{$state} {$record->run_time_unit}")
+                    ->toggleable(),
 
-                TextColumn::make('cost')
+                TextColumn::make('direct_unit_cost')
+                    ->label('Cost')
                     ->money('USD')
                     ->toggleable(),
 
-                IconColumn::make('blocking')
-                    ->label('Blocking')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-stop')
-                    ->falseIcon('heroicon-o-arrow-right')
-                    ->trueColor('danger')
-                    ->falseColor('success'),
+                TextColumn::make('scrap_factor_percent')
+                    ->label('Scrap %')
+                    ->suffix('%')
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
-                CreateAction::make(),
+                CreateAction::make()
+                    ->label('Create Routing Line'),
             ])
             ->recordActions([
                 EditAction::make(),
