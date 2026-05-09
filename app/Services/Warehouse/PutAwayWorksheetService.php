@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace App\Services\Warehouse;
 
 use App\Enums\BinType;
-use App\Enums\ZoneType;
 use App\Enums\WarehouseActivityType;
 use App\Enums\WarehouseDocumentStatus;
+use App\Enums\ZoneType;
 use App\Models\Bin;
 use App\Models\Item;
 use App\Models\Manufacturing\ProductionOrderLine;
 use App\Models\PurchaseOrderLine;
 use App\Models\WarehouseActivity;
 use App\Models\WarehouseActivityLine;
+use App\Models\WarehouseSetup;
 use App\Services\NumberSeriesService;
 use Illuminate\Support\Facades\DB;
 
@@ -49,7 +50,7 @@ class PutAwayWorksheetService
             );
 
             $activity = WarehouseActivity::create([
-                'no' => $this->numberSeriesService->getNextNo('PUTAWAY'),
+                'no' => $this->getPutAwayDocumentNo(),
                 'activity_type' => WarehouseActivityType::PUT_AWAY,
                 'status' => WarehouseDocumentStatus::OPEN,
                 'location_id' => $location->id,
@@ -122,7 +123,7 @@ class PutAwayWorksheetService
             );
 
             $activity = WarehouseActivity::create([
-                'no' => $this->numberSeriesService->getNextNo('PUTAWAY'),
+                'no' => $this->getPutAwayDocumentNo(),
                 'activity_type' => WarehouseActivityType::PUT_AWAY,
                 'status' => WarehouseDocumentStatus::OPEN,
                 'location_id' => $location->id,
@@ -186,5 +187,26 @@ class PutAwayWorksheetService
         $uomRecord = $item->unitOfMeasures()->where('code', $uom)->first();
 
         return $qty * ($uomRecord?->qty_per_base_unit ?? 1);
+    }
+
+    private function getPutAwayDocumentNo(): string
+    {
+        $configuredSeries = WarehouseSetup::instance()->internal_putaway_nos;
+        $candidateSeriesCodes = array_filter([
+            $configuredSeries,
+            'PUTAWAY',
+            'WH-PUTAWAY',
+        ]);
+
+        foreach (array_unique($candidateSeriesCodes) as $seriesCode) {
+            $documentNo = $this->numberSeriesService->tryGetNextNo($seriesCode);
+            if ($documentNo !== null) {
+                return $documentNo;
+            }
+        }
+
+        throw new \RuntimeException(
+            'No usable Put-away number series found. Configure Warehouse Setup Internal Put-away Nos. or create number series PUTAWAY.'
+        );
     }
 }

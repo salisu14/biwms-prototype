@@ -15,6 +15,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -210,6 +211,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                         ->label('Post Output')
                         ->icon('heroicon-m-archive-box')
                         ->color('success')
+                        ->visible(fn ($record) => (float) ($record->productionOrder?->remaining_quantity ?? 0) > 0)
                         ->schema([
                             TextInput::make('quantity')
                                 ->numeric()
@@ -217,7 +219,19 @@ class ProductionOrderLineRelationManager extends RelationManager
                                 ->default(fn ($record) => $record->quantity - ($record->produced_quantity ?? 0)),
                         ])
                         ->action(function ($record, array $data) {
-                            app(ProductionOrderService::class)->postOutput($record->productionOrder, $data['quantity'], auth()->id());
+                            try {
+                                app(ProductionOrderService::class)->postOutput($record->productionOrder, $data['quantity'], auth()->id());
+                                Notification::make()
+                                    ->title('Output successfully posted')
+                                    ->success()
+                                    ->send();
+                            } catch (\Exception $exception) {
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body($exception->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
                         }),
 
                     DeleteAction::make(),

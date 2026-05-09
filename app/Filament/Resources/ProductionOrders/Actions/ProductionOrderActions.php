@@ -50,7 +50,7 @@ class ProductionOrderActions
             ->label('Post Output')
             ->icon('heroicon-m-archive-box')
             ->color('info')
-            ->visible(fn ($record) => $record->status === ProductionOrderStatus::RELEASED)
+            ->visible(fn ($record) => $record->status === ProductionOrderStatus::RELEASED && (float) $record->remaining_quantity > 0)
             ->schema([
                 TextInput::make('quantity')
                     ->numeric()

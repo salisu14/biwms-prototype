@@ -22,6 +22,7 @@ use App\Services\Warehouse\PickWorksheetService;
 use App\Services\Warehouse\PutAwayWorksheetService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ProductionOrderService
 {
@@ -54,11 +55,9 @@ class ProductionOrderService
     public function release(ProductionOrder $order, int $userId): ProductionOrder
     {
         DB::transaction(function () use ($order, $userId) {
-            $this->validateBeforeRelease($order);
-
             $this->changeStatus($order, ProductionOrderStatus::RELEASED, $userId);
 
-            if ($order->flushing_method === 'FORWARD') {
+            if (str_contains((string) $order->flushing_method, 'FORWARD')) {
                 $this->forwardFlush($order, $userId);
             }
 
@@ -164,6 +163,10 @@ class ProductionOrderService
 
                 $component->actual_quantity_consumed += $qty;
                 $component->actual_scrap_quantity += $scrapQty;
+                $component->remaining_quantity = max(
+                    0,
+                    (float) $component->expected_quantity - (float) $component->actual_quantity_consumed
+                );
                 $component->save();
 
                 // Update CapEx Project if linked
@@ -243,7 +246,16 @@ class ProductionOrderService
             // Create Put-away for finished goods
             $orderLines = $order->lines()->where('item_id', $order->item_id)->get();
             foreach ($orderLines as $orderLine) {
-                $this->putAwayService->createPutAwayFromProductionOutput($orderLine, $quantity);
+                try {
+                    $this->putAwayService->createPutAwayFromProductionOutput($orderLine, $quantity);
+                } catch (\RuntimeException $exception) {
+                    Log::warning('Put-away generation skipped during production output posting', [
+                        'production_order_id' => $order->id,
+                        'production_order_no' => $order->document_number,
+                        'production_order_line_id' => $orderLine->id,
+                        'reason' => $exception->getMessage(),
+                    ]);
+                }
             }
         });
     }
@@ -445,8 +457,7 @@ class ProductionOrderService
             $order->lines()->delete();
         }
 
-        $order->lines()->create([
-            'line_number' => 10000,
+        $lineData = [
             'item_id' => $order->item_id,
             'description' => $order->description,
             'quantity' => $order->quantity,
@@ -455,6 +466,20 @@ class ProductionOrderService
             'due_date' => $order->due_date,
             'production_bom_id' => $order->production_bom_id,
             'routing_id' => $order->routing_id,
+        ];
+
+        $existingLine = $order->lines()->where('line_number', 10000)->first();
+
+        if ($existingLine) {
+            $existingLine->fill($lineData);
+            $existingLine->save();
+
+            return;
+        }
+
+        $order->lines()->create([
+            'line_number' => 10000,
+            ...$lineData,
         ]);
     }
 
@@ -484,11 +509,18 @@ class ProductionOrderService
             return;
         }
 
-        $lines = $version ? $version->lines : $bom->lines;
+        $lines = $version
+            ? $version->lines()->with('item')->get()
+            : $bom->lines()->with('item')->get();
 
         $lineNo = 10000;
         foreach ($lines as $bomLine) {
+            if (! $bomLine->item_id) {
+                continue;
+            }
+
             $expectedQty = $bomLine->quantity_per * $order->quantity * (1 + $bomLine->scrap_percent / 100);
+            $qtyPerUnitOfMeasure = (float) ($bomLine->item?->qty_per_unit_of_measure ?? 1);
 
             $order->components()->create([
                 'line_number' => $lineNo,
@@ -497,7 +529,8 @@ class ProductionOrderService
                 'unit_of_measure_code' => $bomLine->unit_of_measure_code,
                 'quantity_per' => $bomLine->quantity_per,
                 'expected_quantity' => $expectedQty,
-                'expected_quantity_base' => $expectedQty * $bomLine->item->qty_per_unit_of_measure,
+                'expected_quantity_base' => $expectedQty * $qtyPerUnitOfMeasure,
+                'remaining_quantity' => $expectedQty,
                 'scrap_percent' => $bomLine->scrap_percent,
                 'routing_link_code' => $bomLine->routing_link_code,
                 'flushing_method' => $bomLine->flushing_method ?? $order->flushing_method,
@@ -600,7 +633,7 @@ class ProductionOrderService
     protected function backwardFlushComponents(ProductionOrder $order, \DateTime $postingDate, int $userId): void
     {
         foreach ($order->components as $component) {
-            if ($component->flushing_method !== 'BACKWARD') {
+            if (! str_contains((string) $component->flushing_method, 'BACKWARD')) {
                 continue;
             }
 
@@ -620,7 +653,7 @@ class ProductionOrderService
     protected function forwardFlush(ProductionOrder $order, int $userId): void
     {
         foreach ($order->components as $component) {
-            if ($component->flushing_method !== 'FORWARD') {
+            if (! str_contains((string) $component->flushing_method, 'FORWARD')) {
                 continue;
             }
 
@@ -641,11 +674,21 @@ class ProductionOrderService
             throw new \Exception('Production order has no components');
         }
 
+        $remainingByItemAndLocation = [];
+
         foreach ($order->components as $component) {
-            $available = $this->getAvailableInventory($component->item_id, $component->location_code);
-            if ($available < $component->expected_quantity) {
-                throw new \Exception("Insufficient inventory for {$component->item->description}");
+            $key = $component->item_id.'|'.$component->location_code;
+
+            if (! array_key_exists($key, $remainingByItemAndLocation)) {
+                $remainingByItemAndLocation[$key] = $this->getAvailableInventory($component->item_id, $component->location_code);
             }
+
+            if ($remainingByItemAndLocation[$key] < $component->expected_quantity) {
+                $itemDescription = $component->item?->description ?? "item #{$component->item_id}";
+                throw new \Exception("Insufficient inventory for {$itemDescription}");
+            }
+
+            $remainingByItemAndLocation[$key] -= (float) $component->expected_quantity;
         }
     }
 
