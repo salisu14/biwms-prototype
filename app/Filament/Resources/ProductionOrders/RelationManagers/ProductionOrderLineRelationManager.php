@@ -106,6 +106,13 @@ class ProductionOrderLineRelationManager extends RelationManager
                             ->live()
                             ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', $state * ($get('quantity') ?? 0))
                             ),
+
+                        TextInput::make('cost_amount')
+                            ->label('Total Cost')
+                            ->numeric()
+                            ->prefix('$')
+                            ->disabled()
+                            ->dehydrated(),
                     ]),
 
                 Section::make('Scheduling & Warehouse')
@@ -146,7 +153,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                     ->trueColor('success')
                     ->falseColor('warning'),
 
-                TextColumn::make('item.item_no')
+                TextColumn::make('item.item_code')
                     ->label('Item No')
                     ->sortable()
                     ->searchable(),
@@ -203,7 +210,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                         ->label('Post Output')
                         ->icon('heroicon-m-archive-box')
                         ->color('success')
-                        ->form([
+                        ->schema([
                             TextInput::make('quantity')
                                 ->numeric()
                                 ->required()

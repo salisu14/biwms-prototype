@@ -13,11 +13,14 @@ use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\Manufacturing\CapacityLedgerEntry;
+use App\Models\Manufacturing\ProductionBomVersion;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Manufacturing\RoutingVersion;
 use App\Services\Inventory\CostingService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PickWorksheetService;
 use App\Services\Warehouse\PutAwayWorksheetService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class ProductionOrderService
@@ -202,6 +205,9 @@ class ProductionOrderService
 
         DB::transaction(function () use ($order, $quantity, $postingDate, $routingLineId) {
             $expectedUnitCost = $order->cost_rollup ?? $order->unit_cost ?? 0;
+            $locationId = Location::query()
+                ->where('code', $order->location_code)
+                ->value('id');
 
             ItemLedgerEntry::create([
                 'entry_type' => ItemLedgerEntryType::OUTPUT,
@@ -214,6 +220,7 @@ class ProductionOrderService
                 'document_line_number' => $order->lines()->firstWhere('item_id', $order->item_id)?->line_number ?? 10000,
                 'source_id' => $order->id,
                 'source_type' => ProductionOrder::class,
+                'location_id' => $locationId,
                 'location_code' => $order->location_code,
                 'unit_cost' => $expectedUnitCost,
                 'cost_amount_expected' => $quantity * $expectedUnitCost,
@@ -320,11 +327,17 @@ class ProductionOrderService
         $postingDate = $postingDate ?? now();
 
         DB::transaction(function () use ($order, $userId, $postingDate) {
-            $this->validateBeforeFinish($order);
-
             if ($order->flushing_method === 'BACKWARD') {
                 $this->backwardFlushComponents($order, $postingDate, $userId);
             }
+
+            $remainingOutputQuantity = (float) $order->fresh()->remaining_quantity;
+            if ($remainingOutputQuantity > 0) {
+                $this->postOutput($order->fresh(), $remainingOutputQuantity, $userId, $postingDate);
+                $order = $order->fresh();
+            }
+
+            $this->validateBeforeFinish($order);
 
             $totalActualCost = $order->total_actual_cost;
             $totalOutput = $order->itemLedgerEntries()
@@ -465,7 +478,7 @@ class ProductionOrderService
         }
 
         $bom = $order->productionBom;
-        $version = $order->production_bom_version_id ? \App\Models\Manufacturing\ProductionBomVersion::find($order->production_bom_version_id) : null;
+        $version = $order->production_bom_version_id ? ProductionBomVersion::find($order->production_bom_version_id) : null;
 
         if (! $bom) {
             return;
@@ -517,7 +530,7 @@ class ProductionOrderService
         }
 
         $routing = $order->routing;
-        $version = $order->routing_version_id ? \App\Models\Manufacturing\RoutingVersion::find($order->routing_version_id) : null;
+        $version = $order->routing_version_id ? RoutingVersion::find($order->routing_version_id) : null;
 
         if (! $routing) {
             return;
@@ -557,7 +570,7 @@ class ProductionOrderService
                     $availableStart = $workCenter->getNextWorkingDateTime($currentDateTime, true);
                     if ($availableStart) {
                         $routingLine->starting_date_time = $availableStart;
-                        $routingLine->ending_date_time = \Carbon\Carbon::instance($availableStart)->addMinutes($routingLine->total_time_minutes);
+                        $routingLine->ending_date_time = Carbon::instance($availableStart)->addMinutes($routingLine->total_time_minutes);
                         $routingLine->save();
                         $currentDateTime = $routingLine->ending_date_time->copy()->addMinutes($routingLine->move_time);
                     }
@@ -572,7 +585,7 @@ class ProductionOrderService
                     $availableEnd = $workCenter->getNextWorkingDateTime($currentDateTime, false);
                     if ($availableEnd) {
                         $routingLine->ending_date_time = $availableEnd;
-                        $routingLine->starting_date_time = \Carbon\Carbon::instance($availableEnd)->subMinutes($routingLine->total_time_minutes);
+                        $routingLine->starting_date_time = Carbon::instance($availableEnd)->subMinutes($routingLine->total_time_minutes);
                         $routingLine->save();
                         $currentDateTime = $routingLine->starting_date_time->copy()->subMinutes($routingLine->wait_time);
                     }
@@ -797,7 +810,7 @@ class ProductionOrderService
                 'posting_date' => $postingDate,
                 'document_date' => $postingDate,
                 'document_type' => DocumentType::PRODUCTION_ORDER,
-            'document_number' => $order->document_number,
+                'document_number' => $order->document_number,
                 'description' => $description.' (Overhead)',
                 'sourceable_type' => ProductionOrder::class,
                 'sourceable_id' => $order->id,

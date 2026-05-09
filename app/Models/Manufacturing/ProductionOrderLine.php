@@ -150,4 +150,39 @@ class ProductionOrderLine extends Model
     {
         return $this->remaining_quantity <= 0;
     }
+
+    protected static function booted(): void
+    {
+        static::creating(function (ProductionOrderLine $line): void {
+            if (! $line->line_number) {
+                $currentMaxLineNumber = static::query()
+                    ->where('production_order_id', $line->production_order_id)
+                    ->max('line_number');
+
+                $line->line_number = ($currentMaxLineNumber ?? 0) + 10000;
+            }
+
+            if ($line->quantity_base === null) {
+                $line->quantity_base = $line->quantity ?? 0;
+            }
+
+            $line->cost_amount = (float) ($line->quantity ?? 0) * (float) ($line->unit_cost ?? 0);
+
+            if (! $line->created_by) {
+                $line->created_by = auth()->id();
+            }
+        });
+
+        static::updating(function (ProductionOrderLine $line): void {
+            $line->last_modified_by = auth()->id();
+
+            if ($line->isDirty('quantity') && ! $line->isDirty('quantity_base')) {
+                $line->quantity_base = $line->quantity ?? 0;
+            }
+
+            if ($line->isDirty('quantity') || $line->isDirty('unit_cost')) {
+                $line->cost_amount = (float) ($line->quantity ?? 0) * (float) ($line->unit_cost ?? 0);
+            }
+        });
+    }
 }
