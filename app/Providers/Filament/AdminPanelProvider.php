@@ -38,6 +38,7 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Amber,
             ])
             ->spa(hasPrefetching: true)
+            ->sidebarCollapsibleOnDesktop()
             ->brandName('BIFLI Group')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
@@ -338,6 +339,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/item-category-assignments')
                                     ->isActiveWhen(fn () => request()->is('admin/item-category-assignments*')),
 
+                                NavigationItem::make('Item UOM Assignments')
+                                    ->icon('heroicon-o-arrows-up-down')
+                                    ->url('/admin/item-uom-assignments')
+                                    ->isActiveWhen(fn () => request()->is('admin/item-uom-assignments*')),
+
                                 NavigationItem::make('Locations')
                                     ->icon('heroicon-o-map-pin')
                                     ->url('/admin/locations')
@@ -553,7 +559,7 @@ class AdminPanelProvider extends PanelProvider
                                         ->isActiveWhen(fn () => request()->is('admin/payroll-documents*')),
 
                                     NavigationItem::make('Tax Tables')
-                                        ->icon('heroicon-o-square-2-stack')
+                                        ->icon('heroicon-o-table-cells')
                                         ->url('/admin/tax-tables')
                                         ->isActiveWhen(fn () => request()->is('admin/tax-tables*')),
 
