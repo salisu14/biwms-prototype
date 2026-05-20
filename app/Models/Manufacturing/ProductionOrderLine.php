@@ -12,6 +12,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ProductionOrderLine extends Model
 {
@@ -89,6 +90,12 @@ class ProductionOrderLine extends Model
     public function routing(): BelongsTo
     {
         return $this->belongsTo(Routing::class);
+    }
+
+    public function routingLine(): HasOne
+    {
+        return $this->hasOne(ProductionOrderRoutingLine::class, 'production_order_id', 'production_order_id')
+            ->orderBy('line_number');
     }
 
     public function creator(): BelongsTo

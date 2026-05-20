@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\Routings\RelationManagers;
 
 use App\Filament\Resources\Routings\RoutingResource;
+use App\Models\Manufacturing\MachineCenter;
 use App\Models\Manufacturing\RoutingLine;
+use App\Models\Manufacturing\WorkCenter;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -14,8 +16,9 @@ use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Tables;
 use Filament\Tables\Table;
 
 class RoutingLinesRelationManager extends RelationManager
@@ -24,7 +27,8 @@ class RoutingLinesRelationManager extends RelationManager
 
     protected static ?string $relatedResource = RoutingResource::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-collection';
+    protected static ?string $navigationIcon = 'heroicon-o-queue-list';
+
     protected static ?string $pluralLabel = 'Routing Lines';
 
     protected static ?string $title = 'Routing Lines';
@@ -40,7 +44,7 @@ class RoutingLinesRelationManager extends RelationManager
                             ->label('Op. No.')
                             ->numeric()
                             ->required()
-                            ->default(fn() => static::getNextOperationNumber($this->getOwnerRecord()->lines->max('operation_no') ?? 0))
+                            ->default(fn () => static::getNextOperationNumber($this->getOwnerRecord()->lines->max('operation_no') ?? 0))
                             ->columnSpan(2),
 
                         TextInput::make('description')
@@ -59,25 +63,50 @@ class RoutingLinesRelationManager extends RelationManager
                     ->columns(2)
                     ->schema([
                         Select::make('work_center_id')
-                            ->label('Work Center')
+                            ->label('Work Center (Where)')
                             ->relationship(name: 'workCenter', titleAttribute: 'name')
                             ->searchable()
                             ->preload()
-                            ->required(),
+                            ->required()
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                if ($state) {
+                                    $workCenter = WorkCenter::find($state);
+                                    if ($workCenter) {
+                                        // Auto-populate default cost structures from the master card
+                                        $set('direct_unit_cost', $workCenter->direct_unit_cost ?? 0);
+                                        $set('indirect_cost_percent', $workCenter->indirect_cost_percent ?? 0);
+                                        $set('overhead_rate', $workCenter->overhead_rate ?? 0);
+                                    }
+                                }
+                            })
+                            ->helperText('Defines the default cost and capacity parameters for this step.'),
 
                         Select::make('machine_center_id')
-                            ->label('Machine Center')
+                            ->label('Machine Center (Specific Machine)')
                             ->relationship(name: 'machineCenter', titleAttribute: 'name')
                             ->searchable()
-                            ->preload(),
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                if ($state) {
+                                    $machineCenter = MachineCenter::find($state);
+                                    if ($machineCenter) {
+                                        // Specific machine centers can override general work center costs
+                                        $set('direct_unit_cost', $machineCenter->direct_unit_cost ?? 0);
+                                        $set('indirect_cost_percent', $machineCenter->indirect_cost_percent ?? 0);
+                                        $set('overhead_rate', $machineCenter->overhead_rate ?? 0);
+                                    }
+                                }
+                            })
+                            ->helperText('Optional. Selection will override general Work Center costs.'),
                     ]),
 
-                // Section 1: Times & Capacities - Full Width, 2 columns for larger fields
                 Section::make('Times & Capacities')
                     ->description('Production duration and capacity.')
                     ->columns(2)
                     ->schema([
-                        // Setup Time - Full width row
+                        // Setup Time - Wide Row Layout
                         Group::make()->schema([
                             TextInput::make('setup_time')
                                 ->numeric()
@@ -91,7 +120,7 @@ class RoutingLinesRelationManager extends RelationManager
                                 ->columnSpan(1),
                         ])->columns(3)->columnSpanFull(),
 
-                        // Run Time - Full width row
+                        // Run Time - Wide Row Layout
                         Group::make()->schema([
                             TextInput::make('run_time')
                                 ->numeric()
@@ -106,7 +135,6 @@ class RoutingLinesRelationManager extends RelationManager
                                 ->columnSpan(1),
                         ])->columns(3)->columnSpanFull(),
 
-                        // Row 1: Wait | Move | Queue
                         TextInput::make('wait_time')
                             ->label('Wait Time')
                             ->numeric()
@@ -122,7 +150,6 @@ class RoutingLinesRelationManager extends RelationManager
                             ->numeric()
                             ->suffix('mins'),
 
-                        // Row 2: Concurrent Cap | Lot Size | Fixed Scrap
                         TextInput::make('concurrent_capacities')
                             ->label('Concurrent Cap.')
                             ->numeric()
@@ -135,43 +162,43 @@ class RoutingLinesRelationManager extends RelationManager
 
                         TextInput::make('fixed_scrap_quantity')
                             ->label('Fixed Scrap')
-                            ->numeric(),
+                            ->numeric()
+                            ->default(0),
                     ]),
 
-                // Section 2: Costing & Outsourcing - Full Width, 2 columns for larger fields
                 Section::make('Costing & Outsourcing')
                     ->description('Financial and external vendor details.')
                     ->columns(2)
                     ->schema([
-                        // Row 1: Direct Cost | Indirect %
                         TextInput::make('direct_unit_cost')
                             ->label('Direct Unit Cost')
                             ->numeric()
-                            ->prefix('$'),
+                            ->prefix('$')
+                            ->helperText('Pulled automatically from selected Work/Machine center.'),
 
                         TextInput::make('indirect_cost_percent')
-                            ->label('Indirect %')
+                            ->label('Indirect Cost %')
                             ->numeric()
-                            ->suffix('%'),
+                            ->suffix('%')
+                            ->helperText('Pulled automatically from selected Work/Machine center.'),
 
-                        // Row 2: Overhead Rate | Scrap %
                         TextInput::make('overhead_rate')
                             ->label('Overhead Rate')
-                            ->numeric(),
+                            ->numeric()
+                            ->prefix('$')
+                            ->helperText('Pulled automatically from selected Work/Machine center.'),
 
                         TextInput::make('scrap_factor_percent')
                             ->label('Scrap %')
                             ->numeric()
                             ->suffix('%'),
 
-                        // Row 3: Subcontractor (full width for long names)
                         Select::make('subcontractor_id')
                             ->label('Subcontractor (Vendor)')
                             ->relationship('routing', 'created_by')
                             ->searchable()
                             ->columnSpanFull(),
 
-                        // Row 4: Subcontracting Cost (full width)
                         TextInput::make('subcontracting_cost')
                             ->label('Subcon. Cost')
                             ->numeric()
@@ -186,36 +213,36 @@ class RoutingLinesRelationManager extends RelationManager
         return $table
             ->defaultSort('operation_no', 'asc')
             ->columns([
-                TextColumn::make('operation_no')
+                Tables\Columns\TextColumn::make('operation_no')
                     ->label('Op.')
                     ->sortable()
                     ->weight('bold'),
 
-                TextColumn::make('description')
+                Tables\Columns\TextColumn::make('description')
                     ->searchable()
                     ->wrap()
-                    ->description(fn(RoutingLine $record) => $record->routing_link_code ? "Link: {$record->routing_link_code}" : null),
+                    ->description(fn (RoutingLine $record) => $record->routing_link_code ? "Link: {$record->routing_link_code}" : null),
 
-                TextColumn::make('workCenter.name')
+                Tables\Columns\TextColumn::make('workCenter.name')
                     ->label('Work Center')
                     ->toggleable(),
 
-                TextColumn::make('setup_time')
+                Tables\Columns\TextColumn::make('setup_time')
                     ->label('Setup')
-                    ->formatStateUsing(fn($state, $record) => "{$state} {$record->setup_time_unit}")
+                    ->formatStateUsing(fn ($state, $record) => "{$state} ".($record->setup_time_unit ?? 'MINUTES'))
                     ->toggleable(),
 
-                TextColumn::make('run_time')
+                Tables\Columns\TextColumn::make('run_time')
                     ->label('Run')
-                    ->formatStateUsing(fn($state, $record) => "{$state} {$record->run_time_unit}")
+                    ->formatStateUsing(fn ($state, $record) => "{$state} ".($record->run_time_unit ?? 'MINUTES'))
                     ->toggleable(),
 
-                TextColumn::make('direct_unit_cost')
+                Tables\Columns\TextColumn::make('direct_unit_cost')
                     ->label('Cost')
                     ->money('USD')
                     ->toggleable(),
 
-                TextColumn::make('scrap_factor_percent')
+                Tables\Columns\TextColumn::make('scrap_factor_percent')
                     ->label('Scrap %')
                     ->suffix('%')
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -240,6 +267,6 @@ class RoutingLinesRelationManager extends RelationManager
      */
     protected static function getNextOperationNumber(int $maxSoFar): int
     {
-        return $maxSoFar + 10000;
+        return $maxSoFar + 10;
     }
 }

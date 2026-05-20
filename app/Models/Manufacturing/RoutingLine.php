@@ -99,11 +99,44 @@ class RoutingLine extends Model
 
     public function getTotalTimeMinutesAttribute(): float
     {
-        $setup = $this->setup_time * ($this->setup_time_unit === 'HOURS' ? 60 : 1);
-        $run = $this->run_time * ($this->run_time_unit === 'HOURS' ? 60 : 1);
-        $wait = $this->wait_time;
-        $queue = $this->queue_time;
+        $setup = $this->convertTimeToMinutes((float) $this->setup_time, (string) $this->setup_time_unit);
+        $run = $this->convertTimeToMinutes((float) $this->run_time, (string) $this->run_time_unit);
+        $wait = (float) $this->wait_time;
+        $move = (float) $this->move_time;
+        $queue = (float) $this->queue_time;
 
-        return $setup + $run + $wait + $queue;
+        return $setup + $run + $wait + $move + $queue;
+    }
+
+    private function convertTimeToMinutes(float $time, string $unit): float
+    {
+        return match (strtoupper($unit)) {
+            'HOURS', 'HOUR', 'HR', 'HRS' => $time * 60,
+            'DAYS' => $time * 60 * 24,
+            'MINUTES', 'MINUTE', 'MIN', 'MINS' => $time,
+            default => $time,
+        };
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (RoutingLine $line): void {
+            $line->applyCenterCostRates();
+        });
+    }
+
+    public function applyCenterCostRates(): void
+    {
+        $machineCenter = $this->machine_center_id ? MachineCenter::find($this->machine_center_id) : null;
+        $workCenter = $this->work_center_id ? WorkCenter::find($this->work_center_id) : null;
+        $center = $machineCenter ?? $workCenter;
+
+        if (! $center) {
+            return;
+        }
+
+        $this->direct_unit_cost = (float) ($center->direct_unit_cost ?? 0);
+        $this->indirect_cost_percent = (float) ($center->indirect_cost_percent ?? 0);
+        $this->overhead_rate = (float) ($center->overhead_rate ?? 0);
     }
 }

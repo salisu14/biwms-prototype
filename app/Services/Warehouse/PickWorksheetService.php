@@ -32,7 +32,7 @@ class PickWorksheetService
         ?string $toBinCode = null
     ): ?WarehousePick {
         return DB::transaction(function () use ($component, $toBinCode): ?WarehousePick {
-            $remainingQty = $component->remaining_quantity;
+            $remainingQty = (float) $component->remaining_quantity;
 
             if ($remainingQty <= 0) {
                 return null;

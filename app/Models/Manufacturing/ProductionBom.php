@@ -65,18 +65,41 @@ class ProductionBom extends Model
      */
     public function calculateCost(): float
     {
-        $cost = 0;
+        return $this->calculateCostRecursive([]);
+    }
+
+    /**
+     * @param  array<int, bool>  $visitedBomIds
+     */
+    private function calculateCostRecursive(array $visitedBomIds): float
+    {
+        if (isset($visitedBomIds[$this->id])) {
+            return 0;
+        }
+
+        $visitedBomIds[$this->id] = true;
+        $cost = 0.0;
+
         foreach ($this->lines as $line) {
-            if ($line->type === 'ITEM') {
-                $itemCost = $line->item?->unit_cost ?? 0;
-                $cost += ($itemCost * $line->quantity_per) * (1 + $line->scrap_percent / 100);
-            } elseif ($line->type === 'PRODUCTION_BOM') {
-                // Recursive BOM
-                $subBom = self::find($line->production_bom_id);
-                if ($subBom) {
-                    $cost += ($subBom->calculateCost() * $line->quantity_per);
-                }
+            if ($line->type === ProductionBomLine::TYPE_ITEM) {
+                $itemCost = (float) ($line->item?->unit_cost ?? 0);
+                $lineQuantity = (float) $line->quantity_per;
+                $lineScrapPercent = (float) $line->scrap_percent;
+                $cost += ($itemCost * $lineQuantity) * (1 + ($lineScrapPercent / 100));
+
+                continue;
             }
+
+            if ($line->type !== ProductionBomLine::TYPE_PRODUCTION_BOM) {
+                continue;
+            }
+
+            $relatedBom = $line->relatedBom;
+            if (! $relatedBom) {
+                continue;
+            }
+
+            $cost += $relatedBom->calculateCostRecursive($visitedBomIds) * (float) $line->quantity_per;
         }
 
         return $cost;

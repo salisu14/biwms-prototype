@@ -110,6 +110,19 @@ class ProductionOrderRoutingLine extends Model
 
     public function getTotalTimeMinutesAttribute(): float
     {
-        return (float) $this->setup_time + (float) $this->run_time;
+        $setup = $this->convertTimeToMinutes((float) $this->setup_time, (string) $this->setup_time_unit);
+        $run = $this->convertTimeToMinutes((float) $this->run_time, (string) $this->run_time_unit);
+
+        return $setup + $run + (float) $this->wait_time + (float) $this->move_time;
+    }
+
+    private function convertTimeToMinutes(float $time, string $unit): float
+    {
+        return match (strtoupper($unit)) {
+            'HOURS', 'HOUR', 'HR', 'HRS' => $time * 60,
+            'DAYS' => $time * 60 * 24,
+            'MINUTES', 'MINUTE', 'MIN', 'MINS' => $time,
+            default => $time,
+        };
     }
 }

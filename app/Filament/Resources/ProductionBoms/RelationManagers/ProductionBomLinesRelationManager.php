@@ -10,8 +10,6 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\DissociateAction;
-use Filament\Actions\DissociateBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -77,7 +75,7 @@ class ProductionBomLinesRelationManager extends RelationManager
                             $set('description', $item?->description);
 
                             // auto-set default UOM
-                            $set('unit_of_measure_code', $item?->base_uom ?? null);
+                            $set('unit_of_measure_code', $item?->base_unit_of_measure ?? $item?->baseUom?->uom_code);
                         }),
 
                     // ✅ SUB BOM SELECT
@@ -190,12 +188,10 @@ class ProductionBomLinesRelationManager extends RelationManager
             ])
             ->recordActions([
                 EditAction::make(),
-                DissociateAction::make(),
                 DeleteAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DissociateBulkAction::make(),
                     DeleteBulkAction::make(),
                 ]),
             ]);

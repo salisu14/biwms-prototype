@@ -13,10 +13,12 @@ use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\Manufacturing\CapacityLedgerEntry;
+use App\Models\Manufacturing\ProductionBomLine;
 use App\Models\Manufacturing\ProductionBomVersion;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Services\Inventory\CostingService;
+use App\Services\Posting\InventoryPostingResolverService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PickWorksheetService;
 use App\Services\Warehouse\PutAwayWorksheetService;
@@ -26,11 +28,14 @@ use Illuminate\Support\Facades\Log;
 
 class ProductionOrderService
 {
+    private const MAX_DECIMAL_15_4 = 99999999999.9999;
+
     public function __construct(
         protected PostingService $postingService,
         protected PickWorksheetService $pickService,
         protected PutAwayWorksheetService $putAwayService,
-        protected CostingService $costingService
+        protected CostingService $costingService,
+        protected InventoryPostingResolverService $inventoryPostingResolver
     ) {}
 
     /**
@@ -268,9 +273,10 @@ class ProductionOrderService
         int $routingLineId,
         float $setupTime,
         float $runTime,
-        float $cost,
+        ?float $cost,
         int $userId
     ): void {
+        $cost = (float) ($cost ?? 0);
         $routingLine = $order->routingLines()->find($routingLineId);
         if (! $routingLine) {
             return;
@@ -280,22 +286,43 @@ class ProductionOrderService
             $workCenter = $routingLine->workCenter;
             $machineCenter = $routingLine->machineCenter;
             $center = $machineCenter ?? $workCenter;
+            $totalTime = $setupTime + $runTime;
+            $costingTime = $totalTime;
+            $autoDerivedCost = false;
 
             if ($cost <= 0 && $center) {
                 // Derive cost from center rates
-                $totalTime = $setupTime + $runTime;
-                $cost = $totalTime * ($center->direct_unit_cost ?? 0);
+                $autoDerivedCost = true;
+                $cost = $costingTime * ((float) ($center->direct_unit_cost ?? 0));
             }
-
-            $totalTime = $setupTime + $runTime;
 
             // Calculate Indirect Cost (Overhead)
             $indirectCost = 0;
             if ($center) {
-                $indirectCost = ($cost * ($center->indirect_cost_percent / 100)) + ($center->overhead_rate * $totalTime);
+                $indirectCost = ($cost * ((float) $center->indirect_cost_percent / 100)) + (((float) $center->overhead_rate) * $costingTime);
             }
 
             $totalCost = $cost + $indirectCost;
+
+            // If values overflow DECIMAL(15,4), try a conservative auto-conversion for minute-based operations.
+            if (
+                $autoDerivedCost
+                && $this->exceedsDecimal154($totalCost)
+                && $this->isMinuteBasedTimeUnit((string) $routingLine->setup_time_unit, (string) $routingLine->run_time_unit)
+            ) {
+                $costingTime = $totalTime / 60;
+                $cost = $costingTime * ((float) ($center?->direct_unit_cost ?? 0));
+                $indirectCost = ($cost * ((float) ($center?->indirect_cost_percent ?? 0) / 100)) + (((float) ($center?->overhead_rate ?? 0)) * $costingTime);
+                $totalCost = $cost + $indirectCost;
+            }
+
+            if ($this->exceedsDecimal154($cost) || $this->exceedsDecimal154($indirectCost) || $this->exceedsDecimal154($totalCost)) {
+                throw new \Exception(
+                    'Capacity cost is too large to post. '.
+                    "Direct={$cost}, Overhead={$indirectCost}, Total={$totalCost}. ".
+                    'Review run/setup time and center rates.'
+                );
+            }
 
             CapacityLedgerEntry::create([
                 'production_order_id' => $order->id,
@@ -315,6 +342,14 @@ class ProductionOrderService
                 'document_number' => $order->document_number,
             ]);
 
+            // Keep operation progress/status in sync regardless of caller (UI, API, jobs).
+            $routingLine->actual_setup_time = (float) $routingLine->actual_setup_time + (float) $setupTime;
+            $routingLine->actual_run_time = (float) $routingLine->actual_run_time + (float) $runTime;
+            $routingLine->status = $routingLine->actual_run_time >= (float) $routingLine->run_time
+                ? 'COMPLETED'
+                : 'IN_PROGRESS';
+            $routingLine->save();
+
             // Update CapEx Project if linked
             if ($order->capex_project_id && $order->capexProject) {
                 $order->capexProject->increment('actual_amount', $totalCost);
@@ -329,6 +364,19 @@ class ProductionOrderService
                 "Capacity: {$routingLine->description}"
             );
         });
+    }
+
+    private function exceedsDecimal154(float $value): bool
+    {
+        return abs($value) > self::MAX_DECIMAL_15_4;
+    }
+
+    private function isMinuteBasedTimeUnit(string $setupUnit, string $runUnit): bool
+    {
+        $minuteAliases = ['MIN', 'MINS', 'MINUTE', 'MINUTES'];
+
+        return in_array(strtoupper($setupUnit), $minuteAliases, true)
+            || in_array(strtoupper($runUnit), $minuteAliases, true);
     }
 
     /**
@@ -348,6 +396,10 @@ class ProductionOrderService
                 $this->postOutput($order->fresh(), $remainingOutputQuantity, $userId, $postingDate);
                 $order = $order->fresh();
             }
+
+            // Auto-post remaining planned capacity so operations can be completed at finish.
+            $this->autoPostRemainingCapacity($order, $userId);
+            $order = $order->fresh();
 
             $this->validateBeforeFinish($order);
 
@@ -395,6 +447,34 @@ class ProductionOrderService
         });
 
         return $order->fresh();
+    }
+
+    protected function autoPostRemainingCapacity(ProductionOrder $order, int $userId): void
+    {
+        foreach ($order->routingLines as $routingLine) {
+            if ($routingLine->status === 'COMPLETED') {
+                continue;
+            }
+
+            $remainingSetup = max(0, (float) $routingLine->setup_time - (float) $routingLine->actual_setup_time);
+            $remainingRun = max(0, (float) $routingLine->run_time - (float) $routingLine->actual_run_time);
+
+            if ($remainingSetup <= 0 && $remainingRun <= 0) {
+                $routingLine->status = 'COMPLETED';
+                $routingLine->save();
+
+                continue;
+            }
+
+            $this->postCapacity(
+                order: $order,
+                routingLineId: (int) $routingLine->id,
+                setupTime: $remainingSetup,
+                runTime: $remainingRun,
+                cost: 0.0,
+                userId: $userId
+            );
+        }
     }
 
     /**
@@ -520,16 +600,18 @@ class ProductionOrderService
             }
 
             $expectedQty = $bomLine->quantity_per * $order->quantity * (1 + $bomLine->scrap_percent / 100);
-            $qtyPerUnitOfMeasure = (float) ($bomLine->item?->qty_per_unit_of_measure ?? 1);
+            $expectedQtyBase = $this->convertBomQuantityToItemBase((float) $expectedQty, $bomLine);
 
-            $order->components()->create([
+            $order->components()->updateOrCreate([
+                'line_number' => $lineNo,
+            ], [
                 'line_number' => $lineNo,
                 'item_id' => $bomLine->item_id,
                 'description' => $bomLine->description,
                 'unit_of_measure_code' => $bomLine->unit_of_measure_code,
                 'quantity_per' => $bomLine->quantity_per,
                 'expected_quantity' => $expectedQty,
-                'expected_quantity_base' => $expectedQty * $qtyPerUnitOfMeasure,
+                'expected_quantity_base' => $expectedQtyBase,
                 'remaining_quantity' => $expectedQty,
                 'scrap_percent' => $bomLine->scrap_percent,
                 'routing_link_code' => $bomLine->routing_link_code,
@@ -573,20 +655,25 @@ class ProductionOrderService
 
         $lineNo = 10000;
         foreach ($lines as $routingLine) {
-            $order->routingLines()->create([
+            $lotSize = max((float) ($routingLine->lot_size ?? 1), 1.0);
+            $concurrentCapacities = max((int) ($routingLine->concurrent_capacities ?? 1), 1);
+            $expectedRunTime = ((float) $routingLine->run_time * ((float) $order->quantity / $lotSize)) / $concurrentCapacities;
+
+            $order->routingLines()->updateOrCreate([
+                'line_number' => $lineNo,
+            ], [
                 'line_number' => $lineNo,
                 'operation_no' => $routingLine->operation_no,
                 'description' => $routingLine->description,
                 'work_center_id' => $routingLine->work_center_id,
                 'machine_center_id' => $routingLine->machine_center_id,
                 'setup_time' => $routingLine->setup_time,
-                'run_time' => $routingLine->run_time * $order->quantity,
+                'run_time' => $expectedRunTime,
                 'wait_time' => $routingLine->wait_time,
                 'move_time' => $routingLine->move_time,
                 'setup_time_unit' => $routingLine->setup_time_unit,
                 'run_time_unit' => $routingLine->run_time_unit,
                 'routing_link_code' => $routingLine->routing_link_code,
-                'scrap_factor_percent' => $routingLine->scrap_factor_percent,
             ]);
 
             $lineNo += 10000;
@@ -683,12 +770,22 @@ class ProductionOrderService
                 $remainingByItemAndLocation[$key] = $this->getAvailableInventory($component->item_id, $component->location_code);
             }
 
-            if ($remainingByItemAndLocation[$key] < $component->expected_quantity) {
+            $requiredQuantityBase = (float) ($component->expected_quantity_base ?: $component->expected_quantity);
+
+            if ($remainingByItemAndLocation[$key] < $requiredQuantityBase) {
                 $itemDescription = $component->item?->description ?? "item #{$component->item_id}";
-                throw new \Exception("Insufficient inventory for {$itemDescription}");
+                $requiredQuantity = $requiredQuantityBase;
+                $availableQuantity = (float) $remainingByItemAndLocation[$key];
+                $locationLabel = $component->location_code ? " at {$component->location_code}" : '';
+
+                throw new \Exception(
+                    "Insufficient inventory for {$itemDescription}{$locationLabel}. ".
+                    'Required: '.number_format($requiredQuantity, 4).
+                    ', Available: '.number_format($availableQuantity, 4)
+                );
             }
 
-            $remainingByItemAndLocation[$key] -= (float) $component->expected_quantity;
+            $remainingByItemAndLocation[$key] -= $requiredQuantityBase;
         }
     }
 
@@ -697,6 +794,18 @@ class ProductionOrderService
         if ($order->status !== ProductionOrderStatus::RELEASED) {
             throw new \Exception('Only RELEASED orders can be finished');
         }
+
+        // Normalize stale routing statuses based on posted/actual time before validation.
+        $order->routingLines()
+            ->whereRaw('actual_run_time >= run_time')
+            ->where('status', '!=', 'COMPLETED')
+            ->update(['status' => 'COMPLETED']);
+
+        $order->routingLines()
+            ->whereRaw('(coalesce(actual_setup_time, 0) + coalesce(actual_run_time, 0)) > 0')
+            ->whereRaw('actual_run_time < run_time')
+            ->where('status', '=', 'PLANNED')
+            ->update(['status' => 'IN_PROGRESS']);
 
         $incompleteOps = $order->routingLines()->where('status', '!=', 'COMPLETED')->count();
         if ($incompleteOps > 0) {
@@ -718,26 +827,18 @@ class ProductionOrderService
     protected function createWipGlEntries(ProductionOrder $order, Item $item, float $amount, \DateTime $postingDate, string $description): void
     {
         $location = Location::where('code', $order->location_code)->first();
-        $locationId = $location?->id;
-
-        // 1. Inventory Account (Credit) - for the component being consumed
-        $inventorySetup = InventoryPostingSetup::getFor($item->inventory_posting_group_id, $locationId);
-        if (! $inventorySetup || ! $inventorySetup->inventory_account_id) {
-            throw new \Exception("Inventory account missing for component {$item->item_code}");
-        }
-
-        // 2. WIP Account (Debit) - for the parent production order item
-        $parentSetup = InventoryPostingSetup::getFor($order->inventory_posting_group_id, $locationId);
-        if (! $parentSetup || ! $parentSetup->wip_account_id) {
-            throw new \Exception("WIP account missing for production order {$order->document_number}");
-        }
+        $inventoryAccount = $this->inventoryPostingResolver->resolveInventoryAccount($item, $location);
+        $wipAccount = $this->inventoryPostingResolver->resolveWipAccount(
+            (int) $order->inventory_posting_group_id,
+            $location
+        );
 
         $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
 
         // WIP Entry (Debit)
         GlEntry::create([
             'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $parentSetup->wip_account_id,
+            'chart_of_account_id' => $wipAccount->id,
             'debit_amount' => $amount,
             'credit_amount' => 0,
             'amount' => $amount,
@@ -757,7 +858,7 @@ class ProductionOrderService
         // Inventory Entry (Credit)
         GlEntry::create([
             'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $inventorySetup->inventory_account_id,
+            'chart_of_account_id' => $inventoryAccount->id,
             'debit_amount' => 0,
             'credit_amount' => $amount,
             'amount' => -$amount,
@@ -778,13 +879,10 @@ class ProductionOrderService
     protected function createCapacityGlEntries(ProductionOrder $order, float $directCost, float $indirectCost, \DateTime $postingDate, string $description): void
     {
         $location = Location::where('code', $order->location_code)->first();
-        $locationId = $location?->id;
-
-        // 1. WIP Account (Debit)
-        $parentSetup = InventoryPostingSetup::getFor($order->inventory_posting_group_id, $locationId);
-        if (! $parentSetup || ! $parentSetup->wip_account_id) {
-            throw new \Exception("WIP account missing for production order {$order->document_number}");
-        }
+        $wipAccount = $this->inventoryPostingResolver->resolveWipAccount(
+            (int) $order->inventory_posting_group_id,
+            $location
+        );
 
         // 2. Direct Cost Applied (Credit)
         $genSetup = $order->getPostingSetup();
@@ -805,7 +903,7 @@ class ProductionOrderService
         // WIP Entry (Debit)
         GlEntry::create([
             'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $parentSetup->wip_account_id,
+            'chart_of_account_id' => $wipAccount->id,
             'debit_amount' => $totalCost,
             'credit_amount' => 0,
             'amount' => $totalCost,
@@ -868,24 +966,18 @@ class ProductionOrderService
     protected function createFinishGlEntries(ProductionOrder $order, float $totalWip, \DateTime $postingDate): void
     {
         $location = Location::where('code', $order->location_code)->first();
-        $locationId = $location?->id;
-
-        // 1. Inventory Account (Debit) - for the finished good
-        $parentSetup = InventoryPostingSetup::getFor($order->inventory_posting_group_id, $locationId);
-        if (! $parentSetup || ! $parentSetup->inventory_account_id) {
-            throw new \Exception("Inventory account missing for finished item {$order->item->item_code}");
-        }
-
-        if (! $parentSetup->wip_account_id) {
-            throw new \Exception("WIP account missing for finished item {$order->item->item_code}");
-        }
+        $inventoryAccount = $this->inventoryPostingResolver->resolveInventoryAccount($order->item, $location);
+        $wipAccount = $this->inventoryPostingResolver->resolveWipAccount(
+            (int) $order->inventory_posting_group_id,
+            $location
+        );
 
         $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
 
         // Inventory Entry (Debit)
         GlEntry::create([
             'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $parentSetup->inventory_account_id,
+            'chart_of_account_id' => $inventoryAccount->id,
             'debit_amount' => $totalWip,
             'credit_amount' => 0,
             'amount' => $totalWip,
@@ -905,7 +997,7 @@ class ProductionOrderService
         // WIP Entry (Credit)
         GlEntry::create([
             'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $parentSetup->wip_account_id,
+            'chart_of_account_id' => $wipAccount->id,
             'debit_amount' => 0,
             'credit_amount' => $totalWip,
             'amount' => -$totalWip,
@@ -1016,7 +1108,37 @@ class ProductionOrderService
             $query->where('location_id', $locationId);
         }
 
-        return $query->sum('remaining_quantity');
+        $ledgerBalance = (float) $query->sum('remaining_quantity');
+
+        if ($ledgerBalance > 0) {
+            return $ledgerBalance;
+        }
+
+        // Fallback for setups that maintain stock directly on the item card
+        // (e.g. seeded/opening balances without open item ledger layers).
+        $itemInventory = null;
+
+        if (filled($locationCode)) {
+            $locationId = Location::query()
+                ->where('code', $locationCode)
+                ->value('id');
+
+            if ($locationId) {
+                $itemInventory = Item::query()
+                    ->whereKey($itemId)
+                    ->where('location_id', $locationId)
+                    ->value('inventory');
+            }
+        }
+
+        // Item-card inventory acts as global stock fallback in this implementation.
+        if ($itemInventory === null) {
+            $itemInventory = Item::query()
+                ->whereKey($itemId)
+                ->value('inventory');
+        }
+
+        return (float) ($itemInventory ?? 0);
     }
 
     /**
@@ -1029,5 +1151,29 @@ class ProductionOrderService
         $count = ProductionOrder::whereYear('created_at', $year)->count() + 1;
 
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
+    }
+
+    protected function convertBomQuantityToItemBase(float $quantity, ProductionBomLine $bomLine): float
+    {
+        $item = $bomLine->item;
+        $uomCode = (string) ($bomLine->unit_of_measure_code ?? '');
+
+        if (! $item || $uomCode === '') {
+            return $quantity;
+        }
+
+        $baseUomCode = (string) ($item->base_unit_of_measure ?? $item->baseUom?->uom_code ?? '');
+
+        if ($baseUomCode !== '' && strtoupper($uomCode) === strtoupper($baseUomCode)) {
+            return $quantity;
+        }
+
+        $assignment = $item->uoms()
+            ->where('uom_code', $uomCode)
+            ->first();
+
+        $factor = (float) ($assignment?->pivot?->conversion_factor ?? 1.0);
+
+        return $quantity * $factor;
     }
 }

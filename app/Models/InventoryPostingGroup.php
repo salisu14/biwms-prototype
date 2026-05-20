@@ -43,15 +43,23 @@ class InventoryPostingGroup extends Model
     // Get inventory account for location (or default)
     public function getInventoryAccount(?int $locationId = null): ?ChartOfAccount
     {
-        $setup = $this->inventoryPostingSetups()
-            ->where('location_id', $locationId)
-            ->first();
+        $query = $this->inventoryPostingSetups()
+            ->whereNotNull('inventory_account_id');
 
-        if (! $setup && $locationId) {
-            // Try default (null location)
-            $setup = $this->inventoryPostingSetups()
+        if ($locationId) {
+            $setup = (clone $query)
+                ->where(function ($builder) use ($locationId): void {
+                    $builder->where('location_id', $locationId)
+                        ->orWhereNull('location_id');
+                })
+                ->orderByRaw('location_id IS NULL')
+                ->first()
+                ?? $query->first();
+        } else {
+            $setup = (clone $query)
                 ->whereNull('location_id')
-                ->first();
+                ->first()
+                ?? $query->first();
         }
 
         return $setup?->inventoryAccount;

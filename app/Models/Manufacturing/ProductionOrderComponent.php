@@ -76,13 +76,13 @@ class ProductionOrderComponent extends Model
             ->where('source_document', 'production_order_component');
     }
 
-    public function getRemainingQuantityAttribute(): float
+    public function getAvailableRemainingQuantityAttribute(): float
     {
-        $requested = $this->warehouseRequests()
+        $requested = (float) $this->warehouseRequests()
             ->whereIn('status', ['open', 'partial'])
             ->sum('quantity_outstanding');
 
-        return max(0, ($this->expected_quantity ?? 0) - ($this->actual_quantity_consumed ?? 0) - $requested);
+        return max(0, (float) ($this->remaining_quantity ?? 0) - $requested);
     }
 
     public function flushingMethod(): FlushingMethod
@@ -93,7 +93,9 @@ class ProductionOrderComponent extends Model
             return $workCenter->workCenterBin->flushing_method;
         }
 
-        return FlushingMethod::MANUAL;
+        $configuredFlushingMethod = strtolower((string) $this->flushing_method);
+
+        return FlushingMethod::tryFrom($configuredFlushingMethod) ?? FlushingMethod::MANUAL;
     }
 
     public function productionOrder(): BelongsTo
@@ -125,11 +127,6 @@ class ProductionOrderComponent extends Model
 
     public function getIsFullyConsumedAttribute(): bool
     {
-        return $this->actual_quantity_consumed >= ($this->expected_quantity - 0.01);
+        return (float) $this->remaining_quantity <= 0.01;
     }
-
-    //    public function getRemainingQuantityAttribute(): float
-    //    {
-    //        return ($this->expected_quantity ?? 0) - ($this->actual_quantity_consumed ?? 0);
-    //    }
 }

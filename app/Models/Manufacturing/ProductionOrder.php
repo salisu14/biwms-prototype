@@ -121,15 +121,15 @@ class ProductionOrder extends Model
     // ==================== RELATIONSHIPS ====================
     // Add to existing ProductionOrder model
 
-    public function warehouseActivities(): HasMany|ProductionOrder
+    public function warehouseActivities(): HasMany
     {
-        return $this->hasMany(WarehouseActivity::class, 'source_no', 'order_no')
+        return $this->hasMany(WarehouseActivity::class, 'source_no', 'document_number')
             ->where('source_document', 'production_order');
     }
 
-    public function warehouseRequests(): HasMany|ProductionOrder
+    public function warehouseRequests(): HasMany
     {
-        return $this->hasMany(WarehouseRequest::class, 'source_no', 'order_no')
+        return $this->hasMany(WarehouseRequest::class, 'source_no', 'document_number')
             ->where('source_document', 'production_order');
     }
 
@@ -156,9 +156,60 @@ class ProductionOrder extends Model
     // ProductionOrder.php
     public function getPostingSetup(): ?GeneralPostingSetup
     {
-        return GeneralPostingSetup::where('general_business_posting_group_id', $this->general_business_posting_group_id)
-            ->where('general_product_posting_group_id', $this->general_product_posting_group_id)
-            ->first();
+        $exact = null;
+
+        if ($this->general_business_posting_group_id && $this->general_product_posting_group_id) {
+            $exact = GeneralPostingSetup::query()
+                ->where('general_business_posting_group_id', $this->general_business_posting_group_id)
+                ->where('general_product_posting_group_id', $this->general_product_posting_group_id)
+                ->first();
+        }
+
+        if ($exact) {
+            return $exact;
+        }
+
+        $candidateProductGroupIds = array_values(array_unique(array_filter([
+            $this->general_product_posting_group_id,
+            $this->item?->general_product_posting_group_id,
+        ])));
+
+        if ($candidateProductGroupIds === []) {
+            return null;
+        }
+
+        $query = GeneralPostingSetup::query()
+            ->whereIn('general_product_posting_group_id', $candidateProductGroupIds);
+
+        if ($this->general_business_posting_group_id) {
+            $query->where('general_business_posting_group_id', $this->general_business_posting_group_id);
+        }
+
+        $matches = $query->get();
+
+        if ($matches->count() !== 1) {
+            return null;
+        }
+
+        $resolved = $matches->first();
+
+        // Heal stale/missing posting groups on the order once uniquely resolved.
+        $dirty = false;
+        if ($this->general_business_posting_group_id !== $resolved->general_business_posting_group_id) {
+            $this->general_business_posting_group_id = $resolved->general_business_posting_group_id;
+            $dirty = true;
+        }
+
+        if ($this->general_product_posting_group_id !== $resolved->general_product_posting_group_id) {
+            $this->general_product_posting_group_id = $resolved->general_product_posting_group_id;
+            $dirty = true;
+        }
+
+        if ($dirty) {
+            $this->saveQuietly();
+        }
+
+        return $resolved;
     }
 
     public function routing(): BelongsTo
@@ -200,16 +251,6 @@ class ProductionOrder extends Model
     {
         return $this->belongsTo(GeneralProductPostingGroup::class, 'general_product_posting_group_id');
     }
-
-    //    public function warehouseRequests(): MorphMany
-    //    {
-    //        return $this->morphMany(WarehouseRequest::class, 'source', 'source_document', 'source_id');
-    //    }
-    //
-    //    public function warehouseActivities(): MorphMany
-    //    {
-    //        return $this->morphMany(WarehouseActivity::class, 'source', 'source_document', 'source_id');
-    //    }
 
     public function capacityLedgerEntries(): HasMany
     {

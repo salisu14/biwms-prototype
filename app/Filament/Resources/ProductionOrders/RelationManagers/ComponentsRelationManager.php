@@ -149,10 +149,14 @@ class ComponentsRelationManager extends RelationManager
                 TextColumn::make('remaining_quantity')
                     ->label('Remaining')
                     ->numeric(2)
-//                    ->color('danger')
-                    ->color(fn ($state, $record) => ($state ?? 0) >= ($record?->expected_quantity ?? 0) ? 'success' : 'gray')
+                    ->color(fn ($state) => ((float) ($state ?? 0) > 0 ? 'warning' : 'success'))
                     ->hidden(fn ($record) => ($record?->remaining_quantity ?? 0) <= 0),
-                //                    ->hidden(fn ($record) => $record->remaining_quantity <= 0),
+
+                TextColumn::make('available_remaining_quantity')
+                    ->label('Avail. Remaining')
+                    ->numeric(2)
+                    ->color(fn ($state) => ((float) ($state ?? 0) > 0 ? 'warning' : 'success'))
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('location_code')
                     ->label('Warehouse')

@@ -43,7 +43,7 @@ enum ItemType: string
         return match ($this) {
             self::RAW_MATERIAL => 'heroicon-m-beaker',
             self::FINISHED_GOOD => 'heroicon-m-check-badge',
-            self::PACKAGING => 'heroicon-m-box',
+            self::PACKAGING => 'heroicon-m-archive-box',
             self::SPARE_PART => 'heroicon-m-wrench',
             self::SERVICE => 'heroicon-m-wrench-screwdriver',
             self::INVENTORY => 'heroicon-m-cube',

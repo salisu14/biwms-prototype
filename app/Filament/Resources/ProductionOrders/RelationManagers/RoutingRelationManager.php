@@ -113,23 +113,18 @@ class RoutingRelationManager extends RelationManager
                             ->default(0),
                     ])
                     ->action(function ($record, array $data, $livewire) {
+                        $setupTime = (float) ($data['setup_time'] ?? 0);
+                        $runTime = (float) ($data['run_time'] ?? 0);
+                        $cost = isset($data['cost']) ? (float) $data['cost'] : 0.0;
+
                         app(ProductionOrderService::class)->postCapacity(
                             $livewire->getOwnerRecord(),
                             $record->id,
-                            $data['setup_time'],
-                            $data['run_time'],
-                            $data['cost'],
+                            $setupTime,
+                            $runTime,
+                            $cost,
                             auth()->id()
                         );
-
-                        $record->actual_setup_time += $data['setup_time'];
-                        $record->actual_run_time += $data['run_time'];
-                        if ($record->actual_run_time >= $record->run_time) {
-                            $record->status = 'COMPLETED';
-                        } else {
-                            $record->status = 'IN_PROGRESS';
-                        }
-                        $record->save();
                     }),
             ])
             ->bulkActions([
