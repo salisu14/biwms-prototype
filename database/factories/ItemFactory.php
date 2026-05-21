@@ -20,7 +20,6 @@ class ItemFactory extends Factory
         return [
             'item_code' => $this->faker->unique()->bothify('ITEM-####'),
             'description' => $this->faker->words(3, true),
-            'base_unit_of_measure' => 'PCS',
             'unit_cost' => 10,
         ];
     }

@@ -45,7 +45,7 @@ it('prevents non-approver from approving an entry', function () {
         'status' => 'created',
     ]);
 
-    actingAs($other);
+    $this->actingAs($other);
 
     $this->expectException(AuthorizationException::class);
 
@@ -83,7 +83,7 @@ it('allows approver to approve and releases when last entry', function () {
         'status' => 'created',
     ]);
 
-    actingAs($approver);
+    $this->actingAs($approver);
 
     app(ApprovalService::class)->approve($entry);
 

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Manufacturing\MachineCenter;
+use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Manufacturing\ProductionOrderRoutingLine;
+use App\Models\Manufacturing\WorkCenter;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,7 +24,7 @@ class CapacityLedgerEntry extends Model
         'work_center_id',
         'machine_center_id',
         'posting_date',
-        'document_no',
+        'document_number',
         'setup_time',
         'run_time',
         'stop_time',

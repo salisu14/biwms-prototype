@@ -142,15 +142,18 @@ class ProductionOrderLine extends Model
 
     // ==================== CALCULATED ATTRIBUTES ====================
 
-    public function getRemainingQuantityAttribute(): float
+    public function getFinishedQuantityAttribute(): float
     {
-        $produced = $this->productionOrder
+        return $this->productionOrder
             ?->itemLedgerEntries()
             ?->where('entry_type', ItemLedgerEntryType::OUTPUT)
-            ->where('document_line_number', $this->line_number)
+            ->where('item_id', $this->item_id)
             ?->sum('quantity') ?? 0;
+    }
 
-        return $this->quantity - $produced;
+    public function getRemainingQuantityAttribute(): float
+    {
+        return $this->quantity - $this->finished_quantity;
     }
 
     public function getIsCompletedAttribute(): bool

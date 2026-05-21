@@ -10,6 +10,8 @@ use App\Enums\UomType;
 use App\Models\Category;
 use App\Models\Currency;
 use App\Models\Item;
+use App\Models\Manufacturing\ProductionBom;
+use App\Models\Manufacturing\Routing;
 use App\Models\UnitOfMeasure;
 use App\Models\Vendor;
 use Filament\Forms\Components\Repeater;
@@ -55,7 +57,13 @@ class ItemForm
                                         ->required()
                                         ->default(ItemType::FINISHED_GOOD)
                                         ->native(false)
-                                        ->live(),
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, $set) {
+                                            if ($state !== ItemType::FINISHED_GOOD->value) {
+                                                $set('production_bom_id', null);
+                                                $set('routing_id', null);
+                                            }
+                                        }),
 
                                     TextInput::make('sku')
                                         ->label('Base SKU')
@@ -113,6 +121,26 @@ class ItemForm
                                         ->numeric()
                                         ->integer()
                                         ->placeholder('Leave blank if non-perishable'),
+
+                                    Select::make('production_bom_id')
+                                        ->label('Production BOM')
+                                        ->options(fn () => ProductionBom::query()->orderBy('code')->pluck('code', 'id'))
+                                        ->searchable()
+                                        ->preload()
+                                        ->nullable()
+                                        ->visible(fn ($get) => $get('item_type') === ItemType::FINISHED_GOOD->value)
+                                        ->dehydrated(fn ($get) => $get('item_type') === ItemType::FINISHED_GOOD->value)
+                                        ->helperText('Optional. Only for production items.'),
+
+                                    Select::make('routing_id')
+                                        ->label('Routing')
+                                        ->options(fn () => Routing::query()->orderBy('code')->pluck('code', 'id'))
+                                        ->searchable()
+                                        ->preload()
+                                        ->nullable()
+                                        ->visible(fn ($get) => $get('item_type') === ItemType::FINISHED_GOOD->value)
+                                        ->dehydrated(fn ($get) => $get('item_type') === ItemType::FINISHED_GOOD->value)
+                                        ->helperText('Optional. Only for production items.'),
                                 ]),
                             ]),
 

@@ -125,6 +125,12 @@ class ComponentsRelationManager extends RelationManager
                     ->sortable()
                     ->toggleable(),
 
+                TextColumn::make('bom_level')
+                    ->label('BOM Level')
+                    ->badge()
+                    ->color('warning')
+                    ->sortable(),
+
                 TextColumn::make('item.item_code')
                     ->label('Item No')
                     ->copyable()
@@ -161,6 +167,17 @@ class ComponentsRelationManager extends RelationManager
                 TextColumn::make('location_code')
                     ->label('Warehouse')
                     ->badge(),
+
+                TextColumn::make('source_bom_code')
+                    ->label('Source BOM')
+                    ->badge()
+                    ->toggleable(),
+
+                TextColumn::make('bom_path')
+                    ->label('BOM Path')
+                    ->limit(60)
+                    ->tooltip(fn ($state) => $state)
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 // Filter components by the specific Output Line

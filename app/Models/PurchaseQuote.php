@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Contracts\Approvable;
-use App\Traits\Approvable as ApprovableTrait;
 use App\Enums\PurchaseLineType;
 use App\Enums\PurchaseQuoteStatus;
 use App\Services\Purchase\PurchaseQuoteCalculationService;
+use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -317,7 +317,7 @@ class PurchaseQuote extends Model implements Approvable
             SUM(amount_including_vat) as amount_including_vat
         ')->first();
 
-        $this->update([
+        $this->updateQuietly([
             'amount' => $totals->amount ?? 0,
             'vat_amount' => $totals->vat_amount ?? 0,
             'amount_including_vat' => $totals->amount_including_vat ?? 0,
@@ -373,7 +373,7 @@ class PurchaseQuote extends Model implements Approvable
 
     public function getApprovalDocumentType(): string
     {
-        return 'Purchase Order'; // Template uses 'Purchase Order' for quotes/orders in this system? 
+        return 'Purchase Order'; // Template uses 'Purchase Order' for quotes/orders in this system?
         // Wait, let's check ApprovalTemplateForm again.
     }
 

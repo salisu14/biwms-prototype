@@ -20,7 +20,8 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
         $this->errors = [];
 
         // Common validations
-        if ($batch->status !== 'released') {
+        $status = is_string($batch->status) ? $batch->status : ($batch->status->value ?? null);
+        if ($status !== 'released') {
             $this->errors[] = 'Batch must be released before posting';
         }
 
@@ -36,6 +37,17 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
     /**
      * @throws \Throwable
      */
+    protected ?int $currentTransactionNumber = null;
+
+    protected function getTransactionNumber(): int
+    {
+        if ($this->currentTransactionNumber === null) {
+            $this->currentTransactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
+        }
+
+        return $this->currentTransactionNumber;
+    }
+
     public function post(object $batch): PostingResult
     {
         $errors = $this->validate($batch);
@@ -45,6 +57,7 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
 
         return DB::transaction(function () use ($batch) {
             $this->postedEntries = [];
+            $this->currentTransactionNumber = null;
 
             foreach ($batch->lines as $line) {
                 $this->postLine($line);
@@ -62,6 +75,30 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
     {
         $data['created_by'] = Auth::id();
         $data['entry_timestamp'] = now();
+        if (! isset($data['transaction_number'])) {
+            $data['transaction_number'] = $this->getTransactionNumber();
+        }
+
+        // Map common aliases to ensure strict schema adherence
+        if (isset($data['account_id']) && ! isset($data['chart_of_account_id'])) {
+            $data['chart_of_account_id'] = $data['account_id'];
+        }
+        if (isset($data['document_no']) && ! isset($data['document_number'])) {
+            $data['document_number'] = $data['document_no'];
+        }
+
+        // Calculate amount if missing
+        if (! isset($data['amount'])) {
+            $data['amount'] = ($data['debit_amount'] ?? 0) - ($data['credit_amount'] ?? 0);
+        }
+
+        // Default document properties
+        if (! isset($data['document_type'])) {
+            $data['document_type'] = 'JOURNAL';
+        }
+        if (! isset($data['document_date'])) {
+            $data['document_date'] = $data['posting_date'] ?? now();
+        }
 
         return GlEntry::create($data);
     }

@@ -18,6 +18,8 @@ class ProductionJournalLine extends Model
 {
     protected $table = 'production_journal_lines';
 
+    const UPDATED_AT = null;
+
     protected $fillable = [
         'batch_id',
         'line_no',
@@ -89,6 +91,11 @@ class ProductionJournalLine extends Model
         'line_status' => JournalLineStatus::class,
         'entry_type' => ProductionJournalEntryType::class,
     ];
+
+    public function item(): BelongsTo
+    {
+        return $this->belongsTo(Item::class, 'item_id');
+    }
 
     public function batch(): BelongsTo
     {

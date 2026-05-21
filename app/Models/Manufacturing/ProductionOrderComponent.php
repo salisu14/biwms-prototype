@@ -54,6 +54,11 @@ class ProductionOrderComponent extends Model
         // Cost
         'unit_cost',
         'total_cost',
+
+        // Explosion traceability
+        'bom_level',
+        'bom_path',
+        'source_bom_code',
     ];
 
     protected $casts = [
@@ -68,6 +73,7 @@ class ProductionOrderComponent extends Model
         'unit_cost' => 'decimal:4',
         'total_cost' => 'decimal:4',
         'due_date' => 'date',
+        'bom_level' => 'integer',
     ];
 
     public function warehouseRequests()

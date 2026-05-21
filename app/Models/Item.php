@@ -6,6 +6,8 @@ use App\Enums\CostingMethod;
 use App\Enums\InventoryMethod;
 use App\Enums\ItemType;
 use App\Enums\UomType;
+use App\Models\Manufacturing\ProductionBom;
+use App\Models\Manufacturing\Routing;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,6 +31,8 @@ class Item extends Model
         'inventory_bin_id',
         'vat_id',
         'item_type',
+        'production_bom_id',
+        'routing_id',
         'inventory_method',
         'costing_method',
         'unit_cost',
@@ -44,7 +48,6 @@ class Item extends Model
         'reorder_quantity',
         'location_id',
         'bin_code',
-//        'base_unit_of_measure',
         'weight',
         'volume',
         'shelf_no',
@@ -109,20 +112,6 @@ class Item extends Model
             ->withPivot(['uom_type', 'conversion_factor', 'is_default'])
             ->withTimestamps();
     }
-
-// Remove the duplicate unitOfMeasures() method — it's identical to uoms()
-
-//    public function uoms(): BelongsToMany
-//    {
-//        return $this->belongsToMany(
-//            UnitOfMeasure::class,
-//            'item_uom_assignments', // Pivot table
-//            'item_id',             // Foreign key on pivot for Item
-//            'uom_id'               // Foreign key on pivot for Unit of Measure (FIXED)
-//        )
-//            ->withPivot(['uom_type', 'conversion_factor', 'is_default'])
-//            ->withTimestamps();
-//    }
 
     public function primaryCategory(): BelongsTo
     {
@@ -268,6 +257,11 @@ class Item extends Model
         return (float) $this->ledgerEntries()->sum('quantity');
     }
 
+    public function getBaseUnitOfMeasureAttribute(): string
+    {
+        return $this->baseUom?->uom_code ?? 'PCS';
+    }
+
     public function quantityAtLocation(int $locationId): float
     {
         return (float) $this->ledgerEntries()
@@ -294,6 +288,16 @@ class Item extends Model
         return $this->vendors()
             ->wherePivot('is_preferred', true)
             ->first();
+    }
+
+    public function productionBom(): BelongsTo
+    {
+        return $this->belongsTo(ProductionBom::class, 'production_bom_id');
+    }
+
+    public function routing(): BelongsTo
+    {
+        return $this->belongsTo(Routing::class, 'routing_id');
     }
 
     /**
@@ -367,5 +371,15 @@ class Item extends Model
     public function vatProductPostingGroup(): BelongsTo
     {
         return $this->belongsTo(VatProductPostingGroup::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (Item $item): void {
+            if ($item->item_type !== ItemType::FINISHED_GOOD) {
+                $item->production_bom_id = null;
+                $item->routing_id = null;
+            }
+        });
     }
 }

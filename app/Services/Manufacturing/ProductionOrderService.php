@@ -13,8 +13,10 @@ use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\Manufacturing\CapacityLedgerEntry;
+use App\Models\Manufacturing\ProductionBom;
 use App\Models\Manufacturing\ProductionBomLine;
 use App\Models\Manufacturing\ProductionBomVersion;
+use App\Models\Manufacturing\ProductionBomVersionLine;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Services\Inventory\CostingService;
@@ -29,6 +31,8 @@ use Illuminate\Support\Facades\Log;
 class ProductionOrderService
 {
     private const MAX_DECIMAL_15_4 = 99999999999.9999;
+
+    private const MAX_BOM_EXPLOSION_DEPTH = 25;
 
     public function __construct(
         protected PostingService $postingService,
@@ -589,40 +593,148 @@ class ProductionOrderService
             return;
         }
 
-        $lines = $version
-            ? $version->lines()->with('item')->get()
-            : $bom->lines()->with('item')->get();
+        $rootLines = $this->resolveBomLines($bom, $order->starting_date_time ?? now(), $version);
+
+        $explodedLines = [];
+        $visitedBomPath = [];
+
+        $this->explodeBomLines(
+            order: $order,
+            lines: $rootLines,
+            parentOrderQuantity: (float) $order->quantity,
+            accumulatedQuantityPer: 1.0,
+            level: 1,
+            path: [$bom->code],
+            visitedBomPath: $visitedBomPath,
+            target: $explodedLines
+        );
 
         $lineNo = 10000;
-        foreach ($lines as $bomLine) {
-            if (! $bomLine->item_id) {
-                continue;
-            }
-
-            $expectedQty = $bomLine->quantity_per * $order->quantity * (1 + $bomLine->scrap_percent / 100);
-            $expectedQtyBase = $this->convertBomQuantityToItemBase((float) $expectedQty, $bomLine);
-
+        foreach ($explodedLines as $explodedLine) {
             $order->components()->updateOrCreate([
                 'line_number' => $lineNo,
             ], [
                 'line_number' => $lineNo,
-                'item_id' => $bomLine->item_id,
-                'description' => $bomLine->description,
-                'unit_of_measure_code' => $bomLine->unit_of_measure_code,
-                'quantity_per' => $bomLine->quantity_per,
-                'expected_quantity' => $expectedQty,
-                'expected_quantity_base' => $expectedQtyBase,
-                'remaining_quantity' => $expectedQty,
-                'scrap_percent' => $bomLine->scrap_percent,
-                'routing_link_code' => $bomLine->routing_link_code,
-                'flushing_method' => $bomLine->flushing_method ?? $order->flushing_method,
-                'location_code' => $bomLine->location_code ?? $order->location_code,
-                'bin_code' => $bomLine->bin_code,
-                'due_date' => $order->starting_date_time?->copy()->subDays($bomLine->lead_time_offset_days ?? 0),
+                ...$explodedLine,
             ]);
 
             $lineNo += 10000;
         }
+    }
+
+    /**
+     * @param  iterable<int, ProductionBomLine|ProductionBomVersionLine>  $lines
+     * @param  array<int, bool>  $visitedBomPath
+     * @param  array<int, array<string, mixed>>  $target
+     * @param  array<int, string>  $path
+     */
+    protected function explodeBomLines(
+        ProductionOrder $order,
+        iterable $lines,
+        float $parentOrderQuantity,
+        float $accumulatedQuantityPer,
+        int $level,
+        array $path,
+        array &$visitedBomPath,
+        array &$target
+    ): void {
+        if ($level > self::MAX_BOM_EXPLOSION_DEPTH) {
+            throw new \RuntimeException(
+                'BOM explosion depth exceeded maximum allowed levels ('.self::MAX_BOM_EXPLOSION_DEPTH.').'
+            );
+        }
+
+        foreach ($lines as $bomLine) {
+            $lineQuantityPer = (float) $bomLine->quantity_per;
+            $lineScrapPercent = (float) $bomLine->scrap_percent;
+            $effectiveQuantityPer = $accumulatedQuantityPer * $lineQuantityPer;
+            $expectedQty = $parentOrderQuantity * $lineQuantityPer * (1 + $lineScrapPercent / 100);
+
+            if ($bomLine->type === ProductionBomLine::TYPE_ITEM) {
+                if (! $bomLine->item_id || ! $bomLine->item) {
+                    throw new \RuntimeException(
+                        "Invalid BOM line {$bomLine->line_number}: ITEM type must reference a valid item."
+                    );
+                }
+
+                $expectedQtyBase = $this->convertBomQuantityToItemBase((float) $expectedQty, $bomLine);
+
+                $target[] = [
+                    'item_id' => $bomLine->item_id,
+                    'description' => $bomLine->description,
+                    'unit_of_measure_code' => $bomLine->unit_of_measure_code,
+                    'quantity_per' => $effectiveQuantityPer,
+                    'expected_quantity' => $expectedQty,
+                    'expected_quantity_base' => $expectedQtyBase,
+                    'remaining_quantity' => $expectedQty,
+                    'scrap_percent' => $lineScrapPercent,
+                    'routing_link_code' => $bomLine->routing_link_code,
+                    'flushing_method' => $bomLine->flushing_method ?? $order->flushing_method,
+                    'location_code' => $bomLine->location_code ?? $order->location_code,
+                    'bin_code' => $bomLine->bin_code,
+                    'due_date' => $order->starting_date_time?->copy()->subDays($bomLine->lead_time_offset_days ?? 0),
+                    'bom_level' => $level,
+                    'bom_path' => implode(' > ', $path),
+                    'source_bom_code' => end($path) ?: null,
+                ];
+
+                continue;
+            }
+
+            if ($bomLine->type !== ProductionBomLine::TYPE_PRODUCTION_BOM) {
+                continue;
+            }
+
+            if (! $bomLine->production_bom_id_related) {
+                throw new \RuntimeException(
+                    "Invalid BOM line {$bomLine->line_number}: PRODUCTION_BOM type must reference a sub BOM."
+                );
+            }
+
+            $subBomId = (int) $bomLine->production_bom_id_related;
+            if (isset($visitedBomPath[$subBomId])) {
+                $pathLabel = implode(' > ', [...$path, (string) $bomLine->relatedBom?->code]);
+                throw new \RuntimeException("Circular BOM detected in path: {$pathLabel}");
+            }
+
+            $relatedBom = $bomLine->relatedBom;
+            if (! $relatedBom) {
+                throw new \RuntimeException(
+                    "Invalid BOM line {$bomLine->line_number}: referenced sub BOM does not exist."
+                );
+            }
+
+            $visitedBomPath[$subBomId] = true;
+            $subLines = $this->resolveBomLines($relatedBom, $order->starting_date_time ?? now());
+
+            $subOrderQuantity = $parentOrderQuantity * $lineQuantityPer * (1 + $lineScrapPercent / 100);
+            $subPath = [...$path, $relatedBom->code];
+
+            $this->explodeBomLines(
+                order: $order,
+                lines: $subLines,
+                parentOrderQuantity: $subOrderQuantity,
+                accumulatedQuantityPer: $effectiveQuantityPer,
+                level: $level + 1,
+                path: $subPath,
+                visitedBomPath: $visitedBomPath,
+                target: $target
+            );
+
+            unset($visitedBomPath[$subBomId]);
+        }
+    }
+
+    private function resolveBomLines(
+        ProductionBom $bom,
+        \DateTimeInterface $effectiveDate,
+        ?ProductionBomVersion $forcedVersion = null
+    ) {
+        $version = $forcedVersion ?? $bom->getActiveVersion(\DateTime::createFromInterface($effectiveDate));
+
+        return $version
+            ? $version->lines()->with(['item', 'relatedBom'])->orderBy('line_number')->get()
+            : $bom->lines()->with(['item', 'relatedBom'])->orderBy('line_number')->get();
     }
 
     protected function refreshRouting(ProductionOrder $order): void
@@ -1153,7 +1265,7 @@ class ProductionOrderService
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
     }
 
-    protected function convertBomQuantityToItemBase(float $quantity, ProductionBomLine $bomLine): float
+    protected function convertBomQuantityToItemBase(float $quantity, ProductionBomLine|ProductionBomVersionLine $bomLine): float
     {
         $item = $bomLine->item;
         $uomCode = (string) ($bomLine->unit_of_measure_code ?? '');

@@ -86,6 +86,19 @@ class ItemInfolist
                         ]),
                     ]),
 
+                Section::make('Manufacturing')
+                    ->visible(fn ($record) => $record?->item_type === ItemType::FINISHED_GOOD)
+                    ->schema([
+                        Grid::make(2)->schema([
+                            TextEntry::make('productionBom.code')
+                                ->label('Production BOM')
+                                ->placeholder('Not set'),
+                            TextEntry::make('routing.code')
+                                ->label('Routing')
+                                ->placeholder('Not set'),
+                        ]),
+                    ]),
+
                 Section::make('Restrictions')
                     ->collapsed()
                     ->schema([
