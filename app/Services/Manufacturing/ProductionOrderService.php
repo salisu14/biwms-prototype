@@ -573,8 +573,15 @@ class ProductionOrderService
             return;
         }
 
-        if ($order->itemLedgerEntries()->where('entry_type', ItemLedgerEntryType::CONSUMPTION)->count() === 0) {
-            $order->components()->delete();
+        $hasPostedConsumption = $order->itemLedgerEntries()
+            ->where('entry_type', ItemLedgerEntryType::CONSUMPTION)
+            ->exists();
+
+        if ($hasPostedConsumption) {
+            throw new \RuntimeException(
+                'Cannot refresh components after consumption has been posted. '.
+                'Create a new production order or reverse consumption first.'
+            );
         }
 
         // Check for active version if not set
@@ -592,6 +599,9 @@ class ProductionOrderService
         if (! $bom) {
             return;
         }
+
+        // Rebuild component snapshot from the selected BOM/version to avoid stale lines.
+        $order->components()->delete();
 
         $rootLines = $this->resolveBomLines($bom, $order->starting_date_time ?? now(), $version);
 

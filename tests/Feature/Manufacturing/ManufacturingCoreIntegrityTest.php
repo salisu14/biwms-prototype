@@ -1,12 +1,20 @@
 <?php
 
+use App\Enums\AccountType;
+use App\Enums\IncomeBalanceType;
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderStatus;
 use App\Enums\WarehouseActivityType;
 use App\Enums\WarehouseDocumentStatus;
 use App\Events\ProductionOrderStatusChanged;
+use App\Models\ChartOfAccount;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
+use App\Models\InventoryPostingSetup;
 use App\Models\Item;
+use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\Manufacturing\ProductionBom;
 use App\Models\Manufacturing\ProductionBomLine;
@@ -369,4 +377,248 @@ test('production order refresh fails fast when sub bom line is missing related b
     $this->expectExceptionMessage('PRODUCTION_BOM type must reference a sub BOM');
 
     app(ProductionOrderService::class)->refresh($order);
+});
+
+test('production order refresh fails when consumption has already been posted', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $group = GeneralProductPostingGroup::create([
+        'code' => 'RM-POST',
+        'description' => 'Raw Materials Posted',
+    ]);
+    $inventoryGroup = InventoryPostingGroup::create([
+        'code' => 'MAIN-POST',
+        'description' => 'Main Inventory Posted',
+    ]);
+
+    $parentItem = Item::create([
+        'item_code' => 'FG-POST',
+        'description' => 'Posted FG',
+        'unit_cost' => 10,
+        'general_product_posting_group_id' => $group->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+
+    $componentItem = Item::create([
+        'item_code' => 'COMP-POST',
+        'description' => 'Posted Component',
+        'unit_cost' => 2,
+        'general_product_posting_group_id' => $group->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+
+    $bom = ProductionBom::create([
+        'code' => 'BOM-POST',
+        'description' => 'Posted BOM',
+        'item_id' => $parentItem->id,
+    ]);
+
+    $bom->lines()->create([
+        'line_number' => 10000,
+        'type' => ProductionBomLine::TYPE_ITEM,
+        'item_id' => $componentItem->id,
+        'description' => 'Posted Component',
+        'quantity_per' => 1,
+    ]);
+
+    $location = Location::factory()->create(['code' => 'MAIN']);
+    $order = ProductionOrder::create([
+        'document_number' => 'PO-POST-001',
+        'status' => ProductionOrderStatus::PLANNED,
+        'item_id' => $parentItem->id,
+        'quantity' => 10,
+        'quantity_base' => 10,
+        'production_bom_id' => $bom->id,
+        'flushing_method' => 'BACKWARD',
+        'location_code' => $location->code,
+    ]);
+
+    app(ProductionOrderService::class)->refresh($order);
+
+    ItemLedgerEntry::create([
+        'entry_type' => ItemLedgerEntryType::CONSUMPTION,
+        'item_id' => $componentItem->id,
+        'quantity' => -1,
+        'remaining_quantity' => 0,
+        'open' => false,
+        'posting_date' => now(),
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+        'location_id' => $location->id,
+        'location_code' => $location->code,
+        'unit_cost' => 2,
+        'cost_amount_actual' => 2,
+        'general_product_posting_group_id' => $componentItem->general_product_posting_group_id,
+        'inventory_posting_group_id' => $componentItem->inventory_posting_group_id,
+        'entry_date' => now(),
+    ]);
+
+    $this->expectException(RuntimeException::class);
+    $this->expectExceptionMessage('Cannot refresh components after consumption has been posted');
+
+    app(ProductionOrderService::class)->refresh($order);
+});
+
+test('nested bom production order releases and finishes successfully with valid posting setup', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $businessGroup = GeneralBusinessPostingGroup::create([
+        'code' => 'MANUFACTURING',
+        'description' => 'Manufacturing',
+    ]);
+    $generalProductPostingGroup = GeneralProductPostingGroup::create([
+        'code' => 'FG-NEST-POST',
+        'description' => 'Finished Goods Nested Posting',
+    ]);
+    $inventoryPostingGroup = InventoryPostingGroup::create([
+        'code' => 'FG-NEST-POST',
+        'description' => 'Finished Goods Nested Posting',
+    ]);
+
+    $wipAccount = ChartOfAccount::create([
+        'account_number' => '3210',
+        'name' => 'WIP Inventory',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $inventoryAccount = ChartOfAccount::create([
+        'account_number' => '3220',
+        'name' => 'Finished Goods Inventory',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+
+    GeneralPostingSetup::create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_account_id' => $inventoryAccount->id,
+        'inventory_adj_account_id' => $inventoryAccount->id,
+        'direct_cost_applied_account_id' => $inventoryAccount->id,
+        'overhead_applied_account_id' => $inventoryAccount->id,
+        'cogs_account_id' => $inventoryAccount->id,
+    ]);
+
+    InventoryPostingSetup::create([
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
+        'location_id' => null,
+        'inventory_account_id' => $inventoryAccount->id,
+        'wip_account_id' => $wipAccount->id,
+    ]);
+
+    $finishedGood = Item::create([
+        'item_code' => 'FG-NEST-POST-001',
+        'description' => 'Finished Good Nested Posting',
+        'unit_cost' => 10,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
+    ]);
+
+    $packagingItem = Item::create([
+        'item_code' => 'PACK-NEST-POST-001',
+        'description' => 'Packaging',
+        'unit_cost' => 1,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
+    ]);
+
+    $rawItem = Item::create([
+        'item_code' => 'RAW-NEST-POST-001',
+        'description' => 'Raw Material',
+        'unit_cost' => 2,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
+    ]);
+
+    $subBom = ProductionBom::create([
+        'code' => 'BOM-NEST-POST-PACK',
+        'description' => 'Pack BOM',
+    ]);
+    $subBom->lines()->create([
+        'line_number' => 10000,
+        'type' => ProductionBomLine::TYPE_ITEM,
+        'item_id' => $rawItem->id,
+        'description' => 'Raw Material',
+        'quantity_per' => 3,
+    ]);
+    $subBom->lines()->create([
+        'line_number' => 20000,
+        'type' => ProductionBomLine::TYPE_ITEM,
+        'item_id' => $packagingItem->id,
+        'description' => 'Packaging',
+        'quantity_per' => 1,
+    ]);
+
+    $mainBom = ProductionBom::create([
+        'code' => 'BOM-NEST-POST-MAIN',
+        'description' => 'Main BOM',
+        'item_id' => $finishedGood->id,
+    ]);
+    $mainBom->lines()->create([
+        'line_number' => 10000,
+        'type' => ProductionBomLine::TYPE_PRODUCTION_BOM,
+        'production_bom_id_related' => $subBom->id,
+        'description' => 'Pack Level',
+        'quantity_per' => 2,
+    ]);
+
+    $location = Location::factory()->create(['code' => 'MAIN']);
+
+    ItemLedgerEntry::create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
+        'item_id' => $rawItem->id,
+        'location_id' => $location->id,
+        'quantity' => 100,
+        'remaining_quantity' => 100,
+        'open' => true,
+        'posting_date' => now(),
+        'document_number' => 'INIT-NEST-RAW-001',
+        'document_line_number' => 10000,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
+        'entry_date' => now(),
+    ]);
+
+    ItemLedgerEntry::create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
+        'item_id' => $packagingItem->id,
+        'location_id' => $location->id,
+        'quantity' => 100,
+        'remaining_quantity' => 100,
+        'open' => true,
+        'posting_date' => now(),
+        'document_number' => 'INIT-NEST-PACK-001',
+        'document_line_number' => 10000,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
+        'entry_date' => now(),
+    ]);
+
+    $order = ProductionOrder::create([
+        'document_number' => 'PO-NEST-POST-001',
+        'status' => ProductionOrderStatus::FIRM_PLANNED,
+        'item_id' => $finishedGood->id,
+        'quantity' => 2,
+        'quantity_base' => 2,
+        'production_bom_id' => $mainBom->id,
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
+        'location_code' => $location->code,
+        'flushing_method' => 'BACKWARD',
+        'costing_method' => 'FIFO',
+    ]);
+
+    $service = app(ProductionOrderService::class);
+    $service->refresh($order);
+    $service->release($order->fresh(), $user->id);
+    $service->finish($order->fresh(), $user->id);
+
+    expect($order->fresh()->status)->toBe(ProductionOrderStatus::FINISHED)
+        ->and((float) $order->fresh()->remaining_quantity)->toBe(0.0);
 });
