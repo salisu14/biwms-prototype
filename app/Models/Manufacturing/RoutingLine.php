@@ -120,9 +120,50 @@ class RoutingLine extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (RoutingLine $line): void {
+            if (! empty($line->line_number)) {
+                return;
+            }
+
+            $maxLineNumber = static::query()
+                ->where('routing_id', $line->routing_id)
+                ->max('line_number');
+
+            $line->line_number = ((int) ($maxLineNumber ?? 0)) + 10000;
+        });
+
         static::saving(function (RoutingLine $line): void {
+            $line->normalizeNumericDefaults();
             $line->applyCenterCostRates();
         });
+    }
+
+    public function normalizeNumericDefaults(): void
+    {
+        $defaultZeroFields = [
+            'setup_time',
+            'run_time',
+            'wait_time',
+            'move_time',
+            'queue_time',
+            'fixed_scrap_quantity',
+            'direct_unit_cost',
+            'indirect_cost_percent',
+            'overhead_rate',
+            'scrap_factor_percent',
+            'subcontracting_cost',
+            'lot_size',
+        ];
+
+        foreach ($defaultZeroFields as $field) {
+            if ($this->{$field} === null || $this->{$field} === '') {
+                $this->{$field} = 0;
+            }
+        }
+
+        if ($this->concurrent_capacities === null || $this->concurrent_capacities === '') {
+            $this->concurrent_capacities = 1;
+        }
     }
 
     public function applyCenterCostRates(): void

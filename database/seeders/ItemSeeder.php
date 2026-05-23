@@ -35,28 +35,35 @@ class ItemSeeder extends Seeder
 
         $retailGroup = GeneralProductPostingGroup::where('code', 'RETAIL')->first()
             ?? GeneralProductPostingGroup::create(['code' => 'RETAIL', 'description' => 'Retail Items']);
-
-        $serviceGroup = GeneralProductPostingGroup::where('code', 'SERVICE')->first()
-            ?? GeneralProductPostingGroup::create(['code' => 'SERVICE', 'description' => 'Service Items']);
+        $rawMatGroup = GeneralProductPostingGroup::where('code', 'RAW')->first()
+            ?? GeneralProductPostingGroup::create(['code' => 'RAW', 'description' => 'Raw Materials']);
+        $packagingGroup = GeneralProductPostingGroup::where('code', 'PACKAGING')->first()
+            ?? GeneralProductPostingGroup::create(['code' => 'PACKAGING', 'description' => 'Packaging']);
 
         $finishedInvGroup = InventoryPostingGroup::where('code', 'FINISHED')->first()
             ?? InventoryPostingGroup::create(['code' => 'FINISHED', 'description' => 'Finished Goods']);
 
-        $serviceInvGroup = InventoryPostingGroup::where('code', 'SERVICE')->first()
-            ?? InventoryPostingGroup::create(['code' => 'SERVICE', 'description' => 'Service Posting Group']);
+        $rawMatInvGroup = InventoryPostingGroup::where('code', 'RAW')->first()
+            ?? InventoryPostingGroup::create(['code' => 'RAW', 'description' => 'Raw Material']);
+
+        $packagingInvGroup = InventoryPostingGroup::where('code', 'PACKAGING')->first()
+            ?? InventoryPostingGroup::create(['code' => 'PACKAGING', 'description' => 'Packaging Material']);
 
         $standardVatProdGroup = VatProductPostingGroup::where('code', 'STANDARD')->first();
         $zeroVatProdGroup = VatProductPostingGroup::where('code', 'ZERO')->first();
 
         // Cache some common lookups
         $vats = VatMaster::all()->pluck('id', 'code');
-        $uoms = UnitOfMeasure::all()->pluck('id', 'uom_code');
+        $baseUomId = UnitOfMeasure::firstOrCreate(
+            ['uom_code' => 'PCS'],
+            ['description' => 'Pieces']
+        )->id;
 
         $items = [
             [
                 'item_code' => '1000',
-                'description' => 'High-Performance Laptop Z1',
-                'description_2' => '16GB RAM, 512GB SSD',
+                'description' => 'Mai sasanci',
+                'description_2' => 'Mai sasanci 60ml',
                 'general_product_posting_group_id' => $retailGroup->id,
                 'inventory_posting_group_id' => $finishedInvGroup->id,
                 'vat_prod_posting_group' => 'VAT20',
@@ -72,59 +79,196 @@ class ItemSeeder extends Seeder
                 'reorder_quantity' => 25.0000,
                 'location_id' => $mainLocation->id,
                 'bin_code' => 'A-01-01',
-                'base_unit_of_measure' => 'EA',
+                'base_uom_id' => $baseUomId,
                 'weight' => 2.5000,
                 'blocked' => false,
             ],
             [
                 'item_code' => '1100',
-                'description' => 'Wireless Ergonomic Mouse',
-                'description_2' => 'Bluetooth 5.0, Rechargeable',
+                'description' => 'Aspartame',
+                'description_2' => 'Aspartame',
                 'general_product_posting_group_id' => $retailGroup->id,
-                'inventory_posting_group_id' => $finishedInvGroup->id,
+                'inventory_posting_group_id' => $rawMatInvGroup->id,
                 'vat_prod_posting_group' => 'VAT20',
-                'item_type' => ItemType::FINISHED_GOOD->value,
+                'item_type' => ItemType::RAW_MATERIAL->value,
                 'costing_method' => CostingMethod::AVERAGE->value,
                 'inventory_method' => InventoryMethod::AVERAGE,
-                'unit_cost' => 25.5000,
-                'standard_cost' => 25.0000,
-                'last_direct_cost' => 26.0000,
-                'unit_price' => 55.0000,
-                'inventory' => 200.0000,
+                'unit_cost' => 30.5000,
+                'standard_cost' => 30.0000,
+                'last_direct_cost' => 30.0000,
+                'unit_price' => 30.0000,
+                'inventory' => 10000.0000,
                 'reorder_point' => 50.0000,
                 'reorder_quantity' => 100.0000,
                 'location_id' => $mainLocation->id,
                 'bin_code' => 'B-02-15',
-                'base_unit_of_measure' => 'EA',
+                'base_uom_id' => $baseUomId,
                 'weight' => 0.1500,
                 'blocked' => false,
             ],
             [
-                'item_code' => 'SERV-01',
-                'description' => 'On-Site Technical Support',
-                'description_2' => 'Hourly rate for hardware repair',
-                'general_product_posting_group_id' => $serviceGroup->id,
-                'inventory_posting_group_id' => $serviceInvGroup->id,
+                'item_code' => '1200',
+                'description' => 'Ginseng',
+                'description_2' => 'Ginseng',
+                'general_product_posting_group_id' => $rawMatGroup->id,
+                'inventory_posting_group_id' => $rawMatInvGroup->id,
                 'vat_prod_posting_group' => 'VAT20',
-                'item_type' => ItemType::SERVICE->value,
+                'item_type' => ItemType::RAW_MATERIAL->value,
                 'costing_method' => CostingMethod::STANDARD->value,
                 'inventory_method' => InventoryMethod::FIFO,
-                'unit_cost' => 45.0000,
-                'standard_cost' => 45.0000,
+                'unit_cost' => 332.0000,
+                'standard_cost' => 323.0000,
                 'last_direct_cost' => 0.0000,
-                'unit_price' => 110.0000,
-                'inventory' => 0.0000,
+                'unit_price' => 323.0000,
+                'inventory' => 10000.0000,
                 'reorder_point' => 0.0000,
                 'reorder_quantity' => 0.0000,
-                'base_unit_of_measure' => 'EA',
+                'base_uom_id' => $baseUomId,
+                'blocked' => false,
+            ],
+            [
+                'item_code' => '1300',
+                'description' => 'Yohimbine',
+                'description_2' => 'Yohimbine',
+                'general_product_posting_group_id' => $rawMatGroup->id,
+                'inventory_posting_group_id' => $rawMatInvGroup->id,
+                'vat_prod_posting_group' => 'VAT20',
+                'item_type' => ItemType::RAW_MATERIAL->value,
+                'costing_method' => CostingMethod::STANDARD->value,
+                'inventory_method' => InventoryMethod::FIFO,
+                'unit_cost' => 47.0000,
+                'standard_cost' => 47.0000,
+                'last_direct_cost' => 0.0000,
+                'unit_price' => 47.0000,
+                'inventory' => 10000.0000,
+                'reorder_point' => 0.0000,
+                'reorder_quantity' => 0.0000,
+                'base_uom_id' => $baseUomId,
+                'blocked' => false,
+            ],
+            [
+                'item_code' => '1400',
+                'description' => 'Sodium Benzoate',
+                'description_2' => 'Sodium Benzoate',
+                'general_product_posting_group_id' => $rawMatGroup->id,
+                'inventory_posting_group_id' => $rawMatInvGroup->id,
+                'vat_prod_posting_group' => 'VAT20',
+                'item_type' => ItemType::RAW_MATERIAL->value,
+                'costing_method' => CostingMethod::STANDARD->value,
+                'inventory_method' => InventoryMethod::FIFO,
+                'unit_cost' => 20.0000,
+                'standard_cost' => 20.0000,
+                'last_direct_cost' => 0.0000,
+                'unit_price' => 20.0000,
+                'inventory' => 10000.0000,
+                'reorder_point' => 0.0000,
+                'reorder_quantity' => 0.0000,
+                'base_uom_id' => $baseUomId,
+                'blocked' => false,
+            ],
+            [
+                'item_code' => '1500',
+                'description' => 'Rubber & Cap',
+                'description_2' => 'Rubber & Cap',
+                'general_product_posting_group_id' => $packagingGroup->id,
+                'inventory_posting_group_id' => $packagingInvGroup->id,
+                'vat_prod_posting_group' => 'VAT20',
+                'item_type' => ItemType::PACKAGING->value,
+                'costing_method' => CostingMethod::STANDARD->value,
+                'inventory_method' => InventoryMethod::FIFO,
+                'unit_cost' => 47.4300,
+                'standard_cost' => 47.4300,
+                'last_direct_cost' => 47.4300,
+                'unit_price' => 47.4300,
+                'inventory' => 10000.0000,
+                'reorder_point' => 0.0000,
+                'reorder_quantity' => 0.0000,
+                'base_uom_id' => $baseUomId,
+                'blocked' => false,
+            ],
+            [
+                'item_code' => '1600',
+                'description' => 'Label',
+                'description_2' => 'Label',
+                'general_product_posting_group_id' => $packagingGroup->id,
+                'inventory_posting_group_id' => $packagingInvGroup->id,
+                'vat_prod_posting_group' => 'VAT20',
+                'item_type' => ItemType::PACKAGING->value,
+                'costing_method' => CostingMethod::STANDARD->value,
+                'inventory_method' => InventoryMethod::FIFO,
+                'unit_cost' => 20.0000,
+                'standard_cost' => 20.0000,
+                'last_direct_cost' => 0.0000,
+                'unit_price' => 20.0000,
+                'inventory' => 10000.0000,
+                'reorder_point' => 0.0000,
+                'reorder_quantity' => 0.0000,
+                'base_uom_id' => $baseUomId,
+                'blocked' => false,
+            ],
+            [
+                'item_code' => '1650',
+                'description' => 'Shrink Sleeve',
+                'description_2' => 'Shrink Sleeve',
+                'general_product_posting_group_id' => $packagingGroup->id,
+                'inventory_posting_group_id' => $packagingInvGroup->id,
+                'vat_prod_posting_group' => 'VAT20',
+                'item_type' => ItemType::PACKAGING->value,
+                'costing_method' => CostingMethod::STANDARD->value,
+                'inventory_method' => InventoryMethod::FIFO,
+                'unit_cost' => 150.0000,
+                'standard_cost' => 150.0000,
+                'last_direct_cost' => 0.0000,
+                'unit_price' => 150.0000,
+                'inventory' => 1000.0000,
+                'reorder_point' => 0.0000,
+                'reorder_quantity' => 0.0000,
+                'base_uom_id' => $baseUomId,
+                'blocked' => false,
+            ],
+            [
+                'item_code' => '1700',
+                'description' => 'Paper Tray',
+                'description_2' => 'Paper Tray',
+                'general_product_posting_group_id' => $packagingGroup->id,
+                'inventory_posting_group_id' => $packagingInvGroup->id,
+                'vat_prod_posting_group' => 'VAT20',
+                'item_type' => ItemType::PACKAGING->value,
+                'costing_method' => CostingMethod::STANDARD->value,
+                'inventory_method' => InventoryMethod::FIFO,
+                'unit_cost' => 150.0000,
+                'standard_cost' => 150.0000,
+                'last_direct_cost' => 0.0000,
+                'unit_price' => 150.0000,
+                'inventory' => 1000.0000,
+                'reorder_point' => 0.0000,
+                'reorder_quantity' => 0.0000,
+                'base_uom_id' => $baseUomId,
+                'blocked' => false,
+            ],
+            [
+                'item_code' => '1800',
+                'description' => 'Carton',
+                'description_2' => 'Carton Box',
+                'general_product_posting_group_id' => $packagingGroup->id,
+                'inventory_posting_group_id' => $packagingInvGroup->id,
+                'vat_prod_posting_group' => 'VAT20',
+                'item_type' => ItemType::PACKAGING->value,
+                'costing_method' => CostingMethod::STANDARD->value,
+                'inventory_method' => InventoryMethod::STANDARD->value,
+                'unit_cost' => 267.0000,
+                'standard_cost' => 267.0000,
+                'last_direct_cost' => 0.0000,
+                'unit_price' => 267.0000,
+                'inventory' => 100.0000,
+                'reorder_point' => 0.0000,
+                'reorder_quantity' => 0.0000,
+                'base_uom_id' => $baseUomId,
                 'blocked' => false,
             ],
         ];
 
         foreach ($items as $itemData) {
-            // Resolve UOM ID
-            $itemData['uom_id'] = $uoms[$itemData['base_unit_of_measure']] ?? null;
-
             // Resolve VAT ID
             $itemData['vat_id'] = $vats[$itemData['vat_prod_posting_group']] ?? null;
 

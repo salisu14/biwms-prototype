@@ -45,7 +45,6 @@ return new class extends Migration
                 ->nullable()
                 ->constrained('vat_product_posting_groups');
 
-
             // Pricing & Costing
             $table->enum('costing_method', array_column(CostingMethod::cases(), 'value'))
                 ->default('AVERAGE');
@@ -71,7 +70,6 @@ return new class extends Migration
             $table->string('bin_code', 20)->nullable();
 
             // Physical & WMS Attributes
-//            $table->string('base_unit_of_measure', 20)->default('PCS');
             $table->foreignId('base_uom_id')->nullable()->constrained('unit_of_measures');
 
             $table->decimal('weight', 10, 4)->nullable();

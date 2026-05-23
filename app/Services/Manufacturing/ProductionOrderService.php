@@ -18,6 +18,7 @@ use App\Models\Manufacturing\ProductionBomLine;
 use App\Models\Manufacturing\ProductionBomVersion;
 use App\Models\Manufacturing\ProductionBomVersionLine;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Manufacturing\ProductionOrderRoutingLine;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Services\Inventory\CostingService;
 use App\Services\Posting\InventoryPostingResolverService;
@@ -33,6 +34,8 @@ class ProductionOrderService
     private const MAX_DECIMAL_15_4 = 99999999999.9999;
 
     private const MAX_BOM_EXPLOSION_DEPTH = 25;
+
+    private const MAX_CAPACITY_COST_TO_ORDER_VALUE_RATIO = 100;
 
     public function __construct(
         protected PostingService $postingService,
@@ -289,7 +292,7 @@ class ProductionOrderService
         DB::transaction(function () use ($order, $routingLineId, $routingLine, $setupTime, $runTime, &$cost) {
             $workCenter = $routingLine->workCenter;
             $machineCenter = $routingLine->machineCenter;
-            $center = $machineCenter ?? $workCenter;
+            $center = $this->resolveCapacityCostCenter($routingLine);
             $totalTime = $setupTime + $runTime;
             $costingTime = $totalTime;
             $autoDerivedCost = false;
@@ -327,6 +330,15 @@ class ProductionOrderService
                     'Review run/setup time and center rates.'
                 );
             }
+
+            $this->assertCapacityCostIsReasonable(
+                order: $order,
+                totalCost: $totalCost,
+                directCost: $cost,
+                indirectCost: $indirectCost,
+                centerCode: (string) ($center?->code ?? ''),
+                timeUnit: (string) ($routingLine->run_time_unit ?? $routingLine->setup_time_unit ?? '')
+            );
 
             CapacityLedgerEntry::create([
                 'production_order_id' => $order->id,
@@ -383,6 +395,44 @@ class ProductionOrderService
             || in_array(strtoupper($runUnit), $minuteAliases, true);
     }
 
+    private function assertCapacityCostIsReasonable(
+        ProductionOrder $order,
+        float $totalCost,
+        float $directCost,
+        float $indirectCost,
+        string $centerCode,
+        string $timeUnit
+    ): void {
+        if ($totalCost <= 0) {
+            return;
+        }
+
+        $plannedUnitCost = (float) ($order->cost_rollup ?: $order->unit_cost ?: 0);
+        $plannedOrderValue = abs((float) $order->quantity * $plannedUnitCost);
+
+        if ($plannedOrderValue <= 0) {
+            return;
+        }
+
+        $capacityGuardRatio = (float) config('manufacturing.capacity_guard_ratio', self::MAX_CAPACITY_COST_TO_ORDER_VALUE_RATIO);
+        $capacityGuardRatio = $capacityGuardRatio > 0 ? $capacityGuardRatio : self::MAX_CAPACITY_COST_TO_ORDER_VALUE_RATIO;
+        $maxAllowedCapacityCost = $plannedOrderValue * $capacityGuardRatio;
+
+        if ($totalCost > $maxAllowedCapacityCost) {
+            $centerLabel = $centerCode !== '' ? $centerCode : 'N/A';
+            $unitLabel = $timeUnit !== '' ? strtoupper($timeUnit) : 'N/A';
+
+            throw new \Exception(
+                'Capacity cost appears unrealistic for this production order. '.
+                "Center={$centerLabel}, TimeUnit={$unitLabel}, ".
+                "Direct={$directCost}, Overhead={$indirectCost}, Total={$totalCost}, ".
+                "PlannedOrderValue={$plannedOrderValue}, ".
+                "Threshold={$capacityGuardRatio}x. ".
+                'Review machine/work center rates and time units before posting.'
+            );
+        }
+    }
+
     /**
      * Finish production order
      */
@@ -431,6 +481,13 @@ class ProductionOrderService
                 ]);
                 $totalInventoryCost += $actualCostForEntry;
             }
+
+            $order->lines()
+                ->where('item_id', $order->item_id)
+                ->update([
+                    'unit_cost' => $inventoryUnitCost,
+                    'cost_amount' => (float) $order->quantity * (float) $inventoryUnitCost,
+                ]);
 
             // G/L Integration:
             // 1. Move from WIP to Inventory (at the cost we recorded in Inventory)
@@ -541,12 +598,16 @@ class ProductionOrderService
             $order->lines()->delete();
         }
 
+        $lineUnitCost = $this->resolveOrderLineUnitCost($order);
+
         $lineData = [
             'item_id' => $order->item_id,
             'description' => $order->description,
             'quantity' => $order->quantity,
             'unit_of_measure_code' => $order->unit_of_measure_code ?? $order->item->base_unit_of_measure,
             'quantity_base' => $order->quantity_base,
+            'unit_cost' => $lineUnitCost,
+            'cost_amount' => (float) $order->quantity * $lineUnitCost,
             'due_date' => $order->due_date,
             'production_bom_id' => $order->production_bom_id,
             'routing_id' => $order->routing_id,
@@ -565,6 +626,19 @@ class ProductionOrderService
             'line_number' => 10000,
             ...$lineData,
         ]);
+    }
+
+    private function resolveOrderLineUnitCost(ProductionOrder $order): float
+    {
+        if ($order->cost_rollup !== null) {
+            return (float) $order->cost_rollup;
+        }
+
+        if ($order->unit_cost !== null) {
+            return (float) $order->unit_cost;
+        }
+
+        return (float) ($order->item?->unit_cost ?? 0);
     }
 
     protected function refreshComponents(ProductionOrder $order): void
@@ -655,7 +729,7 @@ class ProductionOrderService
         }
 
         foreach ($lines as $bomLine) {
-            $lineQuantityPer = (float) $bomLine->quantity_per;
+            $lineQuantityPer = $this->resolveNormalizedBomLineQuantityPer($bomLine);
             $lineScrapPercent = (float) $bomLine->scrap_percent;
             $effectiveQuantityPer = $accumulatedQuantityPer * $lineQuantityPer;
             $expectedQty = $parentOrderQuantity * $lineQuantityPer * (1 + $lineScrapPercent / 100);
@@ -733,6 +807,30 @@ class ProductionOrderService
 
             unset($visitedBomPath[$subBomId]);
         }
+    }
+
+    private function resolveCapacityCostCenter(ProductionOrderRoutingLine $routingLine): mixed
+    {
+        $priority = (string) config('manufacturing.capacity_cost_center_priority', 'machine_center_first');
+        $priority = strtolower(trim($priority));
+
+        if ($priority === 'work_center_first') {
+            return $routingLine->workCenter ?? $routingLine->machineCenter;
+        }
+
+        return $routingLine->machineCenter ?? $routingLine->workCenter;
+    }
+
+    private function resolveNormalizedBomLineQuantityPer(ProductionBomLine|ProductionBomVersionLine $bomLine): float
+    {
+        $lineQuantityPer = (float) $bomLine->quantity_per;
+        $basisQuantity = 1.0;
+
+        if ($bomLine instanceof ProductionBomVersionLine) {
+            $basisQuantity = max(1.0, (float) ($bomLine->version?->quantity_per ?? 1.0));
+        }
+
+        return $lineQuantityPer / $basisQuantity;
     }
 
     private function resolveBomLines(
@@ -917,6 +1015,8 @@ class ProductionOrderService
             throw new \Exception('Only RELEASED orders can be finished');
         }
 
+        $this->validateManualFlushingConsumption($order);
+
         // Normalize stale routing statuses based on posted/actual time before validation.
         $order->routingLines()
             ->whereRaw('actual_run_time >= run_time')
@@ -936,6 +1036,27 @@ class ProductionOrderService
 
         if ($order->remaining_quantity > 0) {
             throw new \Exception('Production not fully completed');
+        }
+    }
+
+    protected function validateManualFlushingConsumption(ProductionOrder $order): void
+    {
+        $flushingMethod = strtoupper((string) $order->flushing_method);
+        if (! str_contains($flushingMethod, 'MANUAL')) {
+            return;
+        }
+
+        $remainingConsumption = (float) $order->components()
+            ->selectRaw('sum(coalesce(expected_quantity, 0) - coalesce(actual_quantity_consumed, 0)) as remaining')
+            ->value('remaining');
+        $remainingConsumption = max(0.0, $remainingConsumption);
+
+        if ($remainingConsumption > 0.0001) {
+            throw new \Exception(
+                'Cannot finish MANUAL flush order with unconsumed components. '.
+                'Post component consumption first. '.
+                'Remaining component quantity: '.number_format($remainingConsumption, 4)
+            );
         }
     }
 

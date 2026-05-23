@@ -19,6 +19,11 @@ class InventoryPostingGroupSeeder extends Seeder
                 'blocked' => false,
             ],
             [
+                'code' => 'PACKAGING',
+                'description' => 'Packing Materials',
+                'blocked' => false,
+            ],
+            [
                 'code' => 'WIP',
                 'description' => 'Work in Process',
                 'blocked' => false,

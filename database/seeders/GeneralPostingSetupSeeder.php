@@ -81,6 +81,13 @@ class GeneralPostingSetupSeeder extends Seeder
                 'general_product_posting_group_id' => $prodGroups['FINISHED'],
                 'inventory_account_id' => $accounts['inventory_finished'],
                 'inventory_adj_account_id' => $accounts['wip_account'],
+                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_cap'],
+                'overhead_applied_account_id' => $accounts['overhead_applied'],
+                'purchase_variance_account_id' => $accounts['purchase_variance'],
+                'material_variance_account_id' => $accounts['purchase_variance'],
+                'capacity_variance_account_id' => $accounts['purchase_variance'],
+                'capacity_overhead_variance_account_id' => $accounts['purchase_variance'],
+                'manufacturing_overhead_variance_account_id' => $accounts['purchase_variance'],
             ],
 
             [
@@ -88,6 +95,13 @@ class GeneralPostingSetupSeeder extends Seeder
                 'general_product_posting_group_id' => $prodGroups['RAWMAT'],
                 'inventory_account_id' => $accounts['inventory_rawmat'],
                 'inventory_adj_account_id' => $accounts['wip_account'],
+                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_cap'],
+                'overhead_applied_account_id' => $accounts['overhead_applied'],
+                'purchase_variance_account_id' => $accounts['purchase_variance'],
+                'material_variance_account_id' => $accounts['purchase_variance'],
+                'capacity_variance_account_id' => $accounts['purchase_variance'],
+                'capacity_overhead_variance_account_id' => $accounts['purchase_variance'],
+                'manufacturing_overhead_variance_account_id' => $accounts['purchase_variance'],
             ],
 
             [
@@ -100,8 +114,41 @@ class GeneralPostingSetupSeeder extends Seeder
                 'general_business_posting_group_id' => $busGroups['MANUFACTURING'],
                 'general_product_posting_group_id' => $prodGroups['CAPACITY'],
                 'inventory_adj_account_id' => $accounts['wip_account'],
+                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_cap'],
+                'overhead_applied_account_id' => $accounts['overhead_applied'],
+                'purchase_variance_account_id' => $accounts['purchase_variance'],
+                'material_variance_account_id' => $accounts['purchase_variance'],
+                'capacity_variance_account_id' => $accounts['purchase_variance'],
+                'capacity_overhead_variance_account_id' => $accounts['purchase_variance'],
+                'manufacturing_overhead_variance_account_id' => $accounts['purchase_variance'],
             ],
         ];
+
+        // Add manufacturing setups for dynamic product groups used by seeded items.
+        foreach (['PACKAGING', 'RAW', 'RETAIL'] as $optionalProductCode) {
+            if (! isset($prodGroups[$optionalProductCode])) {
+                continue;
+            }
+
+            $inventoryAccountId = in_array($optionalProductCode, ['PACKAGING', 'RAW'], true)
+                ? $accounts['inventory_rawmat']
+                : $accounts['inventory_finished'];
+
+            $setups[] = [
+                'general_business_posting_group_id' => $busGroups['MANUFACTURING'],
+                'general_product_posting_group_id' => $prodGroups[$optionalProductCode],
+                'inventory_account_id' => $inventoryAccountId,
+                'inventory_adj_account_id' => $accounts['wip_account'],
+                'direct_cost_applied_account_id' => $accounts['direct_cost_applied_cap'],
+                'overhead_applied_account_id' => $accounts['overhead_applied'],
+                'purchase_variance_account_id' => $accounts['purchase_variance'],
+                'material_variance_account_id' => $accounts['purchase_variance'],
+                'capacity_variance_account_id' => $accounts['purchase_variance'],
+                'capacity_overhead_variance_account_id' => $accounts['purchase_variance'],
+                'manufacturing_overhead_variance_account_id' => $accounts['purchase_variance'],
+                'inventory_adj_account_id' => $accounts['inventory_adjustment'],
+            ];
+        }
 
         foreach ($setups as $setup) {
             GeneralPostingSetup::updateOrCreate(
@@ -128,7 +175,7 @@ class GeneralPostingSetupSeeder extends Seeder
                 $group = GeneralBusinessPostingGroup::firstOrCreate(
                     ['code' => $code],
                     [
-                        'description' => $code . ' Auto-created (missing seed)',
+                        'description' => $code.' Auto-created (missing seed)',
                         'default_vat_business_posting_group_id' => null,
                         'auto_create_vat_bus_posting_group' => false,
                         'blocked' => false,
@@ -148,7 +195,7 @@ class GeneralPostingSetupSeeder extends Seeder
     {
         // ADDED 'EXPENSE' to the list of codes to fetch
         // If ID 9 is actually 'DTA', 'ASSET', or 'SERVICES', add it here instead.
-        $codes = ['RAWMAT', 'WIP', 'FINISHED', 'CAPACITY', 'EXPENSE'];
+        $codes = ['RAWMAT', 'WIP', 'FINISHED', 'CAPACITY', 'EXPENSE', 'PACKAGING', 'RAW', 'RETAIL'];
         $groups = [];
 
         foreach ($codes as $code) {
@@ -175,9 +222,9 @@ class GeneralPostingSetupSeeder extends Seeder
             'inventory_finished' => '13200',
             'inventory_rawmat' => '13100',
             'wip_account' => '13300',
-            'direct_cost_applied_mat' => '52100',
-            'direct_cost_applied_cap' => '62100',
-            'overhead_applied' => '62200',
+            'direct_cost_applied_mat' => '62110',
+            'direct_cost_applied_cap' => '62110',
+            'overhead_applied' => '62210',
             'purchase_variance' => '50300',
             'inventory_adjustment' => '50400',
             // ADDED: Generic Expense Account for the EXPENSE setup

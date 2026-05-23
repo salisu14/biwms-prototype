@@ -12,112 +12,78 @@ class InventoryPostingSetupSeeder extends Seeder
 {
     public function run(): void
     {
-        // Get posting groups by code
-        $rawGroup = InventoryPostingGroup::where('code', 'RAW')->first();
-        $wipGroup = InventoryPostingGroup::where('code', 'WIP')->first();
-        $finishedGroup = InventoryPostingGroup::where('code', 'FINISHED')->first();
-        $inTransitGroup = InventoryPostingGroup::where('code', 'IN-TRANSIT')->first();
+        $groupByCode = InventoryPostingGroup::query()
+            ->whereIn('code', ['RAW', 'PACKAGING', 'WIP', 'FINISHED', 'IN-TRANSIT'])
+            ->get()
+            ->keyBy('code');
 
-        if (! $rawGroup || ! $wipGroup || ! $finishedGroup) {
-            $this->command->error('Required InventoryPostingGroups not found. Run InventoryPostingGroupSeeder first.');
-
-            return;
-        }
-
-        // Get accounts by account_number
-        $rawMatAccount = ChartOfAccount::where('account_number', '21110')->first();
-        $wipAccount = ChartOfAccount::where('account_number', '21310')->first();
-        $finishedAccount = ChartOfAccount::where('account_number', '21410')->first();
-
-        if (! $rawMatAccount || ! $wipAccount || ! $finishedAccount) {
-            $this->command->error('Required ChartOfAccounts not found. Run ChartOfAccountSeeder first.');
+        if (! $groupByCode->has('RAW') || ! $groupByCode->has('WIP') || ! $groupByCode->has('FINISHED')) {
+            $this->command->error('Required Inventory Posting Groups missing. Seed InventoryPostingGroupSeeder first.');
 
             return;
         }
 
-        // Get locations by code
-        $rawWarehouse = Location::where('code', 'RAW-WAREHOUSE')->first();
-        $prodFloor = Location::where('code', 'PROD-FLOOR')->first();
-        $fgWarehouseA = Location::where('code', 'FG-WAREHOUSE-A')->first();
-        $fgWarehouseB = Location::where('code', 'FG-WAREHOUSE-B')->first();
-        $inTransit = Location::where('code', 'IN-TRANSIT')->first();
+        $accountByNumber = ChartOfAccount::query()
+            ->whereIn('account_number', ['13110', '13210', '13310'])
+            ->get()
+            ->keyBy('account_number');
 
-        $setups = [
-            [
-                'location' => $rawWarehouse,
-                'group' => $rawGroup,
-                'inventory_account' => $rawMatAccount,
-                'inventory_account_interim' => $rawMatAccount,
-                'wip_account' => $wipAccount,
-            ],
-            [
-                'location' => $prodFloor,
-                'group' => $wipGroup,
-                'inventory_account' => $wipAccount,
-                'inventory_account_interim' => $wipAccount,
-                'wip_account' => $wipAccount,
-            ],
-            [
-                'location' => $fgWarehouseA,
-                'group' => $finishedGroup,
-                'inventory_account' => $finishedAccount,
-                'inventory_account_interim' => $finishedAccount,
-                'wip_account' => $wipAccount,
-            ],
-            [
-                'location' => $fgWarehouseB,
-                'group' => $finishedGroup,
-                'inventory_account' => $finishedAccount,
-                'inventory_account_interim' => $finishedAccount,
-                'wip_account' => $wipAccount,
-            ],
+        if (! $accountByNumber->has('13110') || ! $accountByNumber->has('13210') || ! $accountByNumber->has('13310')) {
+            $this->command->error('Required GL accounts missing (13110, 13210, 13310). Seed ChartOfAccountSeeder first.');
+
+            return;
+        }
+
+        $rawInventoryAccount = $accountByNumber->get('13110');
+        $finishedInventoryAccount = $accountByNumber->get('13210');
+        $wipAccount = $accountByNumber->get('13310');
+
+        $defaultMap = [
+            'RAW' => $rawInventoryAccount,
+            'PACKAGING' => $rawInventoryAccount,
+            'WIP' => $wipAccount,
+            'FINISHED' => $finishedInventoryAccount,
+            'IN-TRANSIT' => $rawInventoryAccount,
         ];
 
-        if ($inTransit && $inTransitGroup) {
-            $setups[] = [
-                'location' => $inTransit,
-                'group' => $inTransitGroup,
-                'inventory_account' => $rawMatAccount,
-                'inventory_account_interim' => $rawMatAccount,
-                'wip_account' => $wipAccount,
-            ];
-        }
-
-        foreach ($setups as $setup) {
-            if (! $setup['location']) {
-                $this->command->warn('Skipping setup: location not found');
-
+        foreach ($defaultMap as $groupCode => $inventoryAccount) {
+            $group = $groupByCode->get($groupCode);
+            if (! $group) {
                 continue;
             }
 
             InventoryPostingSetup::updateOrCreate(
                 [
-                    'location_id' => $setup['location']->id,
-                    'inventory_posting_group_id' => $setup['group']->id,
+                    'location_id' => null,
+                    'inventory_posting_group_id' => $group->id,
                 ],
                 [
-                    'inventory_account_id' => $setup['inventory_account']->id,
-                    'inventory_account_interim_id' => $setup['inventory_account_interim']->id,
-                    'wip_account_id' => $setup['wip_account']->id,
+                    'inventory_account_id' => $inventoryAccount->id,
+                    'inventory_account_interim_id' => $inventoryAccount->id,
+                    'wip_account_id' => $wipAccount->id,
                 ]
             );
 
-            $this->command->info("Created setup: {$setup['location']->code} / {$setup['group']->code}");
+            $this->command->info("Created default inventory posting setup for group {$groupCode}");
         }
 
-        // Create default (no location) for RAW
-        InventoryPostingSetup::updateOrCreate(
-            [
-                'location_id' => null,
-                'inventory_posting_group_id' => $rawGroup->id,
-            ],
-            [
-                'inventory_account_id' => $rawMatAccount->id,
-                'inventory_account_interim_id' => $rawMatAccount->id,
-                'wip_account_id' => $wipAccount->id,
-            ]
-        );
+        $inTransitGroup = $groupByCode->get('IN-TRANSIT');
+        $inTransitLocation = Location::query()->where('code', 'IN-TRANSIT')->first();
 
-        $this->command->info('Created default setup for RAW');
+        if ($inTransitGroup && $inTransitLocation) {
+            InventoryPostingSetup::updateOrCreate(
+                [
+                    'location_id' => $inTransitLocation->id,
+                    'inventory_posting_group_id' => $inTransitGroup->id,
+                ],
+                [
+                    'inventory_account_id' => $rawInventoryAccount->id,
+                    'inventory_account_interim_id' => $rawInventoryAccount->id,
+                    'wip_account_id' => $wipAccount->id,
+                ]
+            );
+
+            $this->command->info('Created IN-TRANSIT location-specific inventory posting setup');
+        }
     }
 }

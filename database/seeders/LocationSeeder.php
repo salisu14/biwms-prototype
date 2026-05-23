@@ -13,7 +13,7 @@ class LocationSeeder extends Seeder
             // Main Distribution Center - Full WMS
             [
                 'code' => 'MAIN',
-                'name' => 'Main Distribution Center',
+                'name' => 'Jogana Main Distribution Center',
                 'address' => '1000 Logistics Parkway, Industrial District, Chicago, IL 60601',
                 'directed_put_away_and_pick' => true,
                 'bin_mandatory' => true,

@@ -34,8 +34,14 @@ return new class extends Migration
             $table->decimal('reserved_quantity', 15, 4)->default(0);
             $table->decimal('unit_cost', 15, 4)->default(0);
             $table->decimal('total_cost', 15, 4)->default(0);
+
+            $table->unsignedSmallInteger('bom_level')->default(1)->after('line_number');
+            $table->string('bom_path')->nullable()->after('bom_level');
+            $table->string('source_bom_code')->nullable()->after('bom_path');
             $table->timestamps();
 
+            $table->index(['production_order_id', 'bom_level'], 'poc_order_bom_level_idx');
+            $table->index('source_bom_code', 'poc_source_bom_code_idx');
             $table->index(['production_order_id', 'line_number']);
             $table->index(['item_id', 'production_order_id']);
         });

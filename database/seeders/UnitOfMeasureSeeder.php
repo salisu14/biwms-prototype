@@ -14,6 +14,12 @@ class UnitOfMeasureSeeder extends Seeder
         $uoms = [
             // Base units (is_base_uom = true)
             [
+                'uom_code' => 'PCS',
+                'description' => 'Pieces',
+                'conversion_factor' => 1.000000,
+                'is_base_uom' => true,
+            ],
+            [
                 'uom_code' => 'EA',
                 'description' => 'Each',
                 'conversion_factor' => 1.000000,
@@ -58,18 +64,6 @@ class UnitOfMeasureSeeder extends Seeder
             [
                 'uom_code' => 'MM',
                 'description' => 'Millimeter',
-                'conversion_factor' => 1.000000,
-                'is_base_uom' => true,
-            ],
-            [
-                'uom_code' => 'M2',
-                'description' => 'Square Meter',
-                'conversion_factor' => 1.000000,
-                'is_base_uom' => true,
-            ],
-            [
-                'uom_code' => 'M3',
-                'description' => 'Cubic Meter',
                 'conversion_factor' => 1.000000,
                 'is_base_uom' => true,
             ],
@@ -132,8 +126,14 @@ class UnitOfMeasureSeeder extends Seeder
             [
                 'uom_code' => 'PK',
                 'description' => 'Pack',
-                'conversion_factor' => 10.000000,
+                'conversion_factor' => 12.000000,
                 'is_base_uom' => false,
+            ],
+            [
+                'uom_code' => 'CT',
+                'description' => 'Carton',
+                'conversion_factor' => 288.000000,
+                'is_base_uom' => true,
             ],
             [
                 'uom_code' => 'RL',

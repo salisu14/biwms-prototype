@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductionOrders\Schemas;
 
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderStatus;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -152,6 +153,62 @@ class ProductionOrderInfolist
                             ->money('USD')
                             ->weight(FontWeight::Bold)
                             ->color('success'),
+
+                        TextEntry::make('actual_cost_per_unit')
+                            ->label('Actual Cost / Unit (FG)')
+                            ->state(function ($record): ?float {
+                                $finishedGoodsProducedQty = (float) $record->itemLedgerEntries()
+                                    ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+                                    ->where('item_id', $record->item_id)
+                                    ->sum('quantity');
+
+                                if ($finishedGoodsProducedQty <= 0) {
+                                    return null;
+                                }
+
+                                return (float) $record->total_actual_cost / $finishedGoodsProducedQty;
+                            })
+                            ->money('USD')
+                            ->weight(FontWeight::Bold)
+                            ->color('info')
+                            ->placeholder('N/A'),
+
+                        TextEntry::make('actual_cost_per_piece')
+                            ->label('Actual Cost / Piece')
+                            ->state(function ($record): ?float {
+                                $finishedGoodsProducedQty = (float) $record->itemLedgerEntries()
+                                    ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+                                    ->where('item_id', $record->item_id)
+                                    ->sum('quantity');
+
+                                if ($finishedGoodsProducedQty <= 0) {
+                                    return null;
+                                }
+
+                                $producedBaseQty = (float) ($record->quantity_base ?? 0);
+
+                                // Fallback for pack-style orders where quantity_base remains 1
+                                // but the exploded components reflect per-piece quantity.
+                                if ($producedBaseQty <= $finishedGoodsProducedQty) {
+                                    $componentPieceQty = (float) $record->components()
+                                        ->where('unit_of_measure_code', $record->unit_of_measure_code)
+                                        ->max('expected_quantity');
+
+                                    if ($componentPieceQty > $finishedGoodsProducedQty) {
+                                        $producedBaseQty = $componentPieceQty;
+                                    }
+                                }
+
+                                if ($producedBaseQty <= 0) {
+                                    return null;
+                                }
+
+                                return (float) $record->total_actual_cost / $producedBaseQty;
+                            })
+                            ->money('USD')
+                            ->weight(FontWeight::Bold)
+                            ->color('success')
+                            ->placeholder('N/A'),
                     ]),
 
                 Section::make('Audit & Tracking')

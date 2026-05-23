@@ -21,6 +21,14 @@ class ChartOfAccountSeeder extends Seeder
             // ============================================
             [
                 'account_number' => '40100',
+                'name' => 'Sales - Domestic Wholesale',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::REVENUE,
+                'direct_posting' => true,
+                'parent_account_number' => '40000',
+            ],
+            [
+                'account_number' => '40101',
                 'name' => 'Sales - Domestic Retail',
                 'structural_type' => AccountStructuralType::POSTING,
                 'account_category' => AccountCategory::REVENUE,
@@ -41,7 +49,7 @@ class ChartOfAccountSeeder extends Seeder
             // ============================================
             [
                 'account_number' => '50100',
-                'name' => 'COGS - Domestic Retail',
+                'name' => 'COGS - Domestic Wholesale',
                 'structural_type' => AccountStructuralType::POSTING,
                 'account_category' => AccountCategory::COGS,
                 'direct_posting' => true,
@@ -134,6 +142,34 @@ class ChartOfAccountSeeder extends Seeder
                 'account_category' => AccountCategory::INVENTORY,
                 'direct_posting' => false,
                 'parent_account_number' => '13000',
+            ],
+            [
+                'account_number' => '13310',
+                'name' => 'Work in Process - Production',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::INVENTORY,
+                'direct_posting' => true,
+                'parent_account_number' => '13300',
+            ],
+
+            // ============================================
+            // Manufacturing Applied Cost Accounts
+            // ============================================
+            [
+                'account_number' => '62110',
+                'name' => 'Direct Cost Applied',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::OPERATING_EXPENSE,
+                'direct_posting' => true,
+                'parent_account_number' => '62100',
+            ],
+            [
+                'account_number' => '62210',
+                'name' => 'Overhead Applied - Production',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::LIABILITY,
+                'direct_posting' => true,
+                'parent_account_number' => '62200',
             ],
 
             // ============================================
@@ -235,20 +271,6 @@ class ChartOfAccountSeeder extends Seeder
             [
                 'account_number' => '62200',
                 'name' => 'Overhead Applied',
-                'structural_type' => AccountStructuralType::HEADING,
-                'account_category' => AccountCategory::LIABILITY,
-                'direct_posting' => false,
-            ],
-            [
-                'account_number' => '50300',
-                'name' => 'Purchase Variance',
-                'structural_type' => AccountStructuralType::HEADING,
-                'account_category' => AccountCategory::LIABILITY,
-                'direct_posting' => false,
-            ],
-            [
-                'account_number' => '50400',
-                'name' => 'Inventory Adjustment',
                 'structural_type' => AccountStructuralType::HEADING,
                 'account_category' => AccountCategory::LIABILITY,
                 'direct_posting' => false,
