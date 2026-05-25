@@ -145,6 +145,13 @@ class PurchaseOrder extends Model
         return $this->hasMany(PurchaseInvoice::class, 'order_id');
     }
 
+    public function glEntries(): HasMany
+    {
+        return $this->hasMany(GlEntry::class, 'source_number', 'order_number')
+            ->where('source_type', 'VENDOR')
+            ->whereIn('source_number', $this->postedInvoices()->select('document_number'));
+    }
+
     // ==================== HELPERS & ACCESORS ====================
 
     /**

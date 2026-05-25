@@ -67,27 +67,83 @@ class WipValuationReport extends Page implements HasTable
             ->query(
                 ProductionOrder::query()
                     ->with(['item', 'lines'])
-                    ->whereIn('status', ['released', 'in_progress', 'finished'])
+                    ->whereIn('status', ['RELEASED', 'FINISHED'])
                     ->when($this->dateFrom, fn ($q) => $q->whereDate('starting_date_time', '>=', $this->dateFrom))
                     ->when($this->dateTo, fn ($q) => $q->whereDate('starting_date_time', '<=', $this->dateTo))
                     ->when($this->status, fn ($q) => $q->where('status', $this->status))
                     ->select('production_orders.*')
                     ->selectRaw(
-                        '(SELECT COALESCE(SUM(cost_amount_expected), 0)
-                           FROM value_entries
-                          WHERE production_order_no = production_orders.document_number
+                        '(EXISTS (
+                            SELECT 1
+                            FROM value_entries ve_exist
+                            WHERE ve_exist.production_order_no = production_orders.document_number
+                        )) as has_value_entries'
+                    )
+                    ->selectRaw(
+                        '(SELECT
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT 1
+                                    FROM value_entries ve_exist
+                                    WHERE ve_exist.production_order_no = production_orders.document_number
+                                )
+                                THEN COALESCE(SUM(ve.cost_amount_expected), 0)
+                                ELSE (
+                                    SELECT COALESCE(SUM(ile_expected.cost_amount_expected), 0)
+                                    FROM item_ledger_entries ile_expected
+                                    WHERE ile_expected.source_type = \'App\\\\Models\\\\Manufacturing\\\\ProductionOrder\'
+                                      AND ile_expected.source_id = production_orders.id
+                                )
+                            END
+                          FROM value_entries ve
+                          WHERE ve.production_order_no = production_orders.document_number
                          ) as expected_cost_total'
                     )
                     ->selectRaw(
-                        '(SELECT COALESCE(SUM(cost_amount_actual), 0)
-                           FROM value_entries
-                          WHERE production_order_no = production_orders.document_number
+                        '(SELECT
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT 1
+                                    FROM value_entries ve_exist
+                                    WHERE ve_exist.production_order_no = production_orders.document_number
+                                )
+                                THEN COALESCE(SUM(ve.cost_amount_actual), 0)
+                                ELSE (
+                                    SELECT COALESCE(SUM(ile_actual.cost_amount_actual), 0)
+                                    FROM item_ledger_entries ile_actual
+                                    WHERE ile_actual.source_type = \'App\\\\Models\\\\Manufacturing\\\\ProductionOrder\'
+                                      AND ile_actual.source_id = production_orders.id
+                                )
+                            END
+                          FROM value_entries ve
+                          WHERE ve.production_order_no = production_orders.document_number
                          ) as actual_cost_total'
                     )
                     ->selectRaw(
-                        '(SELECT COALESCE(SUM(variance_amount), 0)
-                           FROM value_entries
-                          WHERE production_order_no = production_orders.document_number
+                        '(SELECT
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT 1
+                                    FROM value_entries ve_exist
+                                    WHERE ve_exist.production_order_no = production_orders.document_number
+                                )
+                                THEN COALESCE(SUM(ve.variance_amount), 0)
+                                ELSE (
+                                    (
+                                        SELECT COALESCE(SUM(ile_actual.cost_amount_actual), 0)
+                                        FROM item_ledger_entries ile_actual
+                                        WHERE ile_actual.source_type = \'App\\\\Models\\\\Manufacturing\\\\ProductionOrder\'
+                                          AND ile_actual.source_id = production_orders.id
+                                    ) - (
+                                        SELECT COALESCE(SUM(ile_expected.cost_amount_expected), 0)
+                                        FROM item_ledger_entries ile_expected
+                                        WHERE ile_expected.source_type = \'App\\\\Models\\\\Manufacturing\\\\ProductionOrder\'
+                                          AND ile_expected.source_id = production_orders.id
+                                    )
+                                )
+                            END
+                          FROM value_entries ve
+                          WHERE ve.production_order_no = production_orders.document_number
                          ) as total_variance'
                     )
             )
@@ -102,9 +158,8 @@ class WipValuationReport extends Page implements HasTable
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state?->value ?? $state) {
-                        'released' => 'warning',
-                        'in_progress' => 'info',
-                        'finished' => 'success',
+                        'RELEASED' => 'warning',
+                        'FINISHED' => 'success',
                         default => 'gray',
                     }),
 
@@ -125,6 +180,13 @@ class WipValuationReport extends Page implements HasTable
                     ->label('Start Date')
                     ->date()
                     ->sortable(),
+
+                TextColumn::make('data_source')
+                    ->label('Data Source')
+                    ->state(fn ($record) => (bool) ($record->has_value_entries ?? false) ? 'Value Entry' : 'Item Ledger Fallback')
+                    ->badge()
+                    ->color(fn ($state) => $state === 'Value Entry' ? 'success' : 'warning')
+                    ->toggleable(),
 
                 TextColumn::make('expected_cost_total')
                     ->label('Expected Cost')
@@ -170,9 +232,8 @@ class WipValuationReport extends Page implements HasTable
             ->filters([
                 SelectFilter::make('status')
                     ->options([
-                        'released' => 'Released',
-                        'in_progress' => 'In Progress',
-                        'finished' => 'Finished',
+                        'RELEASED' => 'Released',
+                        'FINISHED' => 'Finished',
                     ])
                     ->native(false),
 

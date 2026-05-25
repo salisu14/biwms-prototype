@@ -4,7 +4,10 @@
 
 namespace App\Models;
 
+use App\Enums\ContactRole;
+use App\Enums\ContactType;
 use App\Enums\CustomerType;
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -41,6 +44,39 @@ class Customer extends Model
         'customer_type' => CustomerType::class,
         'is_price_inclusive' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Customer $customer): void {
+            if (! empty($customer->customer_number)) {
+                return;
+            }
+
+            try {
+                $customer->customer_number = app(NumberSeriesService::class)->getNextNo('CUSTOMER');
+            } catch (\Throwable) {
+                // Fallback to a deterministic emergency number if series is not configured.
+                $customer->customer_number = 'CUST-'.str_pad((string) ((int) static::max('id') + 1), 5, '0', STR_PAD_LEFT);
+            }
+
+            if (empty($customer->contact_id)) {
+                $contact = Contact::create([
+                    'name' => $customer->name ?: $customer->customer_number,
+                    'full_name' => $customer->name,
+                    'company_name' => $customer->name,
+                    'type' => ContactType::PERSON,
+                    'role' => ContactRole::CUSTOMER,
+                    'email' => $customer->email,
+                    'phone' => $customer->phone,
+                    'address' => $customer->address,
+                    'general_business_posting_group_id' => $customer->general_business_posting_group_id,
+                    'vat_bus_posting_group' => $customer->vat_bus_posting_group,
+                ]);
+
+                $customer->contact_id = $contact->id;
+            }
+        });
+    }
 
     // Relationships
     public function group()

@@ -158,7 +158,7 @@
             </tr>
             <tr>
                 <td>Total Qty</td>
-                <td class="text-right">{{ number_format($totals['total_qty'], 2) }}</td>
+                <td class="text-right">{{ $totals['total_qty_display'] ?? number_format($totals['total_qty'], 2) }}</td>
             </tr>
             <tr class="grand-total">
                 <td>GRAND TOTAL ({{ $currency }})</td>

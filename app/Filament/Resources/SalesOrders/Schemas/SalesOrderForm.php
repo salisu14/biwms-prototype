@@ -95,10 +95,18 @@ class SalesOrderForm
                                                                     ->afterStateUpdated(function ($state, Set $set) {
                                                                         if ($state) {
                                                                             $item = Item::find($state);
+                                                                            $defaultSalesUom = $item?->uoms()
+                                                                                ->wherePivot('uom_type', 'SALES')
+                                                                                ->wherePivot('is_default', true)
+                                                                                ->first();
+                                                                            $defaultUomCode = $defaultSalesUom?->uom_code ?? $item?->base_unit_of_measure;
+                                                                            $conversionFactor = $item?->getConversionFactorForUom($defaultUomCode) ?? 1;
+
                                                                             $set('description', $item?->description);
                                                                             $set('item_code', $item?->item_code);
-                                                                            $set('unit_price', $item?->unit_price ?? 0);
-                                                                            $set('unit_of_measure_code', $item?->base_unit_of_measure);
+                                                                            $set('unit_price', ((float) ($item?->unit_price ?? 0)) * $conversionFactor);
+                                                                            $set('unit_of_measure_code', $defaultUomCode);
+                                                                            $set('qty_per_unit_of_measure', $conversionFactor);
                                                                         }
                                                                     }),
 
@@ -130,9 +138,76 @@ class SalesOrderForm
                                                                     ->dehydrated()
                                                                     ->columnSpan(2),
 
-                                                                TextInput::make('unit_of_measure_code')
+                                                                Select::make('unit_of_measure_code')
                                                                     ->label('UOM')
-                                                                    ->disabled()
+                                                                    ->options(function ($get) {
+                                                                        $itemId = $get('item_id');
+                                                                        if (! $itemId) {
+                                                                            return [];
+                                                                        }
+
+                                                                        $item = Item::find($itemId);
+                                                                        if (! $item) {
+                                                                            return [];
+                                                                        }
+
+                                                                        $uoms = $item->uoms()
+                                                                            ->get()
+                                                                            ->mapWithKeys(fn ($uom) => [
+                                                                                $uom->uom_code => $uom->uom_code,
+                                                                            ])
+                                                                            ->toArray();
+
+                                                                        if (! array_key_exists($item->base_unit_of_measure, $uoms)) {
+                                                                            $uoms[$item->base_unit_of_measure] = $item->base_unit_of_measure;
+                                                                        }
+
+                                                                        return $uoms;
+                                                                    })
+                                                                    ->required()
+                                                                    ->live()
+                                                                    ->afterStateUpdated(function ($state, Set $set, $get) {
+                                                                        $itemId = $get('item_id');
+                                                                        if (! $itemId) {
+                                                                            return;
+                                                                        }
+
+                                                                        $item = Item::find($itemId);
+                                                                        $conversionFactor = $item?->getConversionFactorForUom($state) ?? 1;
+                                                                        $currentQtyPerUom = (float) ($get('qty_per_unit_of_measure') ?? 1);
+                                                                        $currentUnitPrice = (float) ($get('unit_price') ?? 0);
+                                                                        $baseUnitPrice = (float) ($item?->unit_price ?? 0);
+                                                                        $expectedCurrentAutoPrice = $baseUnitPrice * $currentQtyPerUom;
+                                                                        $isManualUnitPrice = abs($currentUnitPrice - $expectedCurrentAutoPrice) > 0.0001;
+
+                                                                        $set('qty_per_unit_of_measure', $conversionFactor);
+                                                                        if (! $isManualUnitPrice) {
+                                                                            $set('unit_price', $baseUnitPrice * $conversionFactor);
+                                                                        }
+
+                                                                        $qty = (float) ($get('quantity') ?? 0);
+                                                                        $price = (float) ($get('unit_price') ?? 0);
+                                                                        $discountPercent = (float) ($get('line_discount_percent') ?? 0);
+                                                                        $vatPercent = (float) ($get('vat_percentage') ?? 0);
+
+                                                                        $lineTotal = $qty * $price;
+                                                                        $discountAmount = $lineTotal * ($discountPercent / 100);
+                                                                        $lineAmount = $lineTotal - $discountAmount;
+                                                                        $vatAmount = $lineAmount * ($vatPercent / 100);
+
+                                                                        $set('quantity_base', $qty * ($conversionFactor > 0 ? $conversionFactor : 1));
+                                                                        $set('line_total', $lineTotal);
+                                                                        $set('line_discount_amount', $discountAmount);
+                                                                        $set('line_amount', $lineAmount);
+                                                                        $set('vat_amount', $vatAmount);
+                                                                        $set('amount_including_vat', $lineAmount + $vatAmount);
+                                                                    })
+                                                                    ->columnSpan(2),
+
+                                                                TextInput::make('qty_per_unit_of_measure')
+                                                                    ->label('Qty/UOM')
+                                                                    ->numeric()
+                                                                    ->readOnly()
                                                                     ->dehydrated()
                                                                     ->columnSpan(2),
                                                             ]),

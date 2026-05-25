@@ -22,8 +22,9 @@ class CustomerForm
                             ->schema([
                                 TextInput::make('customer_number')
                                     ->label('Customer No.')
-                                    ->required()
-                                    ->unique(ignoreRecord: true),
+                                    ->unique(ignoreRecord: true)
+                                    ->readOnlyOn('create')
+                                    ->placeholder('Auto-generated from Number Series (CUSTOMER)'),
 
                                 TextInput::make('name')
                                     ->required()
@@ -36,6 +37,14 @@ class CustomerForm
                                     ->searchable()
                                     ->preload()
                                     ->placeholder('Select a group'),
+
+                                Select::make('contact_id')
+                                    ->label('Customer Contact (Optional)')
+                                    ->relationship('contact', 'name')
+                                    ->searchable()
+                                    ->preload()
+                                    ->nullable()
+                                    ->helperText('If empty, a contact will be auto-created from customer details.'),
 
                                 Grid::make(2)->schema([
                                     TextInput::make('email')

@@ -89,6 +89,8 @@ class SalesOrderLine extends Model
         parent::boot();
 
         static::creating(function ($line) {
+            $line->syncUnitPriceForSelectedUomOnCreate();
+
             // Auto-calculate line number if not set
             if (empty($line->line_number)) {
                 $maxLineNumber = self::where('sales_order_id', $line->sales_order_id)->max('line_number');
@@ -120,6 +122,8 @@ class SalesOrderLine extends Model
         });
 
         static::updating(function ($line) {
+            $line->syncUnitPriceForSelectedUomOnUpdate();
+
             // Recalculate if price or quantity changed
             if ($line->isDirty(['quantity', 'unit_price', 'line_discount_percent', 'vat_percentage', 'qty_per_unit_of_measure'])) {
                 $line->qty_per_unit_of_measure = (float) ($line->qty_per_unit_of_measure ?: 1.0);
@@ -135,6 +139,61 @@ class SalesOrderLine extends Model
             // Update quantity to ship
             $line->quantity_to_ship = $line->quantity - $line->quantity_shipped;
         });
+    }
+
+    protected function syncUnitPriceForSelectedUomOnCreate(): void
+    {
+        if (! $this->item_id) {
+            return;
+        }
+
+        $item = Item::find($this->item_id);
+        if (! $item) {
+            return;
+        }
+
+        $baseUnitPrice = (float) ($item->unit_price ?? 0);
+        $conversionFactor = (float) ($this->qty_per_unit_of_measure ?: $item->getConversionFactorForUom($this->unit_of_measure_code));
+        $conversionFactor = $conversionFactor > 0 ? $conversionFactor : 1.0;
+        $expectedUnitPriceForUom = $baseUnitPrice * $conversionFactor;
+        $enteredUnitPrice = (float) ($this->unit_price ?? 0);
+
+        if ($enteredUnitPrice === 0.0) {
+            $this->unit_price = $expectedUnitPriceForUom;
+
+            return;
+        }
+
+        // If UI/API passed base-unit price while UOM factor > 1, auto-correct to UOM price.
+        if ($conversionFactor > 1 && abs($enteredUnitPrice - $baseUnitPrice) < 0.0001) {
+            $this->unit_price = $expectedUnitPriceForUom;
+        }
+    }
+
+    protected function syncUnitPriceForSelectedUomOnUpdate(): void
+    {
+        if (! $this->item_id || ! $this->isDirty(['unit_of_measure_code', 'qty_per_unit_of_measure'])) {
+            return;
+        }
+
+        $item = Item::find($this->item_id);
+        if (! $item) {
+            return;
+        }
+
+        $baseUnitPrice = (float) ($item->unit_price ?? 0);
+        $previousFactor = (float) ($this->getOriginal('qty_per_unit_of_measure') ?: 1.0);
+        $previousExpectedPrice = $baseUnitPrice * $previousFactor;
+        $previousUnitPrice = (float) $this->getOriginal('unit_price');
+        $wasManualPrice = abs($previousUnitPrice - $previousExpectedPrice) > 0.0001;
+
+        if ($wasManualPrice || $this->isDirty('unit_price')) {
+            return;
+        }
+
+        $newFactor = (float) ($this->qty_per_unit_of_measure ?: $item->getConversionFactorForUom($this->unit_of_measure_code));
+        $newFactor = $newFactor > 0 ? $newFactor : 1.0;
+        $this->unit_price = $baseUnitPrice * $newFactor;
     }
 
     // ==================== RELATIONSHIPS ====================

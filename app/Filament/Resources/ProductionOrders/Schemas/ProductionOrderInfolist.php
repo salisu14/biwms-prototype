@@ -85,6 +85,42 @@ class ProductionOrderInfolist
                                 IconEntry::make('posted')
                                     ->label('Posted Status')
                                     ->boolean(),
+
+                                TextEntry::make('produced_cartons')
+                                    ->label('Produced (Cartons)')
+                                    ->state(fn ($record): float => (float) $record->itemLedgerEntries()
+                                        ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+                                        ->where('item_id', $record->item_id)
+                                        ->sum('quantity'))
+                                    ->numeric(4)
+                                    ->weight(FontWeight::Bold)
+                                    ->color('success'),
+
+                                TextEntry::make('produced_packs')
+                                    ->label('Produced (Packs)')
+                                    ->state(function ($record): float {
+                                        $producedCartons = (float) $record->itemLedgerEntries()
+                                            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+                                            ->where('item_id', $record->item_id)
+                                            ->sum('quantity');
+
+                                        return $producedCartons * 24;
+                                    })
+                                    ->numeric(4)
+                                    ->color('info'),
+
+                                TextEntry::make('produced_pieces')
+                                    ->label('Produced (Pieces)')
+                                    ->state(function ($record): float {
+                                        $producedCartons = (float) $record->itemLedgerEntries()
+                                            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+                                            ->where('item_id', $record->item_id)
+                                            ->sum('quantity');
+
+                                        return $producedCartons * 288;
+                                    })
+                                    ->numeric(4)
+                                    ->color('primary'),
                             ]),
                         ]),
 

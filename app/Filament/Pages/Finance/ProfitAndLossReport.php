@@ -130,8 +130,29 @@ class ProfitAndLossReport extends Page implements HasForms
             );
 
             $this->reportData = [
+                'report_name' => 'Income Statement (Account Schedule)',
+                'printed_at' => now()->format('Y-m-d H:i'),
                 'period' => "{$start->format('Y-m-d')}..{$end->format('Y-m-d')}",
-                'lines' => $rows,
+                'lines' => $rows->map(fn (array $row): array => [
+                    'description' => $row['description'] ?? '',
+                    'indentation' => $row['indentation'] ?? 0,
+                    'bold' => $row['bold'] ?? false,
+                    'amount' => number_format((float) ($row['amount'] ?? 0), 2),
+                    'compare_amount' => null,
+                    'variance_percent' => null,
+                ]),
+                'totals' => [
+                    'revenue' => number_format(0, 2),
+                    'cogs' => number_format(0, 2),
+                    'gross_profit' => number_format(0, 2),
+                    'operating_expenses' => number_format(0, 2),
+                    'operating_income' => number_format(0, 2),
+                    'net_income' => number_format((float) $rows->sum('amount'), 2),
+                    'compare_revenue' => number_format(0, 2),
+                    'compare_gross_profit' => number_format(0, 2),
+                    'compare_operating_expenses' => number_format(0, 2),
+                    'compare_net_income' => number_format(0, 2),
+                ],
                 'is_custom' => true,
             ];
         } else {

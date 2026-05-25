@@ -17,6 +17,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Validation\ValidationException;
 
 class SalesOrdersTable
 {
@@ -47,6 +48,53 @@ class SalesOrdersTable
                     ->money(fn ($record) => $record instanceof SalesOrder ? $record->currency_code : 'NGN')
                     ->sortable()
                     ->alignment('right'),
+
+                TextColumn::make('total_quantity')
+                    ->label('Total Qty')
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(function (SalesOrder $record): string {
+                        $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
+
+                        if ($uoms->count() === 1) {
+                            return ' '.$uoms->first();
+                        }
+
+                        return ' Units';
+                    })
+                    ->sortable()
+                    ->alignment('right'),
+
+                TextColumn::make('total_quantity_shipped')
+                    ->label('Shipped Qty')
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(function (SalesOrder $record): string {
+                        $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
+
+                        if ($uoms->count() === 1) {
+                            return ' '.$uoms->first();
+                        }
+
+                        return ' Units';
+                    })
+                    ->sortable()
+                    ->alignment('right')
+                    ->color('success'),
+
+                TextColumn::make('total_quantity_to_ship')
+                    ->label('To Ship Qty')
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(function (SalesOrder $record): string {
+                        $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
+
+                        if ($uoms->count() === 1) {
+                            return ' '.$uoms->first();
+                        }
+
+                        return ' Units';
+                    })
+                    ->sortable()
+                    ->alignment('right')
+                    ->color('warning'),
 
                 IconColumn::make('fully_shipped')
                     ->label('Shipped')
@@ -90,7 +138,62 @@ class SalesOrdersTable
                     ->color('danger')
                     ->visible(fn ($record): bool => $record instanceof SalesOrder && $record->isPosted())
                     ->requiresConfirmation()
-                    ->action(fn (SalesOrder $record) => $record->reverse()),
+                    ->action(function (SalesOrder $record): void {
+                        try {
+                            $record->reverse();
+                            Notification::make()
+                                ->title('Shipment Reversed')
+                                ->success()
+                                ->send();
+                        } catch (ValidationException $exception) {
+                            Notification::make()
+                                ->title(collect($exception->errors())->flatten()->first() ?? 'Unable to reverse shipment')
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
+                Action::make('post_shipment')
+                    ->label('Post Shipment')
+                    ->icon('heroicon-o-truck')
+                    ->color('success')
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder && in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
+                    ->requiresConfirmation()
+                    ->action(function (SalesOrder $record): void {
+                        try {
+                            $record->postShipment();
+                            Notification::make()
+                                ->title('Shipment Posted')
+                                ->success()
+                                ->send();
+                        } catch (ValidationException $exception) {
+                            Notification::make()
+                                ->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post shipment')
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
+                Action::make('post_invoice')
+                    ->label('Post Invoice')
+                    ->icon('heroicon-o-document-check')
+                    ->color('primary')
+                    ->visible(fn ($record): bool => $record instanceof SalesOrder && in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
+                    ->requiresConfirmation()
+                    ->action(function (SalesOrder $record): void {
+                        try {
+                            $record->postInvoice();
+                            Notification::make()
+                                ->title('Invoice Posted')
+                                ->success()
+                                ->send();
+                        } catch (ValidationException $exception) {
+                            Notification::make()
+                                ->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post invoice')
+                                ->danger()
+                                ->send();
+                        }
+                    }),
 
                 Action::make('printProforma')
                     ->label('Proforma Invoice')

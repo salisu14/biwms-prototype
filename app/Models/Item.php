@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Enums\CostingMethod;
 use App\Enums\InventoryMethod;
 use App\Enums\ItemType;
+use App\Enums\PurchaseOrderStatus;
+use App\Enums\SalesOrderStatus;
 use App\Enums\UomType;
 use App\Models\Manufacturing\ProductionBom;
 use App\Models\Manufacturing\Routing;
@@ -157,6 +159,23 @@ class Item extends Model
             ?? $this->uoms()->wherePivot('uom_type', $typeValue)->first();
     }
 
+    public function getConversionFactorForUom(?string $uomCode): float
+    {
+        if (! $uomCode) {
+            return 1.0;
+        }
+
+        $uom = $this->uoms()
+            ->where('uom_code', $uomCode)
+            ->first();
+
+        if ($uom?->pivot?->conversion_factor) {
+            return (float) $uom->pivot->conversion_factor;
+        }
+
+        return 1.0;
+    }
+
     /**
      * Relationships
      */
@@ -252,14 +271,97 @@ class Item extends Model
         return $this->hasMany(ItemLedgerEntry::class);
     }
 
+    public function salesOrderLines(): HasMany
+    {
+        return $this->hasMany(SalesOrderLine::class);
+    }
+
+    public function purchaseOrderLines(): HasMany
+    {
+        return $this->hasMany(PurchaseOrderLine::class);
+    }
+
     public function getTotalQuantityAttribute(): float
     {
         return (float) $this->ledgerEntries()->sum('quantity');
     }
 
+    public function getLedgerOnHandAttribute(): float
+    {
+        $ledgerOnHand = (float) $this->ledgerEntries()
+            ->where('open', true)
+            ->sum('remaining_quantity');
+
+        if ($ledgerOnHand > 0) {
+            return $ledgerOnHand;
+        }
+
+        // Backward-compatible fallback for environments that still keep
+        // opening stock only on the item card (without open ledger layers).
+        return (float) ($this->inventory ?? 0);
+    }
+
     public function getBaseUnitOfMeasureAttribute(): string
     {
         return $this->baseUom?->uom_code ?? 'PCS';
+    }
+
+    public function getQtyOnSalesOrderAttribute(): float
+    {
+        $openStatuses = [
+            SalesOrderStatus::DRAFT->value,
+            SalesOrderStatus::PENDING_APPROVAL->value,
+            SalesOrderStatus::APPROVED->value,
+            SalesOrderStatus::RELEASED->value,
+            SalesOrderStatus::PICKING->value,
+            SalesOrderStatus::PACKED->value,
+            SalesOrderStatus::PARTIALLY_INVOICED->value,
+        ];
+
+        return (float) $this->salesOrderLines()
+            ->whereHas('salesOrder', fn ($query) => $query->whereIn('status', $openStatuses))
+            ->get()
+            ->sum(function (SalesOrderLine $line): float {
+                $remainingSalesUom = max(0, (float) $line->quantity - (float) $line->quantity_shipped);
+                $qtyPerUom = (float) ($line->qty_per_unit_of_measure ?: 1.0);
+
+                return $remainingSalesUom * $qtyPerUom;
+            });
+    }
+
+    public function getQtyOnPurchaseOrderAttribute(): float
+    {
+        $openStatuses = [
+            PurchaseOrderStatus::PENDING->value,
+            PurchaseOrderStatus::APPROVED->value,
+            PurchaseOrderStatus::PARTIALLY_RECEIVED->value,
+        ];
+
+        return (float) $this->purchaseOrderLines()
+            ->whereHas('purchaseOrder', fn ($query) => $query->whereIn('status', $openStatuses))
+            ->get()
+            ->sum(fn (PurchaseOrderLine $line): float => max(0, (float) $line->quantity - (float) $line->received_quantity));
+    }
+
+    public function getAvailableToPromiseAttribute(): float
+    {
+        return (float) $this->ledger_on_hand - (float) $this->qty_on_sales_order;
+    }
+
+    public function getProjectedAvailableAttribute(): float
+    {
+        return (float) $this->available_to_promise + (float) $this->qty_on_purchase_order;
+    }
+
+    public function getNeedsReorderAttribute(): bool
+    {
+        $reorderPoint = (float) ($this->reorder_point ?? 0);
+
+        if ($reorderPoint <= 0) {
+            return false;
+        }
+
+        return (float) $this->projected_available <= $reorderPoint;
     }
 
     public function quantityAtLocation(int $locationId): float

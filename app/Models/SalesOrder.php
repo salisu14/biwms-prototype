@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Contracts\Approvable;
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class SalesOrder extends Model implements Approvable
 {
@@ -30,7 +33,6 @@ class SalesOrder extends Model implements Approvable
         'general_business_posting_group_id',
         'customer_posting_group_id',
         'vat_business_posting_group_id',
-        'vat_bus_posting_group',
         'pricing_group_id',
         'location_id',
         'shipping_agent_code',
@@ -144,7 +146,6 @@ class SalesOrder extends Model implements Approvable
         ]);
     }
 
-
     /**
      * Populate posting groups and default customer info
      */
@@ -155,10 +156,15 @@ class SalesOrder extends Model implements Approvable
             if ($customer) {
                 $this->general_business_posting_group_id = $customer->general_business_posting_group_id;
                 $this->customer_posting_group_id = $customer->customer_posting_group_id;
-                $this->vat_bus_posting_group = $customer->vat_bus_posting_group;
                 $this->pricing_group_id = $customer->pricing_group_id;
                 $this->is_price_inclusive = $customer->is_price_inclusive;
                 $this->customer_name ??= $customer->name;
+
+                if ($customer->vat_bus_posting_group && ! $this->vat_business_posting_group_id) {
+                    $this->vat_business_posting_group_id = VatBusinessPostingGroup::query()
+                        ->where('code', $customer->vat_bus_posting_group)
+                        ->value('id');
+                }
             }
         }
     }
@@ -246,6 +252,13 @@ class SalesOrder extends Model implements Approvable
     public function postedInvoices(): HasMany
     {
         return $this->hasMany(PostedSalesInvoice::class, 'order_id');
+    }
+
+    public function glEntries(): HasMany
+    {
+        return $this->hasMany(GlEntry::class, 'source_number', 'order_number')
+            ->where('source_type', 'CUSTOMER')
+            ->whereIn('source_number', $this->postedInvoices()->select('document_number'));
     }
 
     // ==================== SCOPES ====================
@@ -379,5 +392,212 @@ class SalesOrder extends Model implements Approvable
             'approved_by' => auth()->id(),
             'approved_at' => now(),
         ]);
+    }
+
+    /**
+     * Post shipment and deduct inventory in base quantity.
+     *
+     * @throws ValidationException
+     */
+    public function postShipment(): void
+    {
+        if (! in_array($this->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'Only approved or released orders can be shipped.',
+            ]);
+        }
+
+        DB::transaction(function (): void {
+            $this->loadMissing('lines.item');
+
+            $shipmentDocumentNumber = $this->getShipmentDocumentNumber();
+            $alreadyPosted = ItemLedgerEntry::query()
+                ->where('document_number', $shipmentDocumentNumber)
+                ->where('entry_type', ItemLedgerEntryType::SALE)
+                ->exists();
+
+            if ($alreadyPosted) {
+                throw ValidationException::withMessages([
+                    'status' => 'Shipment has already been posted for this order.',
+                ]);
+            }
+
+            $totalShipped = 0.0;
+
+            foreach ($this->lines as $line) {
+                $remainingToShip = max(0, (float) $line->quantity - (float) $line->quantity_shipped);
+                if ($remainingToShip <= 0) {
+                    continue;
+                }
+
+                $qtyPerUom = (float) ($line->qty_per_unit_of_measure ?: 1);
+                $baseQuantityToShip = $remainingToShip * $qtyPerUom;
+                $locationId = $line->location_id ?? $this->location_id ?? $line->item?->location_id;
+
+                if (! $locationId) {
+                    throw ValidationException::withMessages([
+                        'location_id' => "Location is required to post shipment for item {$line->item_code}.",
+                    ]);
+                }
+
+                ItemLedgerEntry::create([
+                    'entry_type' => ItemLedgerEntryType::SALE,
+                    'document_type' => 'SALES_ORDER_SHIPMENT',
+                    'document_number' => $shipmentDocumentNumber,
+                    'document_line_number' => $line->line_number ?? ($line->id * 10),
+                    'item_id' => $line->item_id,
+                    'variant_code' => $line->variant_code,
+                    'location_id' => $locationId,
+                    'bin_code' => $line->bin_code,
+                    'quantity' => -$baseQuantityToShip,
+                    'remaining_quantity' => -$baseQuantityToShip,
+                    'serial_number' => $line->serial_number,
+                    'lot_number' => $line->lot_number,
+                    'expiration_date' => $line->expiration_date,
+                    'cost_amount_actual' => (float) ($line->unit_cost ?? 0) * $baseQuantityToShip,
+                    'cost_amount_expected' => 0,
+                    'purchase_amount_actual' => 0,
+                    'source_type' => self::class,
+                    'source_id' => $this->id,
+                    'general_business_posting_group_id' => $this->general_business_posting_group_id,
+                    'general_product_posting_group_id' => $line->general_product_posting_group_id,
+                    'inventory_posting_group_id' => $line->inventory_posting_group_id,
+                    'dimensions' => $line->dimensions,
+                    'posting_date' => $this->posting_date ?? $this->order_date ?? now(),
+                    'entry_date' => now(),
+                    'open' => false,
+                ]);
+
+                if ($line->item) {
+                    $line->item->decrement('inventory', $baseQuantityToShip);
+                }
+
+                $line->update([
+                    'quantity_shipped' => (float) $line->quantity_shipped + $remainingToShip,
+                    'quantity_to_ship' => 0,
+                    'line_status' => 'SHIPPED',
+                ]);
+
+                $totalShipped += $remainingToShip;
+            }
+
+            if ($totalShipped <= 0) {
+                throw ValidationException::withMessages([
+                    'status' => 'No outstanding quantity available to ship.',
+                ]);
+            }
+
+            $this->refresh()->load('lines');
+            $isFullyShipped = $this->lines->every(fn (SalesOrderLine $line): bool => (float) $line->quantity_shipped >= (float) $line->quantity);
+
+            $this->update([
+                'quantity_shipped' => (float) $this->lines->sum('quantity_shipped'),
+                'fully_shipped' => $isFullyShipped,
+                'status' => $isFullyShipped ? SalesOrderStatus::SHIPPED : SalesOrderStatus::RELEASED,
+            ]);
+        });
+    }
+
+    /**
+     * Reverse a shipped order back to released state.
+     *
+     * @throws ValidationException
+     */
+    public function reverse(): void
+    {
+        if (! in_array($this->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'Only shipped orders can be reversed.',
+            ]);
+        }
+
+        DB::transaction(function (): void {
+            $this->loadMissing(['warehouseShipments.lines', 'lines']);
+
+            $shipmentDocumentNumber = $this->getShipmentDocumentNumber();
+            $shipmentLedgerEntries = ItemLedgerEntry::query()
+                ->where('document_number', $shipmentDocumentNumber)
+                ->where('entry_type', ItemLedgerEntryType::SALE)
+                ->get();
+
+            $lineShipmentQtyByLineNumber = [];
+            foreach ($shipmentLedgerEntries as $ledgerEntry) {
+                $line = $this->lines->firstWhere('line_number', (int) $ledgerEntry->document_line_number);
+                if (! $line) {
+                    continue;
+                }
+
+                $baseQuantity = abs((float) $ledgerEntry->quantity);
+                $qtyPerUom = (float) ($line->qty_per_unit_of_measure ?: 1);
+                $orderQuantity = $baseQuantity / $qtyPerUom;
+
+                $lineShipmentQtyByLineNumber[$line->line_number] = ($lineShipmentQtyByLineNumber[$line->line_number] ?? 0) + $orderQuantity;
+            }
+
+            foreach ($shipmentLedgerEntries as $ledgerEntry) {
+                $item = Item::query()->find($ledgerEntry->item_id);
+                if ($item) {
+                    $item->increment('inventory', abs((float) $ledgerEntry->quantity));
+                }
+                $ledgerEntry->delete();
+            }
+
+            foreach ($this->warehouseShipments as $shipment) {
+                foreach ($shipment->lines as $shipmentLine) {
+                    if ((float) $shipmentLine->quantity_invoiced > 0) {
+                        throw ValidationException::withMessages([
+                            'status' => 'Cannot reverse shipped order with invoiced shipment lines.',
+                        ]);
+                    }
+
+                    if (! $shipmentLine->salesOrderLine) {
+                        continue;
+                    }
+
+                    $orderLine = $shipmentLine->salesOrderLine;
+                    $newQuantityShipped = max(0, (float) $orderLine->quantity_shipped - (float) $shipmentLine->quantity);
+
+                    $orderLine->update([
+                        'quantity_shipped' => $newQuantityShipped,
+                        'quantity_to_ship' => max(0, (float) $orderLine->quantity - $newQuantityShipped),
+                    ]);
+                }
+
+                $shipment->lines()->delete();
+                $shipment->delete();
+            }
+
+            foreach ($this->lines as $line) {
+                $shippedByThisPosting = (float) ($lineShipmentQtyByLineNumber[$line->line_number] ?? 0);
+                if ($shippedByThisPosting <= 0) {
+                    continue;
+                }
+
+                $newQuantityShipped = max(0, (float) $line->quantity_shipped - $shippedByThisPosting);
+                $line->update([
+                    'quantity_shipped' => $newQuantityShipped,
+                    'quantity_to_ship' => max(0, (float) $line->quantity - $newQuantityShipped),
+                    'line_status' => $newQuantityShipped > 0 ? 'PARTIALLY_SHIPPED' : 'OPEN',
+                ]);
+            }
+
+            $this->refresh()->load('lines');
+
+            $totalQuantityShipped = (float) $this->lines->sum('quantity_shipped');
+            $totalQuantityInvoiced = (float) $this->lines->sum('quantity_invoiced');
+
+            $this->update([
+                'quantity_shipped' => $totalQuantityShipped,
+                'quantity_invoiced' => $totalQuantityInvoiced,
+                'fully_shipped' => false,
+                'fully_invoiced' => false,
+                'status' => SalesOrderStatus::RELEASED,
+            ]);
+        });
+    }
+
+    private function getShipmentDocumentNumber(): string
+    {
+        return 'SS-'.$this->order_number;
     }
 }

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SalesOrders\RelationManagers;
 use App\Enums\ItemType;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
 use App\Models\Item;
+use App\Models\SalesOrder;
 use App\Services\VatService;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -28,6 +29,8 @@ class LinesRelationManager extends RelationManager
     protected static string $relationship = 'lines';
 
     protected static ?string $relatedResource = SalesOrderResource::class;
+
+    protected static ?string $title = 'Order Lines';
 
     public function form(Schema $schema): Schema
     {
@@ -55,12 +58,17 @@ class LinesRelationManager extends RelationManager
                                             }
 
                                             $item = Item::find($state);
-                                            $order = $get('../../'); // In RelationManager, ../../ refers to the parent record state if in a form, but here we might need a better way.
-                                            // Actually, $this->getOwnerRecord() is the way to go for parent data.
+
+                                            $defaultSalesUom = $item->uoms()
+                                                ->wherePivot('uom_type', 'SALES')
+                                                ->wherePivot('is_default', true)
+                                                ->first();
+                                            $defaultUomCode = $defaultSalesUom?->uom_code ?? $item->base_unit_of_measure;
+                                            $conversionFactor = $item->getConversionFactorForUom($defaultUomCode);
 
                                             $set('item_code', $item->item_code);
                                             $set('description', $item->description);
-                                            $set('unit_price', $item->unit_price);
+                                            $set('unit_price', (float) $item->unit_price * $conversionFactor);
                                             $set('unit_cost', $item->unit_cost);
                                             $set('vat_product_posting_group_id', $item->vat_product_posting_group_id);
 
@@ -77,12 +85,8 @@ class LinesRelationManager extends RelationManager
                                             }
 
                                             // Set UOM from item's default sales UOM if available
-                                            $uom = $item->uoms()->wherePivot('uom_type', 'SALES')->first()
-                                                ?? $item->uoms()->wherePivot('uom_type', 'BASE')->first();
-
-                                            if ($uom) {
-                                                $set('unit_of_measure_code', $uom->uom_code);
-                                            }
+                                            $set('unit_of_measure_code', $defaultUomCode);
+                                            $set('qty_per_unit_of_measure', $conversionFactor);
                                         }),
 
                                     TextInput::make('description')
@@ -96,9 +100,58 @@ class LinesRelationManager extends RelationManager
                                         ->live(onBlur: true)
                                         ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::calculateLine($set, $get)),
 
-                                    TextInput::make('unit_of_measure_code')
+                                    Select::make('unit_of_measure_code')
                                         ->label('UOM')
-                                        ->disabled()
+                                        ->options(function (Get $get) {
+                                            $itemId = $get('item_id');
+                                            if (! $itemId) {
+                                                return [];
+                                            }
+
+                                            $item = Item::find($itemId);
+                                            if (! $item) {
+                                                return [];
+                                            }
+
+                                            $uoms = $item->uoms()
+                                                ->get()
+                                                ->mapWithKeys(fn ($uom) => [
+                                                    $uom->uom_code => $uom->uom_code,
+                                                ])
+                                                ->toArray();
+
+                                            if (! array_key_exists($item->base_unit_of_measure, $uoms)) {
+                                                $uoms[$item->base_unit_of_measure] = $item->base_unit_of_measure;
+                                            }
+
+                                            return $uoms;
+                                        })
+                                        ->required()
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                            $itemId = $get('item_id');
+                                            if (! $itemId) {
+                                                return;
+                                            }
+
+                                            $item = Item::find($itemId);
+                                            $conversionFactor = $item?->getConversionFactorForUom($state) ?? 1;
+                                            $currentQtyPerUom = (float) ($get('qty_per_unit_of_measure') ?? 1);
+                                            $currentUnitPrice = (float) ($get('unit_price') ?? 0);
+                                            $baseUnitPrice = (float) ($item?->unit_price ?? 0);
+                                            $expectedCurrentAutoPrice = $baseUnitPrice * $currentQtyPerUom;
+                                            $isManualUnitPrice = abs($currentUnitPrice - $expectedCurrentAutoPrice) > 0.0001;
+
+                                            $set('qty_per_unit_of_measure', $conversionFactor);
+                                            if (! $isManualUnitPrice) {
+                                                $set('unit_price', $baseUnitPrice * $conversionFactor);
+                                            }
+                                        }),
+
+                                    TextInput::make('qty_per_unit_of_measure')
+                                        ->label('Qty/UOM')
+                                        ->numeric()
+                                        ->readOnly()
                                         ->dehydrated(),
 
                                     TextInput::make('unit_price')
@@ -196,8 +249,15 @@ class LinesRelationManager extends RelationManager
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->mutateDataUsing(function (array $data) {
-                        $data['line_number'] = rand(1000, 9999); // Logic to increment based on existing lines
+                    ->mutateDataUsing(function (array $data): array {
+                        /** @var SalesOrder $order */
+                        $order = $this->getOwnerRecord();
+                        $maxLineNumber = (int) ($order->lines()->max('line_number') ?? 0);
+                        $data['line_number'] = $maxLineNumber + 10;
+
+                        $qty = (float) ($data['quantity'] ?? 0);
+                        $qtyPerUom = (float) ($data['qty_per_unit_of_measure'] ?? 1);
+                        $data['quantity_base'] = $qty * ($qtyPerUom > 0 ? $qtyPerUom : 1);
 
                         return $data;
                     }),

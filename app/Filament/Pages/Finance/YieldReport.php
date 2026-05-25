@@ -83,7 +83,7 @@ class YieldReport extends Page implements HasTable
                     ->selectRaw(
                         "(SELECT COALESCE(SUM(ile.quantity), 0)
                            FROM item_ledger_entries ile
-                          WHERE ile.source_type = 'ProductionOrder'
+                          WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
                             AND ile.source_id = production_orders.id
                             AND ile.entry_type = 'Output'
                          ) AS actual_output"
@@ -102,7 +102,7 @@ class YieldReport extends Page implements HasTable
                     ->date()
                     ->sortable(),
 
-                TextColumn::make('item.no')
+                TextColumn::make('item.item_code')
                     ->label('Item No.')
                     ->searchable(),
 
@@ -114,10 +114,9 @@ class YieldReport extends Page implements HasTable
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state?->value ?? $state) {
-                        'released' => 'warning',
-                        'in_progress' => 'info',
-                        'finished' => 'success',
-                        'closed' => 'gray',
+                        'RELEASED' => 'warning',
+                        'FINISHED' => 'success',
+                        'CANCELLED' => 'gray',
                         default => 'gray',
                     }),
 
@@ -199,13 +198,12 @@ class YieldReport extends Page implements HasTable
             ->filters([
                 SelectFilter::make('status')
                     ->options([
-                        'simulated' => 'Simulated',
-                        'planned' => 'Planned',
-                        'firm_planned' => 'Firm Planned',
-                        'released' => 'Released',
-                        'in_progress' => 'In Progress',
-                        'finished' => 'Finished',
-                        'closed' => 'Closed',
+                        'SIMULATED' => 'Simulated',
+                        'PLANNED' => 'Planned',
+                        'FIRM_PLANNED' => 'Firm Planned',
+                        'RELEASED' => 'Released',
+                        'FINISHED' => 'Finished',
+                        'CANCELLED' => 'Cancelled',
                     ])
                     ->native(false),
 
@@ -231,7 +229,7 @@ class YieldReport extends Page implements HasTable
                     ->query(fn (Builder $query) => $query->whereRaw(
                         "(SELECT COALESCE(SUM(ile.quantity), 0)
                            FROM item_ledger_entries ile
-                          WHERE ile.source_type = 'ProductionOrder'
+                          WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
                             AND ile.source_id = production_orders.id
                             AND ile.entry_type = 'Output'
                          ) < production_orders.quantity * 0.9"

@@ -78,6 +78,9 @@ class SalesOrderService
             date: $order->order_date
         );
 
+        $selectedUomCode = $uom ?? $item->base_unit_of_measure;
+        $qtyPerUnitOfMeasure = $item->getConversionFactorForUom($selectedUomCode);
+
         $line = $order->lines()->create([
             'line_number' => $order->nextLineNumber(),
             'item_id' => $item->id,
@@ -87,9 +90,9 @@ class SalesOrderService
             'general_product_posting_group_id' => $item->general_product_posting_group_id,
             'inventory_posting_group_id' => $item->inventory_posting_group_id,
             'quantity' => $quantity,
-            'unit_of_measure_code' => $uom ?? $item->base_unit_of_measure,
-            'qty_per_unit_of_measure' => 1,
-            'quantity_base' => $quantity,
+            'unit_of_measure_code' => $selectedUomCode,
+            'qty_per_unit_of_measure' => $qtyPerUnitOfMeasure,
+            'quantity_base' => $quantity * $qtyPerUnitOfMeasure,
             'unit_price' => $priceData['unit_price'],
             'unit_cost' => $item->unit_cost,
             'line_discount_percent' => $priceData['discount_percent'],

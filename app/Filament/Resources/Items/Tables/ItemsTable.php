@@ -9,7 +9,7 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\Summarizers\Sum;
+use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\ColumnManagerLayout;
 use Filament\Tables\Filters\SelectFilter;
@@ -49,13 +49,58 @@ class ItemsTable
                     ->badge()
                     ->sortable(),
 
-                TextColumn::make('inventory')
-                    ->numeric(decimalPlaces: 2)
-                    ->label('Stock')
+                TextColumn::make('ledger_on_hand')
+                    ->label('On Hand')
                     ->alignRight()
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.$record->base_unit_of_measure)
                     ->color(fn ($state) => $state <= 0 ? 'danger' : 'success')
-                    ->summarize(Sum::make()->label('Total Stock'))
-                    ->sortable(),
+                    ->summarize(
+                        Summarizer::make()
+                            ->label('Total Stock')
+                            ->using(fn ($query) => number_format((float) $query->get()->sum('ledger_on_hand'), 2))
+                    ),
+
+                TextColumn::make('qty_on_sales_order')
+                    ->label('On Sales Order')
+                    ->alignRight()
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.$record->base_unit_of_measure)
+                    ->color('warning')
+                    ->toggleable(),
+
+                TextColumn::make('qty_on_purchase_order')
+                    ->label('On Purchase Order')
+                    ->alignRight()
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.$record->base_unit_of_measure)
+                    ->color('info')
+                    ->toggleable(),
+
+                TextColumn::make('available_to_promise')
+                    ->label('Available')
+                    ->alignRight()
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.$record->base_unit_of_measure)
+                    ->color(fn ($state) => $state <= 0 ? 'danger' : 'success')
+                    ->weight('bold')
+                    ->toggleable(),
+
+                TextColumn::make('stock_alert')
+                    ->label('Stock Alert')
+                    ->badge()
+                    ->state(function ($record): string {
+                        if ((float) $record->available_to_promise <= 0) {
+                            return 'Sold Out';
+                        }
+
+                        if ((bool) $record->needs_reorder) {
+                            return 'Reorder Needed';
+                        }
+
+                        return 'In Stock';
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'Sold Out' => 'danger',
+                        'Reorder Needed' => 'warning',
+                        default => 'success',
+                    }),
 
                 TextColumn::make('uoms.uom_code')
                     ->label('Base UoM')

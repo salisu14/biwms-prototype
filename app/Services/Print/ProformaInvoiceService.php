@@ -41,6 +41,7 @@ class ProformaInvoiceService
                 'vat' => (float) $order->total_vat,
                 'grand_total' => (float) $order->grand_total,
                 'total_qty' => (float) $order->lines->sum('quantity'),
+                'total_qty_display' => $this->formatTotalQuantityByUom($order->lines, 'unit_of_measure_code'),
             ],
             'company' => $this->getCompanyInfo(),
         ];
@@ -82,6 +83,7 @@ class ProformaInvoiceService
                 'vat' => (float) $order->total_vat,
                 'grand_total' => (float) $order->grand_total,
                 'total_qty' => (float) $order->lines->sum('quantity'),
+                'total_qty_display' => $this->formatTotalQuantityByUom($order->lines, 'unit_of_measure'),
             ],
             'company' => $this->getCompanyInfo(),
         ];
@@ -102,5 +104,20 @@ class ProformaInvoiceService
             'email' => 'sales@bifli.com',
             'phone' => '+234 800 000 0000',
         ];
+    }
+
+    protected function formatTotalQuantityByUom($lines, string $uomField): string
+    {
+        $grouped = $lines
+            ->groupBy(fn ($line) => $line->{$uomField} ?: 'N/A')
+            ->map(function ($uomLines, $uomCode) {
+                $totalQty = (float) $uomLines->sum('quantity');
+
+                return number_format($totalQty, 2).' '.$uomCode;
+            })
+            ->values()
+            ->implode(' + ');
+
+        return $grouped !== '' ? $grouped : '0.00';
     }
 }

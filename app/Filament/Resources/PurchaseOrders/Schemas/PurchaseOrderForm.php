@@ -37,7 +37,7 @@ class PurchaseOrderForm
 
                             TextInput::make('order_number')
                                 ->label('Order Number')
-                                ->required()
+//                                ->required()
                                 ->unique(ignoreRecord: true)
                                 ->helperText('Leave blank to auto-generate based on Series.')
                                 ->disabled(fn (?PurchaseOrder $record) => $record !== null)

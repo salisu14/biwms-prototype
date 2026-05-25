@@ -270,7 +270,7 @@ class IncomeStatementService
     {
         // BC logic: Revenue accounts normally credit (negative),
         // but P&L shows them as positive
-        if ($account->show_opposite_sign || in_array($account->account_type, ['revenue', 'sales'])) {
+        if ($account->show_opposite_sign || $this->isRevenueAccount($account)) {
             return $amount * -1;
         }
 
@@ -279,13 +279,13 @@ class IncomeStatementService
 
     private function calculateSummary(Collection $rows): array
     {
-        $currentRevenue = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::REVENUE, 'REVENUE', 'revenue']))->sum('net_change');
-        $currentCogs = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::COGS, 'COGS', 'cogs']))->sum('net_change');
-        $currentExp = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::EXPENSE, 'EXPENSE', 'expense']))->sum('net_change');
+        $currentRevenue = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'REVENUE')->sum('net_change');
+        $currentCogs = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'COGS')->sum('net_change');
+        $currentExp = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'EXPENSE')->sum('net_change');
 
-        $compareRevenue = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::REVENUE, 'REVENUE', 'revenue']))->sum('compare_amount');
-        $compareCogs = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::COGS, 'COGS', 'cogs']))->sum('compare_amount');
-        $compareExp = $rows->filter(fn ($r) => in_array($r['account_type'], [AccountType::EXPENSE, 'EXPENSE', 'expense']))->sum('compare_amount');
+        $compareRevenue = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'REVENUE')->sum('compare_amount');
+        $compareCogs = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'COGS')->sum('compare_amount');
+        $compareExp = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'EXPENSE')->sum('compare_amount');
 
         return [
             'total_revenue' => $currentRevenue,
@@ -302,6 +302,69 @@ class IncomeStatementService
             'compare_operating_expenses' => $compareExp,
             'compare_net_income' => $rows->sum('compare_amount'),
         ];
+    }
+
+    private function classifyRowType(array $row): string
+    {
+        $accountType = $row['account_type'] ?? null;
+        $accountNo = (string) ($row['account_no'] ?? '');
+
+        if ($accountType instanceof AccountType) {
+            if ($accountType === AccountType::REVENUE || $accountType === AccountType::OTHER_INCOME) {
+                return 'REVENUE';
+            }
+
+            if ($accountType === AccountType::COGS) {
+                return 'COGS';
+            }
+
+            if (in_array($accountType, [AccountType::EXPENSE, AccountType::DIRECT_EXPENSE, AccountType::INDIRECT_EXPENSE, AccountType::OTHER_EXPENSE, AccountType::INTEREST, AccountType::TAX], true)) {
+                return 'EXPENSE';
+            }
+        }
+
+        $accountTypeString = strtoupper((string) $accountType);
+
+        if (in_array($accountTypeString, ['REVENUE', 'SALES', 'OTHER_INCOME'], true)) {
+            return 'REVENUE';
+        }
+
+        if ($accountTypeString === 'COGS') {
+            return 'COGS';
+        }
+
+        if (in_array($accountTypeString, ['EXPENSE', 'DIRECT_EXPENSE', 'INDIRECT_EXPENSE', 'OTHER_EXPENSE', 'INTEREST', 'TAX'], true)) {
+            return 'EXPENSE';
+        }
+
+        // Defensive fallback by account number band when account_type is dirty.
+        if (str_starts_with($accountNo, '4')) {
+            return 'REVENUE';
+        }
+
+        if (str_starts_with($accountNo, '5')) {
+            return 'COGS';
+        }
+
+        if (str_starts_with($accountNo, '6') || str_starts_with($accountNo, '7') || str_starts_with($accountNo, '8')) {
+            return 'EXPENSE';
+        }
+
+        return 'OTHER';
+    }
+
+    private function isRevenueAccount(ChartOfAccount $account): bool
+    {
+        if ($account->account_type instanceof AccountType) {
+            return in_array($account->account_type, [AccountType::REVENUE, AccountType::OTHER_INCOME], true);
+        }
+
+        $typeString = strtoupper((string) $account->account_type);
+        if (in_array($typeString, ['REVENUE', 'SALES', 'OTHER_INCOME'], true)) {
+            return true;
+        }
+
+        return str_starts_with((string) $account->account_number, '4');
     }
 
     private function getBudgetAmount(

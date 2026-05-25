@@ -9,6 +9,7 @@ use App\Enums\PurchaseOrderType;
 use App\Models\PurchaseOrder;
 use App\Services\Print\ProformaInvoiceService;
 use App\Services\Purchase\PurchaseOrderService;
+use Exception;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -132,7 +133,7 @@ class PurchaseOrdersTable
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
                         ->requiresConfirmation()
-                        ->visible(fn ($record) => $record instanceof PurchaseOrder && $record->can_edit && $record->status !== PurchaseOrderStatus::CANCELLED)
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::PENDING, PurchaseOrderStatus::APPROVED], true))
                         ->action(function ($record, PurchaseOrderService $service) {
                             if (! $record instanceof PurchaseOrder) {
                                 return;
@@ -142,8 +143,87 @@ class PurchaseOrdersTable
                                     purchaseOrderId: $record->id
                                 ));
                                 Notification::make()->title('Order Cancelled')->success()->send();
-                            } catch (\Exception $e) {
+                            } catch (Exception $e) {
                                 Notification::make()->title('Error')->body($e->getMessage())->danger()->send();
+                            }
+                        }),
+
+                    Action::make('markPartiallyReceived')
+                        ->label('Mark Partially Received')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PENDING], true))
+                        ->action(function ($record) {
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
+
+                            $record->update(['status' => PurchaseOrderStatus::PARTIALLY_RECEIVED]);
+                            Notification::make()->title('Order marked as partially received')->success()->send();
+                        }),
+
+                    Action::make('markReceived')
+                        ->label('Mark Received')
+                        ->icon('heroicon-o-check-badge')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true))
+                        ->action(function ($record) {
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
+
+                            $record->update(['status' => PurchaseOrderStatus::RECEIVED]);
+                            Notification::make()->title('Order marked as received')->success()->send();
+                        }),
+
+                    Action::make('markInvoiced')
+                        ->label('Mark Invoiced')
+                        ->icon('heroicon-o-document-check')
+                        ->color('primary')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::RECEIVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true))
+                        ->action(function ($record) {
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
+
+                            $record->update(['status' => PurchaseOrderStatus::INVOICED]);
+                            Notification::make()->title('Order marked as invoiced')->success()->send();
+                        }),
+
+                    Action::make('close')
+                        ->label('Close Order')
+                        ->icon('heroicon-o-lock-closed')
+                        ->color('gray')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::RECEIVED, PurchaseOrderStatus::INVOICED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true))
+                        ->action(function ($record) {
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
+
+                            $record->update(['status' => PurchaseOrderStatus::CLOSED]);
+                            Notification::make()->title('Order closed')->success()->send();
+                        }),
+
+                    Action::make('reopen')
+                        ->label('Reopen to Pending')
+                        ->icon('heroicon-o-arrow-path')
+                        ->color('info')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::CANCELLED, PurchaseOrderStatus::CLOSED], true))
+                        ->action(function ($record, PurchaseOrderService $service) {
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
+
+                            try {
+                                $service->reopen($record->id);
+                                Notification::make()->title('Order reopened')->success()->send();
+                            } catch (Exception $exception) {
+                                Notification::make()->title('Unable to reopen order')->body($exception->getMessage())->danger()->send();
                             }
                         }),
 

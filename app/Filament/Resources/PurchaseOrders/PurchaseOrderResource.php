@@ -42,6 +42,7 @@ class PurchaseOrderResource extends Resource
         return [
             //            RelationManagers\LinesRelationManager::class,
             RelationManagers\PurchaseOrderLinesRelationManager::class,
+            RelationManagers\GlEntriesRelationManager::class,
         ];
     }
 

@@ -27,6 +27,15 @@ use Filament\Schemas\Schema;
 
 class ItemForm
 {
+    private static function isFinishedGood(mixed $itemType): bool
+    {
+        if ($itemType instanceof ItemType) {
+            return $itemType === ItemType::FINISHED_GOOD;
+        }
+
+        return (string) $itemType === ItemType::FINISHED_GOOD->value;
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -59,7 +68,7 @@ class ItemForm
                                         ->native(false)
                                         ->live()
                                         ->afterStateUpdated(function ($state, $set) {
-                                            if ($state !== ItemType::FINISHED_GOOD->value) {
+                                            if (! self::isFinishedGood($state)) {
                                                 $set('production_bom_id', null);
                                                 $set('routing_id', null);
                                             }
@@ -124,22 +133,28 @@ class ItemForm
 
                                     Select::make('production_bom_id')
                                         ->label('Production BOM')
-                                        ->options(fn () => ProductionBom::query()->orderBy('code')->pluck('code', 'id'))
+                                        ->options(fn () => ProductionBom::query()
+                                            ->whereIn('status', ['UNDER_DEVELOPMENT', 'CERTIFIED'])
+                                            ->orderBy('code')
+                                            ->pluck('code', 'id'))
                                         ->searchable()
                                         ->preload()
                                         ->nullable()
-                                        ->visible(fn ($get) => $get('item_type') === ItemType::FINISHED_GOOD->value)
-                                        ->dehydrated(fn ($get) => $get('item_type') === ItemType::FINISHED_GOOD->value)
+                                        ->visible(fn ($get) => self::isFinishedGood($get('item_type')))
+                                        ->dehydrated(fn ($get) => self::isFinishedGood($get('item_type')))
                                         ->helperText('Optional. Only for production items.'),
 
                                     Select::make('routing_id')
                                         ->label('Routing')
-                                        ->options(fn () => Routing::query()->orderBy('code')->pluck('code', 'id'))
+                                        ->options(fn () => Routing::query()
+                                            ->whereIn('status', ['DRAFT', 'CERTIFIED'])
+                                            ->orderBy('code')
+                                            ->pluck('code', 'id'))
                                         ->searchable()
                                         ->preload()
                                         ->nullable()
-                                        ->visible(fn ($get) => $get('item_type') === ItemType::FINISHED_GOOD->value)
-                                        ->dehydrated(fn ($get) => $get('item_type') === ItemType::FINISHED_GOOD->value)
+                                        ->visible(fn ($get) => self::isFinishedGood($get('item_type')))
+                                        ->dehydrated(fn ($get) => self::isFinishedGood($get('item_type')))
                                         ->helperText('Optional. Only for production items.'),
                                 ]),
                             ]),

@@ -41,6 +41,7 @@ class SalesOrderResource extends Resource
     {
         return [
             RelationManagers\LinesRelationManager::class,
+            RelationManagers\GlEntriesRelationManager::class,
         ];
     }
 

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SalesOrders\Pages;
 use App\Enums\SalesOrderStatus;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
 use App\Filament\Traits\PreventsEditingPostedRecords;
+use App\Services\Approval\ApprovalService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
@@ -27,7 +28,7 @@ class EditSalesOrder extends EditRecord
                 ->color('info')
                 ->visible(fn ($record) => $record->status === SalesOrderStatus::DRAFT)
                 ->action(function ($record) {
-                    $record->submitForApproval();
+                    app(ApprovalService::class)->submitForApproval($record);
                     Notification::make()
                         ->title('Submitted for Approval')
                         ->success()
@@ -43,7 +44,20 @@ class EditSalesOrder extends EditRecord
                 )
                 ->requiresConfirmation()
                 ->action(function ($record) {
-                    $record->approve(auth()->id());
+                    $entry = $record->approvalEntries()->where('status', 'created')
+                        ->where(function ($q) {
+                            $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                        })
+                        ->orderBy('sequence_no')
+                        ->first();
+
+                    if (! $entry) {
+                        Notification::make()->title('No pending approval')->danger()->send();
+
+                        return;
+                    }
+
+                    app(ApprovalService::class)->approve($entry);
                     Notification::make()
                         ->title('Order Approved')
                         ->success()
