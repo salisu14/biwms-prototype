@@ -600,4 +600,148 @@ class SalesOrder extends Model implements Approvable
     {
         return 'SS-'.$this->order_number;
     }
+
+    /**
+     * Post invoice from shipped quantities and create Posted Sales Invoice records.
+     * BC-aligned: shipment posting and invoice posting are distinct, but invoice posting
+     * produces a posted document and updates invoicing progress.
+     *
+     * @throws ValidationException
+     */
+    public function postInvoice(): PostedSalesInvoice
+    {
+        if (! in_array($this->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'Only shipped orders can be invoiced.',
+            ]);
+        }
+
+        return DB::transaction(function (): PostedSalesInvoice {
+            $this->loadMissing(['lines.item', 'customer']);
+
+            $linesToInvoice = $this->lines->filter(fn (SalesOrderLine $line): bool => (float) $line->quantity_shipped > (float) $line->quantity_invoiced);
+            if ($linesToInvoice->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'status' => 'No shipped quantity is available for invoicing.',
+                ]);
+            }
+
+            $invoiceNo = 'PSI-'.now()->format('Y').'-'.str_pad((string) ((int) PostedSalesInvoice::query()->whereYear('posted_at', now()->year)->count() + 1), 6, '0', STR_PAD_LEFT);
+
+            $postedInvoice = PostedSalesInvoice::query()->create([
+                'document_number' => $invoiceNo,
+                'external_document_number' => $this->external_document_number,
+                'order_id' => $this->id,
+                'order_number' => $this->order_number,
+                'customer_id' => $this->customer_id,
+                'customer_name' => $this->customer_name,
+                'customer_address' => $this->customer_address,
+                'ship_to_name' => $this->ship_to_name,
+                'ship_to_address' => $this->ship_to_address,
+                'general_business_posting_group_id' => $this->general_business_posting_group_id,
+                'customer_posting_group_id' => $this->customer_posting_group_id,
+                'vat_bus_posting_group' => $this->vatBusinessPostingGroup?->code,
+                'location_id' => $this->location_id,
+                'shipping_agent_code' => $this->shipping_agent_code,
+                'posting_date' => $this->posting_date ?? now()->toDateString(),
+                'document_date' => now()->toDateString(),
+                'due_date' => now()->toDateString(),
+                'shipment_date' => $this->shipment_date,
+                'currency_code' => $this->currency_code,
+                'currency_factor' => $this->currency_factor,
+                'posted_by' => auth()->id(),
+                'posted_at' => now(),
+                'salesperson_id' => $this->salesperson_id,
+                'dimensions' => $this->dimensions,
+            ]);
+
+            $subtotal = 0.0;
+            $lineDiscountTotal = 0.0;
+            $totalAmount = 0.0;
+            $totalVat = 0.0;
+
+            foreach ($linesToInvoice as $line) {
+                $quantityToInvoice = max(0, (float) $line->quantity_shipped - (float) $line->quantity_invoiced);
+                if ($quantityToInvoice <= 0) {
+                    continue;
+                }
+
+                $lineTotal = $quantityToInvoice * (float) $line->unit_price;
+                $lineDiscountAmount = $lineTotal * ((float) $line->line_discount_percent / 100);
+                $lineAmount = $lineTotal - $lineDiscountAmount;
+                $vatAmount = $lineAmount * ((float) $line->vat_percentage / 100);
+                $costAmount = $quantityToInvoice * (float) ($line->unit_cost ?? 0);
+
+                PostedSalesInvoiceLine::query()->create([
+                    'posted_sales_invoice_id' => $postedInvoice->id,
+                    'so_line_id' => $line->id,
+                    'so_line_number' => $line->line_number,
+                    'item_id' => $line->item_id,
+                    'item_code' => $line->item_code,
+                    'item_description' => $line->description,
+                    'variant_code' => $line->variant_code,
+                    'posting_date' => $postedInvoice->posting_date,
+                    'general_product_posting_group_id' => $line->general_product_posting_group_id,
+                    'inventory_posting_group_id' => $line->inventory_posting_group_id,
+                    'quantity' => $quantityToInvoice,
+                    'unit_of_measure_code' => $line->unit_of_measure_code,
+                    'qty_per_unit_of_measure' => $line->qty_per_unit_of_measure,
+                    'quantity_base' => $quantityToInvoice * (float) ($line->qty_per_unit_of_measure ?: 1),
+                    'unit_price' => $line->unit_price,
+                    'unit_cost' => $line->unit_cost,
+                    'unit_cost_lcy' => $line->unit_cost,
+                    'line_discount_percent' => $line->line_discount_percent,
+                    'line_discount_amount' => $lineDiscountAmount,
+                    'line_total' => $lineTotal,
+                    'line_amount' => $lineAmount,
+                    'vat_code' => $line->vat_code,
+                    'vat_percentage' => $line->vat_percentage,
+                    'vat_amount' => $vatAmount,
+                    'amount_including_vat' => $lineAmount + $vatAmount,
+                    'cost_amount' => $costAmount,
+                    'profit_amount' => $lineAmount - $costAmount,
+                    'lot_number' => $line->lot_number,
+                    'serial_number' => $line->serial_number,
+                    'expiration_date' => $line->expiration_date,
+                    'dimensions' => $line->dimensions,
+                    'line_number' => $line->line_number,
+                ]);
+
+                $line->update([
+                    'quantity_invoiced' => (float) $line->quantity_invoiced + $quantityToInvoice,
+                    'line_status' => ((float) $line->quantity_invoiced + $quantityToInvoice) >= (float) $line->quantity ? 'INVOICED' : 'PARTIALLY_SHIPPED',
+                ]);
+
+                $subtotal += $lineTotal;
+                $lineDiscountTotal += $lineDiscountAmount;
+                $totalAmount += $lineAmount;
+                $totalVat += $vatAmount;
+            }
+
+            $invoiceDiscountAmount = $totalAmount * ((float) ($this->invoice_discount_percent ?? 0) / 100);
+            $grandTotal = ($totalAmount - $invoiceDiscountAmount) + $totalVat;
+
+            $postedInvoice->update([
+                'subtotal' => $subtotal,
+                'line_discount_total' => $lineDiscountTotal,
+                'invoice_discount_amount' => $invoiceDiscountAmount,
+                'total_amount' => $totalAmount,
+                'total_vat' => $totalVat,
+                'grand_total' => $grandTotal,
+                'remaining_amount' => $grandTotal,
+            ]);
+
+            $this->refresh()->load('lines');
+            $totalQuantityInvoiced = (float) $this->lines->sum('quantity_invoiced');
+            $fullyInvoiced = $this->lines->every(fn (SalesOrderLine $line): bool => (float) $line->quantity_invoiced >= (float) $line->quantity);
+
+            $this->update([
+                'quantity_invoiced' => $totalQuantityInvoiced,
+                'fully_invoiced' => $fullyInvoiced,
+                'status' => $fullyInvoiced ? SalesOrderStatus::INVOICED : SalesOrderStatus::PARTIALLY_INVOICED,
+            ]);
+
+            return $postedInvoice->fresh('lines');
+        });
+    }
 }

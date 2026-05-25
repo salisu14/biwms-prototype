@@ -2,12 +2,13 @@
 
 namespace App\Filament\Resources\SalesOrders\Pages;
 
+use App\Enums\SalesOrderStatus;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\Page;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
 
 class ArchivedSalesOrders extends Page
 {
@@ -27,8 +28,11 @@ class ArchivedSalesOrders extends Page
     protected function getTableQuery(): Builder
     {
         return SalesOrderResource::getModel()::query()
-            ->whereIn('status', ['completed', 'closed', 'cancelled'])
-            ->orWhereNotNull('fully_shipped')
+            ->whereIn('status', [
+                SalesOrderStatus::CLOSED->value,
+                SalesOrderStatus::CANCELLED->value,
+                SalesOrderStatus::INVOICED->value,
+            ])
             ->latest('updated_at');
     }
     //    protected function getTableQuery(): Builder
@@ -47,12 +51,12 @@ class ArchivedSalesOrders extends Page
     {
         return $table
             ->columns([
-                TextColumn::make('order_no')
+                TextColumn::make('order_number')
                     ->label('Order No.')
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('sell_to_customer_name')
+                TextColumn::make('customer_name')
                     ->label('Customer')
                     ->searchable(),
 
@@ -62,14 +66,9 @@ class ArchivedSalesOrders extends Page
 
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'completed' => 'success',
-                        'closed' => 'gray',
-                        'cancelled' => 'danger',
-                        default => 'warning',
-                    }),
+                    ->sortable(),
 
-                TextColumn::make('completely_shipped')
+                TextColumn::make('fully_shipped')
                     ->label('Shipped')
                     ->formatStateUsing(fn (bool $state): string => $state ? 'Yes' : 'No')
                     ->icon(fn (bool $state): string => $state ? 'heroicon-o-check-circle' : 'heroicon-o-x-circle')

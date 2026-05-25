@@ -37,7 +37,11 @@ class LinesRelationManager extends RelationManager
                             ->schema([
                                 Select::make('item_id')
                                     ->label('Specific Item')
-                                    ->relationship('item', 'description')
+                                    ->relationship(
+                                        'item',
+                                        'description',
+                                        fn ($query) => $query->where('item_type', 'FINISHED_GOOD')
+                                    )
                                     ->searchable()
                                     ->preload()
                                     ->live()

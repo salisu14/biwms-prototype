@@ -3,8 +3,10 @@
 namespace App\Filament\Resources\SalesOrders\Tables;
 
 use App\Enums\SalesOrderStatus;
+use App\Models\PostedSalesInvoice;
 use App\Models\SalesOrder;
 use App\Services\Approval\ApprovalService;
+use App\Services\Print\PostedSalesInvoicePrintService;
 use App\Services\Print\ProformaInvoiceService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -51,6 +53,15 @@ class SalesOrdersTable
 
                 TextColumn::make('total_quantity')
                     ->label('Total Qty')
+                    ->state(function (SalesOrder $record): float {
+                        $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
+
+                        if ($uoms->count() === 1) {
+                            return (float) $record->total_quantity;
+                        }
+
+                        return (float) $record->lines()->sum('quantity_base');
+                    })
                     ->numeric(decimalPlaces: 2)
                     ->suffix(function (SalesOrder $record): string {
                         $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
@@ -59,13 +70,26 @@ class SalesOrdersTable
                             return ' '.$uoms->first();
                         }
 
-                        return ' Units';
+                        $item = $record->lines()->first()?->item;
+
+                        return ' '.($item?->base_unit_of_measure ?? 'PCS');
                     })
                     ->sortable()
                     ->alignment('right'),
 
                 TextColumn::make('total_quantity_shipped')
                     ->label('Shipped Qty')
+                    ->state(function (SalesOrder $record): float {
+                        $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
+
+                        if ($uoms->count() === 1) {
+                            return (float) $record->total_quantity_shipped;
+                        }
+
+                        return (float) $record->lines->sum(function ($line): float {
+                            return (float) $line->quantity_shipped * (float) ($line->qty_per_unit_of_measure ?: 1);
+                        });
+                    })
                     ->numeric(decimalPlaces: 2)
                     ->suffix(function (SalesOrder $record): string {
                         $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
@@ -74,7 +98,9 @@ class SalesOrdersTable
                             return ' '.$uoms->first();
                         }
 
-                        return ' Units';
+                        $item = $record->lines()->first()?->item;
+
+                        return ' '.($item?->base_unit_of_measure ?? 'PCS');
                     })
                     ->sortable()
                     ->alignment('right')
@@ -82,6 +108,17 @@ class SalesOrdersTable
 
                 TextColumn::make('total_quantity_to_ship')
                     ->label('To Ship Qty')
+                    ->state(function (SalesOrder $record): float {
+                        $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
+
+                        if ($uoms->count() === 1) {
+                            return (float) $record->total_quantity_to_ship;
+                        }
+
+                        return (float) $record->lines->sum(function ($line): float {
+                            return max(0, (float) $line->quantity - (float) $line->quantity_shipped) * (float) ($line->qty_per_unit_of_measure ?: 1);
+                        });
+                    })
                     ->numeric(decimalPlaces: 2)
                     ->suffix(function (SalesOrder $record): string {
                         $uoms = $record->lines()->pluck('unit_of_measure_code')->filter()->unique();
@@ -90,7 +127,9 @@ class SalesOrdersTable
                             return ' '.$uoms->first();
                         }
 
-                        return ' Units';
+                        $item = $record->lines()->first()?->item;
+
+                        return ' '.($item?->base_unit_of_measure ?? 'PCS');
                     })
                     ->sortable()
                     ->alignment('right')
@@ -103,6 +142,18 @@ class SalesOrdersTable
 
                 IconColumn::make('fully_invoiced')
                     ->label('Invoiced')
+                    ->state(function (SalesOrder $record): bool {
+                        $record->loadMissing('lines');
+
+                        if ($record->status === SalesOrderStatus::INVOICED) {
+                            return true;
+                        }
+
+                        return $record->lines->isNotEmpty()
+                            && $record->lines->every(
+                                fn ($line): bool => (float) $line->quantity_invoiced >= (float) $line->quantity_shipped
+                            );
+                    })
                     ->boolean()
                     ->toggleable(),
 
@@ -204,6 +255,30 @@ class SalesOrdersTable
                         fn () => print (app(ProformaInvoiceService::class)->generateSalesProforma($record->refresh()->load(['lines']))->output()),
                         $record->order_number.'_Proforma.pdf'
                     )),
+
+                Action::make('printPostedInvoice')
+                    ->label('Print Posted Invoice')
+                    ->icon('heroicon-o-document-text')
+                    ->color('gray')
+                    ->visible(fn (SalesOrder $record): bool => $record->postedInvoices()->exists())
+                    ->action(function (SalesOrder $record) {
+                        /** @var PostedSalesInvoice|null $postedInvoice */
+                        $postedInvoice = $record->postedInvoices()->latest('id')->first();
+
+                        if (! $postedInvoice) {
+                            Notification::make()
+                                ->title('No posted invoice found')
+                                ->warning()
+                                ->send();
+
+                            return null;
+                        }
+
+                        return response()->streamDownload(
+                            fn () => print (app(PostedSalesInvoicePrintService::class)->generateTaxInvoice($postedInvoice)->output()),
+                            $postedInvoice->document_number.'.pdf'
+                        );
+                    }),
 
                 Action::make('submit_approval')
                     ->label('Submit for Approval')

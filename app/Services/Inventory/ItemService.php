@@ -21,11 +21,18 @@ class ItemService
                 if ($line->item_id) {
                     $item = Item::find($line->item_id);
                     if ($item) {
+                        $oldPrice = (float) $item->unit_price;
+                        $newPrice = (float) ($line->new_unit_price ?: $oldPrice);
+
                         $item->update([
-                            'unit_price' => $line->new_unit_price,
+                            'unit_price' => $newPrice,
                         ]);
 
                         $line->update([
+                            'current_unit_price' => $oldPrice,
+                            'new_unit_price' => $newPrice,
+                            'adjustment_amount' => $newPrice - $oldPrice,
+                            'adjustment_percent' => $oldPrice > 0 ? (($newPrice - $oldPrice) / $oldPrice) * 100 : 0,
                             'applied_at' => now(),
                         ]);
 
@@ -35,17 +42,24 @@ class ItemService
                     // Apply to all items in category if specific item not set
                     $items = Item::where('item_category_id', $line->category_id)->get();
                     foreach ($items as $item) {
+                        $oldPrice = (float) $item->unit_price;
+                        $newPrice = (float) ($line->new_unit_price ?: $oldPrice);
+
                         $item->update([
-                            'unit_price' => $line->new_unit_price,
+                            'unit_price' => $newPrice,
                         ]);
                         $updatedCount++;
                     }
 
                     $line->update([
+                        'adjustment_amount' => 0,
+                        'adjustment_percent' => 0,
                         'applied_at' => now(),
                     ]);
                 }
             });
+
+            $template->update(['status' => 'applied']);
 
             return $updatedCount;
         });

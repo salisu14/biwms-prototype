@@ -3,12 +3,12 @@
 namespace App\Filament\Resources\SalesShipmentHeaders\Pages;
 
 use App\Filament\Resources\SalesShipmentHeaders\SalesShipmentHeaderResource;
+use App\Models\SalesShipmentHeader;
 use Filament\Actions\ViewAction;
-use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
 
 class PostedShipments extends Page
 {
@@ -26,33 +26,13 @@ class PostedShipments extends Page
 
     protected static string|null|\UnitEnum $navigationGroup = 'Sales History';
 
-    // Filter to posted shipments only
     protected function getTableQuery(): Builder
     {
-        $query = parent::getTableQuery();
-
-        // DEBUG: Log what conditions we're checking
-        \Log::info('ArchivedSalesOrders query', [
-            'total_orders' => $query->count(),
-            'status_completed' => $query->where('status', 'completed')->count(),
-            'status_closed' => $query->where('status', 'closed')->count(),
-            'completely_shipped' => $query->where('completely_shipped', true)->count(),
-        ]);
-
-        // More flexible query - check what actually exists in your database
-        return $query->where(function (Builder $q) {
-            $q->where('status', 'completed')
-                ->orWhere('status', 'closed')
-                ->orWhere('status', 'cancelled')
-                ->orWhere('status', 'posted')  // Add this if you use posted status
-                ->orWhere(function ($sq) {
-                    // Check if all lines are fully shipped/invoiced
-                    $sq->whereHas('lines', function ($lineQ) {
-                        $lineQ->whereColumn('quantity', '<=', 'quantity_shipped');
-                    });
-                });
-        })
-            ->latest('updated_at');
+        return SalesShipmentHeader::query()
+            ->whereNotNull('document_no')
+            ->whereNotNull('sales_order_id')
+            ->withCount('lines')
+            ->latest('posting_date');
     }
 
     //    protected function getTableQuery(): Builder

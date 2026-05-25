@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\SalesOrders\Schemas;
 
+use App\Enums\SalesOrderStatus;
+use App\Models\SalesOrder;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -54,7 +56,20 @@ class SalesOrderInfolist
                                     Grid::make(2)
                                         ->schema([
                                             IconEntry::make('fully_shipped')->boolean(),
-                                            IconEntry::make('fully_invoiced')->boolean(),
+                                            IconEntry::make('fully_invoiced')
+                                                ->state(function (SalesOrder $record): bool {
+                                                    $record->loadMissing('lines');
+
+                                                    if ($record->status === SalesOrderStatus::INVOICED) {
+                                                        return true;
+                                                    }
+
+                                                    return $record->lines->isNotEmpty()
+                                                        && $record->lines->every(
+                                                            fn ($line): bool => (float) $line->quantity_invoiced >= (float) $line->quantity_shipped
+                                                        );
+                                                })
+                                                ->boolean(),
                                         ]),
                                 ]),
                         ])->columnSpan(1),
