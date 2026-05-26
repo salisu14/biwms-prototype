@@ -198,86 +198,19 @@ class PurchaseOrdersTable
                             if (! $record instanceof PurchaseOrder) {
                                 return;
                             }
+                            try {
+                                app(PurchaseOrderService::class)->receivePartial($record->id, $data['lines'] ?? []);
+                                Notification::make()->title('Receipt quantities updated successfully')->success()->send();
+                            } catch (Exception $exception) {
+                                $message = $exception->getMessage();
+                                $isOverReceipt = str_contains($message, 'cannot exceed remaining quantity');
 
-                            $record->load('lines');
-
-                            $receiveLines = collect($data['lines'] ?? []);
-                            $receivedAny = false;
-
-                            $orderedLines = $record->lines->sortBy('line_number')->values();
-
-                            $validationErrors = [];
-
-                            foreach ($receiveLines->values() as $index => $lineData) {
-                                $lineId = (int) ($lineData['line_id'] ?? 0);
-                                $lineNumber = (int) ($lineData['line_number'] ?? 0);
-                                $receiveQtyRaw = (string) ($lineData['receive_qty'] ?? 0);
-                                $receiveQty = (float) str_replace(',', '', $receiveQtyRaw);
-
-                                if ($receiveQty <= 0) {
-                                    continue;
-                                }
-
-                                $line = $lineId > 0
-                                    ? $record->lines->firstWhere('id', $lineId)
-                                    : null;
-
-                                if (! $line && $lineNumber > 0) {
-                                    $line = $record->lines->firstWhere('line_number', $lineNumber);
-                                }
-
-                                if (! $line && $orderedLines->has($index)) {
-                                    $line = $orderedLines->get($index);
-                                }
-
-                                if (! $line) {
-                                    continue;
-                                }
-
-                                $remaining = max(0, (float) $line->quantity - (float) $line->received_quantity);
-                                if ($receiveQty > $remaining) {
-                                    $validationErrors[] = "Receive quantity for item {$line->item_code} cannot exceed remaining quantity ({$remaining}).";
-
-                                    continue;
-                                }
-
-                                $line->update([
-                                    'received_quantity' => (float) $line->received_quantity + $receiveQty,
-                                ]);
-
-                                $receivedAny = true;
-                            }
-
-                            if ($validationErrors !== []) {
                                 Notification::make()
-                                    ->title('Invalid receive quantity')
-                                    ->body(implode("\n", $validationErrors))
-                                    ->danger()
+                                    ->title($isOverReceipt ? 'Invalid receive quantity' : 'Nothing to receive')
+                                    ->body($message)
+                                    ->{$isOverReceipt ? 'danger' : 'warning'}()
                                     ->send();
-
-                                return;
                             }
-
-                            if (! $receivedAny) {
-                                Notification::make()
-                                    ->title('Nothing to receive')
-                                    ->body('Enter a receive quantity greater than 0 for at least one line.')
-                                    ->warning()
-                                    ->send();
-
-                                return;
-                            }
-
-                            $record->refresh()->load('lines');
-                            $allReceived = $record->lines->every(
-                                fn ($line): bool => (float) $line->received_quantity >= (float) $line->quantity
-                            );
-
-                            $record->update([
-                                'status' => $allReceived ? PurchaseOrderStatus::RECEIVED : PurchaseOrderStatus::PARTIALLY_RECEIVED,
-                            ]);
-
-                            Notification::make()->title('Receipt quantities updated successfully')->success()->send();
                         }),
 
                     Action::make('markReceived')

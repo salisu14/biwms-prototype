@@ -259,6 +259,87 @@ class PurchaseOrderService
     }
 
     /**
+     * Receive purchase order lines partially/full with strict quantity guards.
+     *
+     * @param  array<int, array{line_id?:int|null,line_number?:int|null,receive_qty?:float|int|string|null}>  $lines
+     *
+     * @throws Exception
+     */
+    public function receivePartial(int $purchaseOrderId, array $lines): PurchaseOrder
+    {
+        $order = PurchaseOrder::with('lines')->findOrFail($purchaseOrderId);
+
+        if (! in_array($order->status, [PurchaseOrderStatus::PENDING, PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true)) {
+            throw new Exception('Purchase Order cannot be received in its current state.');
+        }
+
+        return DB::transaction(function () use ($order, $lines): PurchaseOrder {
+            $orderedLines = $order->lines->sortBy('line_number')->values();
+            $receivedAny = false;
+            $validationErrors = [];
+
+            foreach (collect($lines)->values() as $index => $lineData) {
+                $lineId = (int) ($lineData['line_id'] ?? 0);
+                $lineNumber = (int) ($lineData['line_number'] ?? 0);
+                $receiveQtyRaw = (string) ($lineData['receive_qty'] ?? 0);
+                $receiveQty = (float) str_replace(',', '', $receiveQtyRaw);
+
+                if ($receiveQty <= 0) {
+                    continue;
+                }
+
+                $line = $lineId > 0
+                    ? $order->lines->firstWhere('id', $lineId)
+                    : null;
+
+                if (! $line && $lineNumber > 0) {
+                    $line = $order->lines->firstWhere('line_number', $lineNumber);
+                }
+
+                if (! $line && $orderedLines->has($index)) {
+                    $line = $orderedLines->get($index);
+                }
+
+                if (! $line) {
+                    continue;
+                }
+
+                $remaining = max(0, (float) $line->quantity - (float) $line->received_quantity);
+                if ($receiveQty > $remaining) {
+                    $validationErrors[] = "Receive quantity for item {$line->item_code} cannot exceed remaining quantity ({$remaining}).";
+
+                    continue;
+                }
+
+                $line->update([
+                    'received_quantity' => (float) $line->received_quantity + $receiveQty,
+                ]);
+
+                $receivedAny = true;
+            }
+
+            if ($validationErrors !== []) {
+                throw new Exception(implode("\n", $validationErrors));
+            }
+
+            if (! $receivedAny) {
+                throw new Exception('Enter a receive quantity greater than 0 for at least one line.');
+            }
+
+            $order->refresh()->load('lines');
+            $allReceived = $order->lines->every(
+                fn ($line): bool => (float) $line->received_quantity >= (float) $line->quantity
+            );
+
+            $order->update([
+                'status' => $allReceived ? PurchaseOrderStatus::RECEIVED : PurchaseOrderStatus::PARTIALLY_RECEIVED,
+            ]);
+
+            return $order->fresh('lines');
+        });
+    }
+
+    /**
      * Post Purchase Invoice
      * Moves totals and G/L logic here from the Model
      */
