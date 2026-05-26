@@ -14,6 +14,7 @@ use App\Models\PurchaseOrder;
 use App\Models\SalesOrder;
 use App\Models\VendorLedgerEntry;
 use App\Services\CurrencyService;
+use App\Services\PostingDateValidator;
 use App\Services\PostingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -23,7 +24,8 @@ class PaymentService
 {
     public function __construct(
         protected PostingService $postingService,
-        protected CurrencyService $currencyService
+        protected CurrencyService $currencyService,
+        protected PostingDateValidator $postingDateValidator
     ) {}
 
     /**
@@ -31,6 +33,8 @@ class PaymentService
      */
     public function post(Payment $payment, int $userId): void
     {
+        $this->postingDateValidator->validate($payment->posting_date ?? now());
+
         if ($payment->status !== 'PENDING') {
             throw new \Exception('Payment is not pending');
         }
@@ -61,6 +65,7 @@ class PaymentService
     public function applyToDocument(Payment $payment, array $applicationData, ?int $userId = null): PaymentApplication
     {
         $userId = $userId ?? auth()->id();
+        $this->postingDateValidator->validate($payment->posting_date ?? now());
 
         if ($payment->status !== 'POSTED') {
             throw new \Exception('Only posted payments can be applied to documents.');

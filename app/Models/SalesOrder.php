@@ -9,6 +9,7 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
+use App\Services\PostingDateValidator;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -401,6 +402,8 @@ class SalesOrder extends Model implements Approvable
      */
     public function postShipment(): void
     {
+        app(PostingDateValidator::class)->validate($this->posting_date ?? now());
+
         if (! in_array($this->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true)) {
             throw ValidationException::withMessages([
                 'status' => 'Only approved or released orders can be shipped.',
@@ -610,6 +613,8 @@ class SalesOrder extends Model implements Approvable
      */
     public function postInvoice(): PostedSalesInvoice
     {
+        app(PostingDateValidator::class)->validate($this->posting_date ?? now());
+
         if (! in_array($this->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true)) {
             throw ValidationException::withMessages([
                 'status' => 'Only shipped orders can be invoiced.',

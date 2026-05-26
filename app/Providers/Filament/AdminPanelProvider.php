@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\Finance\GeneralJournals;
+use App\Filament\Pages\FiscalYearManagement;
 use App\Filament\Pages\PurchaseHistory;
 use App\Filament\Pages\SalesHistory;
 use Filament\Http\Middleware\Authenticate;
@@ -107,6 +108,12 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-currency-dollar')
                                     ->url('/admin/payments')
                                     ->isActiveWhen(fn () => request()->is('admin/payments*')),
+
+                                NavigationItem::make('Fiscal Year Management')
+                                    ->icon('heroicon-o-calendar-days')
+                                    ->visible(fn () => auth()->user()?->hasRole('super_admin'))
+                                    ->url(FiscalYearManagement::getUrl())
+                                    ->isActiveWhen(fn () => request()->is('admin/fiscal-year-management*')),
 
                                 // Inventory Valuation Report
                                 NavigationItem::make('Inventory Valuation Report')

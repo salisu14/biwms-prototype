@@ -39,6 +39,8 @@ class GlEntry extends Model
         'comment',
         'dimensions',
         'reconciled',
+        'is_closing_entry',
+        'closing_fiscal_year',
         'reconciliation_date',
         'item_ledger_entry_id',
         'cust_ledger_entry_id',
@@ -64,6 +66,8 @@ class GlEntry extends Model
         'posting_date' => 'date',
         'reconciliation_date' => 'date',
         'reconciled' => 'boolean',
+        'is_closing_entry' => 'boolean',
+        'closing_fiscal_year' => 'integer',
     ];
 
     // Relationships

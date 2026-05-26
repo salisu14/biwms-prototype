@@ -19,6 +19,13 @@ class GeneralLedgerSetup extends Model
         'shortcut_dimension_5_code', 'shortcut_dimension_6_code',
         'shortcut_dimension_7_code', 'shortcut_dimension_8_code',
         'lc_code', 'company_name',
+        'allow_posting_from', 'allow_posting_to',
+        'retained_earnings_account_id',
+    ];
+
+    protected $casts = [
+        'allow_posting_from' => 'date',
+        'allow_posting_to' => 'date',
     ];
 
     /**
@@ -41,5 +48,10 @@ class GeneralLedgerSetup extends Model
     public static function instance(): self
     {
         return static::firstOrCreate(['company_name' => 'Default Company']);
+    }
+
+    public function retainedEarningsAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'retained_earnings_account_id');
     }
 }
