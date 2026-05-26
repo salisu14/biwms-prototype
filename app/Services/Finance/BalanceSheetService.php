@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\Finance;
 
+use App\Enums\AccountScheduleRowType;
+use App\Enums\AccountScheduleTotalingType;
 use App\Enums\AccountType;
 use App\Enums\IncomeBalanceType;
+use App\Models\AccountSchedule;
 use App\Models\ChartOfAccount;
 use App\Models\GlEntry;
 use Carbon\Carbon;
@@ -60,6 +63,49 @@ class BalanceSheetService
                 'equity' => $totalEquity,
                 'liabilities_and_equity' => $totalLiabilities + $totalEquity,
                 'difference' => $totalAssets - ($totalLiabilities + $totalEquity),
+            ],
+        ];
+    }
+
+    public function generateFromSchedule(int $scheduleId, Carbon $asOfDate): array
+    {
+        $schedule = AccountSchedule::with('lines')->findOrFail($scheduleId);
+        $results = collect();
+
+        foreach ($schedule->lines as $line) {
+            $amount = match ($line->totaling_type) {
+                AccountScheduleTotalingType::POSTING_ACCOUNTS,
+                AccountScheduleTotalingType::TOTAL_ACCOUNTS => $this->sumAccountsByRowType(
+                    (string) $line->totaling,
+                    $asOfDate,
+                    $line->row_type ?? AccountScheduleRowType::BALANCE_AT_DATE
+                ),
+                AccountScheduleTotalingType::FORMULA => $this->calculateFormula((string) $line->totaling, $results->all()),
+                default => 0.0,
+            };
+
+            $results->push([
+                'account_no' => $line->row_no ?: '',
+                'description' => $line->description,
+                'account_type' => null,
+                'indentation' => $line->indentation ?? 0,
+                'bold' => (bool) $line->bold,
+                'is_total_account' => false,
+                'amount' => $line->show_opposite_sign ? $amount * -1 : $amount,
+            ]);
+        }
+
+        return [
+            'as_of_date' => $asOfDate->toDateString(),
+            'printed_at' => now()->format('Y-m-d H:i'),
+            'schedule_name' => $schedule->name,
+            'lines' => $results->all(),
+            'totals' => [
+                'assets' => 0.0,
+                'liabilities' => 0.0,
+                'equity' => 0.0,
+                'liabilities_and_equity' => 0.0,
+                'difference' => 0.0,
             ],
         ];
     }
@@ -129,5 +175,53 @@ class BalanceSheetService
         }
 
         return [trim($totaling)];
+    }
+
+    private function sumAccountsByRowType(string $totaling, Carbon $asOfDate, AccountScheduleRowType|string|null $rowType): float
+    {
+        $accountCodes = $this->parseTotaling($totaling);
+        $query = GlEntry::query()->whereHas('chartOfAccount', function ($query) use ($accountCodes): void {
+            $query->whereIn('account_number', $accountCodes);
+        });
+
+        $resolvedRowType = $rowType instanceof AccountScheduleRowType
+            ? $rowType
+            : AccountScheduleRowType::tryFrom((string) $rowType);
+
+        return match ($resolvedRowType) {
+            AccountScheduleRowType::NET_CHANGE => (float) $query
+                ->whereBetween('posting_date', [$asOfDate->copy()->startOfYear(), $asOfDate])
+                ->sum(DB::raw('debit_amount - credit_amount')),
+            AccountScheduleRowType::BEGINNING_BALANCE => (float) $query
+                ->whereDate('posting_date', '<', $asOfDate->copy()->startOfYear())
+                ->sum(DB::raw('debit_amount - credit_amount')),
+            default => (float) $query
+                ->whereDate('posting_date', '<=', $asOfDate)
+                ->sum(DB::raw('debit_amount - credit_amount')),
+        };
+    }
+
+    /**
+     * @param  array<int, array{row_no?: string, amount?: float|int|string}>  $previousResults
+     */
+    private function calculateFormula(string $formula, array $previousResults): float
+    {
+        $expression = $formula;
+
+        foreach ($previousResults as $result) {
+            if (! empty($result['row_no'])) {
+                $expression = str_replace((string) $result['row_no'], (string) ($result['amount'] ?? 0), $expression);
+            }
+        }
+
+        if (preg_match('/[^0-9\+\-\*\/\(\)\. ]/', $expression)) {
+            return 0.0;
+        }
+
+        try {
+            return (float) eval("return {$expression};");
+        } catch (\Throwable) {
+            return 0.0;
+        }
     }
 }

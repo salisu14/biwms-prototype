@@ -37,6 +37,8 @@ class DatabaseSeeder extends Seeder
             RolesTableSeeder::class,
             UsersTableSeeder::class,
             OverheadCostCategorySeeder::class,
+            BalanceSheetAccountScheduleSeeder::class,
+            ProfitAndLossAccountScheduleSeeder::class,
         ]);
     }
 }
