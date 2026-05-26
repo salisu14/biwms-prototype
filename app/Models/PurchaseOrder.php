@@ -27,6 +27,7 @@ class PurchaseOrder extends Model
         'due_date',
         'delivery_date',
         'payment_terms',
+        'currency_code',
         'status',
         'comment',
         'total_amount',
@@ -59,6 +60,7 @@ class PurchaseOrder extends Model
     protected $attributes = [
         'status' => PurchaseOrderStatus::PENDING,
         'order_type' => PurchaseOrderType::PURCHASE_ORDER,
+        'currency_code' => 'USD',
         'is_price_inclusive' => false,
     ];
 

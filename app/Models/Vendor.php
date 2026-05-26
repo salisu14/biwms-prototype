@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\ContactRole;
+use App\Enums\ContactType;
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -59,6 +62,39 @@ class Vendor extends Model
         'is_overpaid',
         'available_credit',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Vendor $vendor): void {
+            if (! empty($vendor->vendor_code)) {
+                return;
+            }
+
+            try {
+                $vendor->vendor_code = app(NumberSeriesService::class)->getNextNo('VENDOR');
+            } catch (\Throwable) {
+                $vendor->vendor_code = 'VEND-'.str_pad((string) ((int) static::max('id') + 1), 5, '0', STR_PAD_LEFT);
+            }
+
+            if (empty($vendor->contact_id)) {
+                $contact = Contact::create([
+                    'name' => $vendor->vendor_name ?: $vendor->vendor_code,
+                    'full_name' => $vendor->contact_person ?: $vendor->vendor_name,
+                    'company_name' => $vendor->vendor_name,
+                    'type' => ContactType::COMPANY,
+                    'role' => ContactRole::VENDOR,
+                    'email' => $vendor->email,
+                    'phone' => $vendor->phone,
+                    'mobile' => $vendor->mobile,
+                    'address' => $vendor->address,
+                    'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+                    'vat_bus_posting_group' => $vendor->vat_bus_posting_group,
+                ]);
+
+                $vendor->contact_id = $contact->id;
+            }
+        });
+    }
 
     // Relationships
     public function contact(): BelongsTo

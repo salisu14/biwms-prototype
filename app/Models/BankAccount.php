@@ -46,6 +46,19 @@ class BankAccount extends Model
         'allow_receipts' => 'boolean',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (BankAccount $bankAccount): void {
+            if ($bankAccount->current_balance === null) {
+                $bankAccount->current_balance = 0;
+            }
+
+            if ($bankAccount->available_balance === null) {
+                $bankAccount->available_balance = 0;
+            }
+        });
+    }
+
     // ==================== RELATIONSHIPS ====================
 
     public function glAccount(): BelongsTo

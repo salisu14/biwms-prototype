@@ -86,41 +86,41 @@ class ProductionOrderInfolist
                                     ->label('Posted Status')
                                     ->boolean(),
 
-                                TextEntry::make('produced_cartons')
-                                    ->label('Produced (Cartons)')
-                                    ->state(fn ($record): float => (float) $record->itemLedgerEntries()
-                                        ->where('entry_type', ItemLedgerEntryType::OUTPUT)
-                                        ->where('item_id', $record->item_id)
-                                        ->sum('quantity'))
+                                TextEntry::make('produced_quantity')
+                                    ->label('Produced Quantity')
+                                    ->state(function ($record): float {
+                                        $produced = (float) $record->itemLedgerEntries()
+                                            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+                                            ->where('item_id', $record->item_id)
+                                            ->sum('quantity');
+
+                                        $uomCode = (string) ($record->unit_of_measure_code ?? '');
+                                        if (! $record->item_id || $uomCode === '') {
+                                            return $produced;
+                                        }
+
+                                        $item = $record->item;
+                                        if (! $item) {
+                                            return $produced;
+                                        }
+
+                                        $baseUom = (string) ($item->base_unit_of_measure ?? '');
+                                        if ($baseUom !== '' && strtoupper($uomCode) === strtoupper($baseUom)) {
+                                            return $produced;
+                                        }
+
+                                        $assignment = $item->uoms()->where('uom_code', $uomCode)->first();
+                                        $factor = (float) ($assignment?->pivot?->conversion_factor ?? 1);
+                                        if ($factor <= 0) {
+                                            return $produced;
+                                        }
+
+                                        return $produced / $factor;
+                                    })
                                     ->numeric(4)
+                                    ->suffix(fn ($record): string => ' '.($record->unit_of_measure_code ?? 'PCS'))
                                     ->weight(FontWeight::Bold)
                                     ->color('success'),
-
-                                TextEntry::make('produced_packs')
-                                    ->label('Produced (Packs)')
-                                    ->state(function ($record): float {
-                                        $producedCartons = (float) $record->itemLedgerEntries()
-                                            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
-                                            ->where('item_id', $record->item_id)
-                                            ->sum('quantity');
-
-                                        return $producedCartons * 24;
-                                    })
-                                    ->numeric(4)
-                                    ->color('info'),
-
-                                TextEntry::make('produced_pieces')
-                                    ->label('Produced (Pieces)')
-                                    ->state(function ($record): float {
-                                        $producedCartons = (float) $record->itemLedgerEntries()
-                                            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
-                                            ->where('item_id', $record->item_id)
-                                            ->sum('quantity');
-
-                                        return $producedCartons * 288;
-                                    })
-                                    ->numeric(4)
-                                    ->color('primary'),
                             ]),
                         ]),
 

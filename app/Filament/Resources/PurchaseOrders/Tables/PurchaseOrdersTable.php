@@ -16,6 +16,8 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -102,7 +104,7 @@ class PurchaseOrdersTable
 
                 TextColumn::make('grand_total')
                     ->label('Total')
-                    ->money('USD')
+                    ->money(fn (PurchaseOrder $record) => $record->currency_code ?: 'USD')
                     ->sortable()
                     ->weight('bold'),
             ])->recordActions([
@@ -152,15 +154,130 @@ class PurchaseOrdersTable
                         ->label('Mark Partially Received')
                         ->icon('heroicon-o-arrow-down-tray')
                         ->color('warning')
-                        ->requiresConfirmation()
-                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PENDING], true))
-                        ->action(function ($record) {
+                        ->form(function (PurchaseOrder $record): array {
+                            $record->loadMissing('lines');
+
+                            return [
+                                Repeater::make('lines')
+                                    ->label('Receive Quantities (per line)')
+                                    ->default(
+                                        $record->lines->map(fn ($line): array => [
+                                            'line_id' => $line->id,
+                                            'line_number' => $line->line_number,
+                                            'item_code' => $line->item_code,
+                                            'description' => $line->description,
+                                            'ordered_qty' => (float) $line->quantity,
+                                            'already_received' => (float) $line->received_quantity,
+                                            'remaining_qty' => max(0, (float) $line->quantity - (float) $line->received_quantity),
+                                            'receive_qty' => 0,
+                                        ])->values()->all()
+                                    )
+                                    ->schema([
+                                        TextInput::make('line_id')->hidden()->dehydrated(),
+                                        TextInput::make('line_number')->hidden()->dehydrated(),
+                                        TextInput::make('item_code')->label('Item')->disabled()->dehydrated(false),
+                                        TextInput::make('description')->disabled()->dehydrated(false),
+                                        TextInput::make('ordered_qty')->label('Ordered')->numeric()->disabled()->dehydrated(false),
+                                        TextInput::make('already_received')->label('Received')->numeric()->disabled()->dehydrated(false),
+                                        TextInput::make('remaining_qty')->label('Remaining')->numeric()->disabled()->dehydrated(false),
+                                        TextInput::make('receive_qty')
+                                            ->label('Receive Now')
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->default(0)
+                                            ->required(),
+                                    ])
+                                    ->columns(7)
+                                    ->addable(false)
+                                    ->deletable(false)
+                                    ->reorderable(false),
+                            ];
+                        })
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PENDING, PurchaseOrderStatus::PARTIALLY_RECEIVED], true))
+                        ->action(function ($record, array $data) {
                             if (! $record instanceof PurchaseOrder) {
                                 return;
                             }
 
-                            $record->update(['status' => PurchaseOrderStatus::PARTIALLY_RECEIVED]);
-                            Notification::make()->title('Order marked as partially received')->success()->send();
+                            $record->load('lines');
+
+                            $receiveLines = collect($data['lines'] ?? []);
+                            $receivedAny = false;
+
+                            $orderedLines = $record->lines->sortBy('line_number')->values();
+
+                            $validationErrors = [];
+
+                            foreach ($receiveLines->values() as $index => $lineData) {
+                                $lineId = (int) ($lineData['line_id'] ?? 0);
+                                $lineNumber = (int) ($lineData['line_number'] ?? 0);
+                                $receiveQtyRaw = (string) ($lineData['receive_qty'] ?? 0);
+                                $receiveQty = (float) str_replace(',', '', $receiveQtyRaw);
+
+                                if ($receiveQty <= 0) {
+                                    continue;
+                                }
+
+                                $line = $lineId > 0
+                                    ? $record->lines->firstWhere('id', $lineId)
+                                    : null;
+
+                                if (! $line && $lineNumber > 0) {
+                                    $line = $record->lines->firstWhere('line_number', $lineNumber);
+                                }
+
+                                if (! $line && $orderedLines->has($index)) {
+                                    $line = $orderedLines->get($index);
+                                }
+
+                                if (! $line) {
+                                    continue;
+                                }
+
+                                $remaining = max(0, (float) $line->quantity - (float) $line->received_quantity);
+                                if ($receiveQty > $remaining) {
+                                    $validationErrors[] = "Receive quantity for item {$line->item_code} cannot exceed remaining quantity ({$remaining}).";
+
+                                    continue;
+                                }
+
+                                $line->update([
+                                    'received_quantity' => (float) $line->received_quantity + $receiveQty,
+                                ]);
+
+                                $receivedAny = true;
+                            }
+
+                            if ($validationErrors !== []) {
+                                Notification::make()
+                                    ->title('Invalid receive quantity')
+                                    ->body(implode("\n", $validationErrors))
+                                    ->danger()
+                                    ->send();
+
+                                return;
+                            }
+
+                            if (! $receivedAny) {
+                                Notification::make()
+                                    ->title('Nothing to receive')
+                                    ->body('Enter a receive quantity greater than 0 for at least one line.')
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
+                            $record->refresh()->load('lines');
+                            $allReceived = $record->lines->every(
+                                fn ($line): bool => (float) $line->received_quantity >= (float) $line->quantity
+                            );
+
+                            $record->update([
+                                'status' => $allReceived ? PurchaseOrderStatus::RECEIVED : PurchaseOrderStatus::PARTIALLY_RECEIVED,
+                            ]);
+
+                            Notification::make()->title('Receipt quantities updated successfully')->success()->send();
                         }),
 
                     Action::make('markReceived')
@@ -241,13 +358,13 @@ class PurchaseOrdersTable
                         }),
 
                     Action::make('printProforma')
-                        ->label('Proforma Invoice')
+                        ->label('Purchase Order (PO)')
                         ->icon('heroicon-o-printer')
                         ->color('info')
                         ->visible(fn ($record) => $record instanceof PurchaseOrder)
                         ->action(fn ($record) => $record instanceof PurchaseOrder ? response()->streamDownload(
                             fn () => print (app(ProformaInvoiceService::class)->generatePurchaseProforma($record->refresh()->load(['lines']))->output()),
-                            $record->order_number.'_Proforma.pdf'
+                            $record->order_number.'_PO.pdf'
                         ) : null),
                 ]),
             ])

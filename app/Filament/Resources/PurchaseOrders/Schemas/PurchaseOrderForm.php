@@ -55,11 +55,25 @@ class PurchaseOrderForm
                                         $vendor = Vendor::find($state);
                                         $set('vendor_name', $vendor?->vendor_name ?? '');
                                         $set('payment_terms', $vendor?->payment_terms ?? '');
+                                        $set('currency_code', $vendor?->currency ?? 'USD');
                                     } else {
                                         $set('vendor_name', '');
                                         $set('payment_terms', '');
+                                        $set('currency_code', 'USD');
                                     }
                                 }),
+
+                            Select::make('currency_code')
+                                ->label('Currency')
+                                ->options([
+                                    'USD' => 'USD - US Dollar',
+                                    'EUR' => 'EUR - Euro',
+                                    'GBP' => 'GBP - British Pound',
+                                    'NGN' => 'NGN - Nigerian Naira',
+                                ])
+                                ->default('USD')
+                                ->searchable()
+                                ->required(),
 
                             Select::make('location_id')
                                 ->label('Ship To Location')

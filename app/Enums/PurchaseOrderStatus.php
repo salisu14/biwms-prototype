@@ -55,6 +55,7 @@ enum PurchaseOrderStatus: string
             self::PENDING => 'heroicon-m-clock',
             self::APPROVED => 'heroicon-m-check-badge',
             self::RECEIVED => 'heroicon-m-truck',
+            self::PARTIALLY_RECEIVED => 'heroicon-m-arrow-down-tray',
             self::INVOICED => 'heroicon-m-document-text',
             self::CLOSED => 'heroicon-m-lock-closed',
             self::CANCELLED => 'heroicon-m-x-circle',

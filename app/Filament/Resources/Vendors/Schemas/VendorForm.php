@@ -27,10 +27,12 @@ class VendorForm
                                 Grid::make(3)->schema([
                                     TextInput::make('vendor_code')
                                         ->label('Vendor No.')
-                                        ->required()
+//                                        ->required()
                                         ->unique(ignoreRecord: true)
+                                        ->readOnlyOn('create')
                                         ->disabled(fn (?Vendor $record) => $record !== null)
                                         ->dehydrated()
+                                        ->placeholder('Auto-generated from Number Series (VENDOR)')
                                         ->extraInputAttributes(['style' => 'text-transform: uppercase']),
 
                                     TextInput::make('vendor_name')

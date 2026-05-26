@@ -51,19 +51,19 @@ class ProformaInvoiceService
     }
 
     /**
-     * Generate a Proforma Invoice PDF for a Purchase Order.
+     * Generate a Purchase Order (PO) PDF for a Purchase Order.
      */
     public function generatePurchaseProforma(PurchaseOrder $order)
     {
         $data = [
             'type' => 'Purchase',
-            'title' => 'PROFORMA PURCHASE INVOICE',
+            'title' => 'PURCHASE ORDER (PO)',
             'order_number' => $order->order_number,
             'client_label' => 'Vendor',
             'client_name' => $order->vendor_name ?? $order->vendor?->name,
             'client_address' => $order->vendor?->address,
             'date' => $order->order_date?->format('d/m/Y'),
-            'currency' => 'USD', // Purchase base usually USD in this system
+            'currency' => $order->currency_code ?? $order->vendor?->currency ?? 'USD',
             'lines' => $order->lines->map(function ($line) {
                 return [
                     'item_code' => $line->item_code,

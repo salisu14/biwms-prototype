@@ -40,7 +40,40 @@ class ProductionOrdersTable
                     ->searchable(),
 
                 TextColumn::make('quantity')
-                    ->numeric(decimalPlaces: 2),
+                    ->state(function ($record): float {
+                        $quantity = (float) ($record->quantity ?? 0);
+                        $quantityBase = (float) ($record->quantity_base ?? 0);
+                        $uomCode = (string) ($record->unit_of_measure_code ?? '');
+
+                        if (! $record->item_id || $uomCode === '') {
+                            return $quantity;
+                        }
+
+                        $item = $record->item;
+                        if (! $item) {
+                            return $quantity;
+                        }
+
+                        $baseUom = (string) ($item->base_unit_of_measure ?? '');
+                        if ($baseUom !== '' && strtoupper($uomCode) === strtoupper($baseUom)) {
+                            return $quantity;
+                        }
+
+                        $assignment = $item->uoms()->where('uom_code', $uomCode)->first();
+                        $factor = (float) ($assignment?->pivot?->conversion_factor ?? 1);
+                        if ($factor <= 0) {
+                            return $quantity;
+                        }
+
+                        // If quantity looks stored in base (same as quantity_base), convert for display.
+                        if ($quantityBase > 0 && abs($quantity - $quantityBase) < 0.0001) {
+                            return $quantity / $factor;
+                        }
+
+                        return $quantity;
+                    })
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(fn ($record): string => ' '.($record->unit_of_measure_code ?? 'PCS')),
 
                 TextColumn::make('due_date')
                     ->date(),

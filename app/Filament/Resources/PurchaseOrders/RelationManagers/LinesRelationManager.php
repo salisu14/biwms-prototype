@@ -248,8 +248,22 @@ class LinesRelationManager extends RelationManager
                     ->limit(30),
 
                 TextColumn::make('quantity')
+                    ->label('Ordered')
                     ->numeric()
                     ->suffix(fn ($record) => ' '.($record->unit_of_measure ?? '')),
+
+                TextColumn::make('received_quantity')
+                    ->label('Received')
+                    ->numeric()
+                    ->suffix(fn ($record) => ' '.($record->unit_of_measure ?? ''))
+                    ->color('success'),
+
+                TextColumn::make('remaining_quantity')
+                    ->label('Remaining')
+                    ->state(fn ($record) => $record->remaining_quantity)
+                    ->numeric()
+                    ->suffix(fn ($record) => ' '.($record->unit_of_measure ?? ''))
+                    ->color('warning'),
 
                 TextColumn::make('unit_cost')
                     ->money('USD')
