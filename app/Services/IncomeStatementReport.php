@@ -33,6 +33,13 @@ class IncomeStatementReport
             'printed_at' => now()->format('Y-m-d H:i'),
             'lines' => $this->rows->map(fn ($row) => [
                 'account_no' => $row['account_no'],
+                'heading' => null,
+                'posting' => $row['is_total_account'] ? null : $row['account_no'],
+                'start_total' => $row['is_total_account'] ? $row['account_no'] : null,
+                'end_total' => $row['is_total_account'] ? $row['account_no'] : null,
+                'style' => collect([
+                    ! empty($row['bold']) ? 'Bold' : null,
+                ])->filter()->implode(', '),
                 'indentation' => $row['indentation'],
                 'description' => $row['account_name'],
                 'amount' => number_format($row['net_change'], 2),
@@ -40,7 +47,7 @@ class IncomeStatementReport
                 'variance' => isset($row['variance']) ? number_format($row['variance'], 2) : null,
                 'variance_percent' => isset($row['variance_percent']) ? number_format($row['variance_percent'], 1).'%' : null,
                 'bold' => $row['bold'],
-            ]),
+            ])->values()->all(),
             'totals' => [
                 'revenue' => number_format($this->summary['total_revenue'], 2),
                 'cogs' => number_format($this->summary['total_cogs'], 2),

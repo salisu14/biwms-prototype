@@ -190,6 +190,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-chart-bar')
                                     ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*'))
                                     ->url('/admin/profit-and-loss-report'),
+                                NavigationItem::make('Balance Sheet')
+                                    ->icon('heroicon-o-scale')
+                                    ->isActiveWhen(fn () => request()->is('admin/balance-sheet-report*'))
+                                    ->url('/admin/balance-sheet-report'),
 
                                 NavigationItem::make('WIP Valuation')
                                     ->icon('heroicon-o-currency-dollar')
@@ -227,7 +231,7 @@ class AdminPanelProvider extends PanelProvider
                                 //                                    ->url('/admin/vendor-contacts')
                                 //                                    ->isActiveWhen(fn () => request()->is('admin/vendor-contacts*')),
 
-                                NavigationItem::make('Raw Materials')
+                                NavigationItem::make('Raw & Packaging Materials')
                                     ->icon('heroicon-o-shopping-bag')
                                     ->url('/admin/items/rm/raw-materials'),
 

@@ -2,19 +2,20 @@
     <div class="space-y-8 fi-report-container font-sans antialiased">
         <!-- Premium Filter Section -->
         <x-filament::section class="print:hidden border-none shadow-xl bg-white/50 dark:bg-gray-900/50 backdrop-blur-md rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl">
-            <template x-if="true"> {{-- Animation wrapper --}}
-                <form wire:submit="generateReport" class="p-2">
-                    {{ $this->form }}
-                    <div class="mt-6 flex justify-end items-center gap-x-4 border-t border-gray-100 dark:border-white/5 pt-6">
-                        <button type="button" wire:click="form.fill" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                            Reset Filters
-                        </button>
-                        <x-filament::button type="submit" size="lg" class="rounded-xl shadow-lg shadow-primary-500/20 px-8 transition-transform active:scale-95">
-                            Update Analysis
-                        </x-filament::button>
-                    </div>
-                </form>
-            </template>
+            <form wire:submit="generateReport" class="p-2">
+                {{ $this->form }}
+                <div class="mt-6 flex justify-end items-center gap-x-4 border-t border-gray-100 dark:border-white/5 pt-6">
+                    <x-filament::button type="button" color="info" icon="heroicon-o-printer" onclick="window.print(); return false;">
+                        Print
+                    </x-filament::button>
+                    <button type="button" wire:click="form.fill" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                        Reset Filters
+                    </button>
+                    <x-filament::button type="submit" size="lg" class="rounded-xl shadow-lg shadow-primary-500/20 px-8 transition-transform active:scale-95">
+                        Update Analysis
+                    </x-filament::button>
+                </div>
+            </form>
         </x-filament::section>
 
         @if($reportData)
@@ -96,6 +97,11 @@
                     <table class="w-full text-sm text-left border-collapse">
                         <thead>
                             <tr class="border-b border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/5">
+                                <th class="py-5 px-4 font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">Heading</th>
+                                <th class="py-5 px-4 font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">Posting</th>
+                                <th class="py-5 px-4 font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">Start Total</th>
+                                <th class="py-5 px-4 font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">End Total</th>
+                                <th class="py-5 px-4 font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">Style</th>
                                 <th class="py-5 px-8 font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">G/L Description</th>
                                 <th class="py-5 px-8 text-right font-black uppercase tracking-[0.15em] text-gray-900 dark:text-white text-[11px]">Current Amount</th>
                                 @if(isset($reportData['compare_period']))
@@ -113,6 +119,11 @@
                                     $isNegative = str_contains((string)$amount, '-');
                                 @endphp
                                 <tr class="group transition-all duration-200 {{ $isBold ? 'bg-gray-50/30 dark:bg-white/[0.02] font-extrabold' : 'hover:bg-primary-500/5 cursor-default' }}">
+                                    <td class="py-3 px-4 text-gray-500">{{ $line['heading'] ?? '—' }}</td>
+                                    <td class="py-3 px-4 text-gray-500">{{ $line['posting'] ?? '—' }}</td>
+                                    <td class="py-3 px-4 text-gray-500">{{ $line['start_total'] ?? '—' }}</td>
+                                    <td class="py-3 px-4 text-gray-500">{{ $line['end_total'] ?? '—' }}</td>
+                                    <td class="py-3 px-4 text-gray-500">{{ $line['style'] ?: '—' }}</td>
                                     <td class="py-3 px-8 relative">
                                         {{-- Indentation Guides --}}
                                         @for($i = 0; $i < $indent; $i++)
@@ -156,6 +167,7 @@
                                     $isNetNegative = str_contains((string)$netInc, '-');
                                 @endphp
                                 <tr class="bg-gray-950 dark:bg-black group border-t-4 border-primary-500">
+                                    <td colspan="5"></td>
                                     <td class="py-6 px-8 font-black uppercase tracking-[0.25em] text-white text-base">Net Income / (Loss)</td>
                                     <td class="py-6 px-8 text-right font-black text-xl text-white tabular-nums border-b-[6px] border-double border-white/30">
                                         {{ $isNetNegative ? '(' . ltrim($netInc, '-') . ')' : $netInc }}
@@ -200,7 +212,6 @@
     </div>
 
     <style>
-        {{-- Custom Typography & Polish --}}
         @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
         
         .fi-report-container {
@@ -214,12 +225,26 @@
         @media print {
             @page {
                 size: A4 portrait;
-                margin: 0;
+                margin: 12mm;
+            }
+            .fi-sidebar,
+            .fi-topbar,
+            .fi-header,
+            .fi-breadcrumbs,
+            .fi-global-search {
+                display: none !important;
+            }
+            .fi-main,
+            .fi-page,
+            .fi-page-content {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
             }
             body { 
                 background: white !important;
                 color: black !important;
-                padding: 1.5cm;
             }
             .print\:hidden { display: none !important; }
             .fi-section {
@@ -234,12 +259,10 @@
             .border-white\/30 { border-color: black !important; }
             tr { page-break-inside: avoid; }
             
-            {{-- Print specific typography --}}
             table { font-size: 9pt !important; }
             h1 { font-size: 18pt !important; }
         }
 
-        {{-- Custom scrollbar for data tables --}}
         .overflow-x-auto::-webkit-scrollbar {
             height: 4px;
         }

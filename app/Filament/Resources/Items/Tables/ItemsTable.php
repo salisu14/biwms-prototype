@@ -9,7 +9,6 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\ColumnManagerLayout;
 use Filament\Tables\Filters\SelectFilter;
@@ -53,12 +52,7 @@ class ItemsTable
                     ->label('On Hand')
                     ->alignRight()
                     ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.$record->base_unit_of_measure)
-                    ->color(fn ($state) => $state <= 0 ? 'danger' : 'success')
-                    ->summarize(
-                        Summarizer::make()
-                            ->label('Total Stock')
-                            ->using(fn ($query) => number_format((float) $query->get()->sum('ledger_on_hand'), 2))
-                    ),
+                    ->color(fn ($state) => $state <= 0 ? 'danger' : 'success'),
 
                 TextColumn::make('qty_on_sales_order')
                     ->label('On Sales Order')

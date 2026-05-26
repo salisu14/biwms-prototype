@@ -5,7 +5,6 @@ namespace App\Filament\Pages\Finance;
 use App\Models\AccountSchedule;
 use App\Models\DimensionValue;
 use App\Services\IncomeStatementService;
-use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
@@ -97,18 +96,7 @@ class ProfitAndLossReport extends Page implements HasForms
 
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('generate')
-                ->label('Generate')
-                ->action(fn () => $this->generateReport()),
-            Action::make('print')
-                ->label('Print')
-                ->icon('heroicon-o-printer')
-                ->color('info')
-                ->extraAttributes([
-                    'onclick' => 'window.print(); return false;',
-                ]),
-        ];
+        return [];
     }
 
     public function generateReport(): void
@@ -134,13 +122,22 @@ class ProfitAndLossReport extends Page implements HasForms
                 'printed_at' => now()->format('Y-m-d H:i'),
                 'period' => "{$start->format('Y-m-d')}..{$end->format('Y-m-d')}",
                 'lines' => $rows->map(fn (array $row): array => [
+                    'heading' => null,
+                    'posting' => null,
+                    'start_total' => null,
+                    'end_total' => null,
+                    'style' => collect([
+                        ! empty($row['bold']) ? 'Bold' : null,
+                        ! empty($row['italic']) ? 'Italic' : null,
+                        ! empty($row['underline']) ? 'Underline' : null,
+                    ])->filter()->implode(', '),
                     'description' => $row['description'] ?? '',
                     'indentation' => $row['indentation'] ?? 0,
                     'bold' => $row['bold'] ?? false,
                     'amount' => number_format((float) ($row['amount'] ?? 0), 2),
                     'compare_amount' => null,
                     'variance_percent' => null,
-                ]),
+                ])->values()->all(),
                 'totals' => [
                     'revenue' => number_format(0, 2),
                     'cogs' => number_format(0, 2),

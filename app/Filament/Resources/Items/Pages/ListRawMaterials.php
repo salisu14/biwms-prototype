@@ -12,9 +12,9 @@ class ListRawMaterials extends ListRecords
 {
     protected static string $resource = ItemResource::class;
 
-    protected static ?string $title = 'Raw Materials';
+    protected static ?string $title = 'Raw & Packaging Materials';
 
-    protected static ?string $navigationLabel = 'Raw Materials';
+    protected static ?string $navigationLabel = 'Raw & Packaging Materials';
 
     protected static string|null|\BackedEnum $navigationIcon = 'heroicon-o-cube';
 
@@ -27,7 +27,10 @@ class ListRawMaterials extends ListRecords
         return $table
             ->query(
                 Item::query()
-                    ->where('item_type', ItemType::RAW_MATERIAL->value)
+                    ->whereIn('item_type', [
+                        ItemType::RAW_MATERIAL->value,
+                        ItemType::PACKAGING->value,
+                    ])
             )
             ->columns(ItemResource::table($table)->getColumns());
     }

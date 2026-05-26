@@ -54,6 +54,14 @@
             "@php artisan config:clear --ansi",
             "@php artisan test"
         ],
+        "deploy:backup": [
+            "bash scripts/deploy-backup.sh ${RELEASE_TAG:-manual}"
+        ],
+        "deploy:migrate": [
+            "@composer deploy:backup",
+            "@php artisan migrate --force",
+            "@php artisan optimize:clear"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi",

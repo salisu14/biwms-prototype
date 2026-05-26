@@ -65,7 +65,7 @@ class IncomeStatementService
                 'bold' => $account->bold || $account->isTotalAccount(),
                 'is_total_account' => $account->isTotalAccount(),
                 'net_change' => $this->applySign($netChange, $account),
-                'compare_amount' => $compareAmount ? $this->applySign($compareAmount, $account) : null,
+                'compare_amount' => $compareAmount !== null ? $this->applySign($compareAmount, $account) : null,
                 'budget_amount' => $budgetAmount,
                 'variance' => $budgetAmount !== null ? $this->applySign($netChange, $account) - $budgetAmount : null,
                 'variance_percent' => $this->calculateVariancePercent($netChange, $budgetAmount, $account),
@@ -128,8 +128,23 @@ class IncomeStatementService
 
     private function getIncomeStatementAccounts(): Collection
     {
-        return ChartOfAccount::where('income_balance', IncomeBalanceType::INCOME_STATEMENT)
+        return ChartOfAccount::query()
             ->where('blocked', false)
+            ->where(function ($query): void {
+                $query->where('income_balance', IncomeBalanceType::INCOME_STATEMENT)
+                    // Defensive fallback: include known P&L account types even if income_balance is misclassified.
+                    ->orWhereIn('account_type', [
+                        'REVENUE',
+                        'COGS',
+                        'EXPENSE',
+                        'INTEREST',
+                        'TAX',
+                        'direct_expense',
+                        'indirect_expense',
+                        'other_income',
+                        'other_expense',
+                    ]);
+            })
             ->orderBy('account_number')
             ->get();
     }
@@ -279,13 +294,15 @@ class IncomeStatementService
 
     private function calculateSummary(Collection $rows): array
     {
-        $currentRevenue = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'REVENUE')->sum('net_change');
-        $currentCogs = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'COGS')->sum('net_change');
-        $currentExp = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'EXPENSE')->sum('net_change');
+        $postingRows = $rows->filter(fn ($row) => ! ($row['is_total_account'] ?? false));
 
-        $compareRevenue = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'REVENUE')->sum('compare_amount');
-        $compareCogs = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'COGS')->sum('compare_amount');
-        $compareExp = $rows->filter(fn ($r) => $this->classifyRowType($r) === 'EXPENSE')->sum('compare_amount');
+        $currentRevenue = $postingRows->filter(fn ($r) => $this->classifyRowType($r) === 'REVENUE')->sum('net_change');
+        $currentCogs = $postingRows->filter(fn ($r) => $this->classifyRowType($r) === 'COGS')->sum('net_change');
+        $currentExp = $postingRows->filter(fn ($r) => $this->classifyRowType($r) === 'EXPENSE')->sum('net_change');
+
+        $compareRevenue = $postingRows->filter(fn ($r) => $this->classifyRowType($r) === 'REVENUE')->sum('compare_amount');
+        $compareCogs = $postingRows->filter(fn ($r) => $this->classifyRowType($r) === 'COGS')->sum('compare_amount');
+        $compareExp = $postingRows->filter(fn ($r) => $this->classifyRowType($r) === 'EXPENSE')->sum('compare_amount');
 
         return [
             'total_revenue' => $currentRevenue,
@@ -294,13 +311,13 @@ class IncomeStatementService
             'gross_profit_margin' => $currentRevenue > 0 ? (($currentRevenue - $currentCogs) / $currentRevenue) * 100 : 0,
             'operating_expenses' => $currentExp,
             'operating_income' => ($currentRevenue - $currentCogs) - $currentExp,
-            'net_income' => $rows->sum('net_change'),
+            'net_income' => ($currentRevenue - $currentCogs) - $currentExp,
 
             'compare_total_revenue' => $compareRevenue,
             'compare_total_cogs' => $compareCogs,
             'compare_gross_profit' => $compareRevenue - $compareCogs,
             'compare_operating_expenses' => $compareExp,
-            'compare_net_income' => $rows->sum('compare_amount'),
+            'compare_net_income' => ($compareRevenue - $compareCogs) - $compareExp,
         ];
     }
 
