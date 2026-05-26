@@ -10,9 +10,12 @@ use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
 use App\Models\PurchaseInvoice;
+use App\Models\PurchaseOrder;
+use App\Models\SalesOrder;
 use App\Models\VendorLedgerEntry;
 use App\Services\CurrencyService;
 use App\Services\PostingService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
@@ -59,6 +62,10 @@ class PaymentService
     {
         $userId = $userId ?? auth()->id();
 
+        if ($payment->status !== 'POSTED') {
+            throw new \Exception('Only posted payments can be applied to documents.');
+        }
+
         $document = $this->findDocument(
             $applicationData['document_type'],
             $applicationData['document_id']
@@ -72,6 +79,11 @@ class PaymentService
         $documentPartyId = $document->customer_id ?? $document->vendor_id;
         if ($documentPartyId !== $payment->party_id) {
             throw new \Exception('Document does not belong to this party');
+        }
+
+        $expectedDocumentType = $payment->party_type === 'CUSTOMER' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE';
+        if (($applicationData['document_type'] ?? null) !== $expectedDocumentType) {
+            throw new \Exception('Document type does not match payment party type.');
         }
 
         $amountToApply = min(
@@ -127,9 +139,24 @@ class PaymentService
             $this->postingService->postRealizedGainLoss($application);
         }
 
-        // Update document
-        if (method_exists($document, 'applyPayment')) {
-            $document->applyPayment($amountToApply + ($applicationData['discount'] ?? 0) + $application->write_off_amount, now());
+        // Update document balances through Payment flow only.
+        $documentSettleAmount = $amountToApply + ($applicationData['discount'] ?? 0) + $application->write_off_amount;
+        $newAmountPaid = (float) ($document->amount_paid ?? 0) + $documentSettleAmount;
+        $newRemaining = max(0, (float) ($document->grand_total ?? 0) - $newAmountPaid);
+
+        $document->update([
+            'amount_paid' => $newAmountPaid,
+            'remaining_amount' => $newRemaining,
+            'paid_in_full' => $newRemaining <= 0.01,
+            'paid_in_full_date' => $newRemaining <= 0.01 ? now() : null,
+        ]);
+
+        if ($document instanceof PostedSalesInvoice && ! empty($document->order_id)) {
+            SalesOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
+        }
+
+        if ($document instanceof PurchaseInvoice && ! empty($document->order_id)) {
+            PurchaseOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
         }
 
         // Update payment totals
@@ -333,11 +360,15 @@ class PaymentService
     {
         if ($payment->party_type === 'CUSTOMER') {
             return PostedSalesInvoice::forCustomer($payment->party_id)
-                ->where('paid_in_full', false)
+                ->where(fn (Builder $query) => $query
+                    ->where('paid_in_full', false)
+                    ->orWhereNull('paid_in_full'))
                 ->get();
         } else {
             return PurchaseInvoice::forVendor($payment->party_id)
-                ->where('paid_in_full', false)
+                ->where(fn (Builder $query) => $query
+                    ->where('paid_in_full', false)
+                    ->orWhereNull('paid_in_full'))
                 ->get();
         }
     }

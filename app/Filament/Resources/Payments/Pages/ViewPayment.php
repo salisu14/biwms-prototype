@@ -11,8 +11,9 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notifications;
+use Filament\Notifications\Livewire\Notifications;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Database\Eloquent\Builder;
 
 class ViewPayment extends ViewRecord
 {
@@ -42,21 +43,54 @@ class ViewPayment extends ViewRecord
                 ->icon('heroicon-o-document-plus')
                 ->color('primary')
                 ->visible(fn ($record) => $record->status === 'POSTED' && $record->unapplied_amount > 0)
-                ->form([
+                ->schema([
                     Select::make('document_type')
                         ->options([
                             'SALES_INVOICE' => 'Sales Invoice',
                             'PURCHASE_INVOICE' => 'Purchase Invoice',
                         ])
+                        ->default(fn ($record) => $record->party_type === 'CUSTOMER' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE')
                         ->required()
-                        ->live(),
+                        ->live()
+                        ->afterStateUpdated(fn ($set) => $set('document_id', null)),
                     Select::make('document_id')
                         ->label('Document')
                         ->searchable()
+                        ->preload()
+                        ->native(false)
                         ->options(fn ($get, $record) => $get('document_type') === 'SALES_INVOICE'
-                                ? PostedSalesInvoice::forCustomer($record->party_id)->where('paid_in_full', false)->pluck('document_number', 'id')
-                                : PurchaseInvoice::forVendor($record->party_id)->where('paid_in_full', false)->pluck('document_number', 'id')
+                                ? PostedSalesInvoice::forCustomer($record->party_id)
+                                    ->where(fn (Builder $query) => $query
+                                        ->where('remaining_amount', '>', 0)
+                                        ->orWhereNull('remaining_amount'))
+                                    ->where(fn (Builder $query) => $query
+                                        ->where('cancelled', false)
+                                        ->orWhereNull('cancelled'))
+                                    ->pluck('document_number', 'id')
+                                : PurchaseInvoice::forVendor($record->party_id)
+                                    ->where(fn (Builder $query) => $query
+                                        ->where('remaining_amount', '>', 0)
+                                        ->orWhereNull('remaining_amount'))
+                                    ->where(fn (Builder $query) => $query
+                                        ->where('cancelled', false)
+                                        ->orWhereNull('cancelled'))
+                                    ->pluck('document_number', 'id')
                         )
+                        ->helperText(function ($get, $record): string {
+                            $count = $get('document_type') === 'SALES_INVOICE'
+                                ? PostedSalesInvoice::forCustomer($record->party_id)
+                                    ->where(fn (Builder $query) => $query->where('remaining_amount', '>', 0)->orWhereNull('remaining_amount'))
+                                    ->where(fn (Builder $query) => $query->where('cancelled', false)->orWhereNull('cancelled'))
+                                    ->count()
+                                : PurchaseInvoice::forVendor($record->party_id)
+                                    ->where(fn (Builder $query) => $query->where('remaining_amount', '>', 0)->orWhereNull('remaining_amount'))
+                                    ->where(fn (Builder $query) => $query->where('cancelled', false)->orWhereNull('cancelled'))
+                                    ->count();
+
+                            return $count > 0
+                                ? "{$count} open document(s) available."
+                                : 'No posted open documents found for this party. Post an invoice first.';
+                        })
                         ->required(),
                     TextInput::make('amount')
                         ->numeric()
@@ -71,6 +105,15 @@ class ViewPayment extends ViewRecord
                         ->success()
                         ->send();
                 }),
+
+            Action::make('openInvoices')
+                ->label('Open Invoice List')
+                ->icon('heroicon-o-document-text')
+                ->color('gray')
+                ->url(fn ($record) => $record->party_type === 'CUSTOMER'
+                    ? route('filament.admin.resources.sales-invoices.index')
+                    : route('filament.admin.resources.purchase-invoices.index'))
+                ->openUrlInNewTab(),
 
             Action::make('void')
                 ->label('Void')

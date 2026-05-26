@@ -19,7 +19,7 @@ use Filament\Resources\Pages\Page;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
 
 class ArchivedPurchaseOrders extends Page
 {
@@ -39,8 +39,11 @@ class ArchivedPurchaseOrders extends Page
     protected function getTableQuery(): Builder
     {
         return PurchaseOrderResource::getModel()::query()
-            ->whereIn('status', ['completed', 'closed', 'cancelled'])
-            ->orWhereNotNull('fully_shipped')
+            ->whereIn('status', [
+                PurchaseOrderStatus::INVOICED->value,
+                PurchaseOrderStatus::CLOSED->value,
+                PurchaseOrderStatus::CANCELLED->value,
+            ])
             ->latest('updated_at');
     }
 

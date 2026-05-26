@@ -191,4 +191,19 @@ class PurchaseOrder extends Model
     {
         return $query->where('status', $status);
     }
+
+    public function refreshLifecycleStatus(): void
+    {
+        $this->loadMissing('postedInvoices');
+
+        $hasPostedInvoices = $this->postedInvoices->isNotEmpty();
+        $allInvoicesPaid = $hasPostedInvoices
+            && $this->postedInvoices->every(fn (PurchaseInvoice $invoice): bool => (float) ($invoice->remaining_amount ?? 0) <= 0.01);
+
+        if ($allInvoicesPaid) {
+            $this->update([
+                'status' => PurchaseOrderStatus::CLOSED,
+            ]);
+        }
+    }
 }

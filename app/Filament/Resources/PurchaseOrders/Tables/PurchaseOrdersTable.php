@@ -154,7 +154,7 @@ class PurchaseOrdersTable
                         ->label('Mark Partially Received')
                         ->icon('heroicon-o-arrow-down-tray')
                         ->color('warning')
-                        ->form(function (PurchaseOrder $record): array {
+                        ->schema(function (PurchaseOrder $record): array {
                             $record->loadMissing('lines');
 
                             return [

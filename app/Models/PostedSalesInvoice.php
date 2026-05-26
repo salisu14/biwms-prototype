@@ -208,4 +208,9 @@ class PostedSalesInvoice extends Model
 
         return ($this->total_profit / $this->total_amount) * 100;
     }
+
+    public function isPosted(): bool
+    {
+        return true;
+    }
 }

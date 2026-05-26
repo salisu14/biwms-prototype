@@ -9,6 +9,7 @@ use App\Services\Approval\ApprovalService;
 use App\Services\Print\PostedSalesInvoicePrintService;
 use App\Services\Print\ProformaInvoiceService;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -172,180 +173,141 @@ class SalesOrdersTable
                     ->relationship('location', 'name'),
             ])
             ->recordActions([
-                ViewAction::make()
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder && ! $record->isPosted()),
+                ActionGroup::make([
+                    ViewAction::make()
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder && ! $record->isPosted()),
+                    EditAction::make()
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder && ! $record->isPosted())
+                        ->disabled(fn ($record): bool => $record instanceof SalesOrder &&
+                            ! auth()->user()?->hasRole('SUPER_ADMIN') &&
+                            ($record->isPosted() || $record->status === SalesOrderStatus::APPROVED)
+                        ),
+                    Action::make('reverse')
+                        ->label('Reverse')
+                        ->icon('heroicon-o-arrow-uturn-left')
+                        ->color('danger')
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder && $record->isPosted())
+                        ->requiresConfirmation()
+                        ->action(function (SalesOrder $record): void {
+                            try {
+                                $record->reverse();
+                                Notification::make()->title('Shipment Reversed')->success()->send();
+                            } catch (ValidationException $exception) {
+                                Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to reverse shipment')->danger()->send();
+                            }
+                        }),
+                    Action::make('post_shipment')
+                        ->label('Post Shipment')
+                        ->icon('heroicon-o-truck')
+                        ->color('success')
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder && in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
+                        ->requiresConfirmation()
+                        ->action(function (SalesOrder $record): void {
+                            try {
+                                $record->postShipment();
+                                Notification::make()->title('Shipment Posted')->success()->send();
+                            } catch (ValidationException $exception) {
+                                Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post shipment')->danger()->send();
+                            }
+                        }),
+                    Action::make('post_invoice')
+                        ->label('Post Invoice')
+                        ->icon('heroicon-o-document-check')
+                        ->color('primary')
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder && in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
+                        ->requiresConfirmation()
+                        ->action(function (SalesOrder $record): void {
+                            try {
+                                $record->postInvoice();
+                                Notification::make()->title('Invoice Posted')->success()->send();
+                            } catch (ValidationException $exception) {
+                                Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post invoice')->danger()->send();
+                            }
+                        }),
+                    Action::make('printProforma')
+                        ->label('Proforma Invoice')
+                        ->icon('heroicon-o-printer')
+                        ->color('info')
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder)
+                        ->action(fn (SalesOrder $record) => response()->streamDownload(
+                            fn () => print (app(ProformaInvoiceService::class)->generateSalesProforma($record->refresh()->load(['lines']))->output()),
+                            $record->order_number.'_Proforma.pdf'
+                        )),
+                    Action::make('printPostedInvoice')
+                        ->label('Print Posted Invoice')
+                        ->icon('heroicon-o-document-text')
+                        ->color('gray')
+                        ->visible(fn (SalesOrder $record): bool => $record->postedInvoices()->exists())
+                        ->action(function (SalesOrder $record) {
+                            /** @var PostedSalesInvoice|null $postedInvoice */
+                            $postedInvoice = $record->postedInvoices()->latest('id')->first();
 
-                EditAction::make()
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder && ! $record->isPosted())
-                    ->disabled(fn ($record): bool => $record instanceof SalesOrder &&
-                        ! auth()->user()?->hasRole('SUPER_ADMIN') &&
-                        ($record->isPosted() || $record->status === SalesOrderStatus::APPROVED)
-                    ),
+                            if (! $postedInvoice) {
+                                Notification::make()->title('No posted invoice found')->warning()->send();
 
-                // Custom "Reverse" action for posted invoices
-                Action::make('reverse')
-                    ->label('Reverse')
-                    ->icon('heroicon-o-arrow-uturn-left')
-                    ->color('danger')
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder && $record->isPosted())
-                    ->requiresConfirmation()
-                    ->action(function (SalesOrder $record): void {
-                        try {
-                            $record->reverse();
-                            Notification::make()
-                                ->title('Shipment Reversed')
-                                ->success()
-                                ->send();
-                        } catch (ValidationException $exception) {
-                            Notification::make()
-                                ->title(collect($exception->errors())->flatten()->first() ?? 'Unable to reverse shipment')
-                                ->danger()
-                                ->send();
-                        }
-                    }),
+                                return null;
+                            }
 
-                Action::make('post_shipment')
-                    ->label('Post Shipment')
-                    ->icon('heroicon-o-truck')
-                    ->color('success')
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder && in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
-                    ->requiresConfirmation()
-                    ->action(function (SalesOrder $record): void {
-                        try {
-                            $record->postShipment();
-                            Notification::make()
-                                ->title('Shipment Posted')
-                                ->success()
-                                ->send();
-                        } catch (ValidationException $exception) {
-                            Notification::make()
-                                ->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post shipment')
-                                ->danger()
-                                ->send();
-                        }
-                    }),
+                            return response()->streamDownload(
+                                fn () => print (app(PostedSalesInvoicePrintService::class)->generateTaxInvoice($postedInvoice)->output()),
+                                $postedInvoice->document_number.'.pdf'
+                            );
+                        }),
+                    Action::make('submit_approval')
+                        ->label('Submit for Approval')
+                        ->icon('heroicon-o-paper-airplane')
+                        ->color('info')
+                        ->visible(fn ($record) => $record instanceof SalesOrder && $record->status === SalesOrderStatus::DRAFT)
+                        ->action(function (SalesOrder $record) {
+                            app(ApprovalService::class)->submitForApproval($record);
+                            Notification::make()->title('Submitted for Approval')->success()->send();
+                        }),
+                    Action::make('approve')
+                        ->label('Approve')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->visible(fn ($record) => $record instanceof SalesOrder &&
+                            $record->status === SalesOrderStatus::PENDING_APPROVAL &&
+                            $record->approvalEntries()->where('status', 'created')
+                                ->where(function ($q) {
+                                    $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                                })
+                                ->exists()
+                        )
+                        ->requiresConfirmation()
+                        ->action(function (SalesOrder $record) {
+                            $entry = $record->approvalEntries()->where('status', 'created')
+                                ->where(function ($q) {
+                                    $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                                })
+                                ->orderBy('sequence_no')
+                                ->first();
 
-                Action::make('post_invoice')
-                    ->label('Post Invoice')
-                    ->icon('heroicon-o-document-check')
-                    ->color('primary')
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder && in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
-                    ->requiresConfirmation()
-                    ->action(function (SalesOrder $record): void {
-                        try {
-                            $record->postInvoice();
-                            Notification::make()
-                                ->title('Invoice Posted')
-                                ->success()
-                                ->send();
-                        } catch (ValidationException $exception) {
-                            Notification::make()
-                                ->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post invoice')
-                                ->danger()
-                                ->send();
-                        }
-                    }),
+                            if (! $entry) {
+                                Notification::make()->title('No pending approval')->danger()->send();
 
-                Action::make('printProforma')
-                    ->label('Proforma Invoice')
-                    ->icon('heroicon-o-printer')
-                    ->color('info')
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder)
-                    ->action(fn (SalesOrder $record) => response()->streamDownload(
-                        fn () => print (app(ProformaInvoiceService::class)->generateSalesProforma($record->refresh()->load(['lines']))->output()),
-                        $record->order_number.'_Proforma.pdf'
-                    )),
+                                return;
+                            }
 
-                Action::make('printPostedInvoice')
-                    ->label('Print Posted Invoice')
-                    ->icon('heroicon-o-document-text')
-                    ->color('gray')
-                    ->visible(fn (SalesOrder $record): bool => $record->postedInvoices()->exists())
-                    ->action(function (SalesOrder $record) {
-                        /** @var PostedSalesInvoice|null $postedInvoice */
-                        $postedInvoice = $record->postedInvoices()->latest('id')->first();
-
-                        if (! $postedInvoice) {
-                            Notification::make()
-                                ->title('No posted invoice found')
-                                ->warning()
-                                ->send();
-
-                            return null;
-                        }
-
-                        return response()->streamDownload(
-                            fn () => print (app(PostedSalesInvoicePrintService::class)->generateTaxInvoice($postedInvoice)->output()),
-                            $postedInvoice->document_number.'.pdf'
-                        );
-                    }),
-
-                Action::make('submit_approval')
-                    ->label('Submit for Approval')
-                    ->icon('heroicon-o-paper-airplane')
-                    ->color('info')
-                    ->visible(fn ($record) => $record instanceof SalesOrder && $record->status === SalesOrderStatus::DRAFT)
-                    ->action(function (SalesOrder $record) {
-                        app(ApprovalService::class)->submitForApproval($record);
-                        Notification::make()
-                            ->title('Submitted for Approval')
-                            ->success()
-                            ->send();
-                    }),
-
-                Action::make('approve')
-                    ->label('Approve')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->visible(fn ($record) => $record instanceof SalesOrder &&
-                        $record->status === SalesOrderStatus::PENDING_APPROVAL &&
-                        $record->approvalEntries()->where('status', 'created')
-                            ->where(function ($q) {
-                                $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
-                            })
-                            ->exists()
-                    )
-                    ->requiresConfirmation()
-                    ->action(function (SalesOrder $record) {
-                        $entry = $record->approvalEntries()->where('status', 'created')
-                            ->where(function ($q) {
-                                $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
-                            })
-                            ->orderBy('sequence_no')
-                            ->first();
-
-                        if (! $entry) {
-                            Notification::make()->title('No pending approval')->danger()->send();
-
-                            return;
-                        }
-
-                        app(ApprovalService::class)->approve($entry);
-                        Notification::make()
-                            ->title('Order Approved')
-                            ->success()
-                            ->send();
-                    }),
-
-                // Super Admin Status Override
-                Action::make('changeStatus')
-                    ->label('Change Status')
-                    ->icon('heroicon-o-shield-check')
-                    ->color('warning')
-                    ->visible(fn ($record): bool => $record instanceof SalesOrder && auth()->user()?->hasRole('super_admin'))
-                    ->form([
-                        Select::make('status')
-                            ->options(SalesOrderStatus::class)
-                            ->required()
-                            ->native(false),
-                    ])
-                    ->action(function (SalesOrder $record, array $data) {
-                        $record->update(['status' => $data['status']]);
-                        Notification::make()
-                            ->title('Status Updated')
-                            ->success()
-                            ->send();
-                    }),
+                            app(ApprovalService::class)->approve($entry);
+                            Notification::make()->title('Order Approved')->success()->send();
+                        }),
+                    Action::make('changeStatus')
+                        ->label('Change Status')
+                        ->icon('heroicon-o-shield-check')
+                        ->color('warning')
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder && auth()->user()?->hasRole('super_admin'))
+                        ->form([
+                            Select::make('status')
+                                ->options(SalesOrderStatus::class)
+                                ->required()
+                                ->native(false),
+                        ])
+                        ->action(function (SalesOrder $record, array $data) {
+                            $record->update(['status' => $data['status']]);
+                            Notification::make()->title('Status Updated')->success()->send();
+                        }),
+                ])->label('Actions'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

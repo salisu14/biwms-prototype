@@ -31,7 +31,9 @@ class PaymentForm
                                 Grid::make(3)->schema([
                                     TextInput::make('payment_number')
                                         ->label('Payment No.')
-                                        ->required()
+                                        ->placeholder('Auto-generated on save')
+                                        ->readOnly()
+                                        ->dehydrated()
                                         ->unique(ignoreRecord: true),
                                     DatePicker::make('payment_date')
                                         ->default(now())
@@ -48,8 +50,21 @@ class PaymentForm
                                         ])
                                         ->required()
                                         ->native(false),
-                                    TextInput::make('payment_method')
-                                        ->placeholder('e.g., EFT, Check, Cash')
+                                    Select::make('payment_method')
+                                        ->options([
+                                            'CASH' => 'Cash',
+                                            'CHECK' => 'Check',
+                                            'BANK_TRANSFER' => 'Bank Transfer',
+                                            'ACH' => 'ACH',
+                                            'WIRE' => 'Wire',
+                                            'CREDIT_CARD' => 'Credit Card',
+                                            'DEBIT_CARD' => 'Debit Card',
+                                            'MOBILE_MONEY' => 'Mobile Money',
+                                            'CRYPTO' => 'Crypto',
+                                            'OTHER' => 'Other',
+                                        ])
+                                        ->searchable()
+                                        ->native(false)
                                         ->required(),
                                     TextInput::make('external_reference')
                                         ->label('External Reference')

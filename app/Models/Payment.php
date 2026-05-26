@@ -4,15 +4,51 @@
 
 namespace App\Models;
 
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\Auth;
 
 class Payment extends Model
 {
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::creating(function (Payment $payment): void {
+            if (! empty($payment->payment_number)) {
+                return;
+            }
+
+            try {
+                $payment->payment_number = app(NumberSeriesService::class)->getNextNo('PAYMENT');
+            } catch (\Throwable) {
+                $payment->payment_number = self::generateNumber((string) ($payment->payment_direction ?: 'DISBURSEMENT'));
+            }
+        });
+
+        static::creating(function (Payment $payment): void {
+            if (empty($payment->currency_code) && ! empty($payment->currency_id)) {
+                $payment->currency_code = Currency::query()
+                    ->whereKey($payment->currency_id)
+                    ->value('code');
+            }
+
+            $payment->currency_code ??= 'NGN';
+            $payment->created_by ??= Auth::id() ?? 1;
+            $payment->applied_amount ??= 0;
+            $payment->unapplied_amount ??= (float) ($payment->payment_amount ?? 0) - (float) ($payment->applied_amount ?? 0);
+            $payment->discount_taken ??= 0;
+            $payment->transaction_fee ??= 0;
+            $payment->transaction_fee_lcy ??= 0;
+            $payment->currency_factor ??= 1;
+            $payment->payment_amount_lcy ??= (float) ($payment->payment_amount ?? 0) * (float) $payment->currency_factor;
+            $payment->status ??= 'PENDING';
+        });
+    }
 
     protected $fillable = [
         'payment_number',

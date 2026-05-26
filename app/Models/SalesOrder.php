@@ -741,7 +741,24 @@ class SalesOrder extends Model implements Approvable
                 'status' => $fullyInvoiced ? SalesOrderStatus::INVOICED : SalesOrderStatus::PARTIALLY_INVOICED,
             ]);
 
+            $this->refreshLifecycleStatus();
+
             return $postedInvoice->fresh('lines');
         });
+    }
+
+    public function refreshLifecycleStatus(): void
+    {
+        $this->loadMissing('postedInvoices');
+
+        $hasPostedInvoices = $this->postedInvoices->isNotEmpty();
+        $allInvoicesPaid = $hasPostedInvoices
+            && $this->postedInvoices->every(fn (PostedSalesInvoice $invoice): bool => (float) ($invoice->remaining_amount ?? 0) <= 0.01);
+
+        if ($this->fully_invoiced && $allInvoicesPaid) {
+            $this->update([
+                'status' => SalesOrderStatus::CLOSED,
+            ]);
+        }
     }
 }

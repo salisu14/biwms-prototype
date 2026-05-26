@@ -22,6 +22,7 @@ class PostedSalesInvoiceLine extends Model
         'item_code',
         'item_description',
         'variant_code',
+        'posting_date',
         'general_product_posting_group_id',
         'inventory_posting_group_id',
         'sales_account_id',
@@ -69,6 +70,7 @@ class PostedSalesInvoiceLine extends Model
         'amount_including_vat' => 'decimal:4',
         'cost_amount' => 'decimal:4',
         'profit_amount' => 'decimal:4',
+        'posting_date' => 'date',
         'expiration_date' => 'date',
         'dimensions' => 'array',
     ];
