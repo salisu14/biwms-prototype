@@ -115,6 +115,56 @@ class ViewPayment extends ViewRecord
                     : route('filament.admin.resources.purchase-invoices.index'))
                 ->openUrlInNewTab(),
 
+            Action::make('markReconciled')
+                ->label('Mark Reconciled')
+                ->icon('heroicon-o-check-badge')
+                ->color('success')
+                ->requiresConfirmation()
+                ->disabled(fn ($record) => $record->status !== 'POSTED'
+                    || (bool) $record->reconciled
+                    || empty($record->bank_account_id))
+                ->tooltip(fn ($record) => $record->status !== 'POSTED'
+                    ? 'Only posted payments can be reconciled.'
+                    : ((bool) $record->reconciled
+                        ? 'Payment is already reconciled.'
+                        : (empty($record->bank_account_id)
+                            ? 'Set a bank account before reconciliation.'
+                            : null)))
+                ->action(function ($record) {
+                    $record->update([
+                        'reconciled' => true,
+                        'reconciled_at' => now(),
+                        'reconciled_by' => auth()->id(),
+                    ]);
+
+                    Notifications::make()
+                        ->title('Payment Reconciled')
+                        ->success()
+                        ->send();
+                }),
+
+            Action::make('undoReconciled')
+                ->label('Undo Reconciliation')
+                ->icon('heroicon-o-arrow-uturn-left')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->disabled(fn ($record) => $record->status !== 'POSTED' || ! (bool) $record->reconciled)
+                ->tooltip(fn ($record) => $record->status !== 'POSTED'
+                    ? 'Only posted payments can be unreconciled.'
+                    : (! (bool) $record->reconciled ? 'Payment is not reconciled yet.' : null))
+                ->action(function ($record) {
+                    $record->update([
+                        'reconciled' => false,
+                        'reconciled_at' => null,
+                        'reconciled_by' => null,
+                    ]);
+
+                    Notifications::make()
+                        ->title('Reconciliation Reversed')
+                        ->success()
+                        ->send();
+                }),
+
             Action::make('void')
                 ->label('Void')
                 ->icon('heroicon-o-x-circle')
