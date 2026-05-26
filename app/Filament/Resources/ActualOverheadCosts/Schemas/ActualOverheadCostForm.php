@@ -3,11 +3,12 @@
 namespace App\Filament\Resources\ActualOverheadCosts\Schemas;
 
 use App\Models\ChartOfAccount;
+use App\Models\OverheadCostCategory;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -66,25 +67,38 @@ class ActualOverheadCostForm
                             ->minValue(1)
                             ->maxValue(12),
 
-                        Select::make('cost_type')
+                        Select::make('cost_type_code')
                             ->label('Cost Category')
-                            ->options([
-                                'indirect_labor' => 'Indirect Labor',
-                                'maintenance' => 'Maintenance',
-                                'utilities' => 'Utilities',
-                                'rent' => 'Rent/Lease',
-                                'depreciation' => 'Depreciation',
-                                'insurance' => 'Insurance',
-                                'other' => 'Other Indirect',
-                            ])
+                            ->options(fn () => OverheadCostCategory::query()
+                                ->where('is_active', true)
+                                ->orderBy('name')
+                                ->get()
+                                ->mapWithKeys(fn (OverheadCostCategory $category): array => [
+                                    $category->code => "{$category->name} ({$category->code})",
+                                ])
+                                ->toArray())
+                            ->searchable()
+                            ->preload()
                             ->required()
-                            ->native(false),
+                            ->native(false)
+                            ->live()
+                            ->afterStateUpdated(function ($state, $set): void {
+                                if (! $state) {
+                                    $set('cost_type', null);
 
-                        TextInput::make('cost_type_code')
-                            ->label('Internal Cost Code')
-                            ->placeholder('e.g. UTIL-01'),
+                                    return;
+                                }
+
+                                $category = OverheadCostCategory::query()->where('code', $state)->first();
+                                $set('cost_type', $category?->name);
+                            }),
+
+                        TextInput::make('cost_type')
+                            ->label('Category Name')
+                            ->readOnly()
+                            ->required()
+                            ->dehydrated(),
                     ]),
-
 
                 Section::make('Financial Details')
                     ->description('Manage amount values and G/L mapping.')
@@ -112,10 +126,10 @@ class ActualOverheadCostForm
                                     ->label('Remaining to Allocate')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->formatStateUsing(fn ($state, $get) => '₦ ' . number_format(
-                                            (float)($get('amount') ?? 0) - (float)($get('allocated_amount') ?? 0),
-                                            4
-                                        )),
+                                    ->formatStateUsing(fn ($state, $get) => '₦ '.number_format(
+                                        (float) ($get('amount') ?? 0) - (float) ($get('allocated_amount') ?? 0),
+                                        4
+                                    )),
                             ])->columnSpan(1),
 
                             Grid::make(1)->schema([

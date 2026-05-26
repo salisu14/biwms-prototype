@@ -69,7 +69,6 @@ class ActualOverheadCost extends Model
         });
     }
 
-
     // Relationships
     public function workCenter(): BelongsTo
     {
@@ -89,6 +88,11 @@ class ActualOverheadCost extends Model
     public function glAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class, 'gl_account_id');
+    }
+
+    public function overheadCostCategory(): BelongsTo
+    {
+        return $this->belongsTo(OverheadCostCategory::class, 'cost_type_code', 'code');
     }
 
     public function varianceJournalBatch(): BelongsTo

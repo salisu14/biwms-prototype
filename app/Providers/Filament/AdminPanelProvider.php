@@ -486,6 +486,11 @@ class AdminPanelProvider extends PanelProvider
                                         ->url('/admin/work-center-calendars')
                                         ->isActiveWhen(fn () => request()->is('admin/work-center-calendars*')),
 
+                                    NavigationItem::make('Overhead Cost Categories')
+                                        ->icon('heroicon-o-currency-pound')
+                                        ->url('/admin/overhead-cost-categories')
+                                        ->isActiveWhen(fn () => request()->is('admin/overhead-cost-categories*')),
+
                                     NavigationItem::make('Actual Overhead Costs')
                                         ->icon('heroicon-o-calendar-days')
                                         ->url('/admin/actual-overhead-costs')
