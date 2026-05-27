@@ -29,6 +29,10 @@
             color: #1a56db;
             margin-bottom: 10px;
         }
+        .logo {
+            max-height: 52px;
+            margin-bottom: 6px;
+        }
         .section-header {
             clear: both;
             border-bottom: 2px solid #1a56db;
@@ -84,10 +88,19 @@
 <body>
     <div class="header">
         <div class="company-info">
+            @if(!empty($company['logo_data_uri']))
+                <img src="{{ $company['logo_data_uri'] }}" alt="Company Logo" class="logo">
+            @endif
             <div style="font-size: 16pt; font-weight: bold;">{{ $company['name'] }}</div>
-            <div>{{ $company['address'] }}</div>
-            <div>Email: {{ $company['email'] }}</div>
-            <div>Tel: {{ $company['phone'] }}</div>
+            @if(!empty($company['address_lines']))
+                <div>{{ implode(', ', $company['address_lines']) }}</div>
+            @elseif(!empty($company['address']))
+                <div>{{ $company['address'] }}</div>
+            @endif
+            @if(!empty($company['email']))<div>Email: {{ $company['email'] }}</div>@endif
+            @if(!empty($company['phone']))<div>Tel: {{ $company['phone'] }}</div>@endif
+            @if(!empty($company['website']))<div>Web: {{ $company['website'] }}</div>@endif
+            @if(!empty($company['tax_no']))<div>Tax No: {{ $company['tax_no'] }}</div>@endif
         </div>
         <div class="doc-info">
             <div class="doc-title">{{ $title }}</div>
@@ -139,6 +152,9 @@
     <div class="footer">
         <div style="float: left; width: 50%; font-size: 9pt; color: #6b7280;">
             <p><strong>Note:</strong> This is a proforma invoice for information purposes only and does not constitute a legal invoice for payment until confirmed.</p>
+            @if(!empty($company['invoice_footer']))
+                <p>{{ $company['invoice_footer'] }}</p>
+            @endif
         </div>
         
         <table class="totals-table">

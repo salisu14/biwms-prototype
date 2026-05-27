@@ -30,7 +30,15 @@
 
 @foreach($copies as $index => $copy)
     <div class="header">
-        <div class="company-name">BIFLI GROUP</div>
+        <div class="company-name">{{ $company['name'] ?? config('app.name') }}</div>
+        @if(!empty($company['address_lines']))
+            <div>{{ implode(', ', $company['address_lines']) }}</div>
+        @endif
+        <div>
+            @if(!empty($company['phone'])) Tel: {{ $company['phone'] }} @endif
+            @if(!empty($company['email'])) | Email: {{ $company['email'] }} @endif
+            @if(!empty($company['website'])) | Web: {{ $company['website'] }} @endif
+        </div>
         <div class="doc-title">SALES WAYBILL / DISPATCH NOTE</div>
         <div class="copy-type">{{ strtoupper($copy) }}</div>
     </div>

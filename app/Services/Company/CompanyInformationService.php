@@ -135,6 +135,9 @@ class CompanyInformationService
             'email' => $company->email,
             'website' => $company->website,
             'logo_url' => $company->logo_url,
+            'logo_path' => $company->logo_path,
+            'logo_abs_path' => $company->logo_path ? public_path('storage/'.$company->logo_path) : null,
+            'logo_data_uri' => $this->buildLogoDataUri($company->logo_path),
             'tax_no' => $company->tax_registration_no,
             'registration_no' => $company->registration_no,
         ];
@@ -155,5 +158,26 @@ class CompanyInformationService
         ]);
 
         return implode(' | ', $parts);
+    }
+
+    private function buildLogoDataUri(?string $path): ?string
+    {
+        if (blank($path)) {
+            return null;
+        }
+
+        $absolutePath = public_path('storage/'.$path);
+        if (! is_file($absolutePath)) {
+            return null;
+        }
+
+        $mime = mime_content_type($absolutePath) ?: 'image/png';
+        $contents = file_get_contents($absolutePath);
+
+        if ($contents === false) {
+            return null;
+        }
+
+        return 'data:'.$mime.';base64,'.base64_encode($contents);
     }
 }

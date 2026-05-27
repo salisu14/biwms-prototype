@@ -23,6 +23,12 @@
     </style>
 </head>
 <body onload="window.print()">
+    <div style="margin-bottom: 10px; font-size: 12px;">
+        <strong>{{ $company['name'] ?? config('app.name') }}</strong>
+        @if(!empty($company['address_lines']))
+            <div>{{ implode(', ', $company['address_lines']) }}</div>
+        @endif
+    </div>
     <div class="meta">
         <div>
             <h1>{{ $report['report_type'] === 'GROUP_SUMMARY' ? 'Group Summary' : 'Trial Balance' }}</h1>

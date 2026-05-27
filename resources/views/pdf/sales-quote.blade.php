@@ -167,10 +167,19 @@
 
 <div class="header">
     <div class="company-info">
-        <h1>BIFLI GLOBAL RESOURCES LTD.</h1>
+        @if(!empty($company['logo_data_uri']))
+            <div style="margin-bottom: 8px;">
+                <img src="{{ $company['logo_data_uri'] }}" alt="Company Logo" style="max-height: 48px;">
+            </div>
+        @endif
+        <h1>{{ $company['name'] ?? config('app.name') }}</h1>
         <div class="company-details">
-            Off 13Km Larabar Abasawa Road, Jogana Kano State, Nigeria.<br>
-            <strong>Tel:</strong> +234 703 533 8583 | <strong>Email:</strong> bifli2019@gmail.com
+            @if(!empty($company['address_lines']))
+                {{ implode(', ', $company['address_lines']) }}<br>
+            @endif
+            @if(!empty($company['phone']))<strong>Tel:</strong> {{ $company['phone'] }} @endif
+            @if(!empty($company['email'])) | <strong>Email:</strong> {{ $company['email'] }} @endif
+            @if(!empty($company['website'])) | <strong>Web:</strong> {{ $company['website'] }} @endif
         </div>
     </div>
     <div class="quote-meta">
@@ -273,7 +282,7 @@
         1. This quote is valid until the date indicated above.<br>
         2. Payment terms: 50% upfront, 50% upon delivery unless otherwise agreed.<br>
         3. Please reference quote <strong>#{{ $quote->quote_no }}</strong> when accepting this offer.<br>
-        4. Goods supplied remain property of BIFLI GLOBAL RESOURCES LTD until full payment is received.
+        4. Goods supplied remain property of {{ $company['name'] ?? config('app.name') }} until full payment is received.
     </div>
 </div>
 

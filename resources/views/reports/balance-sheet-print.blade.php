@@ -19,6 +19,12 @@
     </style>
 </head>
 <body onload="window.print()">
+<div style="margin-bottom: 10px; font-size: 12px;">
+    <strong>{{ $company['name'] ?? config('app.name') }}</strong>
+    @if(!empty($company['address_lines']))
+        <div>{{ implode(', ', $company['address_lines']) }}</div>
+    @endif
+</div>
 <h1>Balance Sheet</h1>
 <p>As of {{ $reportData['as_of_date'] ?? now()->toDateString() }}</p>
 
@@ -50,4 +56,3 @@
 </table>
 </body>
 </html>
-

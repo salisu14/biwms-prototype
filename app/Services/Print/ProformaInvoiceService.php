@@ -4,10 +4,15 @@ namespace App\Services\Print;
 
 use App\Models\PurchaseOrder;
 use App\Models\SalesOrder;
+use App\Services\Company\CompanyInformationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class ProformaInvoiceService
 {
+    public function __construct(
+        private readonly CompanyInformationService $companyInformationService
+    ) {}
+
     /**
      * Generate a Proforma Invoice PDF for a Sales Order.
      */
@@ -97,12 +102,19 @@ class ProformaInvoiceService
      */
     protected function getCompanyInfo(): array
     {
-        // Try to dynamic find company info or fallback to config
+        $header = $this->companyInformationService->getReportHeader();
+
         return [
-            'name' => config('app.name', 'Bifli WMS'),
-            'address' => 'Factory Road, Lagos, Nigeria',
-            'email' => 'sales@bifli.com',
-            'phone' => '+234 800 000 0000',
+            'name' => $header['name'] ?? config('app.name', 'Bifli WMS'),
+            'address' => implode(', ', $header['address_lines'] ?? []),
+            'address_lines' => $header['address_lines'] ?? [],
+            'email' => $header['email'] ?? null,
+            'phone' => $header['phone'] ?? null,
+            'website' => $header['website'] ?? null,
+            'tax_no' => $header['tax_no'] ?? null,
+            'registration_no' => $header['registration_no'] ?? null,
+            'logo_url' => $header['logo_url'] ?? null,
+            'invoice_footer' => $this->companyInformationService->getInvoiceFooter(),
         ];
     }
 

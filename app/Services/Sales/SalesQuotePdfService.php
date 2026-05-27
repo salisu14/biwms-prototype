@@ -4,10 +4,15 @@ namespace App\Services\Sales;
 
 use App\Models\SalesQuote;
 use App\Models\SalesQuoteRevision;
+use App\Services\Company\CompanyInformationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class SalesQuotePdfService
 {
+    public function __construct(
+        private readonly CompanyInformationService $companyInformationService
+    ) {}
+
     /**
      * Recursively convert all strings in array/object to UTF-8
      */
@@ -93,12 +98,22 @@ class SalesQuotePdfService
         });
 
         $totalAmount = $items->sum('line_total');
+        $header = $this->companyInformationService->getReportHeader();
 
         return Pdf::loadView('pdf.sales-quote', [
             'quote' => $quote,
             'items' => $items,
             'totalAmount' => $totalAmount,
             'revision' => $revision,
+            'company' => [
+                'name' => $header['name'] ?? config('app.name'),
+                'address_lines' => $header['address_lines'] ?? [],
+                'phone' => $header['phone'] ?? null,
+                'email' => $header['email'] ?? null,
+                'website' => $header['website'] ?? null,
+                'logo_url' => $header['logo_url'] ?? null,
+                'tax_no' => $header['tax_no'] ?? null,
+            ],
         ]);
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Services\Company\CompanyInformationService;
 use App\Services\Finance\GroupSummaryService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -11,6 +12,10 @@ use Illuminate\View\View;
 
 class GroupSummaryPrintController extends Controller
 {
+    public function __construct(
+        private readonly CompanyInformationService $companyInformationService
+    ) {}
+
     public function __invoke(Request $request, GroupSummaryService $service): View
     {
         $start = Carbon::parse((string) $request->query('startDate', now()->startOfYear()->toDateString()));
@@ -22,6 +27,7 @@ class GroupSummaryPrintController extends Controller
 
         return view('reports.group-summary-print', [
             'report' => $report,
+            'company' => $this->companyInformationService->getReportHeader(),
         ]);
     }
 }

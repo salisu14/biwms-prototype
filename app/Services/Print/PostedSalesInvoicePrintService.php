@@ -3,13 +3,19 @@
 namespace App\Services\Print;
 
 use App\Models\PostedSalesInvoice;
+use App\Services\Company\CompanyInformationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class PostedSalesInvoicePrintService
 {
+    public function __construct(
+        private readonly CompanyInformationService $companyInformationService
+    ) {}
+
     public function generateTaxInvoice(PostedSalesInvoice $invoice)
     {
         $invoice->loadMissing(['lines', 'customer']);
+        $header = $this->companyInformationService->getReportHeader();
 
         $data = [
             'title' => 'TAX INVOICE',
@@ -37,10 +43,16 @@ class PostedSalesInvoicePrintService
                 'grand_total' => (float) $invoice->grand_total,
             ],
             'company' => [
-                'name' => config('app.name', 'Bifli WMS'),
-                'address' => 'Factory Road, Lagos, Nigeria',
-                'email' => 'sales@bifli.com',
-                'phone' => '+234 800 000 0000',
+                'name' => $header['name'] ?? config('app.name', 'Bifli WMS'),
+                'address' => implode(', ', $header['address_lines'] ?? []),
+                'address_lines' => $header['address_lines'] ?? [],
+                'email' => $header['email'] ?? null,
+                'phone' => $header['phone'] ?? null,
+                'website' => $header['website'] ?? null,
+                'tax_no' => $header['tax_no'] ?? null,
+                'registration_no' => $header['registration_no'] ?? null,
+                'logo_url' => $header['logo_url'] ?? null,
+                'invoice_footer' => $this->companyInformationService->getInvoiceFooter(),
             ],
         ];
 

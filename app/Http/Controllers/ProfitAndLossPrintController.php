@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Services\Company\CompanyInformationService;
 use App\Services\IncomeStatementService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -11,6 +12,10 @@ use Illuminate\View\View;
 
 class ProfitAndLossPrintController extends Controller
 {
+    public function __construct(
+        private readonly CompanyInformationService $companyInformationService
+    ) {}
+
     public function __invoke(Request $request, IncomeStatementService $service): View
     {
         $start = Carbon::parse((string) $request->query('startDate', now()->startOfYear()->toDateString()));
@@ -35,6 +40,7 @@ class ProfitAndLossPrintController extends Controller
 
         return view('reports.profit-and-loss-print', [
             'reportData' => $reportData,
+            'company' => $this->companyInformationService->getReportHeader(),
         ]);
     }
 }
