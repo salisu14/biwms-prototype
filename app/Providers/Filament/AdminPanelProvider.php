@@ -190,6 +190,10 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-chart-bar')
                                     ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*'))
                                     ->url('/admin/profit-and-loss-report'),
+                                NavigationItem::make('Group Summary / Trial Balance')
+                                    ->icon('heroicon-o-table-cells')
+                                    ->isActiveWhen(fn () => request()->is('admin/group-summary-report*'))
+                                    ->url('/admin/group-summary-report'),
                                 NavigationItem::make('Balance Sheet')
                                     ->icon('heroicon-o-scale')
                                     ->isActiveWhen(fn () => request()->is('admin/balance-sheet-report*'))

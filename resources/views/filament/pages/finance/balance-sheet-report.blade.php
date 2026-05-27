@@ -4,7 +4,18 @@
         <x-filament::section class="print:hidden">
             <form wire:submit="generateReport" class="space-y-4">
                 {{ $this->form }}
-                <div class="flex justify-end">
+                <div class="flex justify-end gap-2">
+                    <x-filament::button
+                        tag="a"
+                        color="info"
+                        icon="heroicon-o-printer"
+                        :href="route('reports.balance-sheet.print', [
+                            'asOfDate' => $this->formData['asOfDate'] ?? null,
+                        ])"
+                        target="_blank"
+                    >
+                        Print
+                    </x-filament::button>
                     <x-filament::button type="submit">Update Report</x-filament::button>
                 </div>
             </form>

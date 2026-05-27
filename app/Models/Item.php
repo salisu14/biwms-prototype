@@ -179,6 +179,16 @@ class Item extends Model
     /**
      * Relationships
      */
+    public function productionBom(): BelongsTo
+    {
+        return $this->belongsTo(ProductionBom::class);
+    }
+
+    public function routing(): BelongsTo
+    {
+        return $this->belongsTo(Routing::class);
+    }
+
     public function generalProductPostingGroup(): BelongsTo
     {
         return $this->belongsTo(GeneralProductPostingGroup::class);
@@ -390,16 +400,6 @@ class Item extends Model
         return $this->vendors()
             ->wherePivot('is_preferred', true)
             ->first();
-    }
-
-    public function productionBom(): BelongsTo
-    {
-        return $this->belongsTo(ProductionBom::class, 'production_bom_id');
-    }
-
-    public function routing(): BelongsTo
-    {
-        return $this->belongsTo(Routing::class, 'routing_id');
     }
 
     /**

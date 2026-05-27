@@ -17,14 +17,22 @@ class ExpenseCategory extends Model
     use HasFactory;
 
     protected $fillable = [
-        'account_type', 'category_code', 'category_type',
-        'description', 'notes',
-        'is_direct', 'is_variable', 'is_controllable',
+        'account_type',
+        'category_code',
+        'category_type',
+        'description',
+        'notes',
+        'is_direct',
+        'is_variable',
+        'is_controllable',
         'category_id',
-        'expense_account_id', 'contra_account_id',
+        'expense_account_id',
+        'contra_account_id',
         'posting_rules',
-        'default_dimension_1', 'default_dimension_2',
-        'gen_prod_posting_group_id', 'vat_prod_posting_group_id',
+        'default_dimension_1',
+        'default_dimension_2',
+        'gen_prod_posting_group_id',
+        'vat_prod_posting_group_id',
         'is_active',
     ];
 

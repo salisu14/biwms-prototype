@@ -5,7 +5,21 @@
             <form wire:submit="generateReport" class="p-2">
                 {{ $this->form }}
                 <div class="mt-6 flex justify-end items-center gap-x-4 border-t border-gray-100 dark:border-white/5 pt-6">
-                    <x-filament::button type="button" color="info" icon="heroicon-o-printer" onclick="window.print(); return false;">
+                    <x-filament::button
+                        tag="a"
+                        color="info"
+                        icon="heroicon-o-printer"
+                        :href="route('reports.profit-and-loss.print', [
+                            'startDate' => $this->formData['startDate'] ?? null,
+                            'endDate' => $this->formData['endDate'] ?? null,
+                            'compareStartDate' => $this->formData['compareStartDate'] ?? null,
+                            'compareEndDate' => $this->formData['compareEndDate'] ?? null,
+                            'dimension1' => $this->formData['dimension1'] ?? null,
+                            'dimension2' => $this->formData['dimension2'] ?? null,
+                            'showBudget' => ($this->formData['showBudget'] ?? false) ? 1 : 0,
+                        ])"
+                        target="_blank"
+                    >
                         Print
                     </x-filament::button>
                     <button type="button" wire:click="form.fill" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
