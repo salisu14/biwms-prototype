@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SalesOrders\Pages;
 use App\Enums\SalesOrderStatus;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
 use App\Models\SalesOrder;
+use App\Services\Approval\ApprovalService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
@@ -24,9 +25,9 @@ class ViewSalesOrder extends ViewRecord
                 ->label('Submit for Approval')
                 ->icon('heroicon-o-paper-airplane')
                 ->color('info')
-                ->visible(fn (SalesOrder $record) => $record->status === SalesOrderStatus::DRAFT)
+                ->visible(fn (SalesOrder $record) => auth()->user()?->can('update', $record) && $record->status === SalesOrderStatus::DRAFT)
                 ->action(function (SalesOrder $record) {
-                    app(\App\Services\Approval\ApprovalService::class)->submitForApproval($record);
+                    app(ApprovalService::class)->submitForApproval($record);
                     Notification::make()
                         ->title('Submitted for Approval')
                         ->success()
@@ -37,24 +38,30 @@ class ViewSalesOrder extends ViewRecord
                 ->label('Approve')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->visible(fn (SalesOrder $record) => $record->status === SalesOrderStatus::PENDING_APPROVAL &&
+                ->visible(fn (SalesOrder $record) => auth()->user()?->can('approve', $record) &&
+                    $record->status === SalesOrderStatus::PENDING_APPROVAL &&
                     $record->approvalEntries()->where('status', 'created')
-                        ->where(function ($q) { $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id()); })
+                        ->where(function ($q) {
+                            $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                        })
                         ->exists()
                 )
                 ->requiresConfirmation()
                 ->action(function (SalesOrder $record) {
                     $entry = $record->approvalEntries()->where('status', 'created')
-                        ->where(function ($q) { $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id()); })
+                        ->where(function ($q) {
+                            $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                        })
                         ->orderBy('sequence_no')
                         ->first();
 
                     if (! $entry) {
                         Notification::make()->title('No pending approval')->danger()->send();
+
                         return;
                     }
 
-                    app(\App\Services\Approval\ApprovalService::class)->approve($entry);
+                    app(ApprovalService::class)->approve($entry);
                     Notification::make()
                         ->title('Order Approved')
                         ->success()
@@ -65,7 +72,7 @@ class ViewSalesOrder extends ViewRecord
                 ->label('Change Status')
                 ->icon('heroicon-o-shield-check')
                 ->color('warning')
-                ->visible(fn (): bool => auth()->user()?->hasRole('SUPER_ADMIN'))
+                ->visible(fn (): bool => auth()->user()?->hasRole('super_admin'))
                 ->form([
                     Select::make('status')
                         ->options(SalesOrderStatus::class)

@@ -3,13 +3,18 @@
 namespace App\Filament\Resources\SalesQuotes\Tables;
 
 use App\Enums\QuoteStatus;
+use App\Models\SalesQuote;
+use App\Services\Sales\SalesQuoteService;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Validation\ValidationException;
 
 class SalesQuotesTable
 {
@@ -88,6 +93,26 @@ class SalesQuotesTable
                     ->preload(),
             ])
             ->recordActions([
+                Action::make('convert_to_order')
+                    ->label('Convert to Order')
+                    ->icon('heroicon-o-arrow-right-circle')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->visible(fn (SalesQuote $record): bool => auth()->user()->can('convert', $record) && $record->canConvertToOrder())
+                    ->action(function (SalesQuote $record): void {
+                        try {
+                            app(SalesQuoteService::class)->convertToOrder($record);
+                            Notification::make()
+                                ->title('Sales quote converted to order')
+                                ->success()
+                                ->send();
+                        } catch (ValidationException $exception) {
+                            Notification::make()
+                                ->title(collect($exception->errors())->flatten()->first() ?? 'Quote could not be converted.')
+                                ->danger()
+                                ->send();
+                        }
+                    }),
                 ViewAction::make(),
                 EditAction::make(),
             ])

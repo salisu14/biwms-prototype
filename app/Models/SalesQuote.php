@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\QuoteStatus;
+use App\Services\Sales\SalesQuoteService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -65,11 +66,21 @@ class SalesQuote extends Model
         ]);
     }
 
+    public function canConvertToOrder(): bool
+    {
+        return app(SalesQuoteService::class)->canConvertToOrder($this);
+    }
+
+    public function convertToOrder(): SalesOrder
+    {
+        return app(SalesQuoteService::class)->convertToOrder($this);
+    }
+
     protected static function booted()
     {
-        static::updated(function ($quote) {
-            // Get the fields that were actually changed
-            $changes = $quote->getDirty();
+        static::updated(function (SalesQuote $quote) {
+            // In the updated callback, getChanges() reflects the persisted delta.
+            $changes = $quote->getChanges();
 
             // Remove timestamps from the log so it stays clean
             unset($changes['updated_at']);

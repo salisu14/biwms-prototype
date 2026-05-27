@@ -179,7 +179,7 @@ class SalesOrdersTable
                     EditAction::make()
                         ->visible(fn ($record): bool => $record instanceof SalesOrder && ! $record->isPosted())
                         ->disabled(fn ($record): bool => $record instanceof SalesOrder &&
-                            ! auth()->user()?->hasRole('SUPER_ADMIN') &&
+                            ! auth()->user()?->can('update', $record) &&
                             ($record->isPosted() || $record->status === SalesOrderStatus::APPROVED)
                         ),
                     Action::make('reverse')
@@ -200,7 +200,9 @@ class SalesOrdersTable
                         ->label('Post Shipment')
                         ->icon('heroicon-o-truck')
                         ->color('success')
-                        ->visible(fn ($record): bool => $record instanceof SalesOrder && in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder &&
+                            auth()->user()?->can('post', $record) &&
+                            in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
                         ->requiresConfirmation()
                         ->action(function (SalesOrder $record): void {
                             try {
@@ -214,7 +216,9 @@ class SalesOrdersTable
                         ->label('Post Invoice')
                         ->icon('heroicon-o-document-check')
                         ->color('primary')
-                        ->visible(fn ($record): bool => $record instanceof SalesOrder && in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder &&
+                            auth()->user()?->can('post', $record) &&
+                            in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
                         ->requiresConfirmation()
                         ->action(function (SalesOrder $record): void {
                             try {
@@ -257,7 +261,9 @@ class SalesOrdersTable
                         ->label('Submit for Approval')
                         ->icon('heroicon-o-paper-airplane')
                         ->color('info')
-                        ->visible(fn ($record) => $record instanceof SalesOrder && $record->status === SalesOrderStatus::DRAFT)
+                        ->visible(fn ($record) => $record instanceof SalesOrder &&
+                            auth()->user()?->can('update', $record) &&
+                            $record->status === SalesOrderStatus::DRAFT)
                         ->action(function (SalesOrder $record) {
                             app(ApprovalService::class)->submitForApproval($record);
                             Notification::make()->title('Submitted for Approval')->success()->send();
@@ -267,6 +273,7 @@ class SalesOrdersTable
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->visible(fn ($record) => $record instanceof SalesOrder &&
+                            auth()->user()?->can('approve', $record) &&
                             $record->status === SalesOrderStatus::PENDING_APPROVAL &&
                             $record->approvalEntries()->where('status', 'created')
                                 ->where(function ($q) {

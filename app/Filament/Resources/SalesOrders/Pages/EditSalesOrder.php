@@ -26,7 +26,7 @@ class EditSalesOrder extends EditRecord
                 ->label('Submit for Approval')
                 ->icon('heroicon-o-paper-airplane')
                 ->color('info')
-                ->visible(fn ($record) => $record->status === SalesOrderStatus::DRAFT)
+                ->visible(fn ($record) => auth()->user()?->can('update', $record) && $record->status === SalesOrderStatus::DRAFT)
                 ->action(function ($record) {
                     app(ApprovalService::class)->submitForApproval($record);
                     Notification::make()
@@ -39,8 +39,8 @@ class EditSalesOrder extends EditRecord
                 ->label('Approve')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->visible(fn ($record) => $record->status === SalesOrderStatus::PENDING_APPROVAL &&
-                    (auth()->user()?->can('approve:order') || auth()->user()?->hasRole('SUPER_ADMIN'))
+                ->visible(fn ($record) => auth()->user()?->can('approve', $record) &&
+                    $record->status === SalesOrderStatus::PENDING_APPROVAL
                 )
                 ->requiresConfirmation()
                 ->action(function ($record) {

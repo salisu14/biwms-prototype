@@ -100,7 +100,7 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-check')
                     ->color('success')
                     // Ensure you compare against the Enum object if your model casts it
-                    ->visible(fn ($record) => $record->status === ApprovalStatus::PENDING)
+                    ->visible(fn ($record) => auth()->user()?->can('update', $record) && $record->status === ApprovalStatus::PENDING)
                     ->action(fn (SalesInvoice $record) => $record->update([
                         'status' => ApprovalStatus::APPROVED,
                         'approved_by' => auth()->id(),
@@ -113,7 +113,7 @@ class SalesInvoicesTable
                     ->label('Reject')
                     ->icon('heroicon-o-x-mark')
                     ->color('danger')
-                    ->visible(fn ($record) => $record->status === ApprovalStatus::PENDING)
+                    ->visible(fn ($record) => auth()->user()?->can('update', $record) && $record->status === ApprovalStatus::PENDING)
                     ->action(fn (SalesInvoice $record) => $record->update([
                         'status' => ApprovalStatus::REJECTED,
                     ])
@@ -125,7 +125,7 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-check-badge')
                     ->color('primary')
                     ->requiresConfirmation()
-                    ->visible(fn ($record) => $record->status === ApprovalStatus::APPROVED)
+                    ->visible(fn ($record) => auth()->user()?->can('post', $record) && $record->status === ApprovalStatus::APPROVED)
                     ->action(function (SalesInvoice $record) {
                         app(PostingService::class)
                             ->postSalesInvoice($record);

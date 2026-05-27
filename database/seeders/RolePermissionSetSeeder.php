@@ -1,0 +1,115 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Permission;
+use App\Models\Role;
+use Illuminate\Database\Seeder;
+use Spatie\Permission\PermissionRegistrar;
+
+class RolePermissionSetSeeder extends Seeder
+{
+    public function run(): void
+    {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $matrix = [
+            'sales-representative' => [
+                'sales.customer.view_any', 'sales.customer.view', 'sales.customer.create', 'sales.customer.update',
+                'sales.item.view_any', 'sales.item.view',
+                'sales.quote.view_any', 'sales.quote.view', 'sales.quote.create', 'sales.quote.update', 'sales.quote.convert',
+                'sales.order.view_any', 'sales.order.view', 'sales.order.create', 'sales.order.update',
+                'sales.invoice.view_any', 'sales.invoice.view',
+            ],
+            'sales-manager' => [
+                'sales.customer.view_any', 'sales.customer.view', 'sales.customer.create', 'sales.customer.update', 'sales.customer.delete',
+                'sales.item.view_any', 'sales.item.view',
+                'sales.quote.view_any', 'sales.quote.view', 'sales.quote.create', 'sales.quote.update', 'sales.quote.delete', 'sales.quote.approve', 'sales.quote.convert',
+                'sales.order.view_any', 'sales.order.view', 'sales.order.create', 'sales.order.update', 'sales.order.delete', 'sales.order.approve', 'sales.order.post',
+                'sales.invoice.view_any', 'sales.invoice.view',
+            ],
+            'finance-accountant' => [
+                'finance.payment.view_any', 'finance.payment.view', 'finance.payment.create', 'finance.payment.update',
+                'finance.bank_account.view_any', 'finance.bank_account.view',
+                'finance.general_journal_batch.view_any', 'finance.general_journal_batch.view', 'finance.general_journal_batch.create', 'finance.general_journal_batch.update',
+                'finance.currency_adjustment_ledger.view_any', 'finance.currency_adjustment_ledger.view',
+                'finance.customer_ledger_entry.view_any', 'finance.customer_ledger_entry.view',
+                'sales.invoice.view_any', 'sales.invoice.view', 'sales.invoice.update', 'sales.invoice.post',
+                'sales.order.view_any', 'sales.order.view',
+            ],
+            'finance-manager' => [
+                'finance.payment.view_any', 'finance.payment.view', 'finance.payment.create', 'finance.payment.update', 'finance.payment.delete',
+                'finance.bank_account.view_any', 'finance.bank_account.view', 'finance.bank_account.create', 'finance.bank_account.update',
+                'finance.general_journal_batch.view_any', 'finance.general_journal_batch.view', 'finance.general_journal_batch.create', 'finance.general_journal_batch.update', 'finance.general_journal_batch.delete',
+                'finance.currency_adjustment_ledger.view_any', 'finance.currency_adjustment_ledger.view', 'finance.currency_adjustment_ledger.create', 'finance.currency_adjustment_ledger.update',
+                'finance.customer_ledger_entry.view_any', 'finance.customer_ledger_entry.view',
+                'sales.invoice.view_any', 'sales.invoice.view', 'sales.invoice.create', 'sales.invoice.update', 'sales.invoice.delete', 'sales.invoice.post',
+                'sales.order.view_any', 'sales.order.view',
+            ],
+            'warehouse-worker' => [
+                'warehouse.receipt.view_any', 'warehouse.receipt.view', 'warehouse.receipt.create',
+                'warehouse.activity.view_any', 'warehouse.activity.view', 'warehouse.activity.create',
+                'warehouse.putaway.view_any', 'warehouse.putaway.view', 'warehouse.putaway.create',
+                'warehouse.shipment.view_any', 'warehouse.shipment.view', 'warehouse.shipment.create',
+                'sales.item.view_any', 'sales.item.view',
+                'sales.order.view_any', 'sales.order.view',
+            ],
+            'warehouse-manager' => [
+                'warehouse.receipt.view_any', 'warehouse.receipt.view', 'warehouse.receipt.create', 'warehouse.receipt.update', 'warehouse.receipt.delete',
+                'warehouse.activity.view_any', 'warehouse.activity.view', 'warehouse.activity.create', 'warehouse.activity.update', 'warehouse.activity.delete',
+                'warehouse.putaway.view_any', 'warehouse.putaway.view', 'warehouse.putaway.create', 'warehouse.putaway.update', 'warehouse.putaway.delete',
+                'warehouse.shipment.view_any', 'warehouse.shipment.view', 'warehouse.shipment.create', 'warehouse.shipment.update', 'warehouse.shipment.delete',
+                'sales.item.view_any', 'sales.item.view', 'sales.item.update',
+                'sales.order.view_any', 'sales.order.view', 'sales.order.post',
+            ],
+            'factory-operator' => [
+                'factory.production_order.view_any', 'factory.production_order.view', 'factory.production_order.update',
+                'factory.production_bom.view_any', 'factory.production_bom.view',
+                'factory.routing.view_any', 'factory.routing.view',
+                'factory.machine_center.view_any', 'factory.machine_center.view',
+                'sales.item.view_any', 'sales.item.view',
+            ],
+            'factory-manager' => [
+                'factory.production_order.view_any', 'factory.production_order.view', 'factory.production_order.create', 'factory.production_order.update', 'factory.production_order.delete',
+                'factory.production_bom.view_any', 'factory.production_bom.view', 'factory.production_bom.create', 'factory.production_bom.update',
+                'factory.routing.view_any', 'factory.routing.view', 'factory.routing.create', 'factory.routing.update',
+                'factory.machine_center.view_any', 'factory.machine_center.view', 'factory.machine_center.create', 'factory.machine_center.update',
+                'sales.item.view_any', 'sales.item.view', 'sales.item.update',
+            ],
+            'hr-officer' => [
+                'hr.employee.view_any', 'hr.employee.view', 'hr.employee.create', 'hr.employee.update',
+                'hr.payroll_document.view_any', 'hr.payroll_document.view', 'hr.payroll_document.create', 'hr.payroll_document.update',
+                'hr.pay_code.view_any', 'hr.pay_code.view',
+                'hr.payroll_posting_group.view_any', 'hr.payroll_posting_group.view',
+            ],
+            'hr-manager' => [
+                'hr.employee.view_any', 'hr.employee.view', 'hr.employee.create', 'hr.employee.update', 'hr.employee.delete',
+                'hr.payroll_document.view_any', 'hr.payroll_document.view', 'hr.payroll_document.create', 'hr.payroll_document.update', 'hr.payroll_document.delete',
+                'hr.pay_code.view_any', 'hr.pay_code.view', 'hr.pay_code.create', 'hr.pay_code.update',
+                'hr.payroll_posting_group.view_any', 'hr.payroll_posting_group.view', 'hr.payroll_posting_group.create', 'hr.payroll_posting_group.update',
+            ],
+            'admin' => ['*'],
+            'super_admin' => ['*'],
+        ];
+
+        $allPermissions = Permission::query()->pluck('name')->all();
+
+        foreach ($matrix as $roleName => $permissions) {
+            $role = Role::query()->where('name', $roleName)->where('guard_name', 'web')->first();
+
+            if (! $role) {
+                $role = Role::query()->create(['name' => $roleName, 'guard_name' => 'web']);
+            }
+
+            if ($permissions === ['*']) {
+                $role->syncPermissions($allPermissions);
+
+                continue;
+            }
+
+            $role->syncPermissions($permissions);
+        }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+}

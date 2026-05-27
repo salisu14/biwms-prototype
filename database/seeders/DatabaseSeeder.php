@@ -36,6 +36,7 @@ class DatabaseSeeder extends Seeder
             PermissionsTableSeeder::class,
             RolesTableSeeder::class,
             UsersTableSeeder::class,
+            RolePermissionSetSeeder::class,
             OverheadCostCategorySeeder::class,
             BalanceSheetAccountScheduleSeeder::class,
             ProfitAndLossAccountScheduleSeeder::class,
