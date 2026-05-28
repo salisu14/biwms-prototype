@@ -36,7 +36,6 @@ class ApplicationsRelationManager extends RelationManager
                         ->disabled(),
                     TextInput::make('amount_applied')
                         ->numeric()
-                        ->money()
                         ->disabled(),
                 ]),
                 Section::make('Application Impact')

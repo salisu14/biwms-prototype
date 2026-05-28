@@ -155,8 +155,9 @@ class PaymentInfolist
                                 ->badge()
                                 ->color(fn (string $state): string => match ($state) {
                                     'POSTED' => 'success',
+                                    'RECONCILED', 'CLEARED' => 'info',
                                     'VOIDED' => 'danger',
-                                    'OPEN' => 'warning',
+                                    'PENDING' => 'warning',
                                     default => 'gray',
                                 }),
 

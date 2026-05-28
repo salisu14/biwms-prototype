@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Auth;
 
 class Payment extends Model
@@ -121,9 +120,13 @@ class Payment extends Model
 
     // ==================== RELATIONSHIPS ====================
 
-    public function party(): MorphTo
+    public function party()
     {
-        return $this->morphTo('party', 'party_type', 'party_id');
+        return match ($this->party_type) {
+            'CUSTOMER' => $this->belongsTo(Customer::class, 'party_id'),
+            'VENDOR' => $this->belongsTo(Vendor::class, 'party_id'),
+            default => null,
+        };
     }
 
     public function customer(): ?BelongsTo

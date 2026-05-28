@@ -29,7 +29,7 @@ class ViewPayment extends ViewRecord
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
                 ->requiresConfirmation()
-                ->visible(fn ($record) => $record->status === 'PENDING')
+                ->visible(fn ($record) => (auth()->user()?->can('post', $record) ?? false) && $record->status === 'PENDING')
                 ->action(function ($record, PaymentService $service) {
                     $service->post($record, auth()->id());
                     Notifications::make()
@@ -42,7 +42,7 @@ class ViewPayment extends ViewRecord
                 ->label('Apply to Documents')
                 ->icon('heroicon-o-document-plus')
                 ->color('primary')
-                ->visible(fn ($record) => $record->status === 'POSTED' && $record->unapplied_amount > 0)
+                ->visible(fn ($record) => (auth()->user()?->can('apply', $record) ?? false) && $record->status === 'POSTED' && $record->unapplied_amount > 0)
                 ->schema([
                     Select::make('document_type')
                         ->options([
@@ -120,6 +120,7 @@ class ViewPayment extends ViewRecord
                 ->icon('heroicon-o-check-badge')
                 ->color('success')
                 ->requiresConfirmation()
+                ->visible(fn ($record) => auth()->user()?->can('reconcile', $record) ?? false)
                 ->disabled(fn ($record) => $record->status !== 'POSTED'
                     || (bool) $record->reconciled
                     || empty($record->bank_account_id))
@@ -133,6 +134,7 @@ class ViewPayment extends ViewRecord
                 ->action(function ($record) {
                     $record->update([
                         'reconciled' => true,
+                        'status' => 'RECONCILED',
                         'reconciled_at' => now(),
                         'reconciled_by' => auth()->id(),
                     ]);
@@ -148,6 +150,7 @@ class ViewPayment extends ViewRecord
                 ->icon('heroicon-o-arrow-uturn-left')
                 ->color('warning')
                 ->requiresConfirmation()
+                ->visible(fn ($record) => auth()->user()?->can('reconcile', $record) ?? false)
                 ->disabled(fn ($record) => $record->status !== 'POSTED' || ! (bool) $record->reconciled)
                 ->tooltip(fn ($record) => $record->status !== 'POSTED'
                     ? 'Only posted payments can be unreconciled.'
@@ -155,6 +158,7 @@ class ViewPayment extends ViewRecord
                 ->action(function ($record) {
                     $record->update([
                         'reconciled' => false,
+                        'status' => 'POSTED',
                         'reconciled_at' => null,
                         'reconciled_by' => null,
                     ]);
@@ -174,7 +178,7 @@ class ViewPayment extends ViewRecord
                     Textarea::make('reason')
                         ->required(),
                 ])
-                ->visible(fn ($record) => $record->status === 'POSTED' && ! $record->reconciled)
+                ->visible(fn ($record) => (auth()->user()?->can('void', $record) ?? false) && $record->status === 'POSTED' && ! $record->reconciled)
                 ->action(function (array $data, $record, PaymentService $service) {
                     $service->void($record, $data['reason'], auth()->id());
                     Notifications::make()

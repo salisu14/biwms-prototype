@@ -38,6 +38,7 @@ class PermissionsTableSeeder extends Seeder
 
             // Finance
             'finance.payment.view_any', 'finance.payment.view', 'finance.payment.create', 'finance.payment.update', 'finance.payment.delete',
+            'finance.payment.post', 'finance.payment.apply', 'finance.payment.reconcile', 'finance.payment.void',
             'finance.bank_account.view_any', 'finance.bank_account.view', 'finance.bank_account.create', 'finance.bank_account.update', 'finance.bank_account.delete',
             'finance.general_journal_batch.view_any', 'finance.general_journal_batch.view', 'finance.general_journal_batch.create', 'finance.general_journal_batch.update', 'finance.general_journal_batch.delete',
             'finance.currency_adjustment_ledger.view_any', 'finance.currency_adjustment_ledger.view', 'finance.currency_adjustment_ledger.create', 'finance.currency_adjustment_ledger.update', 'finance.currency_adjustment_ledger.delete',

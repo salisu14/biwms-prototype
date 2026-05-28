@@ -103,6 +103,7 @@ class PaymentsTable
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
+                        ->visible(fn ($record): bool => auth()->user()?->can('post', $record) ?? false)
                         ->disabled(fn ($record) => $record->status !== 'PENDING')
                         ->action(function ($record, PaymentService $service): void {
                             $service->post($record, auth()->id());
@@ -113,12 +114,14 @@ class PaymentsTable
                         ->icon('heroicon-o-check-badge')
                         ->color('success')
                         ->requiresConfirmation()
+                        ->visible(fn ($record): bool => auth()->user()?->can('reconcile', $record) ?? false)
                         ->disabled(fn ($record) => $record->status !== 'POSTED'
                             || (bool) $record->reconciled
                             || empty($record->bank_account_id))
                         ->action(function ($record): void {
                             $record->update([
                                 'reconciled' => true,
+                                'status' => 'RECONCILED',
                                 'reconciled_at' => now(),
                                 'reconciled_by' => auth()->id(),
                             ]);
@@ -129,10 +132,12 @@ class PaymentsTable
                         ->icon('heroicon-o-arrow-uturn-left')
                         ->color('warning')
                         ->requiresConfirmation()
+                        ->visible(fn ($record): bool => auth()->user()?->can('reconcile', $record) ?? false)
                         ->disabled(fn ($record) => $record->status !== 'POSTED' || ! (bool) $record->reconciled)
                         ->action(function ($record): void {
                             $record->update([
                                 'reconciled' => false,
+                                'status' => 'POSTED',
                                 'reconciled_at' => null,
                                 'reconciled_by' => null,
                             ]);
@@ -143,6 +148,7 @@ class PaymentsTable
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
                         ->requiresConfirmation()
+                        ->visible(fn ($record): bool => auth()->user()?->can('void', $record) ?? false)
                         ->form([
                             Textarea::make('reason')->required(),
                         ])
