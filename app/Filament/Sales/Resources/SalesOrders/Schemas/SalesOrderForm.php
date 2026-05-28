@@ -19,7 +19,7 @@ class SalesOrderForm
             ->components([
                 Section::make('General')
                     ->schema([
-                        TextInput::make('document_no')
+                        TextInput::make('order_number')
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->default(fn () => NumberSeriesService::getNextNo('S-ORD')),
@@ -30,7 +30,7 @@ class SalesOrderForm
                             ->preload()
                             ->required(),
 
-                        DatePicker::make('document_date')
+                        DatePicker::make('order_date')
                             ->default(now())
                             ->required(),
 
@@ -39,13 +39,15 @@ class SalesOrderForm
 
                         Select::make('status')
                             ->options([
-                                'open' => 'Open',
-                                'released' => 'Released',
-                                'partially_shipped' => 'Partially Shipped',
-                                'shipped' => 'Shipped',
-                                'invoiced' => 'Invoiced',
+                                'DRAFT' => 'Draft',
+                                'PENDING_APPROVAL' => 'Pending Approval',
+                                'APPROVED' => 'Approved',
+                                'RELEASED' => 'Released',
+                                'SHIPPED' => 'Shipped',
+                                'PARTIALLY_INVOICED' => 'Partially Invoiced',
+                                'INVOICED' => 'Invoiced',
                             ])
-                            ->default('open')
+                            ->default('DRAFT')
                             ->required()
                             ->disabled(fn ($operation) => $operation === 'create'),
                     ])

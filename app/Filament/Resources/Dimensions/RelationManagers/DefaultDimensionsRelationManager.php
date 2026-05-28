@@ -4,8 +4,8 @@ namespace App\Filament\Resources\Dimensions\RelationManagers;
 
 use App\Enums\ValuePosting;
 use App\Filament\Resources\Dimensions\DimensionResource;
-use App\Models\DimensionValue; // Ensure this is imported
-use App\Models\Dimension; // <--- Import this model to look up ID
+use App\Models\Dimension; // Ensure this is imported
+use App\Models\DimensionValue; // <--- Import this model to look up ID
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -83,7 +83,7 @@ class DefaultDimensionsRelationManager extends RelationManager
                 TextColumn::make('dimension.name')
                     ->label('Dimension')
                     ->sortable(),
-                TextColumn::make('dimensionValue.name')
+                TextColumn::make('dimension_value_name')
                     ->label('Default Value')
                     ->placeholder('No Default'),
                 TextColumn::make('value_posting')
@@ -101,7 +101,7 @@ class DefaultDimensionsRelationManager extends RelationManager
                 CreateAction::make()
                     ->mutateDataUsing(function (array $data): array {
                         $data['table_id'] = $this->getOwnerRecord()->getTable();
-                        $data['no'] = $this->getOwnerRecord()->id;
+                        $data['no'] = (string) $this->getOwnerRecord()->getKey();
 
                         return $data;
                     }),

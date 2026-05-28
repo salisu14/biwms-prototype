@@ -19,7 +19,7 @@ class SalesQuoteForm
             ->components([
                 Section::make('General')
                     ->schema([
-                        TextInput::make('document_no')
+                        TextInput::make('quote_no')
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->default(fn () => NumberSeriesService::getNextNo('S-QUOTE'))
@@ -36,22 +36,23 @@ class SalesQuoteForm
                                 TextInput::make('email')->email()->required(),
                             ]),
 
-                        DatePicker::make('document_date')
+                        DatePicker::make('quote_date')
                             ->default(now())
                             ->required(),
 
-                        DatePicker::make('valid_until_date')
+                        DatePicker::make('valid_until')
                             ->default(now()->addDays(30))
                             ->required(),
 
                         Select::make('status')
                             ->options([
-                                'open' => 'Open',
-                                'approved' => 'Approved',
+                                'draft' => 'Draft',
+                                'sent' => 'Sent',
+                                'accepted' => 'Accepted',
                                 'rejected' => 'Rejected',
-                                'converted' => 'Converted to Order',
+                                'expired' => 'Expired',
                             ])
-                            ->default('open')
+                            ->default('draft')
                             ->required()
                             ->disabled(fn ($operation) => $operation === 'create'),
                     ])

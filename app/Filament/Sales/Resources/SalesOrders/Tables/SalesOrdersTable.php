@@ -20,13 +20,13 @@ class SalesOrdersTable
     {
         return $table
             ->columns([
-                TextColumn::make('document_no')
+                TextColumn::make('order_number')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('customer.name')
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('document_date')
+                TextColumn::make('order_date')
                     ->date()
                     ->sortable(),
                 TextColumn::make('requested_delivery_date')
@@ -38,29 +38,35 @@ class SalesOrdersTable
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'open' => 'gray',
-                        'released' => 'warning',
-                        'partially_shipped' => 'info',
-                        'shipped' => 'success',
-                        'invoiced' => 'success',
+                        'DRAFT' => 'gray',
+                        'PENDING_APPROVAL' => 'warning',
+                        'APPROVED', 'RELEASED' => 'info',
+                        'SHIPPED', 'INVOICED', 'CLOSED' => 'success',
+                        'PARTIALLY_INVOICED' => 'info',
+                        'CANCELLED' => 'danger',
+                        default => 'gray',
                     }),
             ])
             ->filters([
                 SelectFilter::make('status')
                     ->options([
-                        'open' => 'Open',
-                        'released' => 'Released',
-                        'shipped' => 'Shipped',
+                        'DRAFT' => 'Draft',
+                        'PENDING_APPROVAL' => 'Pending Approval',
+                        'APPROVED' => 'Approved',
+                        'RELEASED' => 'Released',
+                        'SHIPPED' => 'Shipped',
+                        'PARTIALLY_INVOICED' => 'Partially Invoiced',
+                        'INVOICED' => 'Invoiced',
                     ]),
-                Filter::make('document_date')
+                Filter::make('order_date')
                     ->schema([
                         DatePicker::make('from'),
                         DatePicker::make('until'),
                     ])
                     ->query(function ($query, array $data) {
                         return $query
-                            ->when($data['from'], fn ($q, $date) => $q->whereDate('document_date', '>=', $date))
-                            ->when($data['until'], fn ($q, $date) => $q->whereDate('document_date', '<=', $date));
+                            ->when($data['from'], fn ($q, $date) => $q->whereDate('order_date', '>=', $date))
+                            ->when($data['until'], fn ($q, $date) => $q->whereDate('order_date', '<=', $date));
                     }),
             ])
             ->recordActions([
@@ -71,13 +77,13 @@ class SalesOrdersTable
                         $record->update(['status' => 'released']);
                     })
                     ->requiresConfirmation()
-                    ->visible(fn (SalesOrder $record) => $record->status === 'open')
+                    ->visible(fn (SalesOrder $record) => in_array((string) $record->status->value, ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'], true))
                     ->color('warning')
                     ->icon('heroicon-m-arrow-up-on-square'),
 
                 Action::make('create_invoice')
                     ->url(fn (SalesOrder $record) => route('filament.sales.resources.sales-invoices.create', ['sales_order_id' => $record->id]))
-                    ->visible(fn (SalesOrder $record) => in_array($record->status, ['shipped', 'partially_shipped']))
+                    ->visible(fn (SalesOrder $record) => in_array((string) $record->status->value, ['SHIPPED', 'PARTIALLY_INVOICED'], true))
                     ->color('success')
                     ->icon('heroicon-m-document-text'),
             ])

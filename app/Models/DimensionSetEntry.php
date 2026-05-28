@@ -29,6 +29,7 @@ class DimensionSetEntry extends Model
 
     public function dimensionValue(): BelongsTo
     {
-        return $this->belongsTo(DimensionValue::class, 'dimension_value_code', 'code');
+        return $this->belongsTo(DimensionValue::class, 'dimension_value_code', 'code')
+            ->whereHas('dimension', fn ($query) => $query->whereColumn('dimensions.code', 'dimension_set_entries.dimension_code'));
     }
 }

@@ -30,12 +30,7 @@ class DimensionManagementService
      */
     public function getDimensionSetID(array $dimensions): int
     {
-        // Normalize: remove empty, sort by code for consistent hashing
-        $dimensions = collect($dimensions)
-            ->filter(fn ($v) => ! empty($v))
-            ->mapWithKeys(fn ($v, $k) => [strtoupper($k) => $v])
-            ->sortKeys()
-            ->toArray();
+        $dimensions = $this->normalizeDimensions($dimensions);
 
         if (empty($dimensions)) {
             return 0;
@@ -110,8 +105,10 @@ class DimensionManagementService
      */
     public function editDimensionSet(int $dimensionSetId, array $changes): int
     {
-        $current = $this->getDimensionSet($dimensionSetId)->toArray();
-        $merged = array_merge($current, $changes);
+        $current = $this->getDimensionSet($dimensionSetId)
+            ->mapWithKeys(fn (array $row, string $dimCode): array => [$dimCode => $row['code'] ?? null])
+            ->toArray();
+        $merged = array_merge($current, $this->normalizeDimensions($changes));
 
         return $this->getDimensionSetID($merged);
     }
@@ -138,6 +135,7 @@ class DimensionManagementService
      */
     public function applyDefaultDimensions(array &$targetDimensions, string $tableId, string $no): void
     {
+        $targetDimensions = $this->normalizeDimensions($targetDimensions);
         $defaults = $this->getDefaultDimensions($tableId, $no);
 
         foreach ($defaults as $dimCode => $setting) {
@@ -153,16 +151,41 @@ class DimensionManagementService
                         throw new \RuntimeException("Dimension {$dimCode} is mandatory");
                     }
                     break;
-                case 'same_code_mandatory':
-                    if (empty($targetDimensions[$dimCode])) {
-                        $targetDimensions[$dimCode] = $setting['value_code'];
-                    }
-                    if ($targetDimensions[$dimCode] !== $setting['value_code']) {
-                        throw new \RuntimeException("Dimension {$dimCode} must be {$setting['value_code']}");
-                    }
-                    break;
             }
         }
+    }
+
+    /**
+     * Normalize dimensions into canonical [DIM_CODE => VALUE_CODE] format.
+     */
+    public function normalizeDimensionMap(array $dimensions): array
+    {
+        return $this->normalizeDimensions($dimensions);
+    }
+
+    /**
+     * Apply and validate default dimensions for a set of related entities.
+     *
+     * @param  array<int, array{table_id: string, no: string|int|null}>  $entities
+     */
+    public function enforceEntityDefaults(array &$dimensions, array $entities): void
+    {
+        $dimensions = $this->normalizeDimensions($dimensions);
+
+        foreach ($entities as $entity) {
+            $no = $entity['no'] ?? null;
+            if ($no === null || $no === '') {
+                continue;
+            }
+
+            $this->applyDefaultDimensions(
+                $dimensions,
+                (string) $entity['table_id'],
+                (string) $no
+            );
+        }
+
+        $this->validateDimensionCombination($dimensions);
     }
 
     /**
@@ -170,6 +193,7 @@ class DimensionManagementService
      */
     public function validateDimensionCombination(array $dimensions): bool
     {
+        $dimensions = $this->normalizeDimensions($dimensions);
         $dimCodes = array_keys(array_filter($dimensions));
 
         foreach ($dimCodes as $code1) {
@@ -268,6 +292,9 @@ class DimensionManagementService
      */
     public function validateDimValue(string $dimensionCode, string $valueCode): void
     {
+        $dimensionCode = strtoupper(trim($dimensionCode));
+        $valueCode = strtoupper(trim($valueCode));
+
         $dimension = Dimension::where('code', $dimensionCode)->first();
         if (! $dimension) {
             throw new \RuntimeException("Dimension {$dimensionCode} does not exist");
@@ -382,6 +409,26 @@ class DimensionManagementService
         return collect($dimensions)
             ->map(fn ($v, $k) => "{$k}:{$v}")
             ->implode(', ');
+    }
+
+    /**
+     * Normalize mixed dimension payloads into [DIM_CODE => VALUE_CODE].
+     *
+     * Accepts values in forms:
+     * - ['DEPARTMENT' => 'OPS']
+     * - ['DEPARTMENT' => ['code' => 'OPS']]
+     */
+    private function normalizeDimensions(array $dimensions): array
+    {
+        return collect($dimensions)
+            ->mapWithKeys(function ($value, $code): array {
+                $resolved = is_array($value) ? ($value['code'] ?? null) : $value;
+
+                return [strtoupper(trim((string) $code)) => $resolved ? strtoupper(trim((string) $resolved)) : null];
+            })
+            ->filter(fn ($value) => filled($value))
+            ->sortKeys()
+            ->toArray();
     }
 
     private function updateGlobalDimensionsInEntries(?string $oldDim1, ?string $newDim1, ?string $oldDim2, ?string $newDim2): void

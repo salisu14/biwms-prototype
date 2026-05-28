@@ -9,6 +9,7 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
+use App\Services\DimensionManagementService;
 use App\Services\PostingDateValidator;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -131,6 +132,18 @@ class SalesOrder extends Model implements Approvable
 
         static::saving(function (SalesOrder $order) {
             $order->populateCustomerPostingGroups();
+
+            $customerNo = null;
+            if ($order->customer_id) {
+                $customerNo = Customer::query()->whereKey($order->customer_id)->value('customer_number');
+            }
+
+            $dimensions = (array) ($order->dimensions ?? []);
+            app(DimensionManagementService::class)->enforceEntityDefaults($dimensions, [
+                ['table_id' => '18', 'no' => $customerNo],
+            ]);
+            $order->dimensions = $dimensions;
+
             if ($order->relationLoaded('lines')) {
                 $order->recalculateTotals();
             }
@@ -403,6 +416,10 @@ class SalesOrder extends Model implements Approvable
     public function postShipment(): void
     {
         app(PostingDateValidator::class)->validate($this->posting_date ?? now());
+        $this->loadMissing('lines');
+
+        $headerDimensions = app(DimensionManagementService::class)->normalizeDimensionMap((array) ($this->dimensions ?? []));
+        app(DimensionManagementService::class)->validateDimensionCombination($headerDimensions);
 
         if (! in_array($this->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true)) {
             throw ValidationException::withMessages([
@@ -428,6 +445,9 @@ class SalesOrder extends Model implements Approvable
             $totalShipped = 0.0;
 
             foreach ($this->lines as $line) {
+                $lineDimensions = app(DimensionManagementService::class)->normalizeDimensionMap((array) ($line->dimensions ?? []));
+                app(DimensionManagementService::class)->validateDimensionCombination($lineDimensions);
+
                 $remainingToShip = max(0, (float) $line->quantity - (float) $line->quantity_shipped);
                 if ($remainingToShip <= 0) {
                     continue;
@@ -614,6 +634,10 @@ class SalesOrder extends Model implements Approvable
     public function postInvoice(): PostedSalesInvoice
     {
         app(PostingDateValidator::class)->validate($this->posting_date ?? now());
+        $this->loadMissing('lines');
+
+        $headerDimensions = app(DimensionManagementService::class)->normalizeDimensionMap((array) ($this->dimensions ?? []));
+        app(DimensionManagementService::class)->validateDimensionCombination($headerDimensions);
 
         if (! in_array($this->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true)) {
             throw ValidationException::withMessages([
@@ -666,6 +690,9 @@ class SalesOrder extends Model implements Approvable
             $totalVat = 0.0;
 
             foreach ($linesToInvoice as $line) {
+                $lineDimensions = app(DimensionManagementService::class)->normalizeDimensionMap((array) ($line->dimensions ?? []));
+                app(DimensionManagementService::class)->validateDimensionCombination($lineDimensions);
+
                 $quantityToInvoice = max(0, (float) $line->quantity_shipped - (float) $line->quantity_invoiced);
                 if ($quantityToInvoice <= 0) {
                     continue;

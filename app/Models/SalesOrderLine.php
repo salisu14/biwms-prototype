@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Services\DimensionManagementService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -119,6 +120,8 @@ class SalesOrderLine extends Model
                     $line->unit_cost = $item->unit_cost;
                 }
             }
+
+            $line->syncDimensionsWithDefaults();
         });
 
         static::updating(function ($line) {
@@ -138,7 +141,27 @@ class SalesOrderLine extends Model
 
             // Update quantity to ship
             $line->quantity_to_ship = $line->quantity - $line->quantity_shipped;
+
+            $line->syncDimensionsWithDefaults();
         });
+    }
+
+    public function syncDimensionsWithDefaults(): void
+    {
+        $order = $this->relationLoaded('salesOrder') ? $this->salesOrder : $this->salesOrder()->first();
+        $headerDimensions = $order ? (array) ($order->dimensions ?? []) : [];
+        $lineDimensions = array_merge($headerDimensions, (array) ($this->dimensions ?? []));
+
+        $itemCode = null;
+        if ($this->item_id) {
+            $itemCode = Item::query()->whereKey($this->item_id)->value('item_code');
+        }
+
+        app(DimensionManagementService::class)->enforceEntityDefaults($lineDimensions, [
+            ['table_id' => '27', 'no' => $itemCode],
+        ]);
+
+        $this->dimensions = $lineDimensions;
     }
 
     protected function syncUnitPriceForSelectedUomOnCreate(): void

@@ -21,16 +21,16 @@ class SalesQuotesTable
     {
         return $table
             ->columns([
-                TextColumn::make('document_no')
+                TextColumn::make('quote_no')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('customer.name')
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('document_date')
+                TextColumn::make('quote_date')
                     ->date()
                     ->sortable(),
-                TextColumn::make('valid_until_date')
+                TextColumn::make('valid_until')
                     ->date()
                     ->sortable(),
                 TextColumn::make('total_amount')
@@ -39,26 +39,29 @@ class SalesQuotesTable
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'open' => 'warning',
-                        'approved' => 'success',
+                        'draft' => 'gray',
+                        'sent' => 'info',
+                        'accepted' => 'success',
                         'rejected' => 'danger',
-                        'converted' => 'info',
+                        'expired' => 'warning',
+                        default => 'gray',
                     }),
             ])
             ->filters([
                 SelectFilter::make('status')
                     ->options([
-                        'open' => 'Open',
-                        'approved' => 'Approved',
+                        'draft' => 'Draft',
+                        'sent' => 'Sent',
+                        'accepted' => 'Accepted',
                         'rejected' => 'Rejected',
-                        'converted' => 'Converted',
+                        'expired' => 'Expired',
                     ]),
-                Filter::make('valid_until_date')
+                Filter::make('valid_until')
                     ->schema([
                         DatePicker::make('expires_before'),
                     ])
                     ->query(function ($query, array $data) {
-                        return $query->when($data['expires_before'], fn ($q, $date) => $q->whereDate('valid_until_date', '<=', $date));
+                        return $query->when($data['expires_before'], fn ($q, $date) => $q->whereDate('valid_until', '<=', $date));
                     }),
             ])
             ->recordActions([
@@ -72,7 +75,7 @@ class SalesQuotesTable
                         return redirect()->route('filament.sales.resources.sales-orders.edit', $order);
                     })
                     ->requiresConfirmation()
-                    ->visible(fn (SalesQuote $record) => $record->status === 'approved')
+                    ->visible(fn (SalesQuote $record) => in_array((string) $record->status->value, ['accepted', 'approved'], true))
                     ->color('success')
                     ->icon('heroicon-m-arrow-path'),
 

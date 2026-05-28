@@ -25,7 +25,7 @@ class DefaultDimension extends Model
 
         // Explicit casts to ensure type safety
         'table_id' => 'string',
-        'no' => 'int',
+        'no' => 'string',
     ];
 
     /**
@@ -61,7 +61,8 @@ class DefaultDimension extends Model
      */
     public function dimensionValue(): BelongsTo
     {
-        return $this->belongsTo(DimensionValue::class, 'dimension_value_code', 'code');
+        return $this->belongsTo(DimensionValue::class, 'dimension_value_code', 'code')
+            ->whereHas('dimension', fn ($query) => $query->whereColumn('dimensions.code', 'default_dimensions.dimension_code'));
     }
 
     // --- Scopes ---
@@ -70,9 +71,9 @@ class DefaultDimension extends Model
      * Scope to find default dimensions for a specific entity type and ID.
      * Example: DefaultDimension::forEntity('vendors', 1)->get();
      */
-    public function scopeForEntity($query, string $tableId, int $no)
+    public function scopeForEntity($query, string $tableId, string|int $no)
     {
-        return $query->where('table_id', $tableId)->where('no', $no);
+        return $query->where('table_id', $tableId)->where('no', (string) $no);
     }
 
     /**
@@ -90,6 +91,17 @@ class DefaultDimension extends Model
      */
     public function getCompositeKeyAttribute(): string
     {
-        return $this->table_id . '_' . $this->no . '_' . $this->dimension_code;
+        return $this->table_id.'_'.$this->no.'_'.$this->dimension_code;
+    }
+
+    /**
+     * Resolve value name safely using both dimension + value code.
+     */
+    public function getDimensionValueNameAttribute(): ?string
+    {
+        return DimensionValue::query()
+            ->where('code', $this->dimension_value_code)
+            ->whereHas('dimension', fn ($query) => $query->where('code', $this->dimension_code))
+            ->value('name');
     }
 }
