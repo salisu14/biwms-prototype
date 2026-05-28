@@ -106,6 +106,7 @@ class ProformaInvoiceService
 
         return [
             'name' => $header['name'] ?? config('app.name', 'Bifli WMS'),
+            'trading_name' => $header['trading_name'] ?? null,
             'address' => implode(', ', $header['address_lines'] ?? []),
             'address_lines' => $header['address_lines'] ?? [],
             'email' => $header['email'] ?? null,
@@ -114,6 +115,8 @@ class ProformaInvoiceService
             'tax_no' => $header['tax_no'] ?? null,
             'registration_no' => $header['registration_no'] ?? null,
             'logo_url' => $header['logo_url'] ?? null,
+            'logo_data_uri' => $header['logo_data_uri'] ?? null,
+            'logo_abs_path' => $header['logo_abs_path'] ?? null,
             'invoice_footer' => $this->companyInformationService->getInvoiceFooter(),
         ];
     }

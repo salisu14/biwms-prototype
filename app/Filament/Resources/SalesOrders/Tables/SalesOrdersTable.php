@@ -233,16 +233,26 @@ class SalesOrdersTable
                         ->icon('heroicon-o-printer')
                         ->color('info')
                         ->visible(fn ($record): bool => $record instanceof SalesOrder)
-                        ->action(fn (SalesOrder $record) => response()->streamDownload(
-                            fn () => print (app(ProformaInvoiceService::class)->generateSalesProforma($record->refresh()->load(['lines']))->output()),
-                            $record->order_number.'_Proforma.pdf'
-                        )),
+                        ->action(function ($record) {
+                            if (! $record instanceof SalesOrder) {
+                                return null;
+                            }
+
+                            return response()->streamDownload(
+                                fn () => print (app(ProformaInvoiceService::class)->generateSalesProforma($record->refresh()->load(['lines']))->output()),
+                                $record->order_number.'_Proforma.pdf'
+                            );
+                        }),
                     Action::make('printPostedInvoice')
                         ->label('Print Posted Invoice')
                         ->icon('heroicon-o-document-text')
                         ->color('gray')
-                        ->visible(fn (SalesOrder $record): bool => $record->postedInvoices()->exists())
-                        ->action(function (SalesOrder $record) {
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder && $record->postedInvoices()->exists())
+                        ->action(function ($record) {
+                            if (! $record instanceof SalesOrder) {
+                                return null;
+                            }
+
                             /** @var PostedSalesInvoice|null $postedInvoice */
                             $postedInvoice = $record->postedInvoices()->latest('id')->first();
 
