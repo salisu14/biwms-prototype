@@ -75,6 +75,11 @@ class PurchaseCreditMemo extends Model implements Approvable
         return $this->belongsTo(Location::class);
     }
 
+    public function correctedInvoice(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseCreditMemo::class, 'corrects_invoice_id');
+    }
+
     public static function generateNumber(): string
     {
         $prefix = 'D-PCM'; // Draft Purchase Credit Memo
@@ -134,4 +139,3 @@ class PurchaseCreditMemo extends Model implements Approvable
         ]);
     }
 }
-

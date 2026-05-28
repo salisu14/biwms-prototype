@@ -30,7 +30,6 @@ class PurchaseCreditMemoForm
                             ->schema([
                                 TextInput::make('document_number')
                                     ->label('Document Number')
-                                    ->required()
                                     ->unique(ignoreRecord: true)
                                     ->placeholder('Auto-generated')
                                     // Lock the field if the record already exists in the database
@@ -41,7 +40,7 @@ class PurchaseCreditMemoForm
                                     ->helperText('The number cannot be changed once the credit memo is created.'),
 
                                 Select::make('vendor_id')
-                                    ->relationship('vendor', 'name')
+                                    ->relationship('vendor', 'vendor_name')
                                     ->searchable()
                                     ->preload()
                                     ->required()

@@ -44,7 +44,7 @@ class UserForm
                                         $query->whereDoesntHave('user');
 
                                         if ($record?->employee_id) {
-                                            $query->orWhereKey($record->employee_id);
+                                            $query->orWhere('id', $record->employee_id);
                                         }
                                     })
                                     ->orderBy('employee_number')

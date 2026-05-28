@@ -40,7 +40,7 @@ class FactoryPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Orange,
             ])
-            ->brandName('Factory Role Center')
+            ->brandName('BIFLI Globals - Factory Role Center')
             ->favicon(asset('favicon.ico'))
             ->resources([
                 ProductionOrderResource::class,

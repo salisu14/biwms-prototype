@@ -558,6 +558,11 @@ class AdminPanelProvider extends PanelProvider
                                         ->url('/admin/employees')
                                         ->isActiveWhen(fn () => request()->is('admin/employees*')),
 
+                                    NavigationItem::make('Employee Attendances')
+                                        ->icon('heroicon-o-user-group')
+                                        ->url('/admin/attendance-ledger-entries')
+                                        ->isActiveWhen(fn () => request()->is('admin//attendance-ledger-entries*')),
+
                                     NavigationItem::make('Pay Codes')
                                         ->icon('heroicon-o-banknotes')
                                         ->url('/admin/pay-codes')

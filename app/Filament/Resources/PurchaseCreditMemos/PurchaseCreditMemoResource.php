@@ -11,11 +11,11 @@ use App\Filament\Resources\PurchaseCreditMemos\Schemas\PurchaseCreditMemoForm;
 use App\Models\PurchaseCreditMemo;
 use App\Services\Purchases\PurchaseCreditMemoService;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Tables\Actions\Action as TableAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use UnitEnum;
@@ -39,15 +39,15 @@ class PurchaseCreditMemoResource extends Resource
             ->columns([
                 TextColumn::make('document_number')->searchable()->sortable(),
                 TextColumn::make('vendor_name')->searchable(),
-                TextColumn::make('grand_total')->money('USD')->sortable(),
+                TextColumn::make('grand_total')->money('NGN')->sortable(),
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => $state->color())
                     ->icon(fn ($state) => $state->icon()),
                 TextColumn::make('posting_date')->date(),
             ])
-            ->actions([
-                TableAction::make('submit')
+            ->recordActions([
+                Action::make('submit')
                     ->label('Submit')
                     ->icon('heroicon-o-paper-airplane')
                     ->color('info')
@@ -57,7 +57,7 @@ class PurchaseCreditMemoResource extends Resource
                         Notification::make()->title('Credit memo submitted for approval')->success()->send();
                     }),
 
-                TableAction::make('approve')
+                Action::make('approve')
                     ->label('Approve')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
@@ -67,7 +67,7 @@ class PurchaseCreditMemoResource extends Resource
                         Notification::make()->title('Credit memo approved')->success()->send();
                     }),
 
-                TableAction::make('reject')
+                Action::make('reject')
                     ->label('Reject')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
@@ -80,7 +80,7 @@ class PurchaseCreditMemoResource extends Resource
                         Notification::make()->title('Credit memo rejected')->danger()->send();
                     }),
 
-                TableAction::make('post')
+                Action::make('post')
                     ->label('Post')
                     ->icon('heroicon-m-check-badge')
                     ->color('success')
