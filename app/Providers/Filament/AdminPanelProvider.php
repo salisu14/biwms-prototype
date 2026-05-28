@@ -209,11 +209,6 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/yield-report')
                                     ->isActiveWhen(fn () => request()->is('admin/yield-report*')),
 
-                                NavigationItem::make('Production Journal Template')
-                                    ->icon('heroicon-o-beaker')
-                                    ->url('/admin/production-journal-templates')
-                                    ->isActiveWhen(fn () => request()->is('admin/production-journal-templates*')),
-
                                 NavigationItem::make('Journals')
                                     ->icon('heroicon-o-book-open')
                                     ->url(GeneralJournals::getUrl())
