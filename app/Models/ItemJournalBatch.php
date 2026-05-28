@@ -62,6 +62,11 @@ class ItemJournalBatch extends Model
         return $this->belongsTo(Location::class);
     }
 
+    public function reasonCode(): BelongsTo
+    {
+        return $this->belongsTo(ReasonCode::class, 'reason_code', 'code');
+    }
+
     /**
      * The journal lines associated with this batch.
      */

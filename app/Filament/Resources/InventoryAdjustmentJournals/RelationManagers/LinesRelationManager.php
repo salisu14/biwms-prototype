@@ -5,6 +5,7 @@ namespace App\Filament\Resources\InventoryAdjustmentJournals\RelationManagers;
 use App\Filament\Resources\InventoryAdjustmentJournals\InventoryAdjustmentJournalResource;
 use App\Models\InventoryAdjustmentLine;
 use App\Models\Item;
+use App\Models\ReasonCode;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -191,17 +192,51 @@ class LinesRelationManager extends RelationManager
                             ->relationship('bin', 'bin_code')
                             ->disabled($isPosted),
 
-                        TextInput::make('reason_code')
+                        Select::make('reason_code')
                             ->default(fn () => $this->getOwnerRecord()?->reason_code)
+                            ->options(fn () => ReasonCode::query()
+                                ->where('blocked', false)
+                                ->orderBy('code')
+                                ->pluck('description', 'code'))
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function (?string $state, Set $set): void {
+                                if (! $state) {
+                                    return;
+                                }
+
+                                $reason = ReasonCode::query()->where('code', $state)->first();
+                                if (! $reason) {
+                                    return;
+                                }
+
+                                if ($reason->default_location_code) {
+                                    $set('location_code', $reason->default_location_code);
+                                }
+
+                                if ($reason->default_bin_code) {
+                                    $set('bin_code', $reason->default_bin_code);
+                                }
+                            })
                             ->disabled($isPosted),
 
                         TextInput::make('serial_no')
                             ->disabled($isPosted)
-                            ->visible(fn (Get $get) => Item::find($get('item_id'))?->item_tracking_code === 'SNALL'),
+                            ->visible(function (Get $get): bool {
+                                $item = Item::find($get('item_id'));
+
+                                return (bool) $item?->itemTrackingCodeDefinition?->requires_serial;
+                            }),
 
                         TextInput::make('lot_no')
                             ->disabled($isPosted)
-                            ->visible(fn (Get $get) => in_array(Item::find($get('item_id'))?->item_tracking_code, ['LOTALL', 'SNALL'])),
+                            ->visible(function (Get $get): bool {
+                                $item = Item::find($get('item_id'));
+                                $trackingCode = $item?->itemTrackingCodeDefinition;
+
+                                return (bool) ($trackingCode?->requires_lot || $trackingCode?->requires_serial);
+                            }),
 
                         DatePicker::make('expiration_date')
                             ->disabled($isPosted),

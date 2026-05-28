@@ -57,4 +57,9 @@ class WarehouseJournalBatch extends Model
     {
         return $this->belongsTo(Zone::class, 'zone_id');
     }
+
+    public function reasonCode(): BelongsTo
+    {
+        return $this->belongsTo(ReasonCode::class, 'reason_code', 'code');
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ItemJournalBatches\Schemas;
 
 use App\Enums\JournalLineType;
 use App\Models\ItemJournalBatch;
+use App\Models\ReasonCode;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -68,10 +69,15 @@ class ItemJournalBatchForm
                             ->options(JournalLineType::class)
                             ->native(false),
 
-                        TextInput::make('reason_code')
+                        Select::make('reason_code')
                             ->label('Reason Code')
-                            ->maxLength(20)
-                            ->placeholder('e.g., CORRECTION'),
+                            ->options(fn () => ReasonCode::query()
+                                ->where('blocked', false)
+                                ->orderBy('code')
+                                ->pluck('description', 'code'))
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('Select a reason code'),
                     ]),
 
                 Section::make('Settings')

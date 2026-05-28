@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\WarehouseJournalBatches\RelationManagers;
 
 use App\Models\Item;
+use App\Models\ReasonCode;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -185,9 +186,14 @@ class LinesRelationManager extends RelationManager
                             ->icon('heroicon-o-magnifying-glass')
                             ->schema([
                                 Grid::make(2)->schema([
-                                    TextInput::make('reason_code')
+                                    Select::make('reason_code')
                                         ->label('Reason Code')
-                                        ->maxLength(20),
+                                        ->options(fn () => ReasonCode::query()
+                                            ->where('blocked', false)
+                                            ->orderBy('code')
+                                            ->pluck('description', 'code'))
+                                        ->searchable()
+                                        ->preload(),
 
                                     TextInput::make('source_code')
                                         ->label('Source Code')

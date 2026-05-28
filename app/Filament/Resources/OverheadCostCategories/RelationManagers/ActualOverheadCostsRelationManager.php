@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\OverheadCostCategories\RelationManagers;
 
-use App\Filament\Resources\OverheadCostCategories\OverheadCostCategoryResource;
+use App\Filament\Resources\ActualOverheadCosts\ActualOverheadCostResource;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\ViewAction;
@@ -14,7 +14,7 @@ class ActualOverheadCostsRelationManager extends RelationManager
 {
     protected static string $relationship = 'actualOverheadCosts';
 
-    protected static ?string $relatedResource = OverheadCostCategoryResource::class;
+    protected static ?string $relatedResource = ActualOverheadCostResource::class;
 
     protected static ?string $title = 'Actual Overhead Costs';
 

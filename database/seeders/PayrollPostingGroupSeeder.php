@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AccountCategory;
 use App\Models\ChartOfAccount;
 use App\Models\PayrollPostingGroup;
 use Exception;
@@ -32,21 +33,29 @@ class PayrollPostingGroupSeeder extends Seeder
      */
     private function getAccounts(): array
     {
-        $map = [
-            'salaries' => '70010',
-            'wages' => '70020',
-            'social_security' => '21010',
-            'tax_payable' => '21020',
-            'net_pay' => '21030',
+        $maps = [
+            'salaries' => ['number' => '70010', 'category' => AccountCategory::OPERATING_EXPENSE],
+            'wages' => ['number' => '70020', 'category' => AccountCategory::OPERATING_EXPENSE],
+            'social_security' => ['number' => '21010', 'category' => AccountCategory::LIABILITY],
+            'tax_payable' => ['number' => '21020', 'category' => AccountCategory::LIABILITY],
+            'net_pay' => ['number' => '21030', 'category' => AccountCategory::LIABILITY],
         ];
 
         $accounts = [];
 
-        foreach ($map as $key => $number) {
+        foreach ($maps as $key => $config) {
+            $number = $config['number'];
             $account = ChartOfAccount::where('account_number', $number)->first();
 
-            if (!$account) {
-                throw new Exception("ChartOfAccount '{$number}' missing for {$key}");
+            if (! $account) {
+                $account = ChartOfAccount::query()
+                    ->where('account_category', $config['category'])
+                    ->orderBy('id')
+                    ->first();
+            }
+
+            if (! $account) {
+                throw new Exception("Unable to resolve account for {$key} (expected number '{$number}' or fallback category '{$config['category']->value}').");
             }
 
             $accounts[$key] = $account->id;

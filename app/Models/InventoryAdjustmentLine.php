@@ -101,6 +101,11 @@ class InventoryAdjustmentLine extends Model
         return $this->belongsTo(GeneralProductPostingGroup::class, 'gen_prod_posting_group', 'code');
     }
 
+    public function reasonCode(): BelongsTo
+    {
+        return $this->belongsTo(ReasonCode::class, 'reason_code', 'code');
+    }
+
     public function getIsPositiveAdjustmentAttribute(): bool
     {
         return $this->entry_type === 'Positive Adjmt.';

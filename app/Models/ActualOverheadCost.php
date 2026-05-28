@@ -56,6 +56,30 @@ class ActualOverheadCost extends Model
      */
     protected static function booted(): void
     {
+        static::saving(function (ActualOverheadCost $cost): void {
+            $cost->cost_type_code = $cost->cost_type_code ? strtoupper(trim((string) $cost->cost_type_code)) : null;
+
+            if ($cost->cost_type_code) {
+                $categoryName = OverheadCostCategory::query()
+                    ->where('code', $cost->cost_type_code)
+                    ->value('name');
+
+                if ($categoryName) {
+                    $cost->cost_type = $categoryName;
+                }
+            }
+
+            $allocated = (float) ($cost->allocated_amount ?? 0);
+            $amount = (float) ($cost->amount ?? 0);
+            if ($allocated <= 0.0001) {
+                $cost->status = 'unallocated';
+            } elseif ($allocated + 0.0001 < $amount) {
+                $cost->status = 'partial';
+            } elseif ($cost->status !== 'variance_posted') {
+                $cost->status = 'fully_allocated';
+            }
+        });
+
         static::creating(function (ActualOverheadCost $cost) {
             if (Auth::check()) {
                 $cost->created_by = Auth::id();

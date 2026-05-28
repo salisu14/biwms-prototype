@@ -50,6 +50,11 @@ class GeneralJournalBatch extends Model
         return $this->belongsTo(ChartOfAccount::class, 'balancing_account_id');
     }
 
+    public function reasonCode(): BelongsTo
+    {
+        return $this->belongsTo(ReasonCode::class, 'reason_code', 'code');
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(GeneralJournalLine::class, 'batch_id');

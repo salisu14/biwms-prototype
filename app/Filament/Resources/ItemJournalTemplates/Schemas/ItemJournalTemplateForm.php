@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ItemJournalTemplates\Schemas;
 
 use App\Enums\JournalLineType;
 use App\Models\ChartOfAccount;
+use App\Models\ReasonCode;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
@@ -73,9 +74,14 @@ class ItemJournalTemplateForm
                                         ->maxLength(20)
                                         ->placeholder('e.g., ITEMJNL'),
 
-                                    TextInput::make('reason_code')
-                                        ->maxLength(20)
-                                        ->placeholder('e.g., CORRECTION'),
+                                    Select::make('reason_code')
+                                        ->options(fn () => ReasonCode::query()
+                                            ->where('blocked', false)
+                                            ->orderBy('code')
+                                            ->pluck('description', 'code'))
+                                        ->searchable()
+                                        ->preload()
+                                        ->placeholder('Select a reason code'),
                                 ]),
 
                                 Section::make('Inventory Posting')

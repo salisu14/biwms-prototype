@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\GeneralJournalBatches\Schemas;
 
 use App\Models\ChartOfAccount;
+use App\Models\ReasonCode;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -54,9 +55,14 @@ class GeneralJournalBatchForm
                             ->preload()
                             ->getOptionLabelFromRecordUsing(fn (ChartOfAccount $record) => "{$record->no} - {$record->name}"),
 
-                        TextInput::make('reason_code')
+                        Select::make('reason_code')
                             ->label('Reason Code')
-                            ->maxLength(10),
+                            ->options(fn () => ReasonCode::query()
+                                ->where('blocked', false)
+                                ->orderBy('code')
+                                ->pluck('description', 'code'))
+                            ->searchable()
+                            ->preload(),
 
                         Toggle::make('copy_dimensions_from_line')
                             ->label('Copy Dimensions from Line')

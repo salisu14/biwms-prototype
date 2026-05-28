@@ -51,4 +51,9 @@ class ProductionJournalBatch extends Model
     {
         return $this->belongsTo(ProductionOrder::class, 'production_order_id');
     }
+
+    public function reasonCode(): BelongsTo
+    {
+        return $this->belongsTo(ReasonCode::class, 'reason_code', 'code');
+    }
 }

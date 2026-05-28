@@ -53,11 +53,20 @@ class PermissionsTableSeeder extends Seeder
             // Factory
             'factory.production_order.view_any', 'factory.production_order.view', 'factory.production_order.create', 'factory.production_order.update', 'factory.production_order.delete',
             'factory.production_bom.view_any', 'factory.production_bom.view', 'factory.production_bom.create', 'factory.production_bom.update', 'factory.production_bom.delete',
+            'factory.production_bom_version.view_any', 'factory.production_bom_version.view', 'factory.production_bom_version.create', 'factory.production_bom_version.update', 'factory.production_bom_version.delete',
             'factory.routing.view_any', 'factory.routing.view', 'factory.routing.create', 'factory.routing.update', 'factory.routing.delete',
+            'factory.routing_version.view_any', 'factory.routing_version.view', 'factory.routing_version.create', 'factory.routing_version.update', 'factory.routing_version.delete',
             'factory.machine_center.view_any', 'factory.machine_center.view', 'factory.machine_center.create', 'factory.machine_center.update', 'factory.machine_center.delete',
+            'factory.work_center.view_any', 'factory.work_center.view', 'factory.work_center.create', 'factory.work_center.update', 'factory.work_center.delete',
+            'factory.work_center_group.view_any', 'factory.work_center_group.view', 'factory.work_center_group.create', 'factory.work_center_group.update', 'factory.work_center_group.delete',
+            'factory.overhead_cost_category.view_any', 'factory.overhead_cost_category.view', 'factory.overhead_cost_category.create', 'factory.overhead_cost_category.update', 'factory.overhead_cost_category.delete',
+            'factory.actual_overhead_cost.view_any', 'factory.actual_overhead_cost.view', 'factory.actual_overhead_cost.create', 'factory.actual_overhead_cost.update', 'factory.actual_overhead_cost.delete',
 
             // HR
             'hr.employee.view_any', 'hr.employee.view', 'hr.employee.create', 'hr.employee.update', 'hr.employee.delete',
+            'hr.attendance.view_any', 'hr.attendance.view', 'hr.attendance.create', 'hr.attendance.update', 'hr.attendance.delete',
+            'hr.attendance.approve', 'hr.attendance.reject', 'hr.attendance.clock',
+            'hr.payroll_period.view_any', 'hr.payroll_period.view', 'hr.payroll_period.create', 'hr.payroll_period.update', 'hr.payroll_period.delete',
             'hr.payroll_document.view_any', 'hr.payroll_document.view', 'hr.payroll_document.create', 'hr.payroll_document.update', 'hr.payroll_document.delete',
             'hr.payroll_posting_group.view_any', 'hr.payroll_posting_group.view', 'hr.payroll_posting_group.create', 'hr.payroll_posting_group.update', 'hr.payroll_posting_group.delete',
             'hr.pay_code.view_any', 'hr.pay_code.view', 'hr.pay_code.create', 'hr.pay_code.update', 'hr.pay_code.delete',

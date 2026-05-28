@@ -50,7 +50,9 @@ class PayrollDocumentForm
                             ->relationship()
                             ->schema([
                                 Select::make('employee_id')
-                                    ->relationship('employee', 'employee_number')
+                                    ->relationship('employee', 'employee_number', fn ($query) => $query
+                                        ->where('is_active', true)
+                                        ->whereNotNull('payroll_posting_group_id'))
                                     ->getOptionLabelFromRecordUsing(fn (Employee $record) => "{$record->employee_number} - {$record->first_name} {$record->last_name}")
                                     ->required()
                                     ->columnSpan(2),

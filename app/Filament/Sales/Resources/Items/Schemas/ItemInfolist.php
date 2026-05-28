@@ -89,7 +89,11 @@ class ItemInfolist
                     ->placeholder('-'),
                 TextEntry::make('shelf_no')
                     ->placeholder('-'),
-                TextEntry::make('item_tracking_code')
+                TextEntry::make('itemTrackingCodeDefinition.code')
+                    ->label('Tracking Code')
+                    ->placeholder('-'),
+                TextEntry::make('itemTrackingCodeDefinition.description')
+                    ->label('Tracking Rule')
                     ->placeholder('-'),
                 TextEntry::make('shelf_life_days')
                     ->numeric()

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WarehouseJournalBatches\Schemas;
 
+use App\Models\ReasonCode;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -71,9 +72,14 @@ class WarehouseJournalBatchForm
                             ->preload()
                             ->helperText('Restrict lines to this zone.'),
 
-                        TextInput::make('reason_code')
+                        Select::make('reason_code')
                             ->label('Default Reason Code')
-                            ->maxLength(20),
+                            ->options(fn () => ReasonCode::query()
+                                ->where('blocked', false)
+                                ->orderBy('code')
+                                ->pluck('description', 'code'))
+                            ->searchable()
+                            ->preload(),
 
                         Toggle::make('copy_from_warehouse_activity')
                             ->label('Copy from Warehouse Activity')

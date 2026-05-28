@@ -2,20 +2,18 @@
 
 namespace App\Services;
 
+use App\Enums\CalculationMethod;
+use App\Enums\PayCodeType;
+use App\Enums\PayrollStatus;
+use App\Models\AttendanceLedgerEntry;
+use App\Models\Employee;
+use App\Models\EmployeePayCode;
+use App\Models\PayCode;
 use App\Models\PayrollDocument;
 use App\Models\PayrollLine;
-use App\Models\Employee;
-use App\Models\PayCode;
-use App\Models\EmployeePayCode;
 use App\Models\TaxTable;
-use App\Models\SocialSecurityTier;
-use App\Models\EmployeeYtdBalance;
-use App\Enums\PayCodeType;
-use App\Enums\CalculationMethod;
-use App\Enums\PayrollStatus;
-use Illuminate\Support\Facades\DB;
 use Exception;
-use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class PayrollCalculationService
 {
@@ -29,7 +27,7 @@ class PayrollCalculationService
     public function calculate(PayrollDocument $document): void
     {
         if ($document->status === PayrollStatus::POSTED) {
-            throw new Exception("Cannot recalculate a posted document.");
+            throw new Exception('Cannot recalculate a posted document.');
         }
 
         DB::transaction(function () use ($document) {
@@ -45,7 +43,7 @@ class PayrollCalculationService
 
             // 3. Update Document Totals
             $this->updateDocumentTotals($document);
-            
+
             // 4. Update Status to CALCULATED
             $document->status = PayrollStatus::CALCULATED;
             $document->save();
@@ -64,7 +62,7 @@ class PayrollCalculationService
         foreach ($payCodes as $payCode) {
             $amount = $this->resolveAmount($employee, $payCode, $document);
 
-            if ($amount <= 0 && !$payCode->is_statutory) {
+            if ($amount <= 0 && ! $payCode->is_statutory) {
                 continue;
             }
 
@@ -91,7 +89,7 @@ class PayrollCalculationService
         }
 
         // 2. Calculate Statutory Deductions using TaxCalculationService
-        
+
         // Social Security (e.g., NSSF)
         $ssResult = $this->taxService->calculateSocialSecurity($taxableEarnings, 'NSSF');
         $this->createStatutoryLine($document, $employee, 'NSSF', $ssResult['employee']);
@@ -103,7 +101,7 @@ class PayrollCalculationService
         // Tax (PAYE)
         // Taxable income is usually Gross - Social Security (Employee portion)
         $netTaxable = $this->taxService->calculateTaxableIncome($taxableEarnings, [
-            ['amount' => $ssResult['employee'], 'reduces_taxable_income' => true]
+            ['amount' => $ssResult['employee'], 'reduces_taxable_income' => true],
         ]);
 
         // Find active Tax Table for the jurisdiction
@@ -113,9 +111,9 @@ class PayrollCalculationService
 
         if ($taxTable) {
             $taxAmount = $this->taxService->calculateProgressiveTax($netTaxable, $taxTable->id);
-            
+
             // Apply Relief (Personal Relief for KE = 2400)
-            $taxAmount = max(0, $taxAmount - 2400); 
+            $taxAmount = max(0, $taxAmount - 2400);
 
             $this->createStatutoryLine($document, $employee, 'PAYE', $taxAmount);
         }
@@ -127,14 +125,18 @@ class PayrollCalculationService
         $override = EmployeePayCode::where('employee_id', $employee->id)
             ->where('pay_code_id', $payCode->id)
             ->where('effective_date', '<=', $document->period_end)
-            ->where(function($q) use ($document) {
+            ->where(function ($q) use ($document) {
                 $q->whereNull('end_date')->orWhere('end_date', '>=', $document->period_start);
             })
             ->first();
 
         if ($override) {
-            if ($override->amount) return (float) $override->amount;
-            if ($override->percentage) return $this->calculatePercentage($employee, $override->percentage);
+            if ($override->amount) {
+                return (float) $override->amount;
+            }
+            if ($override->percentage) {
+                return $this->calculatePercentage($employee, $override->percentage);
+            }
         }
 
         // 2. Check Global PayCode defaults
@@ -147,10 +149,23 @@ class PayrollCalculationService
         }
 
         if ($payCode->calculation_method === CalculationMethod::HOURLY) {
-            return (float) ($payCode->default_amount * $document->working_days * 8);
+            $hoursWorked = $this->getApprovedAttendanceHours($employee, $document);
+            $fallbackHours = (float) ($document->working_days * 8);
+            $hours = $hoursWorked > 0 ? $hoursWorked : $fallbackHours;
+
+            return (float) (($payCode->default_amount ?? 0) * $hours);
         }
 
         return 0;
+    }
+
+    private function getApprovedAttendanceHours(Employee $employee, PayrollDocument $document): float
+    {
+        return (float) AttendanceLedgerEntry::query()
+            ->where('employee_id', $employee->id)
+            ->where('status', 'APPROVED')
+            ->whereBetween('attendance_date', [$document->period_start, $document->period_end])
+            ->sum('worked_hours');
     }
 
     private function calculatePercentage(Employee $employee, float $percentage): float
@@ -160,10 +175,14 @@ class PayrollCalculationService
 
     private function createStatutoryLine(PayrollDocument $document, Employee $employee, string $code, float $amount): void
     {
-        if ($amount <= 0) return;
+        if ($amount <= 0) {
+            return;
+        }
 
         $payCode = PayCode::where('code', $code)->first();
-        if (!$payCode) return;
+        if (! $payCode) {
+            return;
+        }
 
         PayrollLine::create([
             'payroll_document_id' => $document->id,

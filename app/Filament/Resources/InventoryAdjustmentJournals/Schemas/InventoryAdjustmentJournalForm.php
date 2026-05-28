@@ -75,7 +75,8 @@ class InventoryAdjustmentJournalForm
 
                             Select::make('reason_code')
                                 ->label('Reason Code')
-                                ->relationship('reasonCode', 'code')
+                                ->relationship('reasonCode', 'code', fn ($query) => $query->where('blocked', false))
+                                ->getOptionLabelFromRecordUsing(fn (ReasonCode $record) => "{$record->code} - {$record->description}")
                                 ->preload()
                                 ->searchable()
                                 ->live()

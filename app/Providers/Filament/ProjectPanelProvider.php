@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\MyAttendance;
 use App\Filament\Project\Widgets\ProjectStatsOverview;
 use App\Filament\Resources\CapExProjects\CapExProjectResource;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
@@ -40,6 +41,7 @@ class ProjectPanelProvider extends PanelProvider
             ])
             ->pages([
                 Dashboard::class,
+                MyAttendance::class,
             ])
             ->widgets([
                 ProjectStatsOverview::class,

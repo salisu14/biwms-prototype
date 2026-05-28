@@ -219,6 +219,11 @@ class Item extends Model
         return $this->belongsTo(Bin::class, 'inventory_bin_id');
     }
 
+    public function itemTrackingCodeDefinition(): BelongsTo
+    {
+        return $this->belongsTo(ItemTrackingCode::class, 'item_tracking_code', 'code');
+    }
+
     public function skus(): HasMany
     {
         return $this->hasMany(ItemSku::class);

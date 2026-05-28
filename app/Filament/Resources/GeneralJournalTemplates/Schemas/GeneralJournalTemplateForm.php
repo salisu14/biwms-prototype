@@ -4,6 +4,7 @@ namespace App\Filament\Resources\GeneralJournalTemplates\Schemas;
 
 use App\Enums\JournalTemplateType;
 use App\Models\ChartOfAccount;
+use App\Models\ReasonCode;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -67,9 +68,14 @@ class GeneralJournalTemplateForm
                             ->label('Source Code')
                             ->maxLength(10),
 
-                        TextInput::make('reason_code')
+                        Select::make('reason_code')
                             ->label('Reason Code')
-                            ->maxLength(10),
+                            ->options(fn () => ReasonCode::query()
+                                ->where('blocked', false)
+                                ->orderBy('code')
+                                ->pluck('description', 'code'))
+                            ->searchable()
+                            ->preload(),
                     ]),
 
                 Section::make('Posting Controls')

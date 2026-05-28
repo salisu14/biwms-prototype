@@ -391,9 +391,13 @@ class ItemForm
                                         ->label('Default Bin (Legacy)')
                                         ->placeholder('Pick/Put-away default'),
 
-                                    TextInput::make('item_tracking_code')
+                                    Select::make('item_tracking_code')
                                         ->label('Tracking Code')
-                                        ->placeholder('Serial/Lot rule mapping'),
+                                        ->relationship('itemTrackingCodeDefinition', 'description', fn ($query) => $query->orderBy('code'))
+                                        ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->code} - {$record->description}")
+                                        ->searchable()
+                                        ->preload()
+                                        ->placeholder('No tracking'),
                                 ]),
 
                                 Fieldset::make('Physical Constraints')

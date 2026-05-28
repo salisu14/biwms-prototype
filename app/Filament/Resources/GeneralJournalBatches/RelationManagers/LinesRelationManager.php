@@ -5,6 +5,7 @@ namespace App\Filament\Resources\GeneralJournalBatches\RelationManagers;
 use App\Enums\JournalLineStatus;
 use App\Models\ChartOfAccount;
 use App\Models\DimensionValue;
+use App\Models\ReasonCode;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -205,9 +206,14 @@ class LinesRelationManager extends RelationManager
                                         ->label('Source Code')
                                         ->maxLength(10),
 
-                                    TextInput::make('reason_code')
+                                    Select::make('reason_code')
                                         ->label('Reason Code')
-                                        ->maxLength(10),
+                                        ->options(fn () => ReasonCode::query()
+                                            ->where('blocked', false)
+                                            ->orderBy('code')
+                                            ->pluck('description', 'code'))
+                                        ->searchable()
+                                        ->preload(),
 
                                     Textarea::make('comment')
                                         ->rows(2)

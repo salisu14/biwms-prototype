@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\MyAttendance;
 use App\Filament\Resources\MaintenanceContracts\MaintenanceContractResource;
 use App\Filament\Resources\MaintenanceContractSchedules\MaintenanceContractScheduleResource;
 use App\Filament\Service\Pages\DispatchBoard;
@@ -39,6 +40,7 @@ class ServicePanelProvider extends PanelProvider
             ])
             ->pages([
                 DispatchBoard::class,
+                MyAttendance::class,
             ])
             ->widgets([
                 AccountWidget::class,

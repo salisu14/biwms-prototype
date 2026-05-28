@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProductionJournalBatches\Schemas;
 
 use App\Enums\JournalBatchStatus;
 use App\Models\ProductionJournalBatch;
+use App\Models\ReasonCode;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
@@ -61,9 +62,15 @@ class ProductionJournalBatchForm
                             ->searchable()
                             ->preload(),
 
-                        TextInput::make('reason_code')
+                        Select::make('reason_code')
                             ->label('Reason Code')
-                            ->placeholder('e.g., OVERRUN'),
+                            ->options(fn () => ReasonCode::query()
+                                ->where('blocked', false)
+                                ->orderBy('code')
+                                ->pluck('description', 'code'))
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('Select a reason code'),
 
                         Toggle::make('auto_post_on_release')
                             ->label('Auto-Post on Release')

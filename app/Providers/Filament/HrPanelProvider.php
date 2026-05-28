@@ -3,9 +3,12 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Hr\Widgets\HrStatsOverview;
+use App\Filament\Pages\MyAttendance;
+use App\Filament\Resources\AttendanceLedgerEntries\AttendanceLedgerEntryResource;
 use App\Filament\Resources\Employees\EmployeeResource;
 use App\Filament\Resources\PayCodes\PayCodeResource;
 use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
+use App\Filament\Resources\PayrollPeriods\PayrollPeriodResource;
 use App\Filament\Resources\PayrollPostingGroups\PayrollPostingGroupResource;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -38,12 +41,15 @@ class HrPanelProvider extends PanelProvider
             ->favicon(asset('favicon.ico'))
             ->resources([
                 EmployeeResource::class,
+                AttendanceLedgerEntryResource::class,
                 PayrollDocumentResource::class,
+                PayrollPeriodResource::class,
                 PayrollPostingGroupResource::class,
                 PayCodeResource::class,
             ])
             ->pages([
                 Dashboard::class,
+                MyAttendance::class,
             ])
             ->widgets([
                 HrStatsOverview::class,

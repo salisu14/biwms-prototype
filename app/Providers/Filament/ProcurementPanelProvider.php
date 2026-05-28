@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\MyAttendance;
 use App\Filament\Procurement\Widgets\ProcurementStatsOverview;
 use App\Filament\Resources\BlanketPurchaseOrders\BlanketPurchaseOrderResource;
 use App\Filament\Resources\PurchaseCreditMemos\PurchaseCreditMemoResource;
@@ -50,6 +51,7 @@ class ProcurementPanelProvider extends PanelProvider
             ])
             ->pages([
                 Dashboard::class,
+                MyAttendance::class,
             ])
             ->widgets([
                 ProcurementStatsOverview::class,

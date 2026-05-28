@@ -2,8 +2,13 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\MyAttendance;
+use App\Filament\Resources\InventoryAdjustmentJournals\InventoryAdjustmentJournalResource;
 use App\Filament\Resources\Items\ItemResource;
+use App\Filament\Resources\PhysicalInventoryJournals\PhysicalInventoryJournalResource;
 use App\Filament\Resources\WarehouseActivities\WarehouseActivityResource;
+use App\Filament\Resources\WarehouseJournalBatches\WarehouseJournalBatchResource;
+use App\Filament\Resources\WarehouseJournalTemplates\WarehouseJournalTemplateResource;
 use App\Filament\Resources\WarehousePutaways\WarehousePutawayResource;
 use App\Filament\Resources\WarehouseReceipts\WarehouseReceiptResource;
 use App\Filament\Resources\WarehouseShipments\WarehouseShipmentResource;
@@ -42,10 +47,15 @@ class WarehousePanelProvider extends PanelProvider
                 WarehouseActivityResource::class,
                 WarehousePutawayResource::class,
                 WarehouseShipmentResource::class,
+                WarehouseJournalBatchResource::class,
+                WarehouseJournalTemplateResource::class,
+                InventoryAdjustmentJournalResource::class,
+                PhysicalInventoryJournalResource::class,
                 ItemResource::class,
             ])
             ->pages([
                 Dashboard::class,
+                MyAttendance::class,
             ])
             ->widgets([
                 WarehouseStatsOverview::class,

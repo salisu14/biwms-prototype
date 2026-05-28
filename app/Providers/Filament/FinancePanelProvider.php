@@ -7,6 +7,7 @@ use App\Filament\Pages\Finance\BalanceSheetReport;
 use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\Finance\GroupSummaryReport;
 use App\Filament\Pages\Finance\ProfitAndLossReport;
+use App\Filament\Pages\MyAttendance;
 use App\Filament\Resources\BankAccounts\BankAccountResource;
 use App\Filament\Resources\CurrencyAdjustmentLedgers\CurrencyAdjustmentLedgerResource;
 use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
@@ -52,6 +53,7 @@ class FinancePanelProvider extends PanelProvider
             ])
             ->pages([
                 Dashboard::class,
+                MyAttendance::class,
                 GeneralJournals::class,
                 ProfitAndLossReport::class,
                 GroupSummaryReport::class,

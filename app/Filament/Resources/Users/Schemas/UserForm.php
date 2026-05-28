@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Users\Schemas;
 
+use App\Models\Employee;
+use App\Models\User;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
@@ -35,8 +37,25 @@ class UserForm
                     ->schema([
                         Select::make('employee_id')
                             ->label('Link to Employee')
-                            ->relationship('employee', 'first_name') // We'll improve this to full name shortly
-                            ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->first_name} {$record->last_name} ({$record->employee_number})")
+                            ->options(function (?User $record): array {
+                                return Employee::query()
+                                    ->where('is_active', true)
+                                    ->where(function ($query) use ($record): void {
+                                        $query->whereDoesntHave('user');
+
+                                        if ($record?->employee_id) {
+                                            $query->orWhereKey($record->employee_id);
+                                        }
+                                    })
+                                    ->orderBy('employee_number')
+                                    ->get()
+                                    ->mapWithKeys(fn (Employee $employee): array => [
+                                        $employee->id => "{$employee->first_name} {$employee->last_name} ({$employee->employee_number})",
+                                    ])
+                                    ->all();
+                            })
+                            ->required()
+                            ->helperText('All application users must be linked to one active employee.')
                             ->searchable()
                             ->preload(),
 
