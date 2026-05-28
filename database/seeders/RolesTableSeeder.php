@@ -17,16 +17,21 @@ class RolesTableSeeder extends Seeder
         $roles = [
             ['name' => 'super_admin', 'guard_name' => 'web'],
             ['name' => 'admin', 'guard_name' => 'web'],
+            ['name' => 'business-manager', 'guard_name' => 'web'],
             ['name' => 'sales-representative', 'guard_name' => 'web'],
             ['name' => 'sales-manager', 'guard_name' => 'web'],
             ['name' => 'finance-accountant', 'guard_name' => 'web'],
             ['name' => 'finance-manager', 'guard_name' => 'web'],
+            ['name' => 'purchasing-agent', 'guard_name' => 'web'],
+            ['name' => 'purchasing-manager', 'guard_name' => 'web'],
             ['name' => 'warehouse-worker', 'guard_name' => 'web'],
             ['name' => 'warehouse-manager', 'guard_name' => 'web'],
             ['name' => 'factory-operator', 'guard_name' => 'web'],
             ['name' => 'factory-manager', 'guard_name' => 'web'],
             ['name' => 'hr-officer', 'guard_name' => 'web'],
             ['name' => 'hr-manager', 'guard_name' => 'web'],
+            ['name' => 'project-manager', 'guard_name' => 'web'],
+            ['name' => 'service-manager', 'guard_name' => 'web'],
         ];
 
         foreach ($roles as $role) {

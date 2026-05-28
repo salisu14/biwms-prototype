@@ -61,6 +61,34 @@ class PermissionsTableSeeder extends Seeder
             'hr.payroll_posting_group.view_any', 'hr.payroll_posting_group.view', 'hr.payroll_posting_group.create', 'hr.payroll_posting_group.update', 'hr.payroll_posting_group.delete',
             'hr.pay_code.view_any', 'hr.pay_code.view', 'hr.pay_code.create', 'hr.pay_code.update', 'hr.pay_code.delete',
 
+            // Procurement
+            'procurement.vendor.view_any', 'procurement.vendor.view', 'procurement.vendor.create', 'procurement.vendor.update', 'procurement.vendor.delete',
+            'procurement.purchase_quote.view_any', 'procurement.purchase_quote.view', 'procurement.purchase_quote.create', 'procurement.purchase_quote.update', 'procurement.purchase_quote.delete',
+            'procurement.purchase_order.view_any', 'procurement.purchase_order.view', 'procurement.purchase_order.create', 'procurement.purchase_order.update', 'procurement.purchase_order.delete',
+            'procurement.purchase_receipt.view_any', 'procurement.purchase_receipt.view', 'procurement.purchase_receipt.create', 'procurement.purchase_receipt.update', 'procurement.purchase_receipt.delete',
+            'procurement.purchase_invoice.view_any', 'procurement.purchase_invoice.view', 'procurement.purchase_invoice.create', 'procurement.purchase_invoice.update', 'procurement.purchase_invoice.delete',
+            'procurement.purchase_credit_memo.view_any', 'procurement.purchase_credit_memo.view', 'procurement.purchase_credit_memo.create', 'procurement.purchase_credit_memo.update', 'procurement.purchase_credit_memo.delete',
+            'procurement.blanket_order.view_any', 'procurement.blanket_order.view', 'procurement.blanket_order.create', 'procurement.blanket_order.update', 'procurement.blanket_order.delete',
+
+            // Project
+            'project.capex_project.view_any', 'project.capex_project.view', 'project.capex_project.create', 'project.capex_project.update', 'project.capex_project.delete',
+
+            // Service
+            'service.maintenance_contract.view_any', 'service.maintenance_contract.view', 'service.maintenance_contract.create', 'service.maintenance_contract.update', 'service.maintenance_contract.delete',
+            'service.dispatch.view_any', 'service.dispatch.view', 'service.dispatch.create', 'service.dispatch.update', 'service.dispatch.delete',
+
+            // Backward compatible procurement keys
+            'view:any:vendor', 'view:vendor', 'create:vendor', 'edit:vendor', 'delete:vendor',
+            'view:any:purchase_quote', 'view:purchase_quote', 'create:purchase_quote', 'edit:purchase_quote', 'delete:purchase_quote',
+            'view:any:purchase_order', 'view:purchase_order', 'create:purchase_order', 'edit:purchase_order', 'delete:purchase_order',
+            'view:any:purchase_receipt', 'view:purchase_receipt', 'create:purchase_receipt', 'edit:purchase_receipt', 'delete:purchase_receipt',
+            'view:any:purchase_invoice', 'view:purchase_invoice', 'create:purchase_invoice', 'edit:purchase_invoice', 'delete:purchase_invoice',
+            'view:any:purchase_credit_memo', 'view:purchase_credit_memo', 'create:purchase_credit_memo', 'edit:purchase_credit_memo', 'delete:purchase_credit_memo',
+            'view:any:blanket_order', 'view:blanket_order', 'create:blanket_order', 'edit:blanket_order', 'delete:blanket_order',
+            'view:any:capex_project', 'view:capex_project', 'create:capex_project', 'edit:capex_project', 'delete:capex_project',
+            'view:any:maintenance_contract', 'view:maintenance_contract', 'create:maintenance_contract', 'edit:maintenance_contract', 'delete:maintenance_contract',
+            'view:any:service_dispatch', 'view:service_dispatch', 'create:service_dispatch', 'edit:service_dispatch', 'delete:service_dispatch',
+
             // Backward compatible colon keys
             'view:any:customer', 'view:customer', 'create:customer', 'edit:customer', 'delete:customer',
             'view:any:item', 'view:item', 'create:item', 'edit:item', 'delete:item',

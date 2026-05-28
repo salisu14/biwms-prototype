@@ -3,7 +3,10 @@
 use App\Http\Middleware\EnsureFactoryRole;
 use App\Http\Middleware\EnsureFinanceRole;
 use App\Http\Middleware\EnsureHrRole;
+use App\Http\Middleware\EnsureProcurementRole;
+use App\Http\Middleware\EnsureProjectRole;
 use App\Http\Middleware\EnsureSalesRole;
+use App\Http\Middleware\EnsureServiceRole;
 use App\Http\Middleware\EnsureWarehouseRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -20,7 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'factory' => EnsureFactoryRole::class,
             'finance' => EnsureFinanceRole::class,
             'hr' => EnsureHrRole::class,
+            'project' => EnsureProjectRole::class,
+            'procurement' => EnsureProcurementRole::class,
             'sales' => EnsureSalesRole::class,
+            'service' => EnsureServiceRole::class,
             'warehouse' => EnsureWarehouseRole::class,
         ]);
     })

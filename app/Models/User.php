@@ -46,12 +46,15 @@ class User extends Authenticatable implements FilamentUser
         }
 
         $panelRoles = [
-            'admin' => ['super_admin', 'admin'],
+            'admin' => ['super_admin', 'admin', 'business-manager'],
             'sales' => ['super_admin', 'admin', 'sales-representative', 'sales-manager'],
             'finance' => ['super_admin', 'admin', 'finance-accountant', 'finance-manager'],
+            'procurement' => ['super_admin', 'admin', 'purchasing-agent', 'purchasing-manager'],
+            'project' => ['super_admin', 'admin', 'project-manager'],
             'warehouse' => ['super_admin', 'admin', 'warehouse-worker', 'warehouse-manager'],
             'factory' => ['super_admin', 'admin', 'factory-operator', 'factory-manager'],
             'hr' => ['super_admin', 'admin', 'hr-officer', 'hr-manager'],
+            'service' => ['super_admin', 'admin', 'service-manager'],
         ];
 
         $allowedRoles = $panelRoles[$panel->getId()] ?? ['super_admin', 'admin'];

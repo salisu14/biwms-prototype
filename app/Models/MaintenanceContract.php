@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\MaintenanceContractBillingCycle;
 use App\Enums\MaintenanceContractStatus;
 use App\Enums\MaintenanceContractType;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -112,6 +113,11 @@ class MaintenanceContract extends Model
         return $this->belongsTo(ChartOfAccount::class, 'prepaid_account_id');
     }
 
+    public function accrualAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'accrual_account_id');
+    }
+
     public function faClass(): BelongsTo
     {
         return $this->belongsTo(FAClass::class, 'fa_class_id');
@@ -191,7 +197,7 @@ class MaintenanceContract extends Model
 
     public function canLogIncident(): bool
     {
-        if (!$this->status->canCreateLogs()) {
+        if (! $this->status->canCreateLogs()) {
             return false;
         }
 
@@ -213,19 +219,19 @@ class MaintenanceContract extends Model
         return max(0, (float) $this->contract_value - (float) $this->total_cost_incurred);
     }
 
-    public function getNextBillingDate(): ?\Carbon\Carbon
+    public function getNextBillingDate(): ?Carbon
     {
         $lastBilling = $this->billings()->whereNotNull('actual_invoice_date')->latest('billing_date')->first();
 
-        if (!$lastBilling) {
-            return \Carbon\Carbon::parse($this->start_date);
+        if (! $lastBilling) {
+            return Carbon::parse($this->start_date);
         }
 
-        return match($this->billing_cycle) {
-            MaintenanceContractBillingCycle::MONTHLY => \Carbon\Carbon::parse($lastBilling->billing_date)->addMonth(),
-            MaintenanceContractBillingCycle::QUARTERLY => \Carbon\Carbon::parse($lastBilling->billing_date)->addQuarter(),
-            MaintenanceContractBillingCycle::SEMI_ANNUAL => \Carbon\Carbon::parse($lastBilling->billing_date)->addMonths(6),
-            MaintenanceContractBillingCycle::ANNUAL => \Carbon\Carbon::parse($lastBilling->billing_date)->addYear(),
+        return match ($this->billing_cycle) {
+            MaintenanceContractBillingCycle::MONTHLY => Carbon::parse($lastBilling->billing_date)->addMonth(),
+            MaintenanceContractBillingCycle::QUARTERLY => Carbon::parse($lastBilling->billing_date)->addQuarter(),
+            MaintenanceContractBillingCycle::SEMI_ANNUAL => Carbon::parse($lastBilling->billing_date)->addMonths(6),
+            MaintenanceContractBillingCycle::ANNUAL => Carbon::parse($lastBilling->billing_date)->addYear(),
             default => null,
         };
     }
@@ -243,7 +249,7 @@ class MaintenanceContract extends Model
     {
         $this->update([
             'status' => MaintenanceContractStatus::TERMINATED,
-            'special_terms' => $this->special_terms . "\n[TERMINATED: " . now()->format('Y-m-d') . "] " . $reason,
+            'special_terms' => $this->special_terms."\n[TERMINATED: ".now()->format('Y-m-d').'] '.$reason,
         ]);
     }
 
@@ -251,8 +257,8 @@ class MaintenanceContract extends Model
     {
         // Create renewal contract
         return self::create([
-            'contract_no' => $this->contract_no . '-R' . now()->format('Y'),
-            'description' => $this->description . ' (Renewal)',
+            'contract_no' => $this->contract_no.'-R'.now()->format('Y'),
+            'description' => $this->description.' (Renewal)',
             'contract_type' => $this->contract_type,
             'status' => MaintenanceContractStatus::DRAFT,
             'vendor_id' => $this->vendor_id,
