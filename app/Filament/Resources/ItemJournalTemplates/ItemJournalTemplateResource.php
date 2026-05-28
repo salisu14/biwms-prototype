@@ -24,9 +24,9 @@ class ItemJournalTemplateResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'description';
 
-    protected static string|null|\UnitEnum $navigationGroup = 'Inventory';
+    protected static string|null|\UnitEnum $navigationGroup = 'Finance Setup';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 13;
 
     protected static ?string $navigationLabel = 'Item Journal Templates';
 

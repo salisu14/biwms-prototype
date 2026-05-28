@@ -9,6 +9,7 @@ use App\Models\GeneralJournalTemplate;
 use App\Models\ItemJournalBatch;
 use App\Models\ItemJournalTemplate;
 use App\Models\ProductionJournalBatch;
+use App\Models\ProductionJournalTemplate;
 use App\Models\RecurringJournalBatch;
 use App\Models\RecurringJournalTemplate;
 use App\Models\WarehouseJournalBatch;
@@ -41,6 +42,7 @@ class GeneralJournals extends Page
                 'fa_journal_templates' => FAJournalTemplate::count(),
                 'fa_journal_batches' => FAJournalBatch::count(),
                 'prod_journal_batches' => ProductionJournalBatch::count(),
+                'prod_journal_templates' => ProductionJournalTemplate::count(),
                 'recurring_journal_batches' => RecurringJournalBatch::count(),
                 'recurring_journal_templates' => RecurringJournalTemplate::count(),
                 'warehouse_journal_batches' => WarehouseJournalBatch::count(),

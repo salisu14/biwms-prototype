@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use UnitEnum;
 
 class FAJournalTemplateResource extends Resource
 {
@@ -24,7 +25,11 @@ class FAJournalTemplateResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
-    protected static string|null|\UnitEnum $navigationGroup = 'FA Journal';
+    protected static string|UnitEnum|null $navigationGroup = 'Finance Setup';
+
+    protected static ?int $navigationSort = 12;
+
+    protected static ?string $navigationLabel = 'FA Journal Templates';
 
     // Use this property to override the default URL generation
     protected static ?string $slug = 'fa-journal-templates';

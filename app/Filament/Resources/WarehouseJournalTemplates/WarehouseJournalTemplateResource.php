@@ -23,7 +23,7 @@ class WarehouseJournalTemplateResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'Finance Setup';
 
-    protected static ?int $navigationSort = 12;
+    protected static ?int $navigationSort = 14;
 
     protected static ?string $navigationLabel = 'Warehouse J. Templates';
 

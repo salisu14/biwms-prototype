@@ -95,7 +95,7 @@ class CashReceiptLineForm
                     ->schema([
                         Select::make('bank_account_id')
                             ->label('Bank Account')
-                            ->relationship('bankAccount', 'name')
+                            ->relationship('bankAccount', 'account_name')
                             ->required()
                             ->searchable()
                             ->preload(),

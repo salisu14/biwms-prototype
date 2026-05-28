@@ -12,6 +12,7 @@ use App\Filament\Resources\BankAccounts\BankAccountResource;
 use App\Filament\Resources\CurrencyAdjustmentLedgers\CurrencyAdjustmentLedgerResource;
 use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
 use App\Filament\Resources\GeneralJournalBatches\GeneralJournalBatchResource;
+use App\Filament\Resources\JournalLines\JournalLineResource;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use Filament\Http\Middleware\Authenticate;
@@ -48,6 +49,7 @@ class FinancePanelProvider extends PanelProvider
                 BankAccountResource::class,
                 SalesInvoiceResource::class,
                 GeneralJournalBatchResource::class,
+                JournalLineResource::class,
                 CurrencyAdjustmentLedgerResource::class,
                 CustomerLedgerEntryResource::class,
             ])

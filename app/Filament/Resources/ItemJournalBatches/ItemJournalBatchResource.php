@@ -15,12 +15,19 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use UnitEnum;
 
 class ItemJournalBatchResource extends Resource
 {
     protected static ?string $model = ItemJournalBatch::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Finance';
+
+    protected static ?int $navigationSort = 25;
+
+    protected static ?string $navigationLabel = 'Item Journals';
 
     protected static ?string $recordTitleAttribute = 'description';
 
@@ -42,7 +49,7 @@ class ItemJournalBatchResource extends Resource
     public static function getRelations(): array
     {
         return [
-                RelationManagers\LinesRelationManager::class,
+            RelationManagers\LinesRelationManager::class,
         ];
     }
 

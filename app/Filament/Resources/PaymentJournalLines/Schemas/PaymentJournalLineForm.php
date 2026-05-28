@@ -96,7 +96,7 @@ class PaymentJournalLineForm
                     ->schema([
                         Select::make('bank_account_id')
                             ->label('Bank Account')
-                            ->relationship('bankAccount', 'name')
+                            ->relationship('bankAccount', 'account_name')
                             ->required()
                             ->searchable()
                             ->preload(),
@@ -126,14 +126,12 @@ class PaymentJournalLineForm
                         Toggle::make('exported_to_payment_jnl')
                             ->label('Exported to Bank File')
                             ->default(false)
-                            ->inline(false)
-                            ->readOnly(),
+                            ->inline(false),
 
                         Toggle::make('payment_processed')
                             ->label('Payment Processed')
                             ->default(false)
-                            ->inline(false)
-                            ->readOnly(),
+                            ->inline(false),
                     ]),
             ]);
     }

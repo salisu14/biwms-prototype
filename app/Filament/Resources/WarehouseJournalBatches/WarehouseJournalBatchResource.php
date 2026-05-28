@@ -26,7 +26,7 @@ class WarehouseJournalBatchResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'Finance';
 
-    protected static ?int $navigationSort = 22;
+    protected static ?int $navigationSort = 23;
 
     protected static ?string $navigationLabel = 'Warehouse Journals';
 

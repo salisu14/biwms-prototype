@@ -1,4 +1,7 @@
 <x-filament::page>
+    @php
+        $panelPath = trim(filament()->getCurrentPanel()->getPath(), '/');
+    @endphp
     <style>
         .hub-container {
             display: flex;
@@ -166,7 +169,7 @@
                 <span>General Journal</span>
             </div>
             <div class="hub-grid">
-                <a href="/admin/general-journal-batches" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/general-journal-batches') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-pencil-square style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['gen_journal_batches'] }} Batches</div>
@@ -180,17 +183,31 @@
                     </div>
                 </a>
 
-                <a href="/admin/general-journal-templates" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/general-journal-templates') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-clipboard-document-list style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['gen_journal_templates'] }} Templates</div>
                     </div>
                     <div class="card-body">
-                        <h3>G/J Templates</h3>
+                        <h3>General Journal Templates</h3>
                         <p>Configure journal types, number series, balancing rules, and posting controls.</p>
                     </div>
                     <div class="card-footer text-blue-600 dark:text-blue-400">
                         Manage Templates <x-heroicon-m-arrow-right class="w-3 h-3" />
+                    </div>
+                </a>
+
+                <a href="{{ url('/' . $panelPath . '/journal-lines') }}" class="hub-card">
+                    <div class="card-top">
+                        <div class="card-icon"><x-heroicon-o-rectangle-stack style="width: 1rem; height: 1rem;" /></div>
+                        <div class="counter">Entries</div>
+                    </div>
+                    <div class="card-body">
+                        <h3>Journal Lines</h3>
+                        <p>View and manage posted and draft journal lines in one place for detailed review.</p>
+                    </div>
+                    <div class="card-footer text-blue-600 dark:text-blue-400">
+                        Open Journal Lines <x-heroicon-m-arrow-right class="w-3 h-3" />
                     </div>
                 </a>
             </div>
@@ -203,13 +220,13 @@
                 <span>Item Journal</span>
             </div>
             <div class="hub-grid">
-                <a href="/admin/item-journal-batches" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/item-journal-batches') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-inbox-arrow-down style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['item_journal_batches'] }} Batches</div>
                     </div>
                     <div class="card-body">
-                        <h3>Item Journal</h3>
+                        <h3>Item Journals</h3>
                         <p>Post inventory adjustments, positive/negative corrections, and item reclassifications.</p>
                     </div>
                     <div class="card-footer text-amber-600 dark:text-amber-400">
@@ -217,13 +234,13 @@
                     </div>
                 </a>
 
-                <a href="/admin/item-journal-templates" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/item-journal-templates') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-clipboard-document-list style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['item_journal_templates'] }} Templates</div>
                     </div>
                     <div class="card-body">
-                        <h3>Item J. Templates</h3>
+                        <h3>Item Journal Templates</h3>
                         <p>Define item journal types, entry restrictions, and default locations.</p>
                     </div>
                     <div class="card-footer text-amber-600 dark:text-amber-400">
@@ -240,13 +257,13 @@
                 <span>Fixed Asset Journal</span>
             </div>
             <div class="hub-grid">
-                <a href="/admin/fa-journal-batches" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/fa-journal-batches') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-adjustments-horizontal style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['fa_journal_batches'] }} Batches</div>
                     </div>
                     <div class="card-body">
-                        <h3>FA Journal</h3>
+                        <h3>FA Journals</h3>
                         <p>Post acquisition, depreciation, disposal, and write-down entries for fixed assets.</p>
                     </div>
                     <div class="card-footer text-violet-600 dark:text-violet-400">
@@ -254,13 +271,13 @@
                     </div>
                 </a>
 
-                <a href="/admin/fa-journal-templates" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/fa-journal-templates') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-clipboard-document-list style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['fa_journal_templates'] }} Templates</div>
                     </div>
                     <div class="card-body">
-                        <h3>FA J. Templates</h3>
+                        <h3>FA Journal Templates</h3>
                         <p>Configure FA journal types, depreciation book links, and posting rules.</p>
                     </div>
                     <div class="card-footer text-violet-600 dark:text-violet-400">
@@ -277,13 +294,13 @@
                 <span>Other Journals</span>
             </div>
             <div class="hub-grid">
-                <a href="/admin/recurring-journal-batches" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/recurring-journal-batches') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-arrow-path style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['recurring_journal_batches'] }} Batches</div>
                     </div>
                     <div class="card-body">
-                        <h3>Recurring Journal</h3>
+                        <h3>Recurring Journals</h3>
                         <p>Automate periodic entries for rent, subscriptions, and standing allocations.</p>
                     </div>
                     <div class="card-footer text-emerald-600 dark:text-emerald-400">
@@ -291,13 +308,13 @@
                     </div>
                 </a>
 
-                <a href="/admin/recurring-journal-templates" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/recurring-journal-templates') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-clipboard-document-list style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['recurring_journal_templates'] }} Templates</div>
                     </div>
                     <div class="card-body">
-                        <h3>Recurring J. Templates</h3>
+                        <h3>Recurring Journal Templates</h3>
                         <p>Configure recurring methods, frequency formulas, and auto-reversal rules.</p>
                     </div>
                     <div class="card-footer text-emerald-600 dark:text-emerald-400">
@@ -305,7 +322,7 @@
                     </div>
                 </a>
 
-                <a href="/admin/production-journal-batches" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/production-journal-batches') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-cog-6-tooth style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['prod_journal_batches'] }} Batches</div>
@@ -319,13 +336,27 @@
                     </div>
                 </a>
 
-                <a href="/admin/warehouse-journal-batches" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/production-journal-templates') }}" class="hub-card">
+                    <div class="card-top">
+                        <div class="card-icon"><x-heroicon-o-clipboard-document-list style="width: 1rem; height: 1rem;" /></div>
+                        <div class="counter">{{ $counts['prod_journal_templates'] }} Templates</div>
+                    </div>
+                    <div class="card-body">
+                        <h3>Production Journal Templates</h3>
+                        <p>Configure production journal templates, posting defaults, and controlled entry setup.</p>
+                    </div>
+                    <div class="card-footer text-emerald-600 dark:text-emerald-400">
+                        Manage Templates <x-heroicon-m-arrow-right class="w-3 h-3" />
+                    </div>
+                </a>
+
+                <a href="{{ url('/' . $panelPath . '/warehouse-journal-batches') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-inbox style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['warehouse_journal_batches'] }} Batches</div>
                     </div>
                     <div class="card-body">
-                        <h3>Warehouse Journal</h3>
+                        <h3>Warehouse Journals</h3>
                         <p>Bin-level physical inventory, movements, picks, put-aways, and adjustments.</p>
                     </div>
                     <div class="card-footer text-emerald-600 dark:text-emerald-400">
@@ -333,13 +364,13 @@
                     </div>
                 </a>
 
-                <a href="/admin/warehouse-journal-templates" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/warehouse-journal-templates') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-clipboard-document-list style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['warehouse_journal_templates'] }} Templates</div>
                     </div>
                     <div class="card-body">
-                        <h3>Warehouse J. Templates</h3>
+                        <h3>Warehouse Journal Templates</h3>
                         <p>Configure journal types, bin/zone controls, and physical inventory settings.</p>
                     </div>
                     <div class="card-footer text-emerald-600 dark:text-emerald-400">
@@ -356,7 +387,7 @@
                 <span>Receivables & Payables</span>
             </div>
             <div class="hub-grid">
-                <a href="/admin/cash-receipt-lines" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/cash-receipt-lines') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon" style="background:#cffafe; color:#0e7490;"><x-heroicon-o-banknotes style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">Cash Receipt Journal</div>
@@ -370,7 +401,7 @@
                     </div>
                 </a>
 
-                <a href="/admin/payment-journal-lines" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/payment-journal-lines') }}" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon" style="background:#cffafe; color:#0e7490;"><x-heroicon-o-credit-card style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">Payment Journal</div>
