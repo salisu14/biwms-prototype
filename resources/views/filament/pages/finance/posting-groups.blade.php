@@ -279,6 +279,20 @@
                     </div>
                 </a>
 
+                <a href="/admin/vendor-posting-groups" class="hub-card">
+                    <div class="card-top">
+                        <div class="card-icon"><x-heroicon-o-truck style="width: 1rem; height: 1rem;" /></div>
+                        <div class="counter">{{ $counts['vendor_posting_group'] }} Groups</div>
+                    </div>
+                    <div class="card-body">
+                        <h3>Vendor Posting Groups</h3>
+                        <p>Direct payables and vendor discount ledger mappings.</p>
+                    </div>
+                    <div class="card-footer text-emerald-600 dark:text-emerald-400">
+                        Open Setup <x-heroicon-m-arrow-right class="w-3 h-3" />
+                    </div>
+                </a>
+
                 <a href="/admin/employee-posting-groups" class="hub-card">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-identification style="width: 1rem; height: 1rem;" /></div>

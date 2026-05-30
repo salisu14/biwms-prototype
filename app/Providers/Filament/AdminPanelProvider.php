@@ -7,6 +7,8 @@ use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\FiscalYearManagement;
 use App\Filament\Pages\PurchaseHistory;
 use App\Filament\Pages\SalesHistory;
+use App\Http\Middleware\SetActiveBusinessContext;
+use App\Models\Business;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -17,6 +19,7 @@ use Filament\Navigation\NavigationItem;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -41,6 +44,24 @@ class AdminPanelProvider extends PanelProvider
             ->sidebarCollapsibleOnDesktop()
             ->brandName('BIFLI Group')
             ->favicon(asset('favicon.ico'))
+            ->renderHook(
+                PanelsRenderHook::TOPBAR_START,
+                function (): string {
+                    $businesses = Business::query()
+                        ->where('is_active', true)
+                        ->orderBy('name')
+                        ->get(['id', 'code', 'name']);
+
+                    if ($businesses->isEmpty()) {
+                        return '';
+                    }
+
+                    return view('filament.components.topbar-business-switcher', [
+                        'businesses' => $businesses,
+                        'activeBusinessId' => (int) session('active_business_id', 0),
+                    ])->render();
+                }
+            )
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
@@ -630,6 +651,7 @@ class AdminPanelProvider extends PanelProvider
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
+                SetActiveBusinessContext::class,
                 AuthenticateSession::class,
                 ShareErrorsFromSession::class,
                 PreventRequestForgery::class,

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\CompanyInformation\Tables;
 
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\ImageColumn;
@@ -29,6 +30,11 @@ class CompanyInformationTable
                     ->label('Company')
                     ->searchable()
                     ->weight('bold'),
+                TextColumn::make('business.name')
+                    ->label('Business')
+                    ->badge()
+                    ->color(fn ($record): string => (int) session('active_business_id', 0) === (int) ($record->business_id ?? 0) ? 'success' : 'gray')
+                    ->description(fn ($record): ?string => (int) session('active_business_id', 0) === (int) ($record->business_id ?? 0) ? 'Active' : null),
 
                 TextColumn::make('email')
                     ->label('Contact Email')
@@ -57,6 +63,13 @@ class CompanyInformationTable
                 //
             ])
             ->recordActions([
+                Action::make('set_active')
+                    ->label('Set Active')
+                    ->icon('heroicon-m-check-circle')
+                    ->color('success')
+                    ->action(function ($record): void {
+                        session(['active_business_id' => $record->business_id]);
+                    }),
                 ViewAction::make(),
                 EditAction::make()
                     ->label('Manage'),

@@ -1,7 +1,5 @@
 <?php
 
-// app/Models/PostedPurchaseInvoiceLine.php
-
 namespace App\Models;
 
 use App\Enums\PurchaseLineType;
@@ -13,10 +11,10 @@ class PurchaseInvoiceLine extends Model
 {
     use HasFactory;
 
-    protected $table = 'posted_purchase_invoice_lines';
+    protected $table = 'purchase_invoice_lines';
 
     protected $fillable = [
-        'posted_purchase_invoice_id',
+        'purchase_invoice_id',
         'po_line_id',
         'po_line_number',
         'item_id',
@@ -52,6 +50,7 @@ class PurchaseInvoiceLine extends Model
         'item_ledger_entry_id',
         'gl_entry_id',
         'line_number',
+        'posting_date',
         'type',
         'asset_id',
         'fa_posting_type',
@@ -80,7 +79,7 @@ class PurchaseInvoiceLine extends Model
 
     public function postedPurchaseInvoice(): BelongsTo
     {
-        return $this->belongsTo(PurchaseInvoice::class, 'posted_purchase_invoice_id');
+        return $this->belongsTo(PurchaseInvoice::class, 'purchase_invoice_id');
     }
 
     public function purchaseOrderLine(): BelongsTo

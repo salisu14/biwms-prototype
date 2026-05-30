@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Enums\ApprovalStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -30,6 +31,7 @@ class PurchaseInvoice extends Model
         'posting_date',
         'document_date',
         'due_date',
+        'status',
         'vat_date',
         'total_amount',
         'total_vat',
@@ -42,6 +44,10 @@ class PurchaseInvoice extends Model
         'paid_in_full_date',
         'posted_by',
         'posted_at',
+        'approved_by',
+        'approved_at',
+        'rejected_by',
+        'rejected_at',
         'cancelled',
         'cancelled_at',
         'cancelled_by',
@@ -51,6 +57,7 @@ class PurchaseInvoice extends Model
     ];
 
     protected $casts = [
+        'status' => ApprovalStatus::class,
         'posting_date' => 'date',
         'document_date' => 'date',
         'due_date' => 'date',
@@ -64,6 +71,8 @@ class PurchaseInvoice extends Model
         'paid_in_full' => 'boolean',
         'paid_in_full_date' => 'datetime',
         'posted_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'rejected_at' => 'datetime',
         'cancelled' => 'boolean',
         'cancelled_at' => 'datetime',
         'dimensions' => 'array',
@@ -88,13 +97,23 @@ class PurchaseInvoice extends Model
 
     public function lines(): HasMany
     {
-        return $this->hasMany(PurchaseInvoiceLine::class, 'posted_purchase_invoice_id')
+        return $this->hasMany(PurchaseInvoiceLine::class, 'purchase_invoice_id')
             ->orderBy('line_number');
     }
 
     public function poster(): BelongsTo
     {
         return $this->belongsTo(User::class, 'posted_by');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejector(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 
     public function canceller(): BelongsTo
@@ -165,7 +184,7 @@ class PurchaseInvoice extends Model
         return $this->due_date->diffInDays(now());
     }
 
-    public function getStatusAttribute(): string
+    public function getPaymentStatusAttribute(): string
     {
         if ($this->cancelled) {
             return 'CANCELLED';
@@ -268,16 +287,8 @@ class PurchaseInvoice extends Model
         return sprintf('%s-%d-%06d', $prefix, $year, $count);
     }
 
-    protected static function booted(): void
+    public function isPosted(): bool
     {
-        static::creating(function (PurchaseInvoice $invoice) {
-            if (empty($invoice->posted_at)) {
-                $invoice->posted_at = now();
-            }
-
-            if (empty($invoice->posted_by) && auth()->check()) {
-                $invoice->posted_by = auth()->id();
-            }
-        });
+        return $this->status === ApprovalStatus::POSTED || $this->posted_at !== null;
     }
 }

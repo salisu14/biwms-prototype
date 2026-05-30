@@ -23,10 +23,14 @@ class AdminOpsTrendChart extends ChartWidget
         $filters = $this->filters ?? [];
         [$startDate, $endDate] = $this->getPeriodRange($filters);
 
-        $months = collect(range(0, max(0, $startDate->diffInMonths($endDate))))
-            ->map(fn (int $offset) => $startDate->copy()->startOfMonth()->addMonths($offset))
-            ->filter(fn ($month) => $month->lessThanOrEqualTo($endDate))
-            ->values();
+        $months = collect();
+        $cursor = $startDate->copy()->startOfMonth();
+        $finalMonth = $endDate->copy()->endOfMonth();
+
+        while ($cursor->lessThanOrEqualTo($finalMonth)) {
+            $months->push($cursor->copy());
+            $cursor->addMonth();
+        }
 
         $labels = $months->map(fn ($month) => $month->format('M Y'))->all();
 

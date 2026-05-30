@@ -6,6 +6,7 @@ use App\Filament\Widgets\AdminCashflowChart;
 use App\Filament\Widgets\AdminDocumentMixChart;
 use App\Filament\Widgets\AdminKpiStatsOverview;
 use App\Filament\Widgets\AdminOpsTrendChart;
+use App\Filament\Widgets\CustomerOnAccountWidget;
 use App\Models\Business;
 use App\Models\Factory;
 use Filament\Forms\Components\Select;
@@ -36,6 +37,7 @@ class AdminDashboard extends BaseDashboard
             AdminOpsTrendChart::class,
             AdminDocumentMixChart::class,
             AdminCashflowChart::class,
+            CustomerOnAccountWidget::class,
         ];
     }
 

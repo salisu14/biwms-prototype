@@ -3,6 +3,10 @@
 namespace App\Filament\Resources\PurchaseQuotes\Schemas;
 
 use App\Enums\PurchaseQuoteStatus;
+use App\Models\Currency;
+use App\Models\PaymentTerm;
+use App\Models\Vendor;
+use App\Services\NumberSeriesService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -25,7 +29,10 @@ class PurchaseQuoteForm
                             ->icon('heroicon-m-document-text')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('document_no')->required()->unique(ignoreRecord: true),
+                                    TextInput::make('document_no')
+                                        ->required()
+                                        ->unique(ignoreRecord: true)
+                                        ->default(fn () => app(NumberSeriesService::class)->tryGetNextNo('P-QUOTE') ?? ''),
                                     Select::make('status')
                                         ->options(PurchaseQuoteStatus::class)
                                         ->default(PurchaseQuoteStatus::OPEN)
@@ -35,11 +42,28 @@ class PurchaseQuoteForm
                                 ]),
                                 Grid::make(2)->schema([
                                     Select::make('vendor_id')
-                                        ->relationship('vendor', 'vendor_name') // Changed from 'id' to 'name' for UX
+                                        ->relationship('vendor', 'vendor_name')
                                         ->searchable()
                                         ->preload()
                                         ->required()
-                                        ->reactive(),
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, \Filament\Schemas\Components\Utilities\Set $set): void {
+                                            if (! $state) {
+                                                return;
+                                            }
+
+                                            $vendor = Vendor::find($state);
+                                            if (! $vendor) {
+                                                return;
+                                            }
+
+                                            if ($vendor->currency) {
+                                                $set('currency_code', $vendor->currency);
+                                            }
+                                            if ($vendor->payment_terms_code) {
+                                                $set('payment_terms_code', $vendor->payment_terms_code);
+                                            }
+                                        }),
                                     Select::make('contact_id')
                                         ->relationship('contact', 'full_name')
                                         ->searchable(),
@@ -67,10 +91,14 @@ class PurchaseQuoteForm
                             ->schema([
                                 Grid::make(3)->schema([
                                     Select::make('currency_code')
-                                        ->options(['USD' => 'USD', 'EUR' => 'EUR', 'GBP' => 'GBP']) // Or relationship
-                                        ->default('USD'),
+                                        ->options(fn () => Currency::query()->where('is_active', true)->orderBy('code')->pluck('code', 'code'))
+                                        ->searchable()
+                                        ->default('NGN'),
                                     TextInput::make('currency_factor')->numeric()->default(1),
-                                    TextInput::make('payment_terms_code'),
+                                    Select::make('payment_terms_code')
+                                        ->options(fn () => PaymentTerm::query()->active()->orderBy('code')->pluck('description', 'code'))
+                                        ->searchable()
+                                        ->preload(),
                                     TextInput::make('amount')->disabled()->prefix('$'), // Read-only as model calculates this
                                     TextInput::make('vat_amount')->disabled()->prefix('$'),
                                     TextInput::make('amount_including_vat')

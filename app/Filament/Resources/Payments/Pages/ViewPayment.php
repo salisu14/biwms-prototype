@@ -3,15 +3,15 @@
 namespace App\Filament\Resources\Payments\Pages;
 
 use App\Filament\Resources\Payments\PaymentResource;
+use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedSalesInvoice;
-use App\Models\PurchaseInvoice;
 use App\Services\Finance\PaymentService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Livewire\Notifications;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -32,7 +32,7 @@ class ViewPayment extends ViewRecord
                 ->visible(fn ($record) => (auth()->user()?->can('post', $record) ?? false) && $record->status === 'PENDING')
                 ->action(function ($record, PaymentService $service) {
                     $service->post($record, auth()->id());
-                    Notifications::make()
+                    Notification::make()
                         ->title('Payment Posted')
                         ->success()
                         ->send();
@@ -67,7 +67,7 @@ class ViewPayment extends ViewRecord
                                         ->where('cancelled', false)
                                         ->orWhereNull('cancelled'))
                                     ->pluck('document_number', 'id')
-                                : PurchaseInvoice::forVendor($record->party_id)
+                                : PostedPurchaseInvoice::forVendor($record->party_id)
                                     ->where(fn (Builder $query) => $query
                                         ->where('remaining_amount', '>', 0)
                                         ->orWhereNull('remaining_amount'))
@@ -82,7 +82,7 @@ class ViewPayment extends ViewRecord
                                     ->where(fn (Builder $query) => $query->where('remaining_amount', '>', 0)->orWhereNull('remaining_amount'))
                                     ->where(fn (Builder $query) => $query->where('cancelled', false)->orWhereNull('cancelled'))
                                     ->count()
-                                : PurchaseInvoice::forVendor($record->party_id)
+                                : PostedPurchaseInvoice::forVendor($record->party_id)
                                     ->where(fn (Builder $query) => $query->where('remaining_amount', '>', 0)->orWhereNull('remaining_amount'))
                                     ->where(fn (Builder $query) => $query->where('cancelled', false)->orWhereNull('cancelled'))
                                     ->count();
@@ -100,7 +100,7 @@ class ViewPayment extends ViewRecord
                 ])
                 ->action(function (array $data, $record, PaymentService $service) {
                     $service->applyToDocument($record, $data, auth()->id());
-                    Notifications::make()
+                    Notification::make()
                         ->title('Application Successful')
                         ->success()
                         ->send();
@@ -139,7 +139,7 @@ class ViewPayment extends ViewRecord
                         'reconciled_by' => auth()->id(),
                     ]);
 
-                    Notifications::make()
+                    Notification::make()
                         ->title('Payment Reconciled')
                         ->success()
                         ->send();
@@ -163,7 +163,7 @@ class ViewPayment extends ViewRecord
                         'reconciled_by' => null,
                     ]);
 
-                    Notifications::make()
+                    Notification::make()
                         ->title('Reconciliation Reversed')
                         ->success()
                         ->send();
@@ -181,7 +181,7 @@ class ViewPayment extends ViewRecord
                 ->visible(fn ($record) => (auth()->user()?->can('void', $record) ?? false) && $record->status === 'POSTED' && ! $record->reconciled)
                 ->action(function (array $data, $record, PaymentService $service) {
                     $service->void($record, $data['reason'], auth()->id());
-                    Notifications::make()
+                    Notification::make()
                         ->title('Payment Voided')
                         ->success()
                         ->send();

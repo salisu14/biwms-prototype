@@ -14,6 +14,7 @@ use App\Models\PayrollPostingGroup;
 use App\Models\VatBusinessPostingGroup;
 use App\Models\VatPostingSetup;
 use App\Models\VatProductPostingGroup;
+use App\Models\VendorPostingGroup;
 use Filament\Pages\Page;
 
 class PostingGroups extends Page
@@ -41,6 +42,7 @@ class PostingGroups extends Page
                 'vat_bus_posting_group' => VatBusinessPostingGroup::count(),
                 'vat_prod_posting_group' => VatProductPostingGroup::count(),
                 'customer_posting_group' => CustomerPostingGroup::count(),
+                'vendor_posting_group' => VendorPostingGroup::count(),
                 'employee_posting_group' => EmployeePostingGroup::count(),
                 'payroll_posting_group' => PayrollPostingGroup::count(),
                 'inventory_posting_setup' => InventoryPostingSetup::count(),

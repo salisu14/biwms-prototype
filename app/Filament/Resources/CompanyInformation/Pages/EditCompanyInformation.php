@@ -34,7 +34,7 @@ class EditCompanyInformation extends EditRecord
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        return app(CompanyInformationService::class)->update($data);
+        return app(CompanyInformationService::class)->updateRecord($record, $data);
     }
 
     protected function getSavedNotification(): ?Notification

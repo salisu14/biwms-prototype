@@ -5,7 +5,9 @@ namespace App\Filament\Resources\CompanyInformation\Schemas;
 use App\Enums\CountryCode;
 use App\Enums\CurrencyCode;
 use App\Enums\FiscalMonth;
+use App\Models\Business;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -26,6 +28,33 @@ class CompanyInformationForm
                     Section::make('Company Identity')
                         ->icon('heroicon-o-building-office')
                         ->schema([
+                            Placeholder::make('active_business_indicator')
+                                ->label('Active Business Context')
+                                ->content(function ($record): string {
+                                    if (! $record) {
+                                        return 'Will become active when selected in the business switcher.';
+                                    }
+
+                                    $activeBusinessId = (int) session('active_business_id', 0);
+                                    $recordBusinessId = (int) ($record->business_id ?? 0);
+
+                                    return $activeBusinessId === $recordBusinessId
+                                        ? 'This profile is currently active in your session.'
+                                        : 'This profile is not currently active in your session.';
+                                }),
+                            Select::make('business_id')
+                                ->label('Business / Trade Name')
+                                ->options(
+                                    Business::query()
+                                        ->where('is_active', true)
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                        ->all()
+                                )
+                                ->searchable()
+                                ->preload()
+                                ->required()
+                                ->helperText('Each business keeps its own company profile, logo, and invoice footer.'),
                             Grid::make(2)->schema([
                                 TextInput::make('company_name')
                                     ->required()

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SalesOrders\Tables;
 
 use App\Enums\SalesOrderStatus;
+use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\PostedSalesInvoice;
 use App\Models\SalesOrder;
 use App\Services\Approval\ApprovalService;
@@ -201,7 +202,7 @@ class SalesOrdersTable
                         ->icon('heroicon-o-truck')
                         ->color('success')
                         ->visible(fn ($record): bool => $record instanceof SalesOrder &&
-                            auth()->user()?->can('post', $record) &&
+                            (auth()->user()?->can('post', $record) || auth()->user()?->can('update', $record)) &&
                             in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
                         ->requiresConfirmation()
                         ->action(function (SalesOrder $record): void {
@@ -217,7 +218,7 @@ class SalesOrdersTable
                         ->icon('heroicon-o-document-check')
                         ->color('primary')
                         ->visible(fn ($record): bool => $record instanceof SalesOrder &&
-                            auth()->user()?->can('post', $record) &&
+                            (auth()->user()?->can('post', $record) || auth()->user()?->can('update', $record)) &&
                             in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
                         ->requiresConfirmation()
                         ->action(function (SalesOrder $record): void {
@@ -226,6 +227,31 @@ class SalesOrdersTable
                                 Notification::make()->title('Invoice Posted')->success()->send();
                             } catch (ValidationException $exception) {
                                 Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post invoice')->danger()->send();
+                            }
+                        }),
+                    Action::make('post_and_invoice')
+                        ->label('Post + Invoice')
+                        ->icon('heroicon-o-bolt')
+                        ->color('primary')
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder &&
+                            (auth()->user()?->can('post', $record) || auth()->user()?->can('update', $record)) &&
+                            in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED, SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
+                        ->requiresConfirmation()
+                        ->action(function (SalesOrder $record) {
+                            try {
+                                if (in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true)) {
+                                    $record->postShipment();
+                                    $record->refresh();
+                                }
+
+                                $postedInvoice = $record->postInvoice();
+                                Notification::make()->title('Shipment and Invoice Posted')->success()->send();
+
+                                return redirect(SalesInvoiceResource::getUrl('posted', [
+                                    'tableSearch' => $postedInvoice->document_number,
+                                ]));
+                            } catch (ValidationException $exception) {
+                                Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post and invoice')->danger()->send();
                             }
                         }),
                     Action::make('printProforma')
@@ -323,6 +349,27 @@ class SalesOrdersTable
                         ->action(function (SalesOrder $record, array $data) {
                             $record->update(['status' => $data['status']]);
                             Notification::make()->title('Status Updated')->success()->send();
+                        }),
+                    Action::make('archive')
+                        ->label('Archive')
+                        ->icon('heroicon-o-archive-box')
+                        ->color('gray')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record): bool => $record instanceof SalesOrder &&
+                            (auth()->user()?->can('update', $record) ?? false) &&
+                            ! in_array($record->status, [SalesOrderStatus::CLOSED, SalesOrderStatus::CANCELLED], true))
+                        ->action(function (SalesOrder $record) {
+                            if (! $record->canArchive()) {
+                                Notification::make()
+                                    ->title('Order must be fully shipped and fully invoiced before archiving.')
+                                    ->danger()
+                                    ->send();
+
+                                return;
+                            }
+
+                            $record->update(['status' => SalesOrderStatus::CLOSED]);
+                            Notification::make()->title('Sales Order Archived')->success()->send();
                         }),
                 ])->label('Actions'),
             ])

@@ -88,6 +88,29 @@ class YieldReport extends Page implements HasTable
                             AND ile.entry_type = 'Output'
                          ) AS actual_output"
                     )
+                    ->selectRaw(
+                        '(
+                            (SELECT COALESCE(SUM(poc.actual_quantity_consumed), 0)
+                               FROM production_order_components poc
+                              WHERE poc.production_order_id = production_orders.id
+                            ) -
+                            (SELECT COALESCE(SUM(poc.expected_quantity), 0)
+                               FROM production_order_components poc
+                              WHERE poc.production_order_id = production_orders.id
+                            )
+                        ) AS consumption_variance'
+                    )
+                    ->selectRaw(
+                        "(
+                            production_orders.quantity -
+                            (SELECT COALESCE(SUM(ile.quantity), 0)
+                               FROM item_ledger_entries ile
+                              WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
+                                AND ile.source_id = production_orders.id
+                                AND ile.entry_type = 'Output'
+                            )
+                        ) AS output_variance"
+                    )
             )
             ->columns([
                 TextColumn::make('document_number')

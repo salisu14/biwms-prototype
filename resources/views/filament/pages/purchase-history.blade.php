@@ -151,7 +151,7 @@
             </a>
 
             {{-- Posted Purchase Invoices Card --}}
-            <a href="{{ \App\Filament\Resources\PurchaseInvoices\PurchaseInvoiceResource::getUrl('index') }}" class="history-card card-success">
+            <a href="{{ \App\Filament\Resources\PurchaseInvoices\PurchaseInvoiceResource::getUrl('posted') }}" class="history-card card-success">
                 <div class="card-header">
                     <div class="icon-box">
                         <x-heroicon-o-document-text style="width: 1.5rem; height: 1.5rem;"/>

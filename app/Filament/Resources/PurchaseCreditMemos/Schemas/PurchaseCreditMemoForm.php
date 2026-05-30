@@ -6,6 +6,7 @@ use App\Enums\ApprovalStatus;
 use App\Models\Item;
 use App\Models\PurchaseCreditMemo;
 use App\Models\PurchaseInvoice;
+use App\Models\ReasonCode;
 use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
@@ -85,6 +86,13 @@ class PurchaseCreditMemoForm
 
                                 TextInput::make('corrects_invoice_number')
                                     ->hidden(),
+
+                                Select::make('reason_code')
+                                    ->label('Reason Code')
+                                    ->options(fn () => ReasonCode::query()->orderBy('code')->pluck('description', 'code'))
+                                    ->searchable()
+                                    ->preload()
+                                    ->required(),
                             ])->columns(2),
 
                         Section::make('Credit Items')
@@ -193,8 +201,12 @@ class PurchaseCreditMemoForm
                                         return number_format($total, 2);
                                     }),
                                 Select::make('currency_code')
-                                    ->options(['USD' => 'USD', 'NGN' => 'Naira'])
-                                    ->default('USD'),
+                                    ->relationship('currency', 'code')
+                                    ->getOptionLabelFromRecordUsing(fn ($record): string => $record->code)
+                                    ->searchable()
+                                    ->preload()
+                                    ->default('NGN')
+                                    ->required(),
                             ]),
                     ])->columnSpan(['lg' => 1]),
             ])->columns(3);

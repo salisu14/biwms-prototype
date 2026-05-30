@@ -18,6 +18,24 @@ class CompanyInformationInfolist
             ->components([
                 Section::make('Company Identity')
                     ->schema([
+                        TextEntry::make('active_business_indicator')
+                            ->label('Active Business Context')
+                            ->state(function ($record): string {
+                                $activeBusinessId = (int) session('active_business_id', 0);
+                                $recordBusinessId = (int) ($record->business_id ?? 0);
+
+                                return $activeBusinessId === $recordBusinessId
+                                    ? 'This is the active business profile.'
+                                    : 'Not active in current session.';
+                            })
+                            ->badge()
+                            ->color(function ($record): string {
+                                $activeBusinessId = (int) session('active_business_id', 0);
+                                $recordBusinessId = (int) ($record->business_id ?? 0);
+
+                                return $activeBusinessId === $recordBusinessId ? 'success' : 'gray';
+                            })
+                            ->columnSpanFull(),
                         TextEntry::make('company_name'),
                         TextEntry::make('trading_name')->placeholder('-'),
                         TextEntry::make('registration_no')->placeholder('-'),

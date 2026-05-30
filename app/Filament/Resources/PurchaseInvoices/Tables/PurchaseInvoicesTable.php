@@ -2,11 +2,16 @@
 
 namespace App\Filament\Resources\PurchaseInvoices\Tables;
 
+use App\Enums\ApprovalStatus;
+use App\Models\PurchaseInvoice;
+use App\Services\Purchase\PurchaseInvoiceService;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\SelectColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
@@ -36,6 +41,9 @@ class PurchaseInvoicesTable
                     ->money(fn ($record) => $record->currency_code)
                     ->sortable()
                     ->alignment('right'),
+                SelectColumn::make('status')
+                    ->options(ApprovalStatus::class)
+                    ->disabled(fn ($record) => $record->isPosted()),
                 TextColumn::make('remaining_amount')
                     ->money(fn ($record) => $record->currency_code)
                     ->label('Balance')
@@ -57,6 +65,8 @@ class PurchaseInvoicesTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                SelectFilter::make('status')
+                    ->options(ApprovalStatus::class),
                 TernaryFilter::make('paid_in_full')
                     ->label('Paid Status'),
                 TernaryFilter::make('cancelled'),
@@ -67,8 +77,41 @@ class PurchaseInvoicesTable
                     ->relationship('location', 'name'),
             ])
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
+                Action::make('approve')
+                    ->label('Approve')
+                    ->icon('heroicon-o-check')
+                    ->color('success')
+                    ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::PENDING)
+                    ->action(fn ($record) => $record instanceof PurchaseInvoice ? $record->update([
+                        'status' => ApprovalStatus::APPROVED,
+                        'approved_by' => auth()->id(),
+                        'approved_at' => now(),
+                    ]) : null),
+                Action::make('reject')
+                    ->label('Reject')
+                    ->icon('heroicon-o-x-mark')
+                    ->color('danger')
+                    ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::PENDING)
+                    ->action(fn ($record) => $record instanceof PurchaseInvoice ? $record->update([
+                        'status' => ApprovalStatus::REJECTED,
+                        'rejected_by' => auth()->id(),
+                        'rejected_at' => now(),
+                    ]) : null),
+                Action::make('post')
+                    ->label('Post')
+                    ->icon('heroicon-o-check-badge')
+                    ->color('primary')
+                    ->requiresConfirmation()
+                    ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::APPROVED)
+                    ->action(function ($record, PurchaseInvoiceService $purchaseInvoiceService) {
+                        if (! $record instanceof PurchaseInvoice) {
+                            return;
+                        }
+
+                        $purchaseInvoiceService->post($record);
+                    }),
+                ViewAction::make()->visible(fn ($record): bool => method_exists($record, 'isPosted') ? ! $record->isPosted() : true),
+                EditAction::make()->visible(fn ($record): bool => method_exists($record, 'isPosted') ? ! $record->isPosted() : false),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

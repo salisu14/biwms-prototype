@@ -11,6 +11,7 @@ use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
 use App\Services\DimensionManagementService;
 use App\Services\PostingDateValidator;
+use App\Services\PostingService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -763,6 +764,9 @@ class SalesOrder extends Model implements Approvable
                 'remaining_amount' => $grandTotal,
             ]);
 
+            $this->postGlEntriesForPostedInvoice($postedInvoice);
+            CustomerLedgerEntry::createFromInvoice($postedInvoice);
+
             $this->refresh()->load('lines');
             $totalQuantityInvoiced = (float) $this->lines->sum('quantity_invoiced');
             $fullyInvoiced = $this->lines->every(fn (SalesOrderLine $line): bool => (float) $line->quantity_invoiced >= (float) $line->quantity);
@@ -779,18 +783,161 @@ class SalesOrder extends Model implements Approvable
         });
     }
 
+    private function postGlEntriesForPostedInvoice(PostedSalesInvoice $postedInvoice): void
+    {
+        $postedInvoice->loadMissing(['lines.item', 'customer']);
+
+        $customer = $postedInvoice->customer;
+        if (! $customer) {
+            throw ValidationException::withMessages([
+                'customer_id' => 'Customer is required before posting invoice entries.',
+            ]);
+        }
+
+        $receivablesAccount = $customer->getReceivablesAccount();
+        if (! $receivablesAccount) {
+            throw ValidationException::withMessages([
+                'customer_posting_group_id' => "Customer '{$customer->name}' is missing receivables account setup.",
+            ]);
+        }
+
+        $postingService = app(PostingService::class);
+
+        $postingService->createGlEntry([
+            'chart_of_account_id' => $receivablesAccount->id,
+            'debit_amount' => (float) $postedInvoice->grand_total,
+            'credit_amount' => 0,
+            'source_type' => 'CUSTOMER',
+            'source_number' => $postedInvoice->document_number,
+            'document_type' => 'SALES_INVOICE',
+            'document_number' => $postedInvoice->document_number,
+            'posting_date' => $postedInvoice->posting_date,
+            'document_date' => $postedInvoice->document_date,
+            'description' => "Invoice {$postedInvoice->document_number}",
+        ]);
+
+        foreach ($postedInvoice->lines as $line) {
+            $item = $line->item;
+            if (! $item) {
+                continue;
+            }
+
+            $postingSetup = GeneralPostingSetup::query()
+                ->where('general_business_posting_group_id', $postedInvoice->general_business_posting_group_id)
+                ->where('general_product_posting_group_id', $line->general_product_posting_group_id)
+                ->first();
+
+            if (! $postingSetup) {
+                throw ValidationException::withMessages([
+                    'general_posting_setup' => "Missing posting setup for item {$line->item_code}.",
+                ]);
+            }
+
+            $salesAccount = $postingSetup->getSalesAccount();
+            if (! $salesAccount) {
+                throw ValidationException::withMessages([
+                    'sales_account' => "Missing sales account for item {$line->item_code}.",
+                ]);
+            }
+
+            $postingService->createGlEntry([
+                'chart_of_account_id' => $salesAccount->id,
+                'debit_amount' => 0,
+                'credit_amount' => (float) $line->line_amount,
+                'source_type' => 'CUSTOMER',
+                'source_number' => $postedInvoice->document_number,
+                'document_type' => 'SALES_INVOICE',
+                'document_number' => $postedInvoice->document_number,
+                'posting_date' => $postedInvoice->posting_date,
+                'document_date' => $postedInvoice->document_date,
+                'description' => "Revenue {$line->item_description}",
+            ]);
+
+            if ((float) $line->vat_amount > 0) {
+                $vatSetup = VatPostingSetup::query()
+                    ->where('vat_bus_posting_group_code', $postedInvoice->vat_bus_posting_group)
+                    ->where('vat_prod_posting_group_code', $line->vat_code)
+                    ->first();
+
+                if ($vatSetup?->sales_vat_account_id) {
+                    $postingService->createGlEntry([
+                        'chart_of_account_id' => $vatSetup->sales_vat_account_id,
+                        'debit_amount' => 0,
+                        'credit_amount' => (float) $line->vat_amount,
+                        'source_type' => 'CUSTOMER',
+                        'source_number' => $postedInvoice->document_number,
+                        'document_type' => 'SALES_INVOICE',
+                        'document_number' => $postedInvoice->document_number,
+                        'posting_date' => $postedInvoice->posting_date,
+                        'document_date' => $postedInvoice->document_date,
+                        'description' => "VAT {$line->item_description}",
+                    ]);
+                }
+            }
+
+            if ($item->isInventoryItem() && (float) $line->cost_amount > 0) {
+                $cogsAccount = $postingSetup->getCogsAccount();
+                $inventoryAccount = $item->getInventoryAccount();
+
+                if (! $cogsAccount || ! $inventoryAccount) {
+                    throw ValidationException::withMessages([
+                        'inventory_accounts' => "Missing COGS or Inventory account for item {$line->item_code}.",
+                    ]);
+                }
+
+                $postingService->createGlEntry([
+                    'chart_of_account_id' => $cogsAccount->id,
+                    'debit_amount' => (float) $line->cost_amount,
+                    'credit_amount' => 0,
+                    'source_type' => 'CUSTOMER',
+                    'source_number' => $postedInvoice->document_number,
+                    'document_type' => 'SALES_INVOICE',
+                    'document_number' => $postedInvoice->document_number,
+                    'posting_date' => $postedInvoice->posting_date,
+                    'document_date' => $postedInvoice->document_date,
+                    'description' => "COGS {$line->item_description}",
+                ]);
+
+                $postingService->createGlEntry([
+                    'chart_of_account_id' => $inventoryAccount->id,
+                    'debit_amount' => 0,
+                    'credit_amount' => (float) $line->cost_amount,
+                    'source_type' => 'CUSTOMER',
+                    'source_number' => $postedInvoice->document_number,
+                    'document_type' => 'SALES_INVOICE',
+                    'document_number' => $postedInvoice->document_number,
+                    'posting_date' => $postedInvoice->posting_date,
+                    'document_date' => $postedInvoice->document_date,
+                    'description' => "Inventory {$line->item_description}",
+                ]);
+            }
+        }
+    }
+
     public function refreshLifecycleStatus(): void
+    {
+        // BC-style: payment settlement belongs to customer ledger/invoice lifecycle.
+        // Sales order lifecycle is fulfillment-driven and should not auto-close on payment.
+    }
+
+    public function isPaidInFull(): bool
     {
         $this->loadMissing('postedInvoices');
 
-        $hasPostedInvoices = $this->postedInvoices->isNotEmpty();
-        $allInvoicesPaid = $hasPostedInvoices
+        return $this->postedInvoices->isNotEmpty()
             && $this->postedInvoices->every(fn (PostedSalesInvoice $invoice): bool => (float) ($invoice->remaining_amount ?? 0) <= 0.01);
+    }
 
-        if ($this->fully_invoiced && $allInvoicesPaid) {
-            $this->update([
-                'status' => SalesOrderStatus::CLOSED,
-            ]);
+    public function canArchive(): bool
+    {
+        $this->loadMissing('lines');
+
+        if ($this->status === SalesOrderStatus::CANCELLED) {
+            return true;
         }
+
+        return $this->lines->isNotEmpty()
+            && (bool) $this->fully_shipped
+            && (bool) $this->fully_invoiced;
     }
 }

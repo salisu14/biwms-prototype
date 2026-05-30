@@ -194,16 +194,27 @@ class PurchaseOrder extends Model
 
     public function refreshLifecycleStatus(): void
     {
-        $this->loadMissing('postedInvoices');
+        $this->loadMissing('lines');
 
-        $hasPostedInvoices = $this->postedInvoices->isNotEmpty();
-        $allInvoicesPaid = $hasPostedInvoices
-            && $this->postedInvoices->every(fn (PurchaseInvoice $invoice): bool => (float) ($invoice->remaining_amount ?? 0) <= 0.01);
+        $allReceived = $this->lines->isNotEmpty()
+            && $this->lines->every(fn (PurchaseOrderLine $line): bool => (float) $line->received_quantity >= (float) $line->quantity);
+        $allInvoiced = $this->lines->isNotEmpty()
+            && $this->lines->every(fn (PurchaseOrderLine $line): bool => (float) $line->invoiced_quantity >= (float) $line->quantity);
 
-        if ($allInvoicesPaid) {
-            $this->update([
-                'status' => PurchaseOrderStatus::CLOSED,
-            ]);
+        if ($allReceived && $allInvoiced) {
+            $this->update(['status' => PurchaseOrderStatus::CLOSED]);
+
+            return;
+        }
+
+        if ($allReceived) {
+            $this->update(['status' => PurchaseOrderStatus::RECEIVED]);
+
+            return;
+        }
+
+        if ($this->lines->contains(fn (PurchaseOrderLine $line): bool => (float) $line->received_quantity > 0)) {
+            $this->update(['status' => PurchaseOrderStatus::PARTIALLY_RECEIVED]);
         }
     }
 }

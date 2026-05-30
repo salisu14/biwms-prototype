@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Contracts\Approvable;
 use App\Enums\ApprovalStatus;
+use App\Services\NumberSeriesService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -77,16 +78,29 @@ class PurchaseCreditMemo extends Model implements Approvable
 
     public function correctedInvoice(): BelongsTo
     {
-        return $this->belongsTo(PurchaseCreditMemo::class, 'corrects_invoice_id');
+        return $this->belongsTo(PurchaseInvoice::class, 'corrects_invoice_id');
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'currency_code', 'code');
     }
 
     public static function generateNumber(): string
     {
-        $prefix = 'D-PCM'; // Draft Purchase Credit Memo
+        $postingDate = now();
+        $service = app(NumberSeriesService::class);
+        foreach (['P-CM', 'PURCHASE_CREDIT_MEMO', 'PCM'] as $seriesCode) {
+            $number = $service->tryGetNextNo($seriesCode, $postingDate);
+            if ($number) {
+                return $number;
+            }
+        }
+
         $year = date('Y');
         $count = self::whereYear('created_at', $year)->count() + 1;
 
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return sprintf('PCM-%d-%06d', $year, $count);
     }
 
     protected static function booted(): void

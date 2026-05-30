@@ -583,8 +583,29 @@ class PostingService
     ): array {
         $setup = $vendor->getPostingSetupFor($item);
 
+        if (! $setup && $vendor->general_business_posting_group_id && $item->general_product_posting_group_id) {
+            $setup = GeneralPostingSetup::query()
+                ->where('general_business_posting_group_id', $vendor->general_business_posting_group_id)
+                ->where('general_product_posting_group_id', $item->general_product_posting_group_id)
+                ->where('blocked', false)
+                ->first();
+        }
+
+        if (! $setup && $vendor->general_business_posting_group_id) {
+            $setup = GeneralPostingSetup::query()
+                ->where('general_business_posting_group_id', $vendor->general_business_posting_group_id)
+                ->where('blocked', false)
+                ->where(function ($query) {
+                    $query->whereNotNull('purchase_account_id')
+                        ->orWhereNotNull('inventory_account_id');
+                })
+                ->orderByRaw('CASE WHEN purchase_account_id IS NULL THEN 1 ELSE 0 END, id ASC')
+                ->first();
+        }
+
         if (! $setup) {
-            throw new \Exception("Posting setup missing for vendor {$vendor->vendor_number} and item {$item->item_code}");
+            $vendorRef = $vendor->vendor_code ?: $vendor->vendor_name ?: (string) $vendor->id;
+            throw new \Exception("Posting setup missing for vendor {$vendorRef} and item {$item->item_code}");
         }
 
         $entries = [];
@@ -609,9 +630,15 @@ class PostingService
                 'description' => "Inventory receipt: {$description}",
             ]);
         } else {
+            $purchaseAccount = $setup->getPurchaseAccount();
+            if (! $purchaseAccount) {
+                $vendorRef = $vendor->vendor_code ?: $vendor->vendor_name ?: (string) $vendor->id;
+                throw new \Exception("Purchase account missing in posting setup for vendor {$vendorRef} and item {$item->item_code}");
+            }
+
             // Expense
             $entries[] = $this->createGlEntry([
-                'chart_of_account_id' => $setup->getPurchaseAccount()->id,
+                'chart_of_account_id' => $purchaseAccount->id,
                 'debit_amount' => $lineTotal,
                 'credit_amount' => 0,
                 'source_type' => 'ITEM',
@@ -697,9 +724,21 @@ class PostingService
         string $documentNumber
     ): array {
         $entries = [];
+        $payablesAccount = $vendor->getPayablesAccount();
+
+        if (! $payablesAccount) {
+            $vendorCode = $vendor->vendor_code ?: 'N/A';
+            $vendorName = $vendor->vendor_name ?: 'N/A';
+            $postingGroupId = $vendor->vendor_posting_group_id ?: 'N/A';
+
+            throw new \RuntimeException(
+                "No A/P account is configured for vendor '{$vendorName}' ({$vendorCode}). ".
+                "Set a Payables Account on Vendor Posting Group ID {$postingGroupId}."
+            );
+        }
 
         $entries[] = $this->createGlEntry([
-            'chart_of_account_id' => $vendor->getPayablesAccount()->id,
+            'chart_of_account_id' => $payablesAccount->id,
             'debit_amount' => 0,
             'credit_amount' => $amount,
             'source_type' => 'VENDOR',
@@ -785,7 +824,12 @@ class PostingService
                     throw new \Exception("Item with ID {$line->item_id} not found.");
                 }
 
-                $productGroupId = $item->inventory_posting_group_id;
+                $productGroupId = $item->general_product_posting_group_id;
+                $inventoryGroupId = $item->inventory_posting_group_id;
+                $itemDisplayName = trim((string) ($item->item_code.' '.$item->description));
+                if ($itemDisplayName === '') {
+                    $itemDisplayName = "ID {$item->id}";
+                }
 
                 // Fetch posting setup for this customer × item group
                 $postingSetup = GeneralPostingSetup::where([
@@ -793,13 +837,32 @@ class PostingService
                     'general_product_posting_group_id' => $productGroupId,
                 ])->first();
 
+                // Fallback: some masters are keyed by inventory group; try that when needed.
+                if (! $postingSetup && $inventoryGroupId && $inventoryGroupId !== $productGroupId) {
+                    $postingSetup = GeneralPostingSetup::where([
+                        'general_business_posting_group_id' => $customerGroupId,
+                        'general_product_posting_group_id' => $inventoryGroupId,
+                    ])->first();
+                }
+
+                // Final fallback: use any active setup for this business group that has sales account configured.
+                if (! $postingSetup) {
+                    $postingSetup = GeneralPostingSetup::query()
+                        ->where('general_business_posting_group_id', $customerGroupId)
+                        ->where('blocked', false)
+                        ->whereNotNull('sales_account_id')
+                        ->orderByRaw('CASE WHEN cogs_account_id IS NULL THEN 1 ELSE 0 END')
+                        ->orderBy('id')
+                        ->first();
+                }
+
                 // In PostingService.php around line 515-520, replace:
                 if (! $postingSetup) {
                     throw new \Exception(
                         "No posting setup found for customer '{$customer->name}' (Group: {$customerGroupId}) ".
-                        "and item '{$item->name}' (Group: {$productGroupId}). ".
+                        "and item '{$itemDisplayName}' (General Product Group: {$productGroupId}, Inventory Group: {$inventoryGroupId}). ".
                         "Please configure General Posting Setup for Business Group ID {$customerGroupId} ".
-                        "and Product Group ID {$productGroupId}."
+                        'with one of those Product Group IDs.'
                     );
                 }
 
@@ -808,7 +871,7 @@ class PostingService
                 $inventoryAccount = $item->getInventoryAccount();
 
                 if (! $salesAccount) {
-                    throw new \Exception("Missing sales account for item '{$item->name}'.");
+                    throw new \Exception("Missing sales account for item '{$itemDisplayName}'.");
                 }
 
                 $vatBusGroup = $invoice->vat_business_posting_group_id;
@@ -816,9 +879,10 @@ class PostingService
 
                 $vatService = app(VatService::class);
                 $vatSetup = $vatService->resolveSetup($vatBusGroup, $vatProdGroup);
+                $isPriceInclusive = (bool) ($invoice->is_price_inclusive ?? false);
 
                 $lineTotalRaw = $line->quantity * $line->unit_price;
-                $vatCalc = $vatService->calculate($lineTotalRaw, $vatSetup, $invoice->is_price_inclusive);
+                $vatCalc = $vatService->calculate($lineTotalRaw, $vatSetup, $isPriceInclusive);
 
                 $lineRevenue = $vatCalc['net_amount'];
                 $lineVat = $vatCalc['vat_amount'];

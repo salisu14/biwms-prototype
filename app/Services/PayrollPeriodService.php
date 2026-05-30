@@ -2,13 +2,12 @@
 
 namespace App\Services;
 
-use App\Models\PayrollPeriod;
-use App\Models\PayrollDocument;
-use App\Models\EmployeeYtdBalance;
-use App\Enums\PayrollPeriodStatus;
 use App\Enums\PayCodeType;
-use Illuminate\Support\Facades\DB;
+use App\Enums\PayrollPeriodStatus;
+use App\Models\EmployeeYtdBalance;
+use App\Models\PayrollPeriod;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 class PayrollPeriodService
 {
@@ -17,30 +16,44 @@ class PayrollPeriodService
      */
     public function close(PayrollPeriod $period): void
     {
-        if ($period->status === PayrollPeriodStatus::Closed) {
-            throw new Exception("Period is already closed.");
+        if ($period->status === PayrollPeriodStatus::CLOSED) {
+            throw new Exception('Period is already closed.');
         }
 
         DB::transaction(function () use ($period) {
-            // 1. Ensure document is posted
-            $document = $period->documents()->first();
-            if (!$document || $document->status->value !== 'POSTED') {
-                throw new Exception("Cannot close period. The payroll document must be posted first.");
+            $documents = $period->documents()->with(['lines.payCode'])->get();
+            if ($documents->isEmpty()) {
+                throw new Exception('Cannot close period. No payroll document exists for this period.');
             }
 
-            // 2. Update YTD Balances
-            foreach ($document->lines()->get()->groupBy('employee_id') as $employeeId => $lines) {
+            $hasOpenDocuments = $documents->contains(fn ($document) => $document->status?->value !== 'POSTED');
+            if ($hasOpenDocuments) {
+                throw new Exception('Cannot close period. All payroll documents for this period must be posted first.');
+            }
+
+            $allLines = $documents->flatMap(fn ($document) => $document->lines);
+
+            foreach ($allLines->groupBy('employee_id') as $employeeId => $lines) {
                 $year = $period->start_date->year;
-                
+
                 $ytd = EmployeeYtdBalance::firstOrCreate(
                     ['employee_id' => $employeeId, 'year' => $year],
                     ['gross_earnings' => 0, 'tax_deducted' => 0, 'social_security_employee' => 0, 'social_security_employer' => 0, 'net_paid' => 0]
                 );
 
-                $gross = $lines->where('line_type', PayCodeType::EARNING)->sum('amount');
-                $tax = $lines->where('payCode.code', 'PAYE')->sum('amount');
-                $ss = $lines->where('payCode.code', 'NSSF')->sum('amount');
-                $net = $gross - $lines->where('line_type', PayCodeType::DEDUCTION)->sum('amount');
+                $gross = (float) $lines
+                    ->filter(fn ($line) => strtoupper((string) $line->line_type) === strtoupper(PayCodeType::EARNING->getLabel()))
+                    ->sum('amount');
+                $tax = (float) $lines
+                    ->filter(fn ($line) => strtoupper((string) ($line->payCode?->code ?? '')) === 'PAYE')
+                    ->sum('amount');
+                $ss = (float) $lines
+                    ->filter(fn ($line) => in_array(strtoupper((string) ($line->payCode?->code ?? '')), ['NSSF', 'NHIF', 'SHIF'], true))
+                    ->sum('amount');
+                $totalDeductions = (float) $lines
+                    ->filter(fn ($line) => strtoupper((string) $line->line_type) === strtoupper(PayCodeType::DEDUCTION->getLabel()))
+                    ->sum('amount');
+                $net = $gross - $totalDeductions;
 
                 $ytd->increment('gross_earnings', $gross);
                 $ytd->increment('tax_deducted', $tax);
@@ -48,8 +61,7 @@ class PayrollPeriodService
                 $ytd->increment('net_paid', $net);
             }
 
-            // 3. Mark Period as Closed
-            $period->status = PayrollPeriodStatus::Closed;
+            $period->status = PayrollPeriodStatus::CLOSED;
             $period->is_current = false;
             $period->save();
         });

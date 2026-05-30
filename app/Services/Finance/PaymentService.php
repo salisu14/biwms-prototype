@@ -7,9 +7,9 @@ use App\Models\CustomerLedgerEntry;
 use App\Models\Payment;
 use App\Models\PaymentApplication;
 use App\Models\PostedPurchaseCreditMemo;
+use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
-use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\SalesOrder;
 use App\Models\VendorLedgerEntry;
@@ -160,7 +160,7 @@ class PaymentService
             SalesOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
         }
 
-        if ($document instanceof PurchaseInvoice && ! empty($document->order_id)) {
+        if ($document instanceof PostedPurchaseInvoice && ! empty($document->order_id)) {
             PurchaseOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
         }
 
@@ -344,7 +344,7 @@ class PaymentService
         return match ($type) {
             'SALES_INVOICE' => PostedSalesInvoice::find($id),
             'SALES_CREDIT_MEMO' => PostedSalesCreditMemo::find($id),
-            'PURCHASE_INVOICE' => PurchaseInvoice::find($id),
+            'PURCHASE_INVOICE' => PostedPurchaseInvoice::find($id),
             'PURCHASE_CREDIT_MEMO' => PostedPurchaseCreditMemo::find($id),
             default => null,
         };
@@ -355,7 +355,7 @@ class PaymentService
         return match (get_class($document)) {
             PostedSalesInvoice::class => 'SALES_INVOICE',
             PostedSalesCreditMemo::class => 'SALES_CREDIT_MEMO',
-            PurchaseInvoice::class => 'PURCHASE_INVOICE',
+            PostedPurchaseInvoice::class => 'PURCHASE_INVOICE',
             PostedPurchaseCreditMemo::class => 'PURCHASE_CREDIT_MEMO',
             default => 'UNKNOWN',
         };
@@ -370,7 +370,7 @@ class PaymentService
                     ->orWhereNull('paid_in_full'))
                 ->get();
         } else {
-            return PurchaseInvoice::forVendor($payment->party_id)
+            return PostedPurchaseInvoice::forVendor($payment->party_id)
                 ->where(fn (Builder $query) => $query
                     ->where('paid_in_full', false)
                     ->orWhereNull('paid_in_full'))

@@ -4,12 +4,16 @@ namespace App\Filament\Resources\PayrollDocuments\Schemas;
 
 use App\Enums\PayrollStatus;
 use App\Models\Employee;
+use App\Models\PayCode;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class PayrollDocumentForm
@@ -46,6 +50,55 @@ class PayrollDocumentForm
 
                 Group::make([
                     Section::make('Lines')->schema([
+                        Select::make('employee_seed_ids')
+                            ->label('Add Multiple Employees')
+                            ->options(fn () => Employee::query()
+                                ->where('is_active', true)
+                                ->whereNotNull('payroll_posting_group_id')
+                                ->orderBy('employee_number')
+                                ->get()
+                                ->mapWithKeys(fn (Employee $employee) => [
+                                    $employee->id => "{$employee->employee_number} - {$employee->first_name} {$employee->last_name}",
+                                ])
+                                ->all())
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->dehydrated(false)
+                            ->helperText('Select employees to seed payroll lines for review before posting.')
+                            ->live()
+                            ->afterStateUpdated(function ($state, Get $get, Set $set): void {
+                                $employeeIds = collect($state ?? [])->filter()->map(fn ($id) => (int) $id)->values();
+                                if ($employeeIds->isEmpty()) {
+                                    return;
+                                }
+
+                                $existingLines = collect($get('lines') ?? []);
+                                $existingEmployeeIds = $existingLines->pluck('employee_id')->filter()->map(fn ($id) => (int) $id)->all();
+                                $newIds = $employeeIds->reject(fn (int $id) => in_array($id, $existingEmployeeIds, true));
+                                if ($newIds->isEmpty()) {
+                                    return;
+                                }
+
+                                $defaultPayCode = PayCode::query()
+                                    ->where('is_active', true)
+                                    ->where('type', 'EARNING')
+                                    ->orderBy('code')
+                                    ->first();
+
+                                $generatedLines = $newIds->map(fn (int $employeeId) => [
+                                    'employee_id' => $employeeId,
+                                    'pay_code_id' => $defaultPayCode?->id,
+                                    'line_type' => 'Earning',
+                                    'amount' => 0,
+                                    'hours' => null,
+                                    'rate' => null,
+                                    'employer_amount' => null,
+                                    'description' => 'Seeded line for payroll review',
+                                ])->all();
+
+                                $set('lines', array_values([...$existingLines->all(), ...$generatedLines]));
+                            }),
                         Repeater::make('lines')
                             ->relationship()
                             ->schema([
@@ -83,6 +136,11 @@ class PayrollDocumentForm
                                     ->label('Employer Portion')
                                     ->columnSpan(2),
                                 TextInput::make('description')
+                                    ->columnSpan(6),
+                                Textarea::make('review_note')
+                                    ->dehydrated(false)
+                                    ->rows(2)
+                                    ->helperText('Optional reviewer note (not posted to payroll lines).')
                                     ->columnSpan(6),
                             ])->columns(6)
                             ->reorderable(),

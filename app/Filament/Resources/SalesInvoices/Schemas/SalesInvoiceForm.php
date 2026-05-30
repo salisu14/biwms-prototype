@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SalesInvoices\Schemas;
 use App\Enums\ApprovalStatus;
 use App\Models\Item;
 use App\Models\SalesInvoice;
+use App\Models\SalesOrder;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
@@ -46,6 +47,33 @@ class SalesInvoiceForm
                             ->preload()
                             ->required()
                             ->disabled(fn (?SalesInvoice $record) => $record?->isPosted()),
+
+                        Select::make('sales_order_id')
+                            ->label('Sales Order')
+                            ->relationship('salesOrder', 'order_number')
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set): void {
+                                if (! $state) {
+                                    return;
+                                }
+
+                                /** @var SalesOrder|null $salesOrder */
+                                $salesOrder = SalesOrder::query()
+                                    ->with('lines')
+                                    ->find($state);
+
+                                if (! $salesOrder) {
+                                    return;
+                                }
+
+                                $lines = self::buildLinesFromSalesOrder($salesOrder);
+                                $set('customer_id', $salesOrder->customer_id);
+                                $set('currency_code', $salesOrder->currency_code ?: 'NGN');
+                                $set('lines', $lines);
+                                $set('total_amount', number_format(collect($lines)->sum(fn (array $line): float => (float) ($line['line_total'] ?? 0)), 2, '.', ''));
+                            }),
 
                         Select::make('status')
                             ->options(ApprovalStatus::class)
@@ -95,6 +123,7 @@ class SalesInvoiceForm
                                         if ($item) {
                                             $set('description', $item->description);
                                             $set('unit_price', $item->unit_price);
+                                            $set('unit_of_measure', $item->base_unit_of_measure);
                                         }
                                     })
                                     ->columnSpan(2),
@@ -109,6 +138,10 @@ class SalesInvoiceForm
                                     ->required()
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateLineTotal($set, $get)),
+
+                                TextInput::make('unit_of_measure')
+                                    ->label('UOM')
+                                    ->maxLength(20),
 
                                 TextInput::make('unit_price')
                                     ->numeric()
@@ -188,5 +221,32 @@ class SalesInvoiceForm
 
         $path = $isFromInsideRepeater ? '../../total_amount' : 'total_amount';
         $set($path, number_format($total, 2, '.', ''));
+    }
+
+    public static function buildLinesFromSalesOrder(SalesOrder $salesOrder): array
+    {
+        return $salesOrder->lines
+            ->map(function ($line): array {
+                $quantityToInvoice = max(
+                    0,
+                    ((float) $line->quantity_shipped > 0 ? (float) $line->quantity_shipped : (float) $line->quantity)
+                    - (float) $line->quantity_invoiced
+                );
+                $lineNet = $quantityToInvoice * (float) $line->unit_price;
+                $lineVat = $lineNet * ((float) $line->vat_percentage / 100);
+
+                return [
+                    'item_id' => $line->item_id,
+                    'description' => $line->description,
+                    'quantity' => $quantityToInvoice,
+                    'unit_of_measure' => $line->unit_of_measure_code,
+                    'unit_price' => (float) $line->unit_price,
+                    'vat_percent' => (float) $line->vat_percentage,
+                    'line_total' => number_format($lineNet + $lineVat, 2, '.', ''),
+                ];
+            })
+            ->filter(fn (array $line): bool => (float) $line['quantity'] > 0)
+            ->values()
+            ->all();
     }
 }

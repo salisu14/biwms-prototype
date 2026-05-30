@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PurchaseInvoices\Schemas;
 
+use App\Enums\ApprovalStatus;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -45,6 +46,21 @@ class PurchaseInvoiceInfolist
                             Section::make('Status & Audit')
                                 ->schema([
                                     Grid::make(3)->schema([
+                                        TextEntry::make('status')
+                                            ->badge()
+                                            ->label('Approval')
+                                            ->color(function ($state): string {
+                                                $value = $state instanceof ApprovalStatus ? $state->value : (string) $state;
+
+                                                return match ($value) {
+                                                    'draft' => 'gray',
+                                                    'pending' => 'warning',
+                                                    'approved' => 'success',
+                                                    'rejected' => 'danger',
+                                                    'posted' => 'info',
+                                                    default => 'gray',
+                                                };
+                                            }),
                                         IconEntry::make('paid_in_full')
                                             ->label('Paid')
                                             ->boolean(),
@@ -52,8 +68,9 @@ class PurchaseInvoiceInfolist
                                             ->label('Cancelled')
                                             ->boolean()
                                             ->trueColor('danger'),
-                                        TextEntry::make('status')
+                                        TextEntry::make('payment_status')
                                             ->badge()
+                                            ->label('Payment Status')
                                             ->color(fn (string $state): string => match ($state) {
                                                 'PAID' => 'success',
                                                 'OVERDUE' => 'danger',

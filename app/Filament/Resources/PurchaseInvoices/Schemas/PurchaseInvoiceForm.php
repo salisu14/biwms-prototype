@@ -2,10 +2,12 @@
 
 namespace App\Filament\Resources\PurchaseInvoices\Schemas;
 
+use App\Enums\ApprovalStatus;
 use App\Enums\PurchaseOrderStatus;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
+use App\Services\NumberSeriesService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -35,7 +37,17 @@ class PurchaseInvoiceForm
                                         ->label('Invoice Number')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->default(fn () => (new PurchaseInvoice)->generateNumber() ?? 'AUTO-GEN')
+                                        ->default(function () {
+                                            $service = app(NumberSeriesService::class);
+                                            foreach (['P-INV', 'PURCHASE_INVOICE', 'PI'] as $seriesCode) {
+                                                $nextNo = $service->tryGetNextNo($seriesCode);
+                                                if (! empty($nextNo)) {
+                                                    return $nextNo;
+                                                }
+                                            }
+
+                                            return 'SETUP-NO-SERIES';
+                                        })
                                         // Lock the field if the record already exists in the database
                                         ->disabled(fn (?PurchaseInvoice $record) => $record !== null)
                                         // Ensure the value is still sent to the database during creation
@@ -80,7 +92,11 @@ class PurchaseInvoiceForm
                                                     $get('vendor_id'),
                                                     fn ($q) => $q->where('vendor_id', $get('vendor_id'))
                                                 )
-                                                ->where('status', PurchaseOrderStatus::PENDING->value) // Assuming 'OPEN' is the enum value or DB string
+                                                ->whereIn('status', [
+                                                    PurchaseOrderStatus::APPROVED->value,
+                                                    PurchaseOrderStatus::PARTIALLY_RECEIVED->value,
+                                                    PurchaseOrderStatus::RECEIVED->value,
+                                                ])
                                                 ->orderBy('order_date', 'desc')
                                         )
                                         ->afterStateUpdated(function (Set $set, $state) {
@@ -122,10 +138,11 @@ class PurchaseInvoiceForm
                                             }
                                         }),
 
-                                    TextInput::make('status')
-                                        ->disabled()
-                                        ->default('Draft')
-                                        ->placeholder('Draft'),
+                                    Select::make('status')
+                                        ->options(ApprovalStatus::class)
+                                        ->default(ApprovalStatus::DRAFT)
+                                        ->required()
+                                        ->native(false),
 
                                     // Pay-To Vendor Details (Standard BC Fields)
                                     TextInput::make('pay_to_vendor_no')

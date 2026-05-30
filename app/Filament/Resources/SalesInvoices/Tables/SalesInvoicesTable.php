@@ -4,7 +4,7 @@ namespace App\Filament\Resources\SalesInvoices\Tables;
 
 use App\Enums\ApprovalStatus;
 use App\Models\SalesInvoice;
-use App\Services\PostingService;
+use App\Services\Sales\SalesInvoiceService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -127,8 +127,7 @@ class SalesInvoicesTable
                     ->requiresConfirmation()
                     ->visible(fn ($record) => auth()->user()?->can('post', $record) && $record->status === ApprovalStatus::APPROVED)
                     ->action(function (SalesInvoice $record) {
-                        app(PostingService::class)
-                            ->postSalesInvoice($record);
+                        app(SalesInvoiceService::class)->post($record);
                     }),
 
                 ViewAction::make()

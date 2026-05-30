@@ -6,8 +6,13 @@ use App\Data\Purchase\ApprovePurchaseOrderData;
 use App\Data\Purchase\CancelPurchaseOrderData;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
+use App\Filament\Resources\PurchaseInvoices\PurchaseInvoiceResource;
+use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
+use App\Models\PostedPurchaseInvoice;
 use App\Models\PurchaseOrder;
+use App\Services\Print\PostedPurchaseInvoicePrintService;
 use App\Services\Print\ProformaInvoiceService;
+use App\Services\Purchase\PurchaseInvoiceService;
 use App\Services\Purchase\PurchaseOrderService;
 use Exception;
 use Filament\Actions\Action;
@@ -213,34 +218,71 @@ class PurchaseOrdersTable
                             }
                         }),
 
-                    Action::make('markReceived')
-                        ->label('Mark Received')
+                    Action::make('post_receipt')
+                        ->label('Post Receipt')
                         ->icon('heroicon-o-check-badge')
                         ->color('success')
                         ->requiresConfirmation()
                         ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true))
-                        ->action(function ($record) {
+                        ->action(function ($record, PurchaseOrderService $purchaseOrderService) {
                             if (! $record instanceof PurchaseOrder) {
                                 return;
                             }
 
-                            $record->update(['status' => PurchaseOrderStatus::RECEIVED]);
-                            Notification::make()->title('Order marked as received')->success()->send();
+                            $purchaseOrderService->postReceipt($record);
+                            Notification::make()->title('Receipt posted')->success()->send();
                         }),
 
-                    Action::make('markInvoiced')
-                        ->label('Mark Invoiced')
+                    Action::make('create_purchase_invoice')
+                        ->label('Create Purchase Invoice')
                         ->icon('heroicon-o-document-check')
                         ->color('primary')
                         ->requiresConfirmation()
                         ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::RECEIVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true))
-                        ->action(function ($record) {
+                        ->action(function ($record, PurchaseInvoiceService $purchaseInvoiceService) {
                             if (! $record instanceof PurchaseOrder) {
                                 return;
                             }
 
-                            $record->update(['status' => PurchaseOrderStatus::INVOICED]);
-                            Notification::make()->title('Order marked as invoiced')->success()->send();
+                            try {
+                                $invoice = $purchaseInvoiceService->createFromOrder($record);
+                                Notification::make()->title('Purchase Invoice Created')->success()->send();
+
+                                return redirect(PurchaseInvoiceResource::getUrl('edit', ['record' => $invoice]));
+                            } catch (\RuntimeException $exception) {
+                                Notification::make()->title($exception->getMessage())->warning()->send();
+
+                                return null;
+                            }
+                        }),
+
+                    Action::make('post_and_invoice')
+                        ->label('Post + Invoice')
+                        ->icon('heroicon-o-bolt')
+                        ->color('primary')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED, PurchaseOrderStatus::RECEIVED], true))
+                        ->action(function ($record, PurchaseInvoiceService $purchaseInvoiceService) {
+                            if (! $record instanceof PurchaseOrder) {
+                                return;
+                            }
+
+                            app(PurchaseOrderService::class)->postReceipt($record);
+                            $record->refresh();
+
+                            try {
+                                $invoice = $purchaseInvoiceService->createFromOrder($record);
+                                $postedInvoice = $purchaseInvoiceService->post($invoice);
+                                Notification::make()->title('Receipt and Invoice Posted')->success()->send();
+
+                                return redirect(PurchaseOrderResource::getUrl('archived', [
+                                    'tableSearch' => $record->order_number,
+                                ]));
+                            } catch (\RuntimeException $exception) {
+                                Notification::make()->title($exception->getMessage())->warning()->send();
+
+                                return null;
+                            }
                         }),
 
                     Action::make('close')
@@ -299,6 +341,36 @@ class PurchaseOrdersTable
                             fn () => print (app(ProformaInvoiceService::class)->generatePurchaseProforma($record->refresh()->load(['lines']))->output()),
                             $record->order_number.'_PO.pdf'
                         ) : null),
+
+                    Action::make('printPurchaseInvoice')
+                        ->label('Purchase Invoice (PI)')
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->color('gray')
+                        ->visible(fn ($record) => $record instanceof PurchaseOrder)
+                        ->action(function ($record) {
+                            if (! $record instanceof PurchaseOrder) {
+                                return null;
+                            }
+
+                            $postedInvoice = PostedPurchaseInvoice::query()
+                                ->where('order_id', $record->id)
+                                ->latest('id')
+                                ->first();
+
+                            if (! $postedInvoice) {
+                                Notification::make()
+                                    ->title('No posted purchase invoice found for this order.')
+                                    ->warning()
+                                    ->send();
+
+                                return null;
+                            }
+
+                            return response()->streamDownload(
+                                fn () => print (app(PostedPurchaseInvoicePrintService::class)->generatePurchaseInvoice($postedInvoice)->output()),
+                                $postedInvoice->document_number.'_PI.pdf'
+                            );
+                        }),
                 ]),
             ])
             ->filters([

@@ -26,7 +26,8 @@ class PurchaseOrderService
 {
     public function __construct(
         protected PostingService $postingService,
-        protected PutAwayWorksheetService $putAwayService
+        protected PutAwayWorksheetService $putAwayService,
+        protected PurchaseInvoiceService $purchaseInvoiceService
     ) {}
 
     /**
@@ -339,97 +340,36 @@ class PurchaseOrderService
         });
     }
 
+    public function postReceipt(PurchaseOrder $order): PurchaseOrder
+    {
+        return DB::transaction(function () use ($order): PurchaseOrder {
+            $order->loadMissing('lines');
+
+            foreach ($order->lines as $line) {
+                if ((float) $line->received_quantity < (float) $line->quantity) {
+                    $line->update([
+                        'received_quantity' => (float) $line->quantity,
+                    ]);
+                }
+            }
+
+            $order->refreshLifecycleStatus();
+
+            return $order->fresh('lines');
+        });
+    }
+
     /**
      * Post Purchase Invoice
      * Moves totals and G/L logic here from the Model
      */
     public function postInvoice(PostInvoiceData $data): PurchaseInvoice
     {
-        $order = PurchaseOrder::with(['lines', 'vendor'])->findOrFail($data->purchaseOrderId);
+        $order = PurchaseOrder::query()->findOrFail($data->purchaseOrderId);
+        $invoice = $this->purchaseInvoiceService->createFromOrder($order);
+        $this->purchaseInvoiceService->post($invoice);
 
-        return DB::transaction(function () use ($order, $data) {
-            $invoice = PurchaseInvoice::create([
-                'document_number' => $data->documentNumber ?? PurchaseInvoice::generateNumber(),
-                'order_id' => $order->id,
-                'vendor_id' => $order->vendor_id,
-                'posting_date' => $data->postingDate,
-                'due_date' => $data->postingDate->addDays($order->payment_terms ?? 30),
-                'general_business_posting_group_id' => $order->general_business_posting_group_id,
-                'vendor_posting_group_id' => $order->vendor_posting_group_id,
-                'vat_bus_posting_group' => $order->vat_bus_posting_group,
-            ]);
-
-            $totalAmount = 0;
-            $totalVat = 0;
-
-            foreach ($data->lines as $lineData) {
-                $poLine = $order->lines->find($lineData['poLineId']);
-
-                if (! $poLine) {
-                    throw new Exception('Purchase Order Line not found.');
-                }
-
-                // Check for over-invoicing
-                $remainingToInvoice = $poLine->quantity - $poLine->invoiced_quantity;
-                if ($lineData['quantity'] > $remainingToInvoice) {
-                    throw new Exception("Cannot invoice more than remaining quantity for item: {$poLine->description}");
-                }
-
-                $lineTotal = $lineData['quantity'] * $poLine->unit_cost;
-                $vatAmount = $lineTotal * ($poLine->vat_percentage / 100);
-
-                $invoice->lines()->create([
-                    'line_number' => $poLine->line_number,
-                    'po_line_id' => $poLine->id,
-                    'item_id' => $poLine->item_id,
-                    'description' => $poLine->description,
-                    'quantity' => $lineData['quantity'],
-                    'unit_cost' => $poLine->unit_cost,
-                    'unit_of_measure' => $poLine->unit_of_measure,
-                    'line_total' => $lineTotal,
-                    'vat_amount' => $vatAmount,
-                    'total_amount' => $lineTotal + $vatAmount,
-                ]);
-
-                // Update PO Line Quantity
-                $poLine->increment('invoiced_quantity', $lineData['quantity']);
-
-                // G/L Posting
-                $this->postingService->postPurchaseLine(
-                    vendor: $order->vendor,
-                    item: $poLine->item,
-                    quantity: $lineData['quantity'],
-                    unitCost: $poLine->unit_cost,
-                    lineTotal: $lineTotal,
-                    postingDate: $data->postingDate,
-                    documentNumber: $invoice->document_number,
-                    description: $poLine->description,
-                    vatAmount: $vatAmount
-                );
-
-                $totalAmount += $lineTotal;
-                $totalVat += $vatAmount;
-            }
-
-            // Post A/P entry
-            $this->postingService->postVendorPayable(
-                vendor: $order->vendor,
-                amount: $totalAmount + $totalVat,
-                postingDate: $data->postingDate,
-                documentNumber: $invoice->document_number
-            );
-
-            $invoice->update([
-                'total_amount' => $totalAmount,
-                'total_vat' => $totalVat,
-                'grand_total' => $totalAmount + $totalVat,
-            ]);
-
-            // Finalize order status
-            $this->refreshOrderStatus($order);
-
-            return $invoice;
-        });
+        return $invoice->fresh();
     }
 
     /**

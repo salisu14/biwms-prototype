@@ -30,12 +30,6 @@ class CompanyInformationResource extends Resource
 
     protected static ?int $navigationSort = 1;
 
-    // Singleton guards
-    public static function canCreate(): bool
-    {
-        return CompanyInformation::count() === 0;
-    }
-
     public static function canDelete($model): bool
     {
         return false;

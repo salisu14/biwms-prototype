@@ -10,19 +10,27 @@ use Illuminate\Validation\ValidationException;
 class CompanyInformationService
 {
     /**
-     * Get or create the singleton instance
+     * Get or create the active business company profile.
      */
-    public function get(): CompanyInformation
+    public function get(?int $businessId = null): CompanyInformation
     {
-        return CompanyInformation::getInstance();
+        return CompanyInformation::getInstance($businessId);
     }
 
     /**
      * Update company information
      */
-    public function update(array $data): CompanyInformation
+    public function update(array $data, ?int $businessId = null): CompanyInformation
     {
-        $company = CompanyInformation::getInstance();
+        $resolvedBusinessId = $businessId ?? (isset($data['business_id']) ? (int) $data['business_id'] : null);
+        $company = CompanyInformation::getInstance($resolvedBusinessId);
+
+        return $this->updateRecord($company, $data, $resolvedBusinessId);
+    }
+
+    public function updateRecord(CompanyInformation $company, array $data, ?int $businessId = null): CompanyInformation
+    {
+        $resolvedBusinessId = $businessId ?? (isset($data['business_id']) ? (int) $data['business_id'] : (int) $company->business_id);
         $previousLogoPath = $company->logo_path;
         $previousFaviconPath = $company->favicon_path;
 
@@ -50,6 +58,8 @@ class CompanyInformationService
             $data['favicon_path'] = null;
         }
         unset($data['remove_favicon']);
+
+        $data['business_id'] = $resolvedBusinessId;
 
         $company->update($data);
 

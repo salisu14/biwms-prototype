@@ -13,8 +13,7 @@ class ListCompanyInformation extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->visible(static::getResource()::canCreate()),
+            CreateAction::make(),
         ];
     }
 }

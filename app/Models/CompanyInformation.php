@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -21,6 +22,7 @@ class CompanyInformation extends Model
     const SINGLETON_ID = 1;
 
     protected $fillable = [
+        'business_id',
         'company_name',
         'trading_name',
         'registration_no',
@@ -58,10 +60,24 @@ class CompanyInformation extends Model
         'updated_at' => 'datetime',
     ];
 
-    public static function getInstance(): self
+    public static function getInstance(?int $businessId = null): self
     {
+        $resolvedBusinessId = $businessId ?? self::resolveCurrentBusinessId();
+
+        if ($resolvedBusinessId !== null) {
+            return self::query()->firstOrCreate(
+                ['business_id' => $resolvedBusinessId],
+                [
+                    'company_name' => 'Your Company Name',
+                    'country_code' => 'NGA',
+                    'base_currency_code' => 'NGN',
+                    'fiscal_year_start_month' => '01',
+                ]
+            );
+        }
+
         return self::query()->firstOrCreate(
-            ['id' => self::SINGLETON_ID],
+            ['id' => self::SINGLETON_ID, 'business_id' => null],
             [
                 'id' => self::SINGLETON_ID,
                 'company_name' => 'Your Company Name',
@@ -72,9 +88,9 @@ class CompanyInformation extends Model
         );
     }
 
-    public static function updateInstance(array $data): self
+    public static function updateInstance(array $data, ?int $businessId = null): self
     {
-        $instance = self::getInstance();
+        $instance = self::getInstance($businessId);
         $instance->update($data);
 
         return $instance->fresh();
@@ -227,6 +243,41 @@ class CompanyInformation extends Model
     public function scopeSingleton(Builder $query): Builder
     {
         return $query->where('id', self::SINGLETON_ID);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
+
+    private static function resolveCurrentBusinessId(): ?int
+    {
+        $requestBusinessId = request()?->integer('business_id');
+        if ($requestBusinessId) {
+            session(['active_business_id' => $requestBusinessId]);
+
+            return $requestBusinessId;
+        }
+
+        $sessionBusinessId = session('active_business_id');
+        if (is_numeric($sessionBusinessId)) {
+            return (int) $sessionBusinessId;
+        }
+
+        if (app()->runningInConsole()) {
+            return null;
+        }
+
+        $fallbackBusinessId = Business::query()
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->value('id');
+
+        if ($fallbackBusinessId) {
+            session(['active_business_id' => (int) $fallbackBusinessId]);
+        }
+
+        return $fallbackBusinessId ? (int) $fallbackBusinessId : null;
     }
 
     private static function normalizeStoredPath(mixed $value): ?string

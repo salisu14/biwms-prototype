@@ -2,12 +2,15 @@
 
 namespace App\Filament\Resources\PurchaseReceipts\Tables;
 
+use App\Models\PurchaseReceipt;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -58,6 +61,20 @@ class PurchaseReceiptsTable
                     ->relationship('receivingLocation', 'name'),
             ])
             ->recordActions([
+                Action::make('post')
+                    ->label('Post Receipt')
+                    ->icon('heroicon-o-check-badge')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->visible(fn (PurchaseReceipt $record): bool => ! $record->posted)
+                    ->action(function (PurchaseReceipt $record): void {
+                        try {
+                            $record->post((int) auth()->id());
+                            Notification::make()->title('Purchase Receipt posted successfully')->success()->send();
+                        } catch (\Throwable $exception) {
+                            Notification::make()->title('Unable to post receipt')->body($exception->getMessage())->danger()->send();
+                        }
+                    }),
                 ViewAction::make(),
                 EditAction::make(),
             ])

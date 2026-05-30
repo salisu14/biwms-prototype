@@ -3,7 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\PurchaseOrderStatus;
-use App\Models\PurchaseInvoice;
+use App\Models\PostedPurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseReceipt;
 use Filament\Pages\Page;
@@ -24,7 +24,7 @@ class PurchaseHistory extends Page
     {
         return [
             'postedReceiptCount' => PurchaseReceipt::count(),
-            'postedInvoiceCount' => PurchaseInvoice::count(),
+            'postedInvoiceCount' => PostedPurchaseInvoice::count(),
             'archivedOrderCount' => PurchaseOrder::where('status', PurchaseOrderStatus::CLOSED->value)->count(),
         ];
     }

@@ -11,6 +11,7 @@ class SalesInvoice extends Model
     protected $fillable = [
         'invoice_number',
         'customer_id',
+        'sales_order_id',
         'total_amount',
         'currency_code',
         'status',
@@ -42,9 +43,14 @@ class SalesInvoice extends Model
         return $this->belongsTo(Customer::class);
     }
 
+    public function salesOrder()
+    {
+        return $this->belongsTo(SalesOrder::class);
+    }
+
     public function isPosted(): bool
     {
-        return $this->status === ApprovalStatus::POSTED || $this->posted_at === null;
+        return $this->status === ApprovalStatus::POSTED || $this->posted_at !== null;
     }
 
     public function isSuperAdmin(): bool
