@@ -8,7 +8,9 @@ use App\Models\Item;
 use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedPurchaseCreditMemoLine;
 use App\Models\PurchaseCreditMemo;
+use App\Models\PurchaseInvoice;
 use App\Models\Vendor;
+use App\Services\Approval\ApprovalTemplateService;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +19,8 @@ use Illuminate\Validation\ValidationException;
 class PurchaseCreditMemoService
 {
     public function __construct(
-        protected PostingService $postingService
+        protected PostingService $postingService,
+        protected ApprovalTemplateService $approvalTemplateService,
     ) {}
 
     /**
@@ -26,17 +29,30 @@ class PurchaseCreditMemoService
     public function create(PurchaseCreditMemoData $data): PurchaseCreditMemo
     {
         return DB::transaction(function () use ($data) {
+            if ($data->lines->isEmpty()) {
+                throw ValidationException::withMessages(['lines' => 'Select at least one line to credit.']);
+            }
+
             $vendor = Vendor::findOrFail($data->vendor_id);
+            $correctedInvoice = $data->corrects_invoice_id
+                ? PurchaseInvoice::find($data->corrects_invoice_id)
+                : null;
+
+            if ($correctedInvoice) {
+                $this->validateCreditQuantitiesAgainstInvoice($correctedInvoice, $data);
+            }
 
             $memo = PurchaseCreditMemo::create([
+                'document_number' => PurchaseCreditMemo::generateNumber(),
                 'vendor_id' => $data->vendor_id,
-                'vendor_name' => $vendor->name,
+                'vendor_name' => $vendor->vendor_name,
                 'corrects_invoice_id' => $data->corrects_invoice_id,
+                'corrects_invoice_number' => $correctedInvoice?->document_number,
                 'external_document_number' => $data->external_document_number,
-                'posting_date' => $data->posting_date ?? now(),
-                'document_date' => $data->document_date ?? now(),
-                'location_id' => $data->location_id,
-                'currency_code' => $data->currency_code,
+                'posting_date' => $data->posting_date ?? $correctedInvoice?->posting_date ?? now(),
+                'document_date' => $data->document_date ?? $correctedInvoice?->document_date ?? now(),
+                'location_id' => $data->location_id ?? $correctedInvoice?->location_id,
+                'currency_code' => $data->currency_code ?? $correctedInvoice?->currency_code ?? 'NGN',
                 'reason_code' => $data->reason_code,
                 'description' => $data->description,
                 'status' => ApprovalStatus::DRAFT,
@@ -71,17 +87,29 @@ class PurchaseCreditMemoService
         }
 
         return DB::transaction(function () use ($memo, $data) {
+            if ($data->lines->isEmpty()) {
+                throw ValidationException::withMessages(['lines' => 'Select at least one line to credit.']);
+            }
+
             $vendor = Vendor::findOrFail($data->vendor_id);
+            $correctedInvoice = $data->corrects_invoice_id
+                ? PurchaseInvoice::find($data->corrects_invoice_id)
+                : null;
+
+            if ($correctedInvoice) {
+                $this->validateCreditQuantitiesAgainstInvoice($correctedInvoice, $data);
+            }
 
             $memo->update([
                 'vendor_id' => $data->vendor_id,
-                'vendor_name' => $vendor->name,
+                'vendor_name' => $vendor->vendor_name,
                 'corrects_invoice_id' => $data->corrects_invoice_id,
+                'corrects_invoice_number' => $correctedInvoice?->document_number,
                 'external_document_number' => $data->external_document_number,
-                'posting_date' => $data->posting_date ?? now(),
-                'document_date' => $data->document_date ?? now(),
-                'location_id' => $data->location_id,
-                'currency_code' => $data->currency_code,
+                'posting_date' => $data->posting_date ?? $correctedInvoice?->posting_date ?? now(),
+                'document_date' => $data->document_date ?? $correctedInvoice?->document_date ?? now(),
+                'location_id' => $data->location_id ?? $correctedInvoice?->location_id,
+                'currency_code' => $data->currency_code ?? $correctedInvoice?->currency_code ?? $memo->currency_code,
                 'reason_code' => $data->reason_code,
                 'description' => $data->description,
             ]);
@@ -127,7 +155,9 @@ class PurchaseCreditMemoService
      */
     public function post(PurchaseCreditMemo $memo): PostedPurchaseCreditMemo
     {
-        if ($memo->status !== ApprovalStatus::APPROVED) {
+        $approvalRequired = $this->approvalTemplateService->requiresApproval($memo);
+
+        if ($approvalRequired && $memo->status !== ApprovalStatus::APPROVED) {
             throw ValidationException::withMessages(['status' => 'Only approved credit memos can be posted.']);
         }
 
@@ -138,11 +168,17 @@ class PurchaseCreditMemoService
                 'external_document_number' => $memo->external_document_number,
                 'vendor_id' => $memo->vendor_id,
                 'vendor_name' => $memo->vendor_name,
+                'vendor_address' => $memo->vendor?->address,
+                'vendor_city' => $memo->vendor?->city,
+                'vendor_post_code' => $memo->vendor?->postal_code,
+                'vendor_country' => $memo->vendor?->country,
+                'vendor_tax_registration_number' => $memo->vendor?->tax_id,
                 'posting_date' => $memo->posting_date,
                 'document_date' => $memo->document_date,
                 'vendor_posting_group_id' => $memo->vendor->vendor_posting_group_id,
                 'general_business_posting_group_id' => $memo->vendor->general_business_posting_group_id,
                 'currency_code' => $memo->currency_code,
+                'currency_factor' => 1,
                 'subtotal' => $memo->subtotal,
                 'tax_amount' => $memo->tax_amount,
                 'grand_total' => $memo->grand_total,
@@ -151,8 +187,11 @@ class PurchaseCreditMemoService
                 'posted_by' => Auth::id(),
                 'corrects_invoice_id' => $memo->corrects_invoice_id,
                 'corrects_invoice_number' => $memo->corrects_invoice_number,
+                'source_document_id' => $memo->id,
+                'source_document_type' => PurchaseCreditMemo::class,
                 'reason_code' => $memo->reason_code,
                 'description' => $memo->description,
+                'location_code' => $memo->location?->code,
             ]);
 
             // 2. Map Lines
@@ -188,5 +227,29 @@ class PurchaseCreditMemoService
 
             return $postedMemo;
         });
+    }
+
+    private function validateCreditQuantitiesAgainstInvoice(PurchaseInvoice $invoice, PurchaseCreditMemoData $data): void
+    {
+        $invoice->loadMissing('lines');
+
+        $maxByItemId = $invoice->lines
+            ->groupBy('item_id')
+            ->map(fn ($lines) => (float) $lines->sum('quantity'));
+
+        $requestedByItemId = collect($data->lines->toArray())
+            ->groupBy('item_id')
+            ->map(fn ($lines) => (float) collect($lines)->sum('quantity'));
+
+        foreach ($requestedByItemId as $itemId => $requestedQty) {
+            $maxQty = (float) ($maxByItemId[$itemId] ?? 0.0);
+
+            if ($requestedQty > ($maxQty + 0.000001)) {
+                $itemCode = Item::query()->whereKey($itemId)->value('item_code') ?? ('#'.$itemId);
+                throw ValidationException::withMessages([
+                    'lines' => "Credit quantity for item {$itemCode} exceeds invoiced quantity. Max: {$maxQty}, requested: {$requestedQty}.",
+                ]);
+            }
+        }
     }
 }

@@ -49,6 +49,10 @@ class ApprovalTemplateForm
                             ->options([
                                 'Purchase Order' => 'Purchase Order',
                                 'Sales Order' => 'Sales Order',
+                                'Purchase Quote' => 'Purchase Quote',
+                                'Purchase Credit Memo' => 'Purchase Credit Memo',
+                                'Sales Credit Memo' => 'Sales Credit Memo',
+                                'Payroll Document' => 'Payroll Document',
                                 'Expense Voucher' => 'Expense Voucher',
                                 'Journal' => 'General Journal',
                             ])

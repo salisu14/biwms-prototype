@@ -36,7 +36,7 @@ class ApprovalTemplateService
             ->where(function ($q) use ($model) {
                 // Check amount limits
                 $q->whereNull('amount_limit')
-                    ->orWhere('amount_limit', '>=', $model->getApprovalAmount());
+                    ->orWhere('amount_limit', '<=', $model->getApprovalAmount());
             })
             ->where(function ($q) use ($model) {
                 // Check posting group filter
@@ -48,7 +48,7 @@ class ApprovalTemplateService
                 // Check dimension filters if any (using first dimension for now as per legacy)
                 $dimensions = $model->getApprovalDimensions();
                 $dim1 = $dimensions['shortcut_dimension_1_code'] ?? $model->shortcut_dimension_1_code ?? null;
-                
+
                 if ($dim1) {
                     $q->whereJsonContains('dimension_1_filter', $dim1)
                         ->orWhereNull('dimension_1_filter');
@@ -91,7 +91,7 @@ class ApprovalTemplateService
     private function getUserByRole(string $role, Approvable $model): ?User
     {
         $locationCode = $model->getApprovalLocationCode();
-        
+
         $query = User::whereHas('roles', function ($q) use ($role) {
             $q->where('name', $role);
         });

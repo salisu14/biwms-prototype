@@ -10,6 +10,7 @@ use App\Filament\Resources\PurchaseCreditMemos\Pages\ViewPurchaseCreditMemo;
 use App\Filament\Resources\PurchaseCreditMemos\Schemas\PurchaseCreditMemoForm;
 use App\Filament\Shared\Actions\ApprovalActions;
 use App\Models\PurchaseCreditMemo;
+use App\Services\Approval\ApprovalTemplateService;
 use App\Services\Purchases\PurchaseCreditMemoService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -58,7 +59,36 @@ class PurchaseCreditMemoResource extends Resource
                     ->icon('heroicon-m-check-badge')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn ($record) => $record->status === ApprovalStatus::APPROVED && ! $record->isPendingApproval())
+                    ->hidden(fn ($record) => $record->status === ApprovalStatus::POSTED)
+                    ->disabled(function ($record): bool {
+                        if ($record->isPendingApproval()) {
+                            return true;
+                        }
+
+                        if ($record->status === ApprovalStatus::APPROVED) {
+                            return false;
+                        }
+
+                        return app(ApprovalTemplateService::class)->requiresApproval($record);
+                    })
+                    ->tooltip(function ($record): ?string {
+                        if ($record->status === ApprovalStatus::POSTED) {
+                            return null;
+                        }
+
+                        if ($record->isPendingApproval()) {
+                            return 'Post is unavailable while approval is pending.';
+                        }
+
+                        if (
+                            $record->status !== ApprovalStatus::APPROVED
+                            && app(ApprovalTemplateService::class)->requiresApproval($record)
+                        ) {
+                            return 'Post is available only after the document is approved.';
+                        }
+
+                        return null;
+                    })
                     ->action(function ($record) {
                         app(PurchaseCreditMemoService::class)->post($record);
                         Notification::make()->title('Credit memo posted successfully')->success()->send();
