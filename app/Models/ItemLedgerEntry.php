@@ -5,6 +5,7 @@
 namespace App\Models;
 
 use App\Enums\ItemLedgerEntryType;
+use App\Services\Inventory\ValueEntryService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -162,6 +163,10 @@ class ItemLedgerEntry extends Model
             if (! $entry->entry_number) {
                 $entry->entry_number = (static::max('entry_number') ?? 0) + 1;
             }
+        });
+
+        static::created(function (ItemLedgerEntry $entry): void {
+            app(ValueEntryService::class)->ensureForItemLedgerEntry($entry);
         });
     }
 }

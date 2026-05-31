@@ -2,6 +2,10 @@
 
 namespace App\Models;
 
+use App\Models\Manufacturing\MachineCenter;
+use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Manufacturing\WorkCenter;
+use App\Services\Inventory\ValueEntryAccountingService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,24 +16,39 @@ class ValueEntry extends Model
 
     protected $table = 'value_entries';
 
-    protected $fillable = [
+    private const FILLABLE_ENTRY_KEYS = [
         'entry_no',
         'item_ledger_entry_no',
         'item_ledger_entry_type',
+    ];
+
+    private const FILLABLE_SOURCE_KEYS = [
         'source_type',
         'source_no',
         'source_line_no',
         'source_batch_name',
+    ];
+
+    private const FILLABLE_ITEM_KEYS = [
         'item_no',
         'variant_code',
         'location_code',
         'bin_code',
+        'serial_no',
+        'lot_no',
+        'expiration_date',
+    ];
+
+    private const FILLABLE_DOCUMENT_KEYS = [
         'posting_date',
         'valuation_date',
         'document_type',
         'document_no',
         'document_line_no',
         'description',
+    ];
+
+    private const FILLABLE_COST_KEYS = [
         'quantity',
         'invoiced_quantity',
         'costing_method',
@@ -63,6 +82,9 @@ class ValueEntry extends Model
         'work_center_purch_oh_capacity',
         'work_center_purch_direct_cost',
         'work_center_purch_ovhd_cost',
+    ];
+
+    private const FILLABLE_REFERENCE_KEYS = [
         'production_order_no',
         'production_order_line_no',
         'production_order_component_line_no',
@@ -73,14 +95,17 @@ class ValueEntry extends Model
         'sales_order_line_no',
         'vendor_no',
         'customer_no',
-        'serial_no',
-        'lot_no',
-        'expiration_date',
+    ];
+
+    private const FILLABLE_GL_KEYS = [
         'gl_posted',
         'gl_posting_date',
         'gl_entry_no',
         'gl_account_no',
         'balancing_account_no',
+    ];
+
+    private const FILLABLE_ADJUSTMENT_KEYS = [
         'cost_adjusted',
         'cost_adjustment_date',
         'cost_adjustment_entry_no',
@@ -108,6 +133,17 @@ class ValueEntry extends Model
         'warehouse_activity_no',
         'warehouse_line_no',
         'registering_no',
+    ];
+
+    protected $fillable = [
+        ...self::FILLABLE_ENTRY_KEYS,
+        ...self::FILLABLE_SOURCE_KEYS,
+        ...self::FILLABLE_ITEM_KEYS,
+        ...self::FILLABLE_DOCUMENT_KEYS,
+        ...self::FILLABLE_COST_KEYS,
+        ...self::FILLABLE_REFERENCE_KEYS,
+        ...self::FILLABLE_GL_KEYS,
+        ...self::FILLABLE_ADJUSTMENT_KEYS,
     ];
 
     protected $casts = [
@@ -340,29 +376,7 @@ class ValueEntry extends Model
      */
     public function determineGLAccount(): ?string
     {
-        $item = $this->item;
-        $location = $this->location_code;
-
-        // Get inventory posting setup
-        $setup = InventoryPostingSetup::where('location_code', $location)
-            ->where('inventory_posting_group', $item?->inventory_posting_group_code)
-            ->first();
-
-        if (! $setup) {
-            return null;
-        }
-
-        return match ($this->item_ledger_entry_type) {
-            'PURCHASE' => $setup->inventory_account,
-            'SALE' => $setup->cogs_account,
-            'POSITIVE_ADJUSTMENT', 'NEGATIVE_ADJUSTMENT' => $setup->inventory_adj_account,
-            'TRANSFER' => $setup->inventory_account,
-            'CONSUMPTION' => $setup->wip_account, // Raw Material -> WIP
-            'OUTPUT' => $setup->inventory_account, // WIP -> Finished Goods (credit WIP)
-            'CAPACITY' => $setup->wip_account, // Labor/Machine -> WIP
-            'OVERHEAD' => $setup->wip_account, // Overhead -> WIP
-            default => $setup->inventory_account,
-        };
+        return app(ValueEntryAccountingService::class)->determineGLAccount($this);
     }
 
     /**
@@ -370,15 +384,7 @@ class ValueEntry extends Model
      */
     public function determineBalancingAccount(): ?string
     {
-        return match ($this->item_ledger_entry_type) {
-            'PURCHASE' => $this->vendor?->payables_account,
-            'SALE' => $this->getSalesAccount(),
-            'CONSUMPTION' => $this->getAppliedAccount(), // Raw Materials account
-            'OUTPUT' => $this->getWipAccount(), // WIP account (credit)
-            'CAPACITY' => $this->getDirectCostAppliedAccount(),
-            'OVERHEAD' => $this->getOverheadAppliedAccount(),
-            default => null,
-        };
+        return app(ValueEntryAccountingService::class)->determineBalancingAccount($this);
     }
 
     /**
@@ -386,54 +392,7 @@ class ValueEntry extends Model
      */
     public function postToGL(): GLEntry
     {
-        if ($this->gl_posted) {
-            throw new \Exception("Value Entry {$this->entry_no} already posted to G/L");
-        }
-
-        $debitAccount = $this->determineGLAccount();
-        $creditAccount = $this->determineBalancingAccount();
-        $amount = abs($this->cost_amount_actual);
-
-        // Determine debit/credit based on entry type
-        $isDebit = in_array($this->item_ledger_entry_type, [
-            'PURCHASE', 'POSITIVE_ADJUSTMENT', 'CONSUMPTION',
-            'CAPACITY', 'OVERHEAD', 'TRANSFER_IN',
-        ]);
-
-        $glEntry = GLEntry::create([
-            'posting_date' => $this->posting_date,
-            'document_type' => $this->document_type ?? 'PRODUCTION',
-            'document_no' => $this->document_no ?? $this->source_no,
-            'description' => $this->getGLDescription(),
-            'account_no' => $isDebit ? $debitAccount : $creditAccount,
-            'debit_amount' => $isDebit ? $amount : 0,
-            'credit_amount' => $isDebit ? 0 : $amount,
-            'source_type' => 'VALUE_ENTRY',
-            'source_no' => (string) $this->entry_no,
-        ]);
-
-        // Create balancing entry
-        GLEntry::create([
-            'posting_date' => $this->posting_date,
-            'document_type' => $this->document_type ?? 'PRODUCTION',
-            'document_no' => $this->document_no ?? $this->source_no,
-            'description' => $this->getGLDescription().' (Balancing)',
-            'account_no' => $isDebit ? $creditAccount : $debitAccount,
-            'debit_amount' => $isDebit ? 0 : $amount,
-            'credit_amount' => $isDebit ? $amount : 0,
-            'source_type' => 'VALUE_ENTRY',
-            'source_no' => (string) $this->entry_no,
-        ]);
-
-        $this->update([
-            'gl_posted' => true,
-            'gl_posting_date' => now(),
-            'gl_entry_no' => $glEntry->id,
-            'gl_account_no' => $debitAccount,
-            'balancing_account_no' => $creditAccount,
-        ]);
-
-        return $glEntry;
+        return app(ValueEntryAccountingService::class)->postToGL($this);
     }
 
     /**
@@ -441,24 +400,7 @@ class ValueEntry extends Model
      */
     public function reverse($postingDate = null): self
     {
-        $reversal = $this->replicate();
-        $reversal->entry_no = static::max('entry_no') + 1;
-        $reversal->quantity = -$this->quantity;
-        $reversal->invoiced_quantity = -$this->invoiced_quantity;
-        $reversal->cost_amount_actual = -$this->cost_amount_actual;
-        $reversal->cost_amount_expected = -$this->cost_amount_expected;
-        $reversal->direct_cost_amount = -$this->direct_cost_amount;
-        $reversal->indirect_cost_amount = -$this->indirect_cost_amount;
-        $reversal->overhead_amount = -$this->overhead_amount;
-        $reversal->posting_date = $postingDate ?? now();
-        $reversal->description = 'Reversal of Entry '.$this->entry_no;
-        $reversal->original_entry_no = $this->id;
-        $reversal->entry_type = 'REVERSAL';
-        $reversal->gl_posted = false;
-        $reversal->cost_adjusted = false;
-        $reversal->save();
-
-        return $reversal;
+        return app(ValueEntryAccountingService::class)->reverse($this, $postingDate);
     }
 
     /**
@@ -466,81 +408,6 @@ class ValueEntry extends Model
      */
     public function adjustCost(float $newCostAmount, string $reason = ''): self
     {
-        $adjustment = $this->replicate();
-        $adjustment->entry_no = static::max('entry_no') + 1;
-        $adjustment->cost_amount_actual = $newCostAmount - $this->cost_amount_actual;
-        $adjustment->cost_amount_expected = 0;
-        $adjustment->entry_type = 'REVALUATION';
-        $adjustment->original_entry_no = $this->id;
-        $adjustment->description = "Cost Adjustment: {$reason}";
-        $adjustment->adjustment_entry_no = $this->id;
-        $adjustment->gl_posted = false;
-        $adjustment->save();
-
-        $this->update([
-            'cost_adjusted' => true,
-            'cost_adjustment_date' => now(),
-            'cost_adjustment_entry_no' => $adjustment->id,
-        ]);
-
-        return $adjustment;
-    }
-
-    // ==================== PRIVATE HELPERS ====================
-
-    private function getSalesAccount(): ?string
-    {
-        $setup = GeneralPostingSetup::where('gen_bus_posting_group', $this->customer?->gen_bus_posting_group_code)
-            ->where('gen_prod_posting_group', $this->item?->gen_prod_posting_group_code)
-            ->first();
-
-        return $setup?->cogs_account;
-    }
-
-    private function getAppliedAccount(): ?string
-    {
-        $setup = GeneralPostingSetup::where('gen_bus_posting_group', 'MANUFACTURING')
-            ->where('gen_prod_posting_group', $this->item?->gen_prod_posting_group_code)
-            ->first();
-
-        return $setup?->direct_cost_applied_account;
-    }
-
-    private function getWipAccount(): ?string
-    {
-        $setup = InventoryPostingSetup::where('location_code', $this->location_code)
-            ->where('inventory_posting_group', 'WIP-PROD')
-            ->first();
-
-        return $setup?->wip_account;
-    }
-
-    private function getDirectCostAppliedAccount(): ?string
-    {
-        $setup = GeneralPostingSetup::where('gen_bus_posting_group', 'MANUFACTURING')
-            ->where('gen_prod_posting_group', 'CAPACITY')
-            ->first();
-
-        return $setup?->direct_cost_applied_account;
-    }
-
-    private function getOverheadAppliedAccount(): ?string
-    {
-        $setup = GeneralPostingSetup::where('gen_bus_posting_group', 'MANUFACTURING')
-            ->where('gen_prod_posting_group', 'FIN-GOODS')
-            ->first();
-
-        return $setup?->overhead_applied_account;
-    }
-
-    private function getGLDescription(): string
-    {
-        return match ($this->item_ledger_entry_type) {
-            'CONSUMPTION' => "Consumption: {$this->item_no} -> PO {$this->production_order_no}",
-            'OUTPUT' => "Output: PO {$this->production_order_no} -> {$this->item_no}",
-            'CAPACITY' => "Capacity: {$this->capacity_type} {$this->capacity_no} -> PO {$this->production_order_no}",
-            'OVERHEAD' => "Overhead: Applied to PO {$this->production_order_no}",
-            default => "{$this->item_ledger_entry_type}: {$this->item_no}",
-        };
+        return app(ValueEntryAccountingService::class)->adjustCost($this, $newCostAmount, $reason);
     }
 }

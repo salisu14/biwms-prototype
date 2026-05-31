@@ -49,7 +49,7 @@ class PostPhysicalInventory implements ShouldQueue
             }
 
             $postingDate = $this->journal->posting_date ?? now();
-            $entryNo = ItemLedgerEntry::max('entry_no') ?? 0;
+            $entryNo = ItemLedgerEntry::max('entry_number') ?? 0;
             $valueEntryNo = ValueEntry::max('entry_no') ?? 0;
 
             foreach ($linesToPost as $line) {
@@ -62,80 +62,48 @@ class PostPhysicalInventory implements ShouldQueue
 
                 // 2. Create Item Ledger Entry
                 $itemLedgerEntry = ItemLedgerEntry::create([
-                    'entry_no' => $entryNo,
+                    'entry_number' => $entryNo,
                     'item_id' => $line->item_id,
                     'posting_date' => $postingDate,
                     'entry_type' => $line->entry_type,
-                    'document_no' => $this->journal->journal_batch_name,
-                    'document_line_no' => $line->line_no,
-                    'description' => 'Phys. Inventory: '.$line->item_description,
-                    'location_code' => $line->location_code,
+                    'document_number' => $this->journal->journal_batch_name,
+                    'document_line_number' => $line->line_no,
+                    'location_id' => $line->location_id,
                     'quantity' => $qty * $sign,
                     'remaining_quantity' => $qty * $sign,
-                    'invoiced_quantity' => $qty * $sign,
-                    'unit_of_measure_code' => $line->unit_of_measure_code,
-                    'qty_per_unit_of_measure' => $line->qty_per_unit_of_measure,
-                    'quantity_base' => $qty * $sign,
-                    'invoiced_qty_base' => $qty * $sign,
-                    'unit_cost' => $line->unit_amount,
                     'cost_amount_actual' => $line->amount * $sign,
                     'cost_amount_expected' => 0,
-                    'item_tracking_code' => $line->item?->item_tracking_code,
-                    'serial_no' => $line->serial_no,
-                    'lot_no' => $line->lot_no,
+                    'serial_number' => $line->serial_no,
+                    'lot_number' => $line->lot_no,
                     'expiration_date' => $line->expiration_date,
                     'open' => true,
-                    'positive' => $isPositive,
                     'source_type' => 'Journal',
-                    'source_no' => $this->journal->journal_batch_name,
-                    'reason_code' => $line->reason_code ?? $this->journal->reason_code,
-                    'inventory_posting_group' => $line->inventory_posting_group,
-                    'gen_bus_posting_group' => $line->gen_bus_posting_group,
-                    'gen_prod_posting_group' => $line->gen_prod_posting_group,
-                    'shortcut_dimension_1_code' => $line->shortcut_dimension_1_code,
-                    'shortcut_dimension_2_code' => $line->shortcut_dimension_2_code,
-                    'dimension_set_id' => $line->dimension_set_id,
-                    'qty_to_handle' => $line->qty_to_handle,
-                    'qty_to_invoice' => $line->qty_to_invoice,
-                    'phys_invt_entry' => true, // Flag for physical inventory entries
+                    'source_id' => $this->journal->id,
+                    'entry_date' => now(),
                 ]);
 
                 // 3. Create Value Entry
                 ValueEntry::create([
                     'entry_no' => $valueEntryNo,
-                    'item_ledger_entry_no' => $itemLedgerEntry->entry_no,
-                    'item_ledger_entry_type' => $line->entry_type,
-                    'item_id' => $line->item_id,
+                    'item_ledger_entry_no' => $itemLedgerEntry->entry_number,
+                    'item_ledger_entry_type' => $this->mapValueEntryItemLedgerType($line->entry_type),
                     'posting_date' => $postingDate,
                     'document_no' => $this->journal->journal_batch_name,
                     'document_line_no' => $line->line_no,
                     'description' => 'Phys. Inventory: '.$line->item_description,
-                    'location_code' => $line->location_code,
-                    'inventory_posting_group' => $line->inventory_posting_group,
-                    'gen_bus_posting_group' => $line->gen_bus_posting_group,
-                    'gen_prod_posting_group' => $line->gen_prod_posting_group,
+                    'location_code' => (string) ($line->location_code ?? $line->location?->code ?? 'MAIN'),
                     'source_type' => 'Journal',
                     'source_no' => $this->journal->journal_batch_name,
-                    'item_no' => $line->item?->no,
+                    'item_no' => (string) ($line->item?->item_code ?? $line->item_id),
                     'quantity' => $qty * $sign,
                     'invoiced_quantity' => $qty * $sign,
-                    'cost_per_unit' => $line->unit_amount,
-                    'cost_per_unit_acy' => $line->unit_amount,
-                    'sales_amount_actual' => 0,
-                    'sales_amount_expected' => 0,
+                    'unit_cost' => (float) $line->unit_amount,
+                    'unit_cost_acy' => (float) $line->unit_amount,
                     'cost_amount_actual' => $line->amount * $sign,
                     'cost_amount_expected' => 0,
-                    'cost_amount_non_inv_actual' => 0,
-                    'cost_amount_non_inv_expected' => 0,
                     'cost_amount_actual_acy' => $line->amount * $sign,
                     'cost_amount_expected_acy' => 0,
-                    'expected_cost_obligatory' => false,
-                    'dimension_set_id' => $line->dimension_set_id,
-                    'shortcut_dimension_1_code' => $line->shortcut_dimension_1_code,
-                    'shortcut_dimension_2_code' => $line->shortcut_dimension_2_code,
                     'entry_type' => 'Direct Cost',
-                    'variance_type' => null,
-                    'phys_invt_entry' => true,
                 ]);
 
                 // 4. Update Item.Inventory
@@ -216,5 +184,19 @@ class PostPhysicalInventory implements ShouldQueue
         ]);
 
         $this->journal->update(['status' => 'Calculated']);
+    }
+
+    private function mapValueEntryItemLedgerType(string $entryType): int
+    {
+        return match (strtolower($entryType)) {
+            'purchase' => 1,
+            'sale' => 2,
+            'positive_adj', 'positive adjustment', 'positive adjmt.' => 3,
+            'negative_adj', 'negative adjustment', 'negative adjmt.' => 4,
+            'transfer' => 5,
+            'consumption' => 6,
+            'output' => 7,
+            default => 0,
+        };
     }
 }

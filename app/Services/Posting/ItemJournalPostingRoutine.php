@@ -11,14 +11,14 @@ use App\Models\ItemLedgerEntry;
 use App\Models\ValueEntry;
 use App\Models\WarehouseEntry;
 use App\Services\Inventory\CostingService;
-//use App\Services\Warehouse\WarehousePostingService;
+// use App\Services\Warehouse\WarehousePostingService;
 use Illuminate\Support\Facades\Auth;
 
 class ItemJournalPostingRoutine extends AbstractJournalPostingRoutine
 {
     public function __construct(
         private readonly CostingService $costingService,
-//        private readonly WarehousePostingService $warehousePostingService
+        //        private readonly WarehousePostingService $warehousePostingService
     ) {}
 
     /**
@@ -96,15 +96,20 @@ class ItemJournalPostingRoutine extends AbstractJournalPostingRoutine
         ]);
 
         // Create Value Entry (detailed cost)
-        $valueEntry = ValueEntry::create([
-            'item_ledger_entry_id' => $itemLedgerEntry->id,
-            'item_id' => $line->item_id,
+        $itemNo = (string) ($line->item?->item_code ?? $line->item_id);
+        $locationCode = (string) ($line->location?->code ?? $line->location_id ?? 'MAIN');
+
+        ValueEntry::create([
+            'item_ledger_entry_no' => (int) ($itemLedgerEntry->entry_number ?? $itemLedgerEntry->id),
+            'item_ledger_entry_type' => $this->mapValueEntryItemLedgerType($itemLedgerEntry->entry_type),
+            'item_no' => $itemNo,
+            'location_code' => $locationCode,
             'posting_date' => $line->posting_date,
             'entry_type' => $itemLedgerEntry->entry_type,
             'document_no' => $line->document_no,
             'quantity' => $itemLedgerEntry->quantity,
             'unit_cost' => $unitCost,
-            'cost_per_unit' => $unitCost,
+            'unit_cost_acy' => $unitCost,
             'cost_amount_actual' => $totalCost,
             'cost_amount_expected' => 0, // Adjust later if needed
             'invoiced_quantity' => $itemLedgerEntry->quantity,
@@ -234,6 +239,20 @@ class ItemJournalPostingRoutine extends AbstractJournalPostingRoutine
             JournalLineType::CONSUMPTION => 'consumption',
             JournalLineType::OUTPUT => 'output',
             default => 'adjustment',
+        };
+    }
+
+    private function mapValueEntryItemLedgerType(string $entryType): int
+    {
+        return match (strtolower($entryType)) {
+            'purchase' => 1,
+            'sale' => 2,
+            'positive_adj', 'positive adjustment', 'positive adjmt.' => 3,
+            'negative_adj', 'negative adjustment', 'negative adjmt.' => 4,
+            'transfer' => 5,
+            'consumption' => 6,
+            'output' => 7,
+            default => 0,
         };
     }
 }
