@@ -136,6 +136,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->url(FiscalYearManagement::getUrl())
                                     ->isActiveWhen(fn () => request()->is('admin/fiscal-year-management*')),
 
+                                NavigationItem::make('Value Entries')
+                                    ->icon('heroicon-o-currency-dollar')
+                                    ->url('/admin/value-entries')
+                                    ->isActiveWhen(fn () => request()->is('admin/value-entries*')),
+
                                 // Inventory Valuation Report
                                 NavigationItem::make('Inventory Valuation Report')
                                     ->icon('heroicon-o-presentation-chart-line')

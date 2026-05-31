@@ -213,7 +213,7 @@ class ValueEntry extends Model
 
     public function item(): BelongsTo
     {
-        return $this->belongsTo(Item::class, 'item_no', 'no');
+        return $this->belongsTo(Item::class, 'item_no', 'item_code');
     }
 
     public function location(): BelongsTo
