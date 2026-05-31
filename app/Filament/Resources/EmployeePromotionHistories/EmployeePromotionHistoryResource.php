@@ -12,7 +12,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use UnitEnum;
 
 class EmployeePromotionHistoryResource extends Resource
 {
@@ -22,7 +21,7 @@ class EmployeePromotionHistoryResource extends Resource
 
     protected static ?string $navigationLabel = 'Promotions History';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Human Resources';
+    protected static \UnitEnum|string|null $navigationGroup = 'Human Resources';
 
     public static function canCreate(): bool
     {
