@@ -2,11 +2,11 @@
 
 namespace App\Filament\Resources\SalesInvoices\Pages;
 
+use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\PostedSalesInvoice;
 use App\Services\Print\PostedSalesInvoicePrintService;
 use Filament\Actions\Action;
-use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -60,9 +60,25 @@ class PostedSalesInvoices extends ListRecords
             ->filters([
                 // Add filters if needed
             ])
+            ->recordUrl(fn (PostedSalesInvoice $record): string => SalesInvoiceResource::getUrl('view-posted', [
+                'record' => $record->id,
+            ]))
             ->recordActions([
-                // View only - no edit/delete for posted
-                ViewAction::make(),
+                Action::make('viewPosted')
+                    ->label('View')
+                    ->icon('heroicon-o-eye')
+                    ->url(fn (PostedSalesInvoice $record): string => SalesInvoiceResource::getUrl('view-posted', [
+                        'record' => $record->id,
+                    ])),
+                Action::make('viewSubledger')
+                    ->label('View Subledger')
+                    ->icon('heroicon-o-book-open')
+                    ->color('gray')
+                    ->url(fn (PostedSalesInvoice $record) => CustomerLedgerEntryResource::getUrl('index', [
+                        'tableFilters' => [
+                            'customer_id' => ['value' => $record->customer_id],
+                        ],
+                    ])),
                 Action::make('printPostedInvoice')
                     ->label('Print Posted Invoice')
                     ->icon('heroicon-o-document-text')

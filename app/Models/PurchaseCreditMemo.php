@@ -131,7 +131,7 @@ class PurchaseCreditMemo extends Model implements Approvable
 
     public function getApprovalDocumentType(): string
     {
-        return 'Purchase Order'; // Credit memos use the same template type
+        return 'Purchase Credit Memo';
     }
 
     public function getApprovalRequestorId(): int

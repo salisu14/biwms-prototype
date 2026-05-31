@@ -2,88 +2,43 @@
 
 namespace App\Filament\Resources\PurchaseCreditMemos\Pages;
 
+use App\Enums\ApprovalStatus;
 use App\Filament\Resources\PurchaseCreditMemos\PurchaseCreditMemoResource;
-use App\Services\Approval\ApprovalService;
+use App\Filament\Shared\Actions\ApprovalActions;
+use App\Filament\Traits\ShowsMissingApprovalTemplateWarning;
+use App\Services\Purchases\PurchaseCreditMemoService;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 
 class ViewPurchaseCreditMemo extends ViewRecord
 {
+    use ShowsMissingApprovalTemplateWarning;
+
     protected static string $resource = PurchaseCreditMemoResource::class;
+
+    public function mount($record): void
+    {
+        parent::mount($record);
+
+        $this->warnIfMissingApprovalTemplate($this->record, 'Purchase Credit Memo');
+    }
 
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('submit_for_approval')
-                ->label('Submit for Approval')
-                ->icon('heroicon-o-paper-airplane')
-                ->color('info')
-                ->visible(fn ($record) => $record->isPendingApproval() === false)
-                ->action(function ($record) {
-                    app(ApprovalService::class)->submitForApproval($record);
-
-                    Notification::make()
-                        ->title('Submitted for approval')
-                        ->success()
-                        ->send();
-                }),
-
-            Action::make('approve')
-                ->label('Approve')
-                ->icon('heroicon-o-check-circle')
+            ...ApprovalActions::all(),
+            Action::make('post')
+                ->label('Post')
+                ->icon('heroicon-m-check-badge')
                 ->color('success')
-                ->visible(fn ($record) => $record->approvalEntries()->where('status', 'created')
-                    ->where(function ($q) { $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id()); })
-                    ->exists())
                 ->requiresConfirmation()
+                ->visible(fn ($record) => $record->status === ApprovalStatus::APPROVED && ! $record->isPendingApproval())
                 ->action(function ($record) {
-                    $entry = $record->approvalEntries()->where('status', 'created')
-                        ->where(function ($q) { $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id()); })
-                        ->orderBy('sequence_no')
-                        ->first();
-
-                    if (! $entry) {
-                        Notification::make()->title('No pending approval')->danger()->send();
-                        return;
-                    }
-
-                    app(ApprovalService::class)->approve($entry);
+                    app(PurchaseCreditMemoService::class)->post($record);
 
                     Notification::make()
-                        ->title('Approved')
-                        ->success()
-                        ->send();
-                }),
-
-            Action::make('reject')
-                ->label('Reject')
-                ->icon('heroicon-o-x-circle')
-                ->color('danger')
-                ->visible(fn ($record) => $record->approvalEntries()->where('status', 'created')
-                    ->where(function ($q) { $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id()); })
-                    ->exists())
-                ->form([
-                    Textarea::make('reason')
-                        ->label('Reason')
-                        ->required(),
-                ])
-                ->action(function ($record, array $data) {
-                    $entry = $record->approvalEntries()->where('status', 'created')
-                        ->where(function ($q) { $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id()); })
-                        ->orderBy('sequence_no')
-                        ->first();
-
-                    if (! $entry) {
-                        Notification::make()->title('No pending approval')->danger()->send();
-                        return;
-                    }
-
-                    app(ApprovalService::class)->reject($entry, $data['reason']);
-
-                    Notification::make()
-                        ->title('Rejected')
+                        ->title('Credit memo posted successfully')
                         ->success()
                         ->send();
                 }),

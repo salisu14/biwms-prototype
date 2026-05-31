@@ -91,11 +91,15 @@ class PaymentService
             throw new \Exception('Document type does not match payment party type.');
         }
 
+        $precision = $this->resolvePrecision($payment->currency ?? null, $payment->currency_code);
+        $tolerance = $this->resolveTolerance($precision);
+
         $amountToApply = min(
-            $applicationData['amount'] ?? $document->remaining_amount,
-            $payment->unapplied_amount,
-            $document->remaining_amount
+            (float) ($applicationData['amount'] ?? $document->remaining_amount),
+            (float) $payment->unapplied_amount,
+            (float) $document->remaining_amount
         );
+        $amountToApply = $this->roundMoney($amountToApply, $precision);
 
         if ($amountToApply <= 0) {
             throw new \Exception('No amount to apply');
@@ -120,20 +124,28 @@ class PaymentService
         $gainLossAmount = $appliedLCYPayment - $appliedLCYDocument;
 
         // Create application record
+        $remainingBefore = $this->roundMoney((float) $document->remaining_amount, $precision);
+        $discountApplied = $this->roundMoney((float) ($applicationData['discount'] ?? 0), $precision);
+        $writeOffAmount = $this->roundMoney((float) ($applicationData['write_off'] ?? 0), $precision);
+        $documentRemainingAfter = $this->roundMoney($remainingBefore - $amountToApply - $discountApplied - $writeOffAmount, $precision);
+        if (abs($documentRemainingAfter) <= $tolerance) {
+            $documentRemainingAfter = 0.0;
+        }
+
         $application = PaymentApplication::create([
             'payment_id' => $payment->id,
             'document_type' => $applicationData['document_type'],
             'document_id' => $document->id,
             'document_number' => $document->document_number,
             'document_original_amount' => $document->grand_total,
-            'document_remaining_before' => $document->remaining_amount,
+            'document_remaining_before' => $remainingBefore,
             'amount_applied' => $amountToApply,
             'amount_applied_lcy' => $appliedLCYPayment,
             'gain_loss_amount' => $gainLossAmount,
-            'discount_applied' => $applicationData['discount'] ?? 0,
-            'write_off_amount' => $applicationData['write_off'] ?? 0,
-            'document_remaining_after' => $document->remaining_amount - $amountToApply - ($applicationData['discount'] ?? 0),
-            'full_payment' => ($amountToApply + ($applicationData['discount'] ?? 0)) >= ($document->remaining_amount - 0.01),
+            'discount_applied' => $discountApplied,
+            'write_off_amount' => $writeOffAmount,
+            'document_remaining_after' => $documentRemainingAfter,
+            'full_payment' => $documentRemainingAfter <= $tolerance,
             'currency_id' => $payment->currency_id,
             'applied_by' => $userId,
             'applied_at' => now(),
@@ -145,16 +157,24 @@ class PaymentService
         }
 
         // Update document balances through Payment flow only.
-        $documentSettleAmount = $amountToApply + ($applicationData['discount'] ?? 0) + $application->write_off_amount;
-        $newAmountPaid = (float) ($document->amount_paid ?? 0) + $documentSettleAmount;
-        $newRemaining = max(0, (float) ($document->grand_total ?? 0) - $newAmountPaid);
+        $documentSettleAmount = $this->roundMoney($amountToApply + $discountApplied + $writeOffAmount, $precision);
+        $newAmountPaid = $this->roundMoney((float) ($document->amount_paid ?? 0) + $documentSettleAmount, $precision);
+        $newRemaining = $this->roundMoney((float) ($document->grand_total ?? 0) - $newAmountPaid, $precision);
+        if (abs($newRemaining) <= $tolerance) {
+            $newRemaining = 0.0;
+        }
+        $isPaidInFull = $newRemaining <= $tolerance;
 
         $document->update([
             'amount_paid' => $newAmountPaid,
-            'remaining_amount' => $newRemaining,
-            'paid_in_full' => $newRemaining <= 0.01,
-            'paid_in_full_date' => $newRemaining <= 0.01 ? now() : null,
+            'remaining_amount' => max(0, $newRemaining),
+            'paid_in_full' => $isPaidInFull,
+            'paid_in_full_date' => $isPaidInFull ? now() : null,
         ]);
+
+        if ($document instanceof PostedSalesInvoice) {
+            $this->syncCustomerInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
+        }
 
         if ($document instanceof PostedSalesInvoice && ! empty($document->order_id)) {
             SalesOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
@@ -165,10 +185,17 @@ class PaymentService
         }
 
         // Update payment totals
-        $payment->applied_amount += $amountToApply;
-        $payment->unapplied_amount = $payment->payment_amount - $payment->applied_amount;
-        $payment->discount_taken += ($applicationData['discount'] ?? 0);
+        $payment->applied_amount = $this->roundMoney((float) $payment->applied_amount + $amountToApply, $precision);
+        $payment->unapplied_amount = $this->roundMoney((float) $payment->payment_amount - (float) $payment->applied_amount, $precision);
+        if (abs((float) $payment->unapplied_amount) <= $tolerance) {
+            $payment->unapplied_amount = 0;
+        }
+        $payment->discount_taken = $this->roundMoney((float) $payment->discount_taken + $discountApplied, $precision);
         $payment->save();
+
+        if ($payment->party_type === 'CUSTOMER') {
+            $this->syncCustomerPaymentLedgerFromPayment($payment, $tolerance);
+        }
 
         return $application;
     }
@@ -208,6 +235,22 @@ class PaymentService
             $document = $this->findDocument($application->document_type, $application->document_id);
             if ($document && method_exists($document, 'reversePayment')) {
                 $document->reversePayment($application->amount_applied + $application->discount_applied);
+            } elseif ($document instanceof PostedSalesInvoice) {
+                $precision = $this->resolvePrecision($application->currency ?? null, $document->currency_code);
+                $tolerance = $this->resolveTolerance($precision);
+                $reversalAmount = $this->roundMoney((float) $application->amount_applied + (float) $application->discount_applied + (float) $application->write_off_amount, $precision);
+                $newAmountPaid = $this->roundMoney((float) $document->amount_paid - $reversalAmount, $precision);
+                $newRemaining = $this->roundMoney((float) $document->grand_total - $newAmountPaid, $precision);
+                if (abs($newRemaining) <= $tolerance) {
+                    $newRemaining = 0.0;
+                }
+                $document->update([
+                    'amount_paid' => max(0, $newAmountPaid),
+                    'remaining_amount' => max(0, $newRemaining),
+                    'paid_in_full' => $newRemaining <= $tolerance,
+                    'paid_in_full_date' => $newRemaining <= $tolerance ? $document->paid_in_full_date : null,
+                ]);
+                $this->syncCustomerInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
             }
 
             // Mark application reversed
@@ -223,11 +266,88 @@ class PaymentService
             $payment->discount_taken -= $application->discount_applied;
             $payment->save();
 
+            if ($payment->party_type === 'CUSTOMER') {
+                $precision = $this->resolvePrecision($payment->currency ?? null, $payment->currency_code);
+                $tolerance = $this->resolveTolerance($precision);
+                $this->syncCustomerPaymentLedgerFromPayment($payment, $tolerance);
+            }
+
             // Reverse Gain/Loss G/L entries if they exist
             if (abs($application->gain_loss_amount) > 0.001) {
                 $this->postingService->reverseRealizedGainLoss($application);
             }
         });
+    }
+
+    private function resolvePrecision(?Currency $currency, ?string $currencyCode): int
+    {
+        if ($currency?->decimal_places !== null) {
+            return (int) $currency->decimal_places;
+        }
+
+        if ($currencyCode) {
+            $resolved = Currency::query()->where('code', $currencyCode)->value('decimal_places');
+            if ($resolved !== null) {
+                return (int) $resolved;
+            }
+        }
+
+        return 2;
+    }
+
+    private function resolveTolerance(int $precision): float
+    {
+        return $precision >= 4 ? 0.0001 : 0.01;
+    }
+
+    private function roundMoney(float $value, int $precision): float
+    {
+        return round($value, $precision);
+    }
+
+    private function syncCustomerInvoiceLedgerStatus(PostedSalesInvoice $invoice, float $remaining, float $tolerance): void
+    {
+        $ledgerEntry = CustomerLedgerEntry::query()
+            ->where('document_type', 'SALES_INVOICE')
+            ->where('document_number', $invoice->document_number)
+            ->where('customer_id', $invoice->customer_id)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $ledgerEntry) {
+            return;
+        }
+
+        $ledgerEntry->update([
+            'remaining_amount' => max(0, $remaining),
+            'open' => $remaining > $tolerance,
+            'fully_applied' => $remaining <= $tolerance,
+        ]);
+    }
+
+    private function syncCustomerPaymentLedgerFromPayment(Payment $payment, float $tolerance): void
+    {
+        $ledgerEntry = CustomerLedgerEntry::query()
+            ->where('document_type', 'PAYMENT')
+            ->where('document_number', $payment->payment_number)
+            ->where('customer_id', $payment->party_id)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $ledgerEntry) {
+            return;
+        }
+
+        $remaining = $this->roundMoney((float) $payment->unapplied_amount, 4);
+        if (abs($remaining) <= $tolerance) {
+            $remaining = 0.0;
+        }
+
+        $ledgerEntry->update([
+            'remaining_amount' => max(0, $remaining),
+            'open' => $remaining > $tolerance,
+            'fully_applied' => $remaining <= $tolerance,
+        ]);
     }
 
     /**
@@ -266,8 +386,16 @@ class PaymentService
 
     protected function postCustomerReceipt(Payment $payment, int $userId): void
     {
+        $lastEntry = CustomerLedgerEntry::query()
+            ->where('customer_id', $payment->party_id)
+            ->orderByDesc('entry_number')
+            ->first();
+
+        $nextEntryNumber = ((int) ($lastEntry?->entry_number ?? 0)) + 1;
+        $runningBalance = (float) ($lastEntry?->running_balance ?? 0) - (float) $payment->payment_amount;
+
         CustomerLedgerEntry::create([
-            'entry_number' => CustomerLedgerEntry::getNextEntryNumber($payment->party_id),
+            'entry_number' => $nextEntryNumber,
             'customer_id' => $payment->party_id,
             'document_type' => 'PAYMENT',
             'document_number' => $payment->payment_number,
@@ -278,12 +406,16 @@ class PaymentService
             'debit_amount' => 0,
             'credit_amount' => $payment->payment_amount,
             'amount' => -$payment->payment_amount,
+            'running_balance' => $runningBalance,
             'remaining_amount' => $payment->unapplied_amount,
             'open' => $payment->unapplied_amount > 0.01,
+            'fully_applied' => ((float) $payment->unapplied_amount) <= 0.01,
             'currency_id' => $payment->currency_id,
             'currency_code' => $payment->currency_code, // Keeping for compat
             'currency_factor' => $payment->currency_factor,
             'original_credit_amount' => $payment->payment_amount, // FCY
+            'source_id' => $payment->id,
+            'source_type' => Payment::class,
             'created_by' => $userId,
         ]);
     }

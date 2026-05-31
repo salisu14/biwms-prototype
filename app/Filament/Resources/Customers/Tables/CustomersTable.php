@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Customers\Tables;
 
+use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -58,6 +60,15 @@ class CustomersTable
                     ->relationship('location', 'name'),
             ])
             ->recordActions([
+                Action::make('viewSubledger')
+                    ->label('Subledger')
+                    ->icon('heroicon-o-book-open')
+                    ->color('gray')
+                    ->url(fn ($record) => CustomerLedgerEntryResource::getUrl('index', [
+                        'tableFilters' => [
+                            'customer_id' => ['value' => $record->id],
+                        ],
+                    ])),
                 ViewAction::make(),
                 EditAction::make(),
             ])

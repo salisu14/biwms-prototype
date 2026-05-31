@@ -2,13 +2,17 @@
 
 namespace App\Models;
 
+use App\Contracts\Approvable;
 use App\Enums\PayrollStatus;
+use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class PayrollDocument extends Model
+class PayrollDocument extends Model implements Approvable
 {
+    use ApprovableTrait;
+
     protected $fillable = [
         'document_number',
         'payroll_period_id',
@@ -46,5 +50,28 @@ class PayrollDocument extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'approved_by');
+    }
+
+    public function getApprovalAmount(): float
+    {
+        return (float) ($this->total_net_pay ?? 0);
+    }
+
+    public function getApprovalDocumentType(): string
+    {
+        return 'Payroll Document';
+    }
+
+    public function getApprovalRequestorId(): int
+    {
+        return (int) auth()->id();
+    }
+
+    public function markAsReleased(): void
+    {
+        $this->update([
+            'status' => PayrollStatus::APPROVED,
+            'approved_at' => now(),
+        ]);
     }
 }

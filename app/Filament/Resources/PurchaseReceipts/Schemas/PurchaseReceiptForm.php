@@ -56,6 +56,8 @@ class PurchaseReceiptForm
                                                 $set('vendor_id', $order->vendor_id);
                                                 $set('pay_to_vendor_no', $order->vendor?->vendor_code ?? '');
                                                 $set('buy_from_vendor_name', $order->vendor_name);
+                                                $set('receiving_location_id', $order->location_id);
+                                                $set('location_code', $order->location?->code ?? $order->location_id);
 
                                                 // Automatically pull vendor address details if available on order
                                                 if ($order->vendor) {

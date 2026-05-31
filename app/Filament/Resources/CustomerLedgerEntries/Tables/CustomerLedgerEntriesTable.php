@@ -2,12 +2,15 @@
 
 namespace App\Filament\Resources\CustomerLedgerEntries\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class CustomerLedgerEntriesTable
 {
@@ -15,82 +18,44 @@ class CustomerLedgerEntriesTable
     {
         return $table
             ->columns([
-                TextColumn::make('entry_number')
-                    ->numeric()
+                TextColumn::make('posting_date')
+                    ->label('Date')
+                    ->date()
                     ->sortable(),
                 TextColumn::make('customer.name')
-                    ->searchable(),
+                    ->label('Customer')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('document_type')
+                    ->badge()
                     ->searchable(),
                 TextColumn::make('document_number')
                     ->searchable(),
-                TextColumn::make('external_document_number')
-                    ->searchable(),
                 TextColumn::make('description')
-                    ->searchable(),
-                TextColumn::make('posting_date')
-                    ->date()
-                    ->sortable(),
-                TextColumn::make('document_date')
-                    ->date()
-                    ->sortable(),
-                TextColumn::make('due_date')
-                    ->date()
-                    ->sortable(),
+                    ->searchable()
+                    ->wrap(),
                 TextColumn::make('debit_amount')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('Debit')
+                    ->money('NGN')
+                    ->sortable()
+                    ->summarize(Sum::make()->label('Total Dr')),
                 TextColumn::make('credit_amount')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('amount')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('Credit')
+                    ->money('NGN')
+                    ->sortable()
+                    ->summarize(Sum::make()->label('Total Cr')),
                 TextColumn::make('running_balance')
-                    ->numeric()
+                    ->label('Balance')
+                    ->money('NGN')
                     ->sortable(),
                 TextColumn::make('remaining_amount')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('Remaining')
+                    ->money('NGN')
+                    ->sortable()
+                    ->toggleable(),
                 IconColumn::make('open')
+                    ->label('Open')
                     ->boolean(),
-                IconColumn::make('fully_applied')
-                    ->boolean(),
-                TextColumn::make('currency_code')
-                    ->searchable(),
-                TextColumn::make('original_debit_amount')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('original_credit_amount')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('currency_factor')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('generalBusinessPostingGroup.id')
-                    ->searchable(),
-                TextColumn::make('customerPostingGroup.id')
-                    ->searchable(),
-                TextColumn::make('glEntry.id')
-                    ->searchable(),
-                TextColumn::make('source_id')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('source_type')
-                    ->searchable(),
-                TextColumn::make('created_by')
-                    ->numeric()
-                    ->sortable(),
-                IconColumn::make('reversed')
-                    ->boolean(),
-                TextColumn::make('reversed_at')
-                    ->dateTime()
-                    ->sortable(),
-                TextColumn::make('reversed_by')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('reversal_entry_number')
-                    ->searchable(),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -101,15 +66,34 @@ class CustomerLedgerEntriesTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('customer_id')
+                    ->relationship('customer', 'name')
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('document_type')
+                    ->options([
+                        'SALES_INVOICE' => 'Sales Invoice',
+                        'PAYMENT' => 'Payment',
+                        'CASH_RECEIPT' => 'Cash Receipt',
+                        'BANK_TRANSFER' => 'Bank Transfer',
+                        'SALES_CREDIT_MEMO' => 'Sales Credit Memo',
+                        'ADJUSTMENT' => 'Adjustment',
+                    ]),
+                TernaryFilter::make('open')
+                    ->label('Open Entries')
+                    ->boolean(),
+                Filter::make('posting_date')
+                    ->schema([
+                        DatePicker::make('from'),
+                        DatePicker::make('until'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['from'] ?? null, fn (Builder $q, $date) => $q->whereDate('posting_date', '>=', $date))
+                            ->when($data['until'] ?? null, fn (Builder $q, $date) => $q->whereDate('posting_date', '<=', $date));
+                    }),
             ])
-            ->recordActions([
-                EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
-            ]);
+            ->recordActions([])
+            ->toolbarActions([]);
     }
 }

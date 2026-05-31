@@ -15,6 +15,7 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class PurchaseQuoteForm
@@ -32,7 +33,9 @@ class PurchaseQuoteForm
                                     TextInput::make('document_no')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->default(fn () => app(NumberSeriesService::class)->tryGetNextNo('P-QUOTE') ?? ''),
+                                        ->default(fn () => app(NumberSeriesService::class)->tryGetNextNo('P-QUOTE') ?? '')
+                                        ->disabled(fn ($record) => $record !== null)
+                                        ->dehydrated(),
                                     Select::make('status')
                                         ->options(PurchaseQuoteStatus::class)
                                         ->default(PurchaseQuoteStatus::OPEN)
@@ -47,7 +50,7 @@ class PurchaseQuoteForm
                                         ->preload()
                                         ->required()
                                         ->live()
-                                        ->afterStateUpdated(function ($state, \Filament\Schemas\Components\Utilities\Set $set): void {
+                                        ->afterStateUpdated(function ($state, Set $set): void {
                                             if (! $state) {
                                                 return;
                                             }

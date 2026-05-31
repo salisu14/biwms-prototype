@@ -2,8 +2,6 @@
 
 namespace App\Filament\Resources\CustomerLedgerEntries;
 
-use App\Filament\Resources\CustomerLedgerEntries\Pages\CreateCustomerLedgerEntry;
-use App\Filament\Resources\CustomerLedgerEntries\Pages\EditCustomerLedgerEntry;
 use App\Filament\Resources\CustomerLedgerEntries\Pages\ListCustomerLedgerEntries;
 use App\Filament\Resources\CustomerLedgerEntries\Schemas\CustomerLedgerEntryForm;
 use App\Filament\Resources\CustomerLedgerEntries\Tables\CustomerLedgerEntriesTable;
@@ -13,6 +11,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class CustomerLedgerEntryResource extends Resource
 {
@@ -41,8 +40,21 @@ class CustomerLedgerEntryResource extends Resource
     {
         return [
             'index' => ListCustomerLedgerEntries::route('/'),
-            'create' => CreateCustomerLedgerEntry::route('/create'),
-            'edit' => EditCustomerLedgerEntry::route('/{record}/edit'),
         ];
+    }
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
     }
 }

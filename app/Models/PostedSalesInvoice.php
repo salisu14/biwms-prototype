@@ -182,10 +182,13 @@ class PostedSalesInvoice extends Model
 
     public function getStatusAttribute(): string
     {
+        $remaining = (float) ($this->remaining_amount ?? 0);
+        $tolerance = 0.01;
+
         if ($this->cancelled) {
             return 'CANCELLED';
         }
-        if ($this->paid_in_full) {
+        if ($this->paid_in_full || $remaining <= $tolerance) {
             return 'PAID';
         }
         if ($this->is_overdue) {

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SalesInvoices;
 use App\Filament\Resources\SalesInvoices\Pages\CreateSalesInvoice;
 use App\Filament\Resources\SalesInvoices\Pages\EditSalesInvoice;
 use App\Filament\Resources\SalesInvoices\Pages\ListSalesInvoices;
+use App\Filament\Resources\SalesInvoices\Pages\ViewPostedSalesInvoice;
 use App\Filament\Resources\SalesInvoices\Pages\ViewSalesInvoice;
 use App\Filament\Resources\SalesInvoices\Schemas\SalesInvoiceForm;
 use App\Filament\Resources\SalesInvoices\Schemas\SalesInvoiceInfolist;
@@ -64,6 +65,7 @@ class SalesInvoiceResource extends Resource
             'edit' => EditSalesInvoice::route('/{record}/edit'),
 
             'posted' => Pages\PostedSalesInvoices::route('/history/posted'),
+            'view-posted' => ViewPostedSalesInvoice::route('/history/posted/{record}'),
         ];
     }
 }

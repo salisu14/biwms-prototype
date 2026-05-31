@@ -11,6 +11,7 @@ use Filament\Actions\DissociateAction;
 use Filament\Actions\DissociateBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
@@ -34,6 +35,10 @@ class CompensationsRelationManager extends RelationManager
                 TextInput::make('reason_code')
                     ->maxLength(255)
                     ->placeholder('e.g. ANNUAL_RAISE, PROMOTION'),
+                Textarea::make('audit_note')
+                    ->rows(2)
+                    ->maxLength(1000)
+                    ->placeholder('Why this change was made'),
                 TextInput::make('job_title')
                     ->maxLength(255)
                     ->placeholder('New Job Title (Optional)'),
@@ -53,6 +58,9 @@ class CompensationsRelationManager extends RelationManager
                     ->sortable(),
                 TextColumn::make('reason_code')
                     ->searchable(),
+                TextColumn::make('audit_note')
+                    ->limit(40)
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('job_title')
                     ->searchable(),
             ])

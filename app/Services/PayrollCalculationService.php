@@ -31,11 +31,28 @@ class PayrollCalculationService
         }
 
         DB::transaction(function () use ($document) {
+            // Respect user-selected employees already present on the document.
+            // If none are seeded yet, fall back to all active employees.
+            $selectedEmployeeIds = $document->lines()
+                ->distinct()
+                ->pluck('employee_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->values();
+
             // 1. Clear existing lines
             $document->lines()->delete();
 
-            // 2. Fetch all active employees
-            $employees = Employee::where('is_active', true)->get();
+            // 2. Fetch employees to calculate for this document
+            $employees = Employee::query()
+                ->where('is_active', true)
+                ->whereNotNull('payroll_posting_group_id')
+                ->when($selectedEmployeeIds->isNotEmpty(), fn ($query) => $query->whereIn('id', $selectedEmployeeIds))
+                ->get();
+
+            if ($employees->isEmpty()) {
+                throw new Exception('No eligible employees found for this payroll document.');
+            }
 
             foreach ($employees as $employee) {
                 $this->calculateEmployee($document, $employee);

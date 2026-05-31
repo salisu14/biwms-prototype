@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PurchaseQuotes\Tables;
 
 use App\Enums\PurchaseQuoteStatus;
+use App\Filament\Shared\Actions\ApprovalActions;
 use App\Services\Approval\ApprovalService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -69,11 +70,12 @@ class PurchaseQuotesTable
                     ->label('Submit')
                     ->icon('heroicon-o-paper-airplane')
                     ->color('info')
-                    ->visible(fn ($record) => $record->isPendingApproval() === false)
+                    ->visible(fn ($record) => $record->status?->canSubmitForApproval() === true)
                     ->action(function ($record) {
                         app(ApprovalService::class)->submitForApproval($record);
                         Notification::make()->title('Submitted for approval')->success()->send();
                     }),
+                ApprovalActions::makeCancelApprovalRequestAction(),
 
                 Action::make('approve')
                     ->label('Approve')
@@ -132,6 +134,7 @@ class PurchaseQuotesTable
                         app(ApprovalService::class)->reject($entry, $data['reason']);
                         Notification::make()->title('Rejected')->danger()->send();
                     }),
+                ApprovalActions::makeDelegateAction(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

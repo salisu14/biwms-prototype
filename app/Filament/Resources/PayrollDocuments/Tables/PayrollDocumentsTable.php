@@ -3,7 +3,11 @@
 namespace App\Filament\Resources\PayrollDocuments\Tables;
 
 use App\Enums\PayrollStatus;
+use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
+use App\Filament\Shared\Actions\ApprovalActions;
 use App\Models\PayrollDocument;
+use App\Services\PayrollCalculationService;
+use App\Services\PayrollPaymentService;
 use App\Services\PayrollPostingService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -30,8 +34,7 @@ class PayrollDocumentsTable
                     ->sortable(),
                 TextColumn::make('period')
                     ->label('Period')
-                    ->formatStateUsing(fn (PayrollDocument $record) =>
-                    $record->period
+                    ->formatStateUsing(fn (PayrollDocument $record) => $record->period
                         ? "{$record->period->start_date->format('Y-m-d')} to {$record->period->end_date->format('Y-m-d')}"
                         : '-'
                     )
@@ -56,6 +59,11 @@ class PayrollDocumentsTable
             ])
             ->recordActions([
                 EditAction::make(),
+                Action::make('review')
+                    ->label('Review')
+                    ->icon('heroicon-o-clipboard-document-list')
+                    ->color('gray')
+                    ->url(fn (PayrollDocument $record): string => PayrollDocumentResource::getUrl('review', ['record' => $record])),
                 Action::make('calculate')
                     ->label('Calculate')
                     ->icon('heroicon-o-cpu-chip')
@@ -63,28 +71,23 @@ class PayrollDocumentsTable
                     ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::OPEN)
                     ->action(function (PayrollDocument $record, Notification $notification) {
                         try {
-                            app(\App\Services\PayrollCalculationService::class)->calculate($record);
+                            app(PayrollCalculationService::class)->calculate($record);
                             $notification->success()->title('Payroll Calculated!')->send();
                         } catch (\Exception $e) {
                             $notification->danger()->title('Calculation Failed')->body($e->getMessage())->send();
                         }
                     }),
-                Action::make('approve')
-                    ->label('Approve')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::CALCULATED)
-                    ->action(function (PayrollDocument $record, Notification $notification) {
-                        $record->update(['status' => PayrollStatus::APPROVED]);
-                        $notification->success()->title('Payroll Approved!')->send();
-                    }),
+                ApprovalActions::makeSendApprovalRequestAction(),
+                ApprovalActions::makeCancelApprovalRequestAction(),
+                ApprovalActions::makeApproveAction(),
+                ApprovalActions::makeRejectAction(),
+                ApprovalActions::makeDelegateAction(),
                 Action::make('post')
                     ->label('Post')
                     ->icon('heroicon-o-paper-airplane')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::OPEN || $record->status === PayrollStatus::CALCULATED)
+                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::APPROVED)
                     ->action(function (PayrollDocument $record, Notification $notification) {
                         try {
                             app(PayrollPostingService::class)->post($record);
@@ -99,8 +102,9 @@ class PayrollDocumentsTable
                     ->color('gray')
                     ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::POSTED)
                     ->action(function (PayrollDocument $record) {
-                        $csv = app(\App\Services\PayrollPaymentService::class)->generateBankFile($record);
+                        $csv = app(PayrollPaymentService::class)->generateBankFile($record);
                         $filename = "bank_payment_{$record->document_number}.csv";
+
                         return response()->streamDownload(function () use ($csv) {
                             echo $csv;
                         }, $filename);

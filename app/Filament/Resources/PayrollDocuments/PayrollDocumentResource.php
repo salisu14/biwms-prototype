@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PayrollDocuments;
 use App\Filament\Resources\PayrollDocuments\Pages\CreatePayrollDocument;
 use App\Filament\Resources\PayrollDocuments\Pages\EditPayrollDocument;
 use App\Filament\Resources\PayrollDocuments\Pages\ListPayrollDocuments;
+use App\Filament\Resources\PayrollDocuments\Pages\ReviewPayrollDocument;
 use App\Filament\Resources\PayrollDocuments\Schemas\PayrollDocumentForm;
 use App\Filament\Resources\PayrollDocuments\Tables\PayrollDocumentsTable;
 use App\Models\PayrollDocument;
@@ -33,7 +34,7 @@ class PayrollDocumentResource extends Resource
     public static function getRelations(): array
     {
         return [
-//            RelationManagers\LinesRelationManager::class,
+            //            RelationManagers\LinesRelationManager::class,
         ];
     }
 
@@ -43,6 +44,7 @@ class PayrollDocumentResource extends Resource
             'index' => ListPayrollDocuments::route('/'),
             'create' => CreatePayrollDocument::route('/create'),
             'edit' => EditPayrollDocument::route('/{record}/edit'),
+            'review' => ReviewPayrollDocument::route('/{record}/review'),
         ];
     }
 }

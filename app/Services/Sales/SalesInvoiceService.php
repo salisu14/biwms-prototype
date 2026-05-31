@@ -4,6 +4,7 @@ namespace App\Services\Sales;
 
 use App\Data\Sales\SalesInvoiceData;
 use App\Enums\ApprovalStatus;
+use App\Models\CustomerLedgerEntry;
 use App\Models\PostedSalesInvoice;
 use App\Models\PostedSalesInvoiceLine;
 use App\Models\SalesInvoice;
@@ -286,6 +287,17 @@ class SalesInvoiceService
                 'grand_total' => $grandTotal,
                 'remaining_amount' => $grandTotal,
             ]);
+
+            // Ensure customer subledger receives invoice debit entry for AR tracking.
+            $invoiceLedgerExists = CustomerLedgerEntry::query()
+                ->where('document_type', 'SALES_INVOICE')
+                ->where('document_number', $postedInvoice->document_number)
+                ->where('customer_id', $postedInvoice->customer_id)
+                ->exists();
+
+            if (! $invoiceLedgerExists) {
+                CustomerLedgerEntry::createFromInvoice($postedInvoice);
+            }
 
             // 🔥 3. Mark as posted (ENUM SAFE)
             $invoice->update([

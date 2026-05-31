@@ -13,6 +13,7 @@ class EmployeeCompensation extends Model
         'effective_date',
         'base_salary',
         'reason_code',
+        'audit_note',
         'job_title',
     ];
 

@@ -8,11 +8,11 @@ use App\Filament\Resources\PurchaseCreditMemos\Pages\EditPurchaseCreditMemo;
 use App\Filament\Resources\PurchaseCreditMemos\Pages\ListPurchaseCreditMemos;
 use App\Filament\Resources\PurchaseCreditMemos\Pages\ViewPurchaseCreditMemo;
 use App\Filament\Resources\PurchaseCreditMemos\Schemas\PurchaseCreditMemoForm;
+use App\Filament\Shared\Actions\ApprovalActions;
 use App\Models\PurchaseCreditMemo;
 use App\Services\Purchases\PurchaseCreditMemoService;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -47,45 +47,18 @@ class PurchaseCreditMemoResource extends Resource
                 TextColumn::make('posting_date')->date(),
             ])
             ->recordActions([
-                Action::make('submit')
-                    ->label('Submit')
-                    ->icon('heroicon-o-paper-airplane')
-                    ->color('info')
-                    ->visible(fn ($record) => $record->status === ApprovalStatus::DRAFT)
-                    ->action(function ($record) {
-                        app(PurchaseCreditMemoService::class)->submitForApproval($record);
-                        Notification::make()->title('Credit memo submitted for approval')->success()->send();
-                    }),
-
-                Action::make('approve')
-                    ->label('Approve')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->visible(fn ($record) => $record->status === ApprovalStatus::PENDING && auth()->user()->hasRole('super_admin'))
-                    ->action(function ($record) {
-                        app(PurchaseCreditMemoService::class)->approve($record, auth()->id());
-                        Notification::make()->title('Credit memo approved')->success()->send();
-                    }),
-
-                Action::make('reject')
-                    ->label('Reject')
-                    ->icon('heroicon-o-x-circle')
-                    ->color('danger')
-                    ->visible(fn ($record) => $record->status === ApprovalStatus::PENDING && auth()->user()->hasRole('super_admin'))
-                    ->form([
-                        Textarea::make('reason')->required(),
-                    ])
-                    ->action(function ($record, array $data) {
-                        app(PurchaseCreditMemoService::class)->reject($record, auth()->id(), $data['reason']);
-                        Notification::make()->title('Credit memo rejected')->danger()->send();
-                    }),
+                ApprovalActions::makeSendApprovalRequestAction(),
+                ApprovalActions::makeCancelApprovalRequestAction(),
+                ApprovalActions::makeApproveAction(),
+                ApprovalActions::makeRejectAction(),
+                ApprovalActions::makeDelegateAction(),
 
                 Action::make('post')
                     ->label('Post')
                     ->icon('heroicon-m-check-badge')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn ($record) => $record->status === ApprovalStatus::APPROVED)
+                    ->visible(fn ($record) => $record->status === ApprovalStatus::APPROVED && ! $record->isPendingApproval())
                     ->action(function ($record) {
                         app(PurchaseCreditMemoService::class)->post($record);
                         Notification::make()->title('Credit memo posted successfully')->success()->send();

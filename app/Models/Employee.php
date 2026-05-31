@@ -133,4 +133,9 @@ class Employee extends Model
     {
         return $this->hasMany(EmployeeYtdBalance::class);
     }
+
+    public function promotionHistories(): HasMany
+    {
+        return $this->hasMany(EmployeePromotionHistory::class);
+    }
 }

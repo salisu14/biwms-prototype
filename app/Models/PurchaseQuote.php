@@ -373,8 +373,7 @@ class PurchaseQuote extends Model implements Approvable
 
     public function getApprovalDocumentType(): string
     {
-        return 'Purchase Order'; // Template uses 'Purchase Order' for quotes/orders in this system?
-        // Wait, let's check ApprovalTemplateForm again.
+        return 'Purchase Quote';
     }
 
     public function getApprovalLocationCode(): ?string

@@ -55,8 +55,18 @@ class PostedPurchaseCreditMemoForm
                             Select::make('posted_by')
                                 ->relationship('poster', 'name')
                                 ->disabled(),
-                            TextInput::make('reason_code'),
-                            TextInput::make('location_code'),
+                            Select::make('reason_code')
+                                ->label('Reason Code')
+                                ->relationship('reasonCode', 'description')
+                                ->getOptionLabelFromRecordUsing(fn ($record): string => "{$record->code} - {$record->description}")
+                                ->searchable()
+                                ->preload(),
+                            Select::make('location_code')
+                                ->label('Location')
+                                ->relationship('location', 'name')
+                                ->getOptionLabelFromRecordUsing(fn ($record): string => "{$record->code} - {$record->name}")
+                                ->searchable()
+                                ->preload(),
                         ])->columnSpan(1),
                 ]),
 

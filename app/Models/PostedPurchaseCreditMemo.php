@@ -139,6 +139,16 @@ class PostedPurchaseCreditMemo extends Model
         return $this->belongsTo(PurchaseInvoice::class, 'corrects_invoice_id');
     }
 
+    public function reasonCode(): BelongsTo
+    {
+        return $this->belongsTo(ReasonCode::class, 'reason_code', 'code');
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_code', 'code');
+    }
+
     // ==================== SCOPES ====================
 
     public function scopeForVendor($query, int $vendorId)

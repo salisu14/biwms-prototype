@@ -579,6 +579,11 @@ class AdminPanelProvider extends PanelProvider
                                         ->url('/admin/employees')
                                         ->isActiveWhen(fn () => request()->is('admin/employees*')),
 
+                                    NavigationItem::make('Promotions History')
+                                        ->icon('heroicon-o-user-group')
+                                        ->url('/admin/employee-promotion-histories')
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-promotion-histories*')),
+
                                     NavigationItem::make('Employee Attendances')
                                         ->icon('heroicon-o-user-group')
                                         ->url('/admin/attendance-ledger-entries')

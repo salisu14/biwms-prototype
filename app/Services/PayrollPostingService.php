@@ -8,7 +8,6 @@ use App\Enums\SourceType;
 use App\Models\Employee;
 use App\Models\GlEntry;
 use App\Models\PayrollDocument;
-use App\Models\User;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +27,26 @@ class PayrollPostingService
             $documentNumber = $document->document_number;
             $postingDate = $document->period_end;
             $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
+
+            $employeesInDocument = $document->lines()
+                ->with('employee.bankAccounts')
+                ->get()
+                ->pluck('employee')
+                ->filter()
+                ->unique('id')
+                ->values();
+
+            $employeesMissingPrimaryBank = $employeesInDocument
+                ->filter(fn (Employee $employee) => ! $employee->bankAccounts()->where('is_primary', true)->exists())
+                ->values();
+
+            if ($employeesMissingPrimaryBank->isNotEmpty()) {
+                $employeeList = $employeesMissingPrimaryBank
+                    ->map(fn (Employee $employee) => "{$employee->employee_number} ({$employee->first_name} {$employee->last_name})")
+                    ->implode(', ');
+
+                throw new Exception("Cannot post payroll. The following employees have no primary bank account: {$employeeList}. Please add a primary bank account before posting.");
+            }
 
             foreach ($document->lines as $line) {
                 $employee = $line->employee;
@@ -56,7 +75,7 @@ class PayrollPostingService
                 } elseif ($payCode->type === PayCodeType::DEDUCTION) {
                     // Dr Net Pay (Liability), Cr Tax/Deduction Liability
                     $liabilityAccount = $payCodeAccountId;
-                    
+
                     // Priority fallback to posting group standard accounts
                     if ($payCode->is_statutory) {
                         if ($payCode->code === 'PAYE') {
@@ -66,7 +85,7 @@ class PayrollPostingService
                         }
                     }
 
-                    if (!$liabilityAccount) {
+                    if (! $liabilityAccount) {
                         throw new Exception("Missing liability account for deduction: {$payCode->name}");
                     }
 
