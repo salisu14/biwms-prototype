@@ -15,6 +15,7 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
@@ -33,7 +34,22 @@ class PurchaseQuoteForm
                                     TextInput::make('document_no')
                                         ->required()
                                         ->unique(ignoreRecord: true)
-                                        ->default(fn () => app(NumberSeriesService::class)->tryGetNextNo('P-QUOTE') ?? '')
+                                        ->helperText('Auto-generated from Number Series (P-QUOTE, PURCHASE_QUOTE, or PQ).')
+                                        ->default(function (?object $record): string {
+                                            if ($record?->document_no) {
+                                                return (string) $record->document_no;
+                                            }
+
+                                            $service = app(NumberSeriesService::class);
+                                            foreach (['P-QUOTE', 'PURCHASE_QUOTE', 'PQ'] as $seriesCode) {
+                                                $nextNo = $service->tryGetNextNo($seriesCode);
+                                                if (! empty($nextNo)) {
+                                                    return $nextNo;
+                                                }
+                                            }
+
+                                            return 'SETUP-NO-SERIES';
+                                        })
                                         ->disabled(fn ($record) => $record !== null)
                                         ->dehydrated(),
                                     Select::make('status')
@@ -65,6 +81,11 @@ class PurchaseQuoteForm
                                             }
                                             if ($vendor->payment_terms_code) {
                                                 $set('payment_terms_code', $vendor->payment_terms_code);
+                                                $term = PaymentTerm::query()->where('code', $vendor->payment_terms_code)->first();
+                                                $documentDate = now();
+                                                if ($term) {
+                                                    $set('due_date', $term->calculateDueDate($documentDate)->format('Y-m-d'));
+                                                }
                                             }
                                         }),
                                     Select::make('contact_id')
@@ -101,7 +122,21 @@ class PurchaseQuoteForm
                                     Select::make('payment_terms_code')
                                         ->options(fn () => PaymentTerm::query()->active()->orderBy('code')->pluck('description', 'code'))
                                         ->searchable()
-                                        ->preload(),
+                                        ->preload()
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, Set $set, Get $get): void {
+                                            if (! $state) {
+                                                return;
+                                            }
+
+                                            $term = PaymentTerm::query()->where('code', $state)->first();
+                                            if (! $term) {
+                                                return;
+                                            }
+
+                                            $documentDate = $get('document_date') ? new \DateTime((string) $get('document_date')) : now();
+                                            $set('due_date', $term->calculateDueDate($documentDate)->format('Y-m-d'));
+                                        }),
                                     TextInput::make('amount')->disabled()->prefix('$'), // Read-only as model calculates this
                                     TextInput::make('vat_amount')->disabled()->prefix('$'),
                                     TextInput::make('amount_including_vat')

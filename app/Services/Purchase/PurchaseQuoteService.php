@@ -11,6 +11,7 @@ use App\Models\PurchaseQuoteLine;
 use App\Models\Vendor;
 use App\Services\NumberSeriesService;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class PurchaseQuoteService
 {
@@ -23,7 +24,7 @@ class PurchaseQuoteService
     public function createQuote(array $data): PurchaseQuote
     {
         return DB::transaction(function () use ($data) {
-            $data['document_no'] = $this->numberSeriesService->getNextNo('P-QUOTE');
+            $data['document_no'] = $this->nextQuoteNumber();
             $data['status'] = PurchaseQuoteStatus::OPEN;
 
             if (! empty($data['vendor_id'])) {
@@ -223,4 +224,18 @@ class PurchaseQuoteService
     //            return $order;
     //        });
     //    }
+
+    private function nextQuoteNumber(): string
+    {
+        foreach (['P-QUOTE', 'PURCHASE_QUOTE', 'PQ'] as $seriesCode) {
+            $nextNo = $this->numberSeriesService->tryGetNextNo($seriesCode);
+            if (! empty($nextNo)) {
+                return $nextNo;
+            }
+        }
+
+        throw new RuntimeException(
+            'No Purchase Quote number series is configured. Please set up one of: P-QUOTE, PURCHASE_QUOTE, or PQ.'
+        );
+    }
 }
