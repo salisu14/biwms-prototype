@@ -1,26 +1,5 @@
 <x-filament-panels::page>
-    <style>
-        .expense-report-table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-
-        .expense-report-table th,
-        .expense-report-table td {
-            border: 1px solid #94a3b8 !important;
-            padding: 10px 14px !important;
-            line-height: 1.45 !important;
-        }
-
-        .expense-report-table th {
-            font-weight: 600;
-        }
-
-        .dark .expense-report-table th,
-        .dark .expense-report-table td {
-            border-color: #64748b !important;
-        }
-    </style>
+    @include('filament.components.report-table-styles')
     @php($report = $this->reportData())
 
     <div class="space-y-6">

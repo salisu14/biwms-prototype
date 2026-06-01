@@ -225,6 +225,7 @@
         @endif
     </div>
 
+    @include('filament.components.report-table-styles')
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
         
@@ -234,22 +235,6 @@
 
         .tabular-nums {
             font-variant-numeric: tabular-nums;
-        }
-
-        .report-table th,
-        .report-table td {
-            border: 1px solid #94a3b8 !important;
-            padding: 10px 14px !important;
-            line-height: 1.45 !important;
-        }
-
-        .dark .report-table th,
-        .dark .report-table td {
-            border-color: #64748b !important;
-        }
-
-        .report-table th {
-            font-weight: 600;
         }
 
         @media print {
