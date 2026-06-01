@@ -72,7 +72,7 @@ class PayrollPeriodsTable
                         return $query
                             ->when($data['from'], fn ($q) => $q->whereDate('start_date', '>=', $data['from']))
                             ->when($data['until'], fn ($q) => $q->whereDate('end_date', '<=', $data['until']));
-                    })
+                    }),
             ])
             ->recordActions([
                 EditAction::make(),
@@ -85,15 +85,17 @@ class PayrollPeriodsTable
                     ->modalHeading('Close Payroll Period?')
                     ->modalDescription('This will freeze documents and update YTD balances. This action is irreversible.')
                     ->visible(fn (PayrollPeriod $record) => $record->status !== PayrollPeriodStatus::CLOSED)
-                    ->action(function (PayrollPeriod $record, Notification $notification) {
+                    ->action(function (PayrollPeriod $record) {
                         try {
                             app(PayrollPeriodService::class)->close($record);
-                            $notification->success()
+                            Notification::make()
+                                ->success()
                                 ->title('Period Closed Successfully')
                                 ->body("Year-to-Date balances for the period ending {$record->end_date->format('M d, Y')} have been updated.")
                                 ->send();
                         } catch (\Exception $e) {
-                            $notification->danger()
+                            Notification::make()
+                                ->danger()
                                 ->title('Action Failed')
                                 ->body($e->getMessage())
                                 ->send();

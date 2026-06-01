@@ -115,16 +115,7 @@ class PayrollDocumentForm
                                     ->orderBy('code')
                                     ->first();
 
-                                $generatedLines = $newIds->map(fn (int $employeeId) => [
-                                    'employee_id' => $employeeId,
-                                    'pay_code_id' => $defaultPayCode?->id,
-                                    'line_type' => 'Earning',
-                                    'amount' => 0,
-                                    'hours' => null,
-                                    'rate' => null,
-                                    'employer_amount' => null,
-                                    'description' => 'Seeded line for payroll review',
-                                ])->all();
+                                $generatedLines = self::buildSeededLines($newIds, $defaultPayCode?->id);
 
                                 $set('lines', array_values([...$existingLines->all(), ...$generatedLines]));
                             }),
@@ -146,6 +137,21 @@ class PayrollDocumentForm
                                     ->pluck('id')
                                     ->map(fn ($id) => (int) $id)
                                     ->all();
+
+                                $existingLines = collect($get('lines') ?? []);
+                                $existingEmployeeIds = $existingLines->pluck('employee_id')->filter()->map(fn ($id) => (int) $id)->all();
+                                $newIds = collect($employeeIds)->reject(fn (int $id) => in_array($id, $existingEmployeeIds, true));
+
+                                if ($newIds->isNotEmpty()) {
+                                    $defaultPayCode = PayCode::query()
+                                        ->where('type', 'EARNING')
+                                        ->orderBy('code')
+                                        ->first();
+
+                                    $generatedLines = self::buildSeededLines($newIds, $defaultPayCode?->id);
+
+                                    $set('lines', array_values([...$existingLines->all(), ...$generatedLines]));
+                                }
 
                                 $set('employee_seed_ids', $employeeIds);
                                 $set('seed_select_all_filtered', false);
@@ -200,5 +206,29 @@ class PayrollDocumentForm
                     ]),
                 ])->columnSpan(['lg' => 3]),
             ])->columns(3);
+    }
+
+    private static function buildSeededLines(iterable $employeeIds, ?int $defaultPayCodeId): array
+    {
+        $ids = collect($employeeIds)->map(fn (int $id) => (int) $id)->values();
+        $employees = Employee::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+        return $ids->map(function (int $employeeId) use ($employees, $defaultPayCodeId): array {
+            $employee = $employees->get($employeeId);
+            $baseSalary = (float) ($employee?->getCurrentBaseSalary() ?? 0);
+
+            return [
+                'employee_id' => $employeeId,
+                'pay_code_id' => $defaultPayCodeId,
+                'line_type' => 'Earning',
+                'amount' => $baseSalary,
+                'hours' => null,
+                'rate' => null,
+                'employer_amount' => null,
+                'description' => $baseSalary > 0
+                    ? 'Seeded base salary line for payroll review'
+                    : 'Seeded line for payroll review (salary not configured)',
+            ];
+        })->all();
     }
 }

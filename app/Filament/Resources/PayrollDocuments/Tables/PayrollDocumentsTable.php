@@ -43,13 +43,13 @@ class PayrollDocumentsTable
                     ->badge(),
                 TextColumn::make('total_earnings')
                     ->numeric()
-                    ->money('Ksh'),
+                    ->money('NGN'),
                 TextColumn::make('total_deductions')
                     ->numeric()
-                    ->money('Ksh'),
+                    ->money('NGN'),
                 TextColumn::make('total_net_pay')
                     ->numeric()
-                    ->money('Ksh'),
+                    ->money('NGN'),
                 TextColumn::make('lines_count')
                     ->counts('lines')
                     ->label('Lines'),
@@ -69,12 +69,12 @@ class PayrollDocumentsTable
                     ->icon('heroicon-o-cpu-chip')
                     ->color('info')
                     ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::OPEN)
-                    ->action(function (PayrollDocument $record, Notification $notification) {
+                    ->action(function (PayrollDocument $record) {
                         try {
                             app(PayrollCalculationService::class)->calculate($record);
-                            $notification->success()->title('Payroll Calculated!')->send();
+                            Notification::make()->success()->title('Payroll Calculated!')->send();
                         } catch (\Exception $e) {
-                            $notification->danger()->title('Calculation Failed')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Calculation Failed')->body($e->getMessage())->send();
                         }
                     }),
                 ApprovalActions::makeSendApprovalRequestAction(),
@@ -88,12 +88,12 @@ class PayrollDocumentsTable
                     ->color('success')
                     ->requiresConfirmation()
                     ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::APPROVED)
-                    ->action(function (PayrollDocument $record, Notification $notification) {
+                    ->action(function (PayrollDocument $record) {
                         try {
                             app(PayrollPostingService::class)->post($record);
-                            $notification->success()->title('Payroll Posted!')->send();
+                            Notification::make()->success()->title('Payroll Posted!')->send();
                         } catch (\Exception $e) {
-                            $notification->danger()->title('Posting Failed')->body($e->getMessage())->send();
+                            Notification::make()->danger()->title('Posting Failed')->body($e->getMessage())->send();
                         }
                     }),
                 Action::make('export_bank_file')
