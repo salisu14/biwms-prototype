@@ -8,6 +8,7 @@ use App\Enums\AccountType;
 use App\Enums\COGSCategory;
 use App\Enums\ExpenseCategoryEnum;
 use App\Enums\RevenueCategory;
+use App\Enums\SourceType;
 use App\Models\Category;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
@@ -16,6 +17,7 @@ use App\Models\ExpenseBudget;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseTransaction;
 use App\Models\FixedAsset;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
 use App\Models\Item;
 use App\Models\RecurringExpense;
@@ -28,22 +30,27 @@ use Illuminate\Support\Facades\DB;
 class ExpenseService
 {
     public function __construct(
-        private NumberSeriesService        $numberSeriesService,
-        private GeneralLedgerService       $glService,
-        private CurrencyService            $currencyService,
-        private PostingService             $postingService,
+        private NumberSeriesService $numberSeriesService,
+        private GeneralLedgerService $glService,
+        private CurrencyService $currencyService,
+        private PostingService $postingService,
         private DimensionManagementService $dimensionService,
-        private VatCalculationService      $vatService
+        private VatCalculationService $vatService
     ) {}
 
     /**
      * Post a generic expense transaction (BC standard)
+     *
      * @throws \Throwable
      */
     public function post(ExpenseTransaction $transaction): void
     {
         if ($transaction->status === 'posted') {
             throw new \RuntimeException('Transaction is already posted');
+        }
+
+        if ($transaction->status !== 'approved') {
+            throw new \RuntimeException('Only approved expense transactions can be posted.');
         }
 
         DB::transaction(function () use ($transaction) {
@@ -108,7 +115,7 @@ class ExpenseService
                 'posting_date' => $transaction->posting_date,
                 'document_number' => $transaction->document_no,
                 'document_type' => $transaction->document_type,
-                'source_type' => 'EXPENSE',
+                'source_type' => $this->resolveGlSourceType($transaction),
                 'sourceable_type' => ExpenseTransaction::class, // CRITICAL: Polymorphic Link
                 'sourceable_id' => $transaction->id,
                 'description' => $transaction->description,
@@ -117,6 +124,7 @@ class ExpenseService
             $transaction->update([
                 'status' => 'posted',
                 'posted_at' => now(),
+                'posted_by' => Auth::id(),
             ]);
 
             if ($transaction->allocations()->exists()) {
@@ -149,15 +157,16 @@ class ExpenseService
                 'account_id' => $offsetAccount->id,
                 'debit' => $amount < 0 ? abs($amount) : 0,
                 'credit' => $amount > 0 ? $amount : 0,
-                'description' => "Offset: " . $transaction->document_no,
+                'description' => 'Offset: '.$transaction->document_no,
                 'dimensions' => [],
-            ]
+            ],
         ];
 
         $this->glService->post($lines, [
             'posting_date' => $transaction->posting_date,
             'document_number' => $transaction->document_no,
             'document_type' => $transaction->document_type,
+            'source_type' => $this->resolveGlSourceType($transaction),
             'sourceable_type' => ExpenseTransaction::class,
             'sourceable_id' => $transaction->id,
         ]);
@@ -187,13 +196,14 @@ class ExpenseService
                     'credit' => 0,
                     'description' => "Allocation IN: {$transaction->document_no}",
                     'dimensions' => $this->dimensionService->getDimensionSet($allocation->dimension_set_id ?? 0)->toArray(),
-                ]
+                ],
             ];
 
             $this->glService->post($lines, [
                 'posting_date' => $transaction->posting_date,
                 'document_number' => $transaction->document_no,
                 'document_type' => 'ALLOCATION',
+                'source_type' => $this->resolveGlSourceType($transaction),
                 'sourceable_type' => ExpenseTransaction::class, // Establish link for allocations too
                 'sourceable_id' => $transaction->id,
             ]);
@@ -209,7 +219,7 @@ class ExpenseService
         if ($amount > 0 && $cogsAccount && $inventoryAccount) {
             $lines = [
                 ['account_id' => $inventoryAccount->id, 'debit' => $amount, 'credit' => 0, 'description' => "Rev COGS: {$item->item_code}"],
-                ['account_id' => $cogsAccount->id, 'debit' => 0, 'credit' => $amount, 'description' => "Rev COGS: {$item->item_code}"]
+                ['account_id' => $cogsAccount->id, 'debit' => 0, 'credit' => $amount, 'description' => "Rev COGS: {$item->item_code}"],
             ];
 
             // Use doc number to find the transaction if we want to link it
@@ -219,6 +229,7 @@ class ExpenseService
                 'posting_date' => now(),
                 'document_number' => $documentNo,
                 'document_type' => 'SALES_RETURN',
+                'source_type' => SourceType::ITEM->value,
                 'sourceable_type' => $transaction ? ExpenseTransaction::class : null,
                 'sourceable_id' => $transaction?->id,
             ]);
@@ -227,6 +238,7 @@ class ExpenseService
 
     /**
      * Post COGS from inventory transaction
+     *
      * @throws \Throwable
      */
     public function postCOGS(
@@ -433,6 +445,7 @@ class ExpenseService
 
     /**
      * Allocate indirect expense to cost centers
+     *
      * @throws \Throwable
      */
     public function allocateIndirectExpense(
@@ -683,6 +696,7 @@ class ExpenseService
 
     /**
      * Generate actual transactions from all due recurring templates
+     *
      * @throws \Throwable
      */
     public function processRecurringExpenses(): void
@@ -796,20 +810,28 @@ class ExpenseService
     {
         if ($transaction->vendor) {
             $account = $transaction->vendor->getPayablesAccount();
-            if ($account) return $account;
+            if ($account) {
+                return $account;
+            }
         }
 
         if ($transaction->employee) {
             $account = $transaction->employee->employeePostingGroup?->payables_account_id
                 ? ChartOfAccount::find($transaction->employee->employeePostingGroup->payables_account_id)
                 : ChartOfAccount::where('account_number', '2100')->first();
-            if ($account) return $account;
+            if ($account) {
+                return $account;
+            }
         }
 
-        $account = ChartOfAccount::where('account_number', '10100')->first() ?? ChartOfAccount::where('account_number', '9999')->first();
+        $defaultOffsetAccountId = GeneralLedgerSetup::instance()->default_expense_offset_account_id;
 
-        if (!$account) {
-            throw new \RuntimeException("No Offset Account found for {$transaction->document_no}. Check COA setup.");
+        $account = $defaultOffsetAccountId
+            ? ChartOfAccount::find($defaultOffsetAccountId)
+            : null;
+
+        if (! $account) {
+            throw new \RuntimeException("No Offset Account found for {$transaction->document_no}. Configure 'Default Expense Offset Account' in GL Fiscal Setup.");
         }
 
         return $account;
@@ -817,9 +839,11 @@ class ExpenseService
 
     private function resolvePostingAccounts(ExpenseTransaction $transaction): void
     {
-        if (!$transaction->gen_bus_posting_group_id || !$transaction->gen_prod_posting_group_id) {
+        if (! $transaction->gen_bus_posting_group_id || ! $transaction->gen_prod_posting_group_id) {
             // If missing, we don't throw error here to allow manual account overrides if already set
-            if ($transaction->expense_account_id) return;
+            if ($transaction->expense_account_id) {
+                return;
+            }
             throw new \RuntimeException("Posting Groups required for {$transaction->document_no}");
         }
 
@@ -832,5 +856,22 @@ class ExpenseService
             $transaction->expense_account_id = $setup->purchase_account_id ?? $setup->inventory_account_id;
             $transaction->save();
         }
+    }
+
+    private function resolveGlSourceType(ExpenseTransaction $transaction): string
+    {
+        if ($transaction->vendor_id) {
+            return SourceType::VENDOR->value;
+        }
+
+        if ($transaction->employee_id) {
+            return SourceType::EMPLOYEE->value;
+        }
+
+        if ($transaction->item_id) {
+            return SourceType::ITEM->value;
+        }
+
+        return SourceType::GENERAL_JOURNAL->value;
     }
 }

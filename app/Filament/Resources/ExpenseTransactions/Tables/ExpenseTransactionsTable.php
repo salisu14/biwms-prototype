@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ExpenseTransactions\Tables;
 
+use App\Filament\Resources\ExpenseTransactions\Support\BuildsExpensePostSummary;
 use App\Services\ExpenseService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -15,6 +16,8 @@ use Filament\Tables\Table;
 
 class ExpenseTransactionsTable
 {
+    use BuildsExpensePostSummary;
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -59,9 +62,12 @@ class ExpenseTransactionsTable
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state) {
+                        'approved' => 'info',
+                        'pending_approval' => 'warning',
                         'posted' => 'success',
                         'reversed' => 'danger',
-                        default => 'warning',
+                        'open' => 'warning',
+                        default => 'gray',
                     }),
 
                 TextColumn::make('invoice_no')
@@ -73,6 +79,9 @@ class ExpenseTransactionsTable
             ->filters([
                 SelectFilter::make('status')
                     ->options([
+                        'open' => 'Open',
+                        'pending_approval' => 'Pending Approval',
+                        'approved' => 'Approved',
                         'posted' => 'Posted',
                         'reversed' => 'Reversed',
                     ]),
@@ -85,12 +94,44 @@ class ExpenseTransactionsTable
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
+                Action::make('send_for_approval')
+                    ->label('Send for Approval')
+                    ->button()
+                    ->color('warning')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->hidden(fn ($record) => $record->status !== 'open')
+                    ->requiresConfirmation()
+                    ->action(function ($record): void {
+                        $record->update(['status' => 'pending_approval']);
+
+                        Notification::make()
+                            ->title('Sent for Approval')
+                            ->success()
+                            ->send();
+                    }),
+                Action::make('approve')
+                    ->label('Approve')
+                    ->button()
+                    ->color('info')
+                    ->icon('heroicon-o-check')
+                    ->hidden(fn ($record) => ! in_array($record->status, ['open', 'pending_approval'], true))
+                    ->requiresConfirmation()
+                    ->action(function ($record): void {
+                        $record->update(['status' => 'approved']);
+
+                        Notification::make()
+                            ->title('Expense Approved')
+                            ->success()
+                            ->send();
+                    }),
                 Action::make('post')
                     ->label('Post')
                     ->button()
                     ->color('success')
                     ->icon('heroicon-o-check-circle')
-                    ->hidden(fn ($record) => $record->status === 'posted')
+                    ->hidden(fn ($record) => $record->status !== 'approved')
+                    ->modalHeading('Validate and Post Expense')
+                    ->modalDescription(fn ($record): string => self::buildPostValidationSummary($record))
                     ->requiresConfirmation()
                     ->action(function ($record) {
                         try {

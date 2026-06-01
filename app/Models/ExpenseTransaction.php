@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Auth;
 
 class ExpenseTransaction extends Model
 {
@@ -75,14 +74,13 @@ class ExpenseTransaction extends Model
     ];
 
     /**
-     * Boot the model to handle automatic assignment of auditing fields.
+     * Boot the model to handle default transaction status.
      */
     protected static function booted(): void
     {
         static::creating(function (ExpenseTransaction $transaction) {
-            if (Auth::check()) {
-                // Automatically assign the current user to posted_by if not explicitly set
-                $transaction->posted_by = $transaction->posted_by ?? Auth::id();
+            if (empty($transaction->status)) {
+                $transaction->status = 'open';
             }
         });
     }

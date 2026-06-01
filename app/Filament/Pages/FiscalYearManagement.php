@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\AccountCategory;
 use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\FiscalReopenLog;
@@ -54,6 +55,25 @@ class FiscalYearManagement extends Page
                             ->searchable()
                             ->required()
                             ->default(fn () => GeneralLedgerSetup::instance()->retained_earnings_account_id),
+                        Select::make('default_expense_offset_account_id')
+                            ->label('Default Expense Offset Account')
+                            ->options(
+                                ChartOfAccount::query()
+                                    ->whereIn('account_category', [
+                                        AccountCategory::ASSET->value,
+                                        AccountCategory::LIQUID_ASSET->value,
+                                        AccountCategory::LIABILITY->value,
+                                        AccountCategory::PAYABLE->value,
+                                    ])
+                                    ->orderBy('account_number')
+                                    ->get()
+                                    ->mapWithKeys(fn (ChartOfAccount $account): array => [$account->id => "{$account->account_number} - {$account->name}"])
+                                    ->toArray()
+                            )
+                            ->searchable()
+                            ->nullable()
+                            ->helperText('Used when posting an expense without a vendor or employee payable account.')
+                            ->default(fn () => GeneralLedgerSetup::instance()->default_expense_offset_account_id),
                         DatePicker::make('allow_posting_from')
                             ->required()
                             ->default(fn () => GeneralLedgerSetup::instance()->allow_posting_from),

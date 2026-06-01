@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\AdminDashboard;
+use App\Filament\Pages\Finance\ExpenseReport;
 use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\FiscalYearManagement;
 use App\Filament\Pages\PurchaseHistory;
@@ -156,6 +157,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-credit-card')
                                     ->url('/admin/expense-transactions')
                                     ->isActiveWhen(fn () => request()->is('admin/expense-transaction*')),
+
+                                NavigationItem::make('Expense Report')
+                                    ->icon('heroicon-o-banknotes')
+                                    ->url(ExpenseReport::getUrl())
+                                    ->isActiveWhen(fn () => request()->is('admin/expense-report*')),
 
                                 NavigationItem::make('Expenses Categories')
                                     ->icon('heroicon-o-list-bullet')

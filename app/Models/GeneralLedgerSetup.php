@@ -21,6 +21,7 @@ class GeneralLedgerSetup extends Model
         'lc_code', 'company_name',
         'allow_posting_from', 'allow_posting_to',
         'retained_earnings_account_id',
+        'default_expense_offset_account_id',
     ];
 
     protected $casts = [
@@ -53,5 +54,10 @@ class GeneralLedgerSetup extends Model
     public function retainedEarningsAccount()
     {
         return $this->belongsTo(ChartOfAccount::class, 'retained_earnings_account_id');
+    }
+
+    public function defaultExpenseOffsetAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'default_expense_offset_account_id');
     }
 }

@@ -9,6 +9,7 @@ class ExpenseAllocation extends Model
 {
     protected $fillable = [
         'expense_transaction_id',
+        'title',
         'allocation_basis',
         'allocation_type',
         'allocation_percentage',

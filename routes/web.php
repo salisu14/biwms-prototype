@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BalanceSheetPrintController;
+use App\Http\Controllers\ExpenseReportExportController;
 use App\Http\Controllers\GroupSummaryPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
 use App\Http\Controllers\WaybillController;
@@ -24,4 +25,8 @@ Route::get('/admin/reports/balance-sheet/print', BalanceSheetPrintController::cl
 
 Route::get('/admin/reports/profit-and-loss/print', ProfitAndLossPrintController::class)
     ->name('reports.profit-and-loss.print')
+    ->middleware(['web', 'auth']);
+
+Route::get('/admin/reports/expense/export', ExpenseReportExportController::class)
+    ->name('reports.expense.export')
     ->middleware(['web', 'auth']);

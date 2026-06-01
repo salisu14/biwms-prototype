@@ -16,12 +16,11 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
-
 class AllocationsRelationManager extends RelationManager
 {
     protected static string $relationship = 'allocations';
 
-    protected static ?string $recordTitleAttribute = 'allocated_amount';
+    protected static ?string $recordTitleAttribute = 'title';
 
     protected static ?string $title = 'Expense Allocations (Splits)';
 
@@ -32,6 +31,12 @@ class AllocationsRelationManager extends RelationManager
                 Section::make('Allocation Details')
                     ->schema([
                         Grid::make(3)->schema([
+                            TextInput::make('title')
+                                ->label('Split Title')
+                                ->placeholder('e.g. Digital Marketing')
+                                ->required()
+                                ->maxLength(120),
+
                             Select::make('target_gl_account_id')
                                 ->label('Target Account')
                                 ->relationship('targetAccount', 'account_number')
@@ -126,10 +131,16 @@ class AllocationsRelationManager extends RelationManager
                     ->searchable()
                     ->sortable(),
 
+                TextColumn::make('title')
+                    ->label('Split')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('semibold'),
+
                 TextColumn::make('allocation_type')
                     ->label('Type')
                     ->badge()
-                    ->color(fn ($state) => match($state) {
+                    ->color(fn ($state) => match ($state) {
                         'amount' => 'success',
                         'percentage' => 'info',
                         default => 'gray',
@@ -160,10 +171,15 @@ class AllocationsRelationManager extends RelationManager
             ->headerActions([
                 CreateAction::make()
                     ->mutateDataUsing(function (array $data): array {
+                        if (empty($data['title']) && ! empty($data['allocation_basis'])) {
+                            $data['title'] = $data['allocation_basis'];
+                        }
+
                         if (($data['allocation_type'] ?? 'percentage') === 'percentage') {
                             $parentAmount = (float) $this->getOwnerRecord()->amount;
                             $data['allocated_amount'] = round($parentAmount * (($data['allocation_percentage'] ?? 0) / 100), 4);
                         }
+
                         return $data;
                     }),
             ])

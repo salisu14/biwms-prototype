@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Enums\SourceType;
 use App\Models\ChartOfAccount;
 use App\Models\GlEntry;
 use Illuminate\Support\Facades\DB;
@@ -58,7 +59,7 @@ class GeneralLedgerService
                     'document_date' => $meta['document_date'] ?? now(),
 
                     // Fix: Allow Line-level or Meta-level source override
-                    'source_type' => $line['source_type'] ?? $meta['source_type'] ?? 'GENERAL',
+                    'source_type' => $line['source_type'] ?? $meta['source_type'] ?? SourceType::GENERAL_JOURNAL->value,
                     'source_number' => $line['source_number'] ?? $meta['source_number'] ?? null,
                     'document_type' => $meta['document_type'] ?? 'JOURNAL',
 

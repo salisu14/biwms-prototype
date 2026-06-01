@@ -7,9 +7,11 @@ use App\Models\Currency;
 use App\Models\DimensionValue;
 use App\Models\Employee;
 use App\Models\ExpenseCategory;
+use App\Models\GeneralLedgerSetup;
 use App\Models\Vendor;
 use App\Services\ExpenseService;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -47,11 +49,13 @@ class ExpenseTransactionForm
                                         ->unique(ignoreRecord: true),
                                     Select::make('status')
                                         ->options([
+                                            'open' => 'Open',
+                                            'pending_approval' => 'Pending Approval',
+                                            'approved' => 'Approved',
                                             'posted' => 'Posted',
                                             'reversed' => 'Reversed',
-                                            'pending' => 'Pending',
                                         ])
-                                        ->default('posted')
+                                        ->default('open')
                                         ->required()
                                         ->native(false),
                                 ]),
@@ -146,6 +150,10 @@ class ExpenseTransactionForm
                                         ->options(AccountType::class)
                                         ->required()
                                         ->native(false),
+                                    Placeholder::make('offset_account_setup_warning')
+                                        ->label('Offset Account Setup')
+                                        ->content('Default Expense Offset Account is not configured in GL Fiscal Setup. Posting non-vendor/non-employee expenses will fail.')
+                                        ->visible(fn () => empty(GeneralLedgerSetup::instance()->default_expense_offset_account_id)),
                                     Select::make('category_code')
                                         ->label('Expense Category')
                                         ->relationship('expenseCategory', 'description')
