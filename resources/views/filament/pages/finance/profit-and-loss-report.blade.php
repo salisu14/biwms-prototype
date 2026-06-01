@@ -108,7 +108,7 @@
 
                 <!-- Interactive Data Table -->
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left border-collapse">
+                    <table class="report-table w-full text-sm text-left border-collapse">
                         <thead>
                             <tr class="border-b border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/5">
                                 <th class="py-5 px-4 font-black uppercase tracking-[0.15em] text-gray-400 text-[11px]">Heading</th>
@@ -234,6 +234,22 @@
 
         .tabular-nums {
             font-variant-numeric: tabular-nums;
+        }
+
+        .report-table th,
+        .report-table td {
+            border: 1px solid #94a3b8 !important;
+            padding: 10px 14px !important;
+            line-height: 1.45 !important;
+        }
+
+        .dark .report-table th,
+        .dark .report-table td {
+            border-color: #64748b !important;
+        }
+
+        .report-table th {
+            font-weight: 600;
         }
 
         @media print {

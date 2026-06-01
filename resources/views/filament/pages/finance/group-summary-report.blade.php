@@ -37,7 +37,7 @@
             </div>
 
             <div class="overflow-x-auto">
-                <table class="w-full table-fixed border-separate border-spacing-y-1 text-sm">
+                <table class="report-table w-full table-fixed text-sm">
                     <colgroup>
                         <col style="width: 56%;">
                         <col style="width: 22%;">
@@ -83,6 +83,26 @@
     </div>
 </x-filament-panels::page>
 <style>
+    .report-table {
+        border-collapse: collapse;
+    }
+
+    .report-table th,
+    .report-table td {
+        border: 1px solid #94a3b8 !important;
+        padding: 10px 14px !important;
+        line-height: 1.45 !important;
+    }
+
+    .dark .report-table th,
+    .dark .report-table td {
+        border-color: #64748b !important;
+    }
+
+    .report-table th {
+        font-weight: 600;
+    }
+
     @media print {
         @page { size: A4 portrait; margin: 12mm; }
 

@@ -29,7 +29,7 @@
                 </div>
 
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
+                    <table class="report-table w-full text-sm">
                         <thead>
                             <tr class="border-b border-gray-200 dark:border-gray-700">
                                 <th class="px-3 py-2 text-left font-semibold">Account</th>
@@ -77,6 +77,26 @@
     </div>
 </x-filament-panels::page>
 <style>
+    .report-table {
+        border-collapse: collapse;
+    }
+
+    .report-table th,
+    .report-table td {
+        border: 1px solid #94a3b8 !important;
+        padding: 10px 14px !important;
+        line-height: 1.45 !important;
+    }
+
+    .dark .report-table th,
+    .dark .report-table td {
+        border-color: #64748b !important;
+    }
+
+    .report-table th {
+        font-weight: 600;
+    }
+
     @media print {
         @page { size: A4 portrait; margin: 12mm; }
         .fi-sidebar,

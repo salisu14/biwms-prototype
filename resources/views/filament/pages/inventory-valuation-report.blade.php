@@ -27,11 +27,29 @@
             @apply border-b border-gray-200 dark:border-white/10 text-center py-1 font-bold text-xs uppercase tracking-wider;
             background-color: rgba(var(--primary-50), 0.5);
         }
-        .fi-ta-cell {
-            @apply px-2 py-1 !important;
+        .fi-ta table,
+        .fi-ta-content table {
+            border-collapse: collapse !important;
         }
+
+        .fi-ta table th,
+        .fi-ta table td,
+        .fi-ta-content table th,
+        .fi-ta-content table td {
+            border: 1px solid #94a3b8 !important;
+            padding: 10px 14px !important;
+            line-height: 1.45 !important;
+        }
+
+        .dark .fi-ta table th,
+        .dark .fi-ta table td,
+        .dark .fi-ta-content table th,
+        .dark .fi-ta-content table td {
+            border-color: #64748b !important;
+        }
+
         .fi-ta-header-cell {
-            @apply px-2 py-1 !important;
+            font-weight: 600 !important;
         }
     </style>
 </x-filament-panels::page>
