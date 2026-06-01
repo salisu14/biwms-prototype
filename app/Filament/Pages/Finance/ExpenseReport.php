@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Finance;
 
+use App\Models\ExpenseCategory;
 use App\Models\ExpenseTransaction;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -32,6 +33,7 @@ class ExpenseReport extends Page implements HasForms
         $this->form->fill([
             'period' => 'monthly',
             'anchorDate' => now()->toDateString(),
+            'categoryCode' => null,
         ]);
     }
 
@@ -52,6 +54,17 @@ class ExpenseReport extends Page implements HasForms
                     DatePicker::make('anchorDate')
                         ->label('Reference Date')
                         ->required()
+                        ->live(),
+                    Select::make('categoryCode')
+                        ->label('Category')
+                        ->placeholder('All categories')
+                        ->options(fn (): array => ExpenseCategory::query()
+                            ->where('is_active', true)
+                            ->orderBy('category_code')
+                            ->pluck('category_code', 'category_code')
+                            ->all())
+                        ->searchable()
+                        ->preload()
                         ->live(),
                 ]),
             ])
@@ -74,6 +87,7 @@ class ExpenseReport extends Page implements HasForms
                     'format' => 'print',
                     'period' => $this->formData['period'] ?? 'monthly',
                     'anchorDate' => $this->formData['anchorDate'] ?? now()->toDateString(),
+                    'categoryCode' => $this->formData['categoryCode'] ?? null,
                 ]), shouldOpenInNewTab: true),
             Action::make('csv')
                 ->label('CSV')
@@ -82,6 +96,7 @@ class ExpenseReport extends Page implements HasForms
                     'format' => 'csv',
                     'period' => $this->formData['period'] ?? 'monthly',
                     'anchorDate' => $this->formData['anchorDate'] ?? now()->toDateString(),
+                    'categoryCode' => $this->formData['categoryCode'] ?? null,
                 ])),
         ];
     }
@@ -93,6 +108,14 @@ class ExpenseReport extends Page implements HasForms
         $baseQuery = ExpenseTransaction::query()
             ->where('status', 'posted')
             ->whereBetween('posting_date', [$start->toDateString(), $end->toDateString()]);
+
+        $selectedCategoryCode = filled($this->formData['categoryCode'] ?? null)
+            ? (string) $this->formData['categoryCode']
+            : null;
+
+        if ($selectedCategoryCode !== null) {
+            $baseQuery->where('category_code', $selectedCategoryCode);
+        }
 
         $transactions = (clone $baseQuery)->get();
 
@@ -147,6 +170,7 @@ class ExpenseReport extends Page implements HasForms
                 'mode' => (string) ($this->formData['period'] ?? 'monthly'),
                 'start' => $start->toDateString(),
                 'end' => $end->toDateString(),
+                'category_code' => $selectedCategoryCode,
             ],
             'summary' => $summary,
             'by_category' => $byCategory,

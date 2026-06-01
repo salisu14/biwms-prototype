@@ -21,21 +21,30 @@ class ExpenseReportExportController extends Controller
     {
         $period = (string) $request->query('period', 'monthly');
         $anchorDate = Carbon::parse((string) $request->query('anchorDate', now()->toDateString()));
+        $categoryCode = filled($request->query('categoryCode'))
+            ? (string) $request->query('categoryCode')
+            : null;
 
         [$start, $end] = $this->resolvePeriod($period, $anchorDate);
 
-        $transactions = ExpenseTransaction::query()
+        $query = ExpenseTransaction::query()
             ->where('status', 'posted')
             ->whereBetween('posting_date', [$start->toDateString(), $end->toDateString()])
             ->orderBy('posting_date')
-            ->orderBy('document_no')
-            ->get(['document_no', 'posting_date', 'category_code', 'expense_type', 'amount', 'vat_amount', 'status']);
+            ->orderBy('document_no');
+
+        if ($categoryCode !== null) {
+            $query->where('category_code', $categoryCode);
+        }
+
+        $transactions = $query->get(['document_no', 'posting_date', 'category_code', 'expense_type', 'amount', 'vat_amount', 'status']);
 
         $report = [
             'period' => [
                 'mode' => $period,
                 'start' => $start->toDateString(),
                 'end' => $end->toDateString(),
+                'category_code' => $categoryCode,
             ],
             'summary' => [
                 'total_amount' => (float) $transactions->sum('amount'),

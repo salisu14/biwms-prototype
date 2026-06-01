@@ -15,7 +15,12 @@
         <x-filament::section>
             <div class="mb-4">
                 <h2 class="text-lg font-semibold">Expense Snapshot</h2>
-                <p class="text-sm text-gray-500">{{ $report['period']['start'] }} to {{ $report['period']['end'] }} ({{ ucfirst($report['period']['mode']) }})</p>
+                <p class="text-sm text-gray-500">
+                    {{ $report['period']['start'] }} to {{ $report['period']['end'] }} ({{ ucfirst($report['period']['mode']) }})
+                    @if(filled($report['period']['category_code'] ?? null))
+                        · Category: {{ $report['period']['category_code'] }}
+                    @endif
+                </p>
             </div>
             <div class="overflow-x-auto">
                 <table class="expense-report-table w-full table-auto text-sm">
