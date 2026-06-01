@@ -48,30 +48,15 @@ class WipValuationReport extends Page implements HasTable
 
     protected static ?string $title = 'WIP Valuation Report';
 
-    // Filter state
-    public ?string $dateFrom = null;
-
-    public ?string $dateTo = null;
-
-    public ?string $status = null;
-
-    public function mount(): void
-    {
-        $this->dateFrom = now()->startOfYear()->toDateString();
-        $this->dateTo = now()->toDateString();
-    }
-
     public function table(Table $table): Table
     {
         return $table
             ->query(
                 ProductionOrder::query()
                     ->with(['item', 'lines'])
-                    ->whereIn('status', ['RELEASED', 'FINISHED'])
-                    ->when($this->dateFrom, fn ($q) => $q->whereDate('starting_date_time', '>=', $this->dateFrom))
-                    ->when($this->dateTo, fn ($q) => $q->whereDate('starting_date_time', '<=', $this->dateTo))
-                    ->when($this->status, fn ($q) => $q->where('status', $this->status))
+                    ->whereIn('status', ['PLANNED', 'FIRM_PLANNED', 'RELEASED', 'FINISHED'])
                     ->select('production_orders.*')
+                    ->selectRaw('coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at) as production_date_ref')
                     ->selectRaw(
                         '(EXISTS (
                             SELECT 1
@@ -176,9 +161,9 @@ class WipValuationReport extends Page implements HasTable
                 TextColumn::make('unit_of_measure_code')
                     ->label('UOM'),
 
-                TextColumn::make('starting_date_time')
-                    ->label('Start Date')
-                    ->date()
+                TextColumn::make('production_date_ref')
+                    ->label('Production Date')
+                    ->dateTime('Y-m-d H:i')
                     ->sortable(),
 
                 TextColumn::make('data_source')
@@ -232,6 +217,8 @@ class WipValuationReport extends Page implements HasTable
             ->filters([
                 SelectFilter::make('status')
                     ->options([
+                        'PLANNED' => 'Planned',
+                        'FIRM_PLANNED' => 'Firm Planned',
                         'RELEASED' => 'Released',
                         'FINISHED' => 'Finished',
                     ])
@@ -244,10 +231,11 @@ class WipValuationReport extends Page implements HasTable
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when($data['from'], fn ($q) => $q->whereDate('starting_date_time', '>=', $data['from']))
-                            ->when($data['to'], fn ($q) => $q->whereDate('starting_date_time', '<=', $data['to']));
+                            ->when($data['from'], fn ($q) => $q->whereRaw('date(coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at)) >= ?', [$data['from']]))
+                            ->when($data['to'], fn ($q) => $q->whereRaw('date(coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at)) <= ?', [$data['to']]));
                     }),
             ])
+            ->defaultSort('production_date_ref', 'desc')
             ->striped()
             ->paginated([25, 50, 100]);
     }

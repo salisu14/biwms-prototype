@@ -34,6 +34,7 @@ class ExpenseReport extends Page implements HasForms
             'period' => 'monthly',
             'anchorDate' => now()->toDateString(),
             'categoryCode' => null,
+            'expenseType' => null,
         ]);
     }
 
@@ -66,6 +67,14 @@ class ExpenseReport extends Page implements HasForms
                         ->searchable()
                         ->preload()
                         ->live(),
+                    Select::make('expenseType')
+                        ->label('Expense Type')
+                        ->placeholder('All types')
+                        ->options([
+                            'direct' => 'Direct',
+                            'indirect' => 'Indirect',
+                        ])
+                        ->live(),
                 ]),
             ])
             ->statePath('formData');
@@ -88,6 +97,7 @@ class ExpenseReport extends Page implements HasForms
                     'period' => $this->formData['period'] ?? 'monthly',
                     'anchorDate' => $this->formData['anchorDate'] ?? now()->toDateString(),
                     'categoryCode' => $this->formData['categoryCode'] ?? null,
+                    'expenseType' => $this->formData['expenseType'] ?? null,
                 ]), shouldOpenInNewTab: true),
             Action::make('csv')
                 ->label('CSV')
@@ -97,6 +107,7 @@ class ExpenseReport extends Page implements HasForms
                     'period' => $this->formData['period'] ?? 'monthly',
                     'anchorDate' => $this->formData['anchorDate'] ?? now()->toDateString(),
                     'categoryCode' => $this->formData['categoryCode'] ?? null,
+                    'expenseType' => $this->formData['expenseType'] ?? null,
                 ])),
         ];
     }
@@ -112,9 +123,15 @@ class ExpenseReport extends Page implements HasForms
         $selectedCategoryCode = filled($this->formData['categoryCode'] ?? null)
             ? (string) $this->formData['categoryCode']
             : null;
+        $selectedExpenseType = filled($this->formData['expenseType'] ?? null)
+            ? (string) $this->formData['expenseType']
+            : null;
 
         if ($selectedCategoryCode !== null) {
             $baseQuery->where('category_code', $selectedCategoryCode);
+        }
+        if ($selectedExpenseType !== null) {
+            $baseQuery->where('expense_type', $selectedExpenseType);
         }
 
         $transactions = (clone $baseQuery)->get();
@@ -171,6 +188,7 @@ class ExpenseReport extends Page implements HasForms
                 'start' => $start->toDateString(),
                 'end' => $end->toDateString(),
                 'category_code' => $selectedCategoryCode,
+                'expense_type' => $selectedExpenseType,
             ],
             'summary' => $summary,
             'by_category' => $byCategory,

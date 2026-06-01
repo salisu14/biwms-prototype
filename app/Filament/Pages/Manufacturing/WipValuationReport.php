@@ -44,11 +44,16 @@ class WipValuationReport extends Page implements HasTable
         $itemSums = DB::table('item_ledger_entries')
             ->selectRaw('source_id, sum(cost_amount_actual) as material_cost_sum')
             ->where('source_type', ProductionOrder::class)
-            ->where('entry_type', ItemLedgerEntryType::CONSUMPTION->value)
+            ->whereRaw('LOWER(entry_type) = ?', [strtolower(ItemLedgerEntryType::CONSUMPTION->value)])
             ->groupBy('source_id');
 
         $query = ProductionOrder::query()
-            ->whereIn('status', [ProductionOrderStatus::RELEASED, ProductionOrderStatus::FIRM_PLANNED])
+            ->whereIn('status', [
+                ProductionOrderStatus::PLANNED,
+                ProductionOrderStatus::FIRM_PLANNED,
+                ProductionOrderStatus::RELEASED,
+                ProductionOrderStatus::FINISHED,
+            ])
             ->with('item')
             ->leftJoinSub($capacitySums, 'capacity_sums', function ($join): void {
                 $join->on('production_orders.id', '=', 'capacity_sums.production_order_id');
@@ -57,6 +62,7 @@ class WipValuationReport extends Page implements HasTable
                 $join->on('production_orders.id', '=', 'item_sums.source_id');
             })
             ->select('production_orders.*')
+            ->selectRaw('coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at) as production_date_ref')
             ->selectRaw('coalesce(item_sums.material_cost_sum, 0) as material_wip_cost')
             ->selectRaw('coalesce(capacity_sums.labor_cost_sum, 0) as labor_wip_cost')
             ->selectRaw('coalesce(capacity_sums.overhead_cost_sum, 0) as overhead_wip_cost')
@@ -71,7 +77,12 @@ class WipValuationReport extends Page implements HasTable
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn ($state) => $state === ProductionOrderStatus::RELEASED ? 'success' : 'warning'),
+                    ->color(fn ($state) => match ($state) {
+                        ProductionOrderStatus::FINISHED => 'success',
+                        ProductionOrderStatus::RELEASED => 'warning',
+                        ProductionOrderStatus::FIRM_PLANNED => 'info',
+                        default => 'gray',
+                    }),
                 TextColumn::make('item.description')
                     ->label('Item Being Produced')
                     ->searchable(),
@@ -103,11 +114,11 @@ class WipValuationReport extends Page implements HasTable
                     ->color('success')
                     ->sortable()
                     ->summarize(Sum::make()->money($currency)),
-                TextColumn::make('starting_date_time')
-                    ->label('Started At')
-                    ->dateTime()
+                TextColumn::make('production_date_ref')
+                    ->label('Production Date')
+                    ->dateTime('Y-m-d H:i')
                     ->sortable(),
             ])
-            ->defaultSort('wip_total_cost', 'desc');
+            ->defaultSort('production_date_ref', 'desc');
     }
 }

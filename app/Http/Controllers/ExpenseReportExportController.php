@@ -24,6 +24,9 @@ class ExpenseReportExportController extends Controller
         $categoryCode = filled($request->query('categoryCode'))
             ? (string) $request->query('categoryCode')
             : null;
+        $expenseType = filled($request->query('expenseType'))
+            ? (string) $request->query('expenseType')
+            : null;
 
         [$start, $end] = $this->resolvePeriod($period, $anchorDate);
 
@@ -36,6 +39,9 @@ class ExpenseReportExportController extends Controller
         if ($categoryCode !== null) {
             $query->where('category_code', $categoryCode);
         }
+        if ($expenseType !== null) {
+            $query->where('expense_type', $expenseType);
+        }
 
         $transactions = $query->get(['document_no', 'posting_date', 'category_code', 'expense_type', 'amount', 'vat_amount', 'status']);
 
@@ -45,6 +51,7 @@ class ExpenseReportExportController extends Controller
                 'start' => $start->toDateString(),
                 'end' => $end->toDateString(),
                 'category_code' => $categoryCode,
+                'expense_type' => $expenseType,
             ],
             'summary' => [
                 'total_amount' => (float) $transactions->sum('amount'),

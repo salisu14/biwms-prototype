@@ -20,6 +20,9 @@
                     @if(filled($report['period']['category_code'] ?? null))
                         · Category: {{ $report['period']['category_code'] }}
                     @endif
+                    @if(filled($report['period']['expense_type'] ?? null))
+                        · Type: {{ ucfirst($report['period']['expense_type']) }}
+                    @endif
                 </p>
             </div>
             <div class="overflow-x-auto">

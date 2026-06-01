@@ -61,6 +61,7 @@ class YieldReport extends Page implements HasTable
                 ProductionOrder::query()
                     ->with(['item'])
                     ->select('production_orders.*')
+                    ->selectRaw('coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at) as production_date_ref')
                     // ── Standard Consumption ─────────────────────────────────────
                     // Sum of all component expected_quantity (BOM qty × order qty)
                     ->selectRaw(
@@ -85,7 +86,7 @@ class YieldReport extends Page implements HasTable
                            FROM item_ledger_entries ile
                           WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
                             AND ile.source_id = production_orders.id
-                            AND ile.entry_type = 'Output'
+                            AND LOWER(ile.entry_type) = 'output'
                          ) AS actual_output"
                     )
                     ->selectRaw(
@@ -107,7 +108,7 @@ class YieldReport extends Page implements HasTable
                                FROM item_ledger_entries ile
                               WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
                                 AND ile.source_id = production_orders.id
-                                AND ile.entry_type = 'Output'
+                                AND LOWER(ile.entry_type) = 'output'
                             )
                         ) AS output_variance"
                     )
@@ -120,9 +121,9 @@ class YieldReport extends Page implements HasTable
                     ->weight('bold')
                     ->url(fn ($record) => route('filament.admin.resources.production-orders.view', $record)),
 
-                TextColumn::make('starting_date_time')
+                TextColumn::make('production_date_ref')
                     ->label('Production Date')
-                    ->date()
+                    ->dateTime('Y-m-d H:i')
                     ->sortable(),
 
                 TextColumn::make('item.item_code')
@@ -217,7 +218,7 @@ class YieldReport extends Page implements HasTable
                     ->label('UOM')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->defaultSort('starting_date_time', 'desc')
+            ->defaultSort('production_date_ref', 'desc')
             ->filters([
                 SelectFilter::make('status')
                     ->options([
@@ -235,16 +236,14 @@ class YieldReport extends Page implements HasTable
                     ->schema([
                         DatePicker::make('from')
                             ->label('From')
-                            ->native(false)
-                            ->default(now()->startOfMonth()),
+                            ->native(false),
                         DatePicker::make('to')
                             ->label('To')
-                            ->native(false)
-                            ->default(now()),
+                            ->native(false),
                     ])
                     ->query(fn (Builder $query, array $data) => $query
-                        ->when($data['from'], fn ($q) => $q->whereDate('starting_date_time', '>=', $data['from']))
-                        ->when($data['to'], fn ($q) => $q->whereDate('starting_date_time', '<=', $data['to']))
+                        ->when($data['from'], fn ($q) => $q->whereRaw('date(coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at)) >= ?', [$data['from']]))
+                        ->when($data['to'], fn ($q) => $q->whereRaw('date(coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at)) <= ?', [$data['to']]))
                     ),
 
                 Filter::make('low_yield')
@@ -254,7 +253,7 @@ class YieldReport extends Page implements HasTable
                            FROM item_ledger_entries ile
                           WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
                             AND ile.source_id = production_orders.id
-                            AND ile.entry_type = 'Output'
+                            AND LOWER(ile.entry_type) = 'output'
                          ) < production_orders.quantity * 0.9"
                     )),
             ])
