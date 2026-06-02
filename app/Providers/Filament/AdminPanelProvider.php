@@ -4,7 +4,9 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\AdminDashboard;
 use App\Filament\Pages\Finance\CashFlowStatementReport;
+use App\Filament\Pages\Finance\DepreciationBookReport;
 use App\Filament\Pages\Finance\ExpenseReport;
+use App\Filament\Pages\Finance\FixedAssetListReport;
 use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\FiscalYearManagement;
 use App\Filament\Pages\PurchaseHistory;
@@ -236,6 +238,16 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-arrows-right-left')
                                     ->isActiveWhen(fn () => request()->is('admin/cash-flow-statement-report*'))
                                     ->url(CashFlowStatementReport::getUrl()),
+
+                                NavigationItem::make('Fixed Asset List')
+                                    ->icon('heroicon-o-clipboard-document-list')
+                                    ->isActiveWhen(fn () => request()->is('admin/fixed-asset-list-report*'))
+                                    ->url(FixedAssetListReport::getUrl()),
+
+                                NavigationItem::make('Depreciation Book Report')
+                                    ->icon('heroicon-o-document-chart-bar')
+                                    ->isActiveWhen(fn () => request()->is('admin/depreciation-book-report*'))
+                                    ->url(DepreciationBookReport::getUrl()),
 
                                 NavigationItem::make('WIP Valuation')
                                     ->icon('heroicon-o-currency-dollar')

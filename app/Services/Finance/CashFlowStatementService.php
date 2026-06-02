@@ -813,10 +813,19 @@ class CashFlowStatementService
             ->with('chartOfAccount')
             ->whereBetween('posting_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->whereIn('chart_of_account_id', $operatingExpenseAccountIds->all())
-            ->whereHas('chartOfAccount', function ($query): void {
-                $query->where(function ($nameQuery): void {
-                    $nameQuery->where('name', 'ilike', '%depreci%')
-                        ->orWhere('name', 'ilike', '%amort%');
+            ->where(function ($query): void {
+                $query->whereHas('chartOfAccount', function ($accountQuery): void {
+                    $accountQuery->where(function ($nameQuery): void {
+                        $nameQuery->where('name', 'ilike', '%depreci%')
+                            ->orWhere('name', 'ilike', '%amort%');
+                    });
+                })->orWhere(function ($documentQuery): void {
+                    $documentQuery
+                        ->where('document_type', 'ilike', '%depreciation%')
+                        ->orWhere('document_type', 'ilike', '%amortization%')
+                        ->orWhere('description', 'ilike', 'depreciation %')
+                        ->orWhere('description', 'ilike', '% amortization%')
+                        ->orWhere('sourceable_type', 'App\\Models\\FixedAsset');
                 });
             })
             ->get();

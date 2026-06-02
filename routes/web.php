@@ -2,7 +2,10 @@
 
 use App\Http\Controllers\BalanceSheetPrintController;
 use App\Http\Controllers\CashFlowStatementPrintController;
+use App\Http\Controllers\DepreciationBookReportPrintController;
 use App\Http\Controllers\ExpenseReportExportController;
+use App\Http\Controllers\FixedAssetLedgerEntriesPrintController;
+use App\Http\Controllers\FixedAssetListPrintController;
 use App\Http\Controllers\GroupSummaryPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
 use App\Http\Controllers\WaybillController;
@@ -34,6 +37,18 @@ Route::get('/admin/reports/cash-flow/print', CashFlowStatementPrintController::c
 
 Route::get('/admin/reports/cash-flow/export', CashFlowStatementPrintController::class)
     ->name('reports.cash-flow.export')
+    ->middleware(['web', 'auth']);
+
+Route::get('/admin/reports/fixed-asset-list/print', FixedAssetListPrintController::class)
+    ->name('reports.fixed-asset-list.print')
+    ->middleware(['web', 'auth']);
+
+Route::get('/admin/reports/depreciation-book/print', DepreciationBookReportPrintController::class)
+    ->name('reports.depreciation-book.print')
+    ->middleware(['web', 'auth']);
+
+Route::get('/admin/reports/fixed-asset-ledger/export', FixedAssetLedgerEntriesPrintController::class)
+    ->name('reports.fixed-asset-ledger.export')
     ->middleware(['web', 'auth']);
 
 Route::get('/admin/reports/expense/export', ExpenseReportExportController::class)

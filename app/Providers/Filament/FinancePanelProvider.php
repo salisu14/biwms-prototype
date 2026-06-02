@@ -5,6 +5,9 @@ namespace App\Providers\Filament;
 use App\Filament\Finance\Widgets\FinanceStatsOverview;
 use App\Filament\Pages\Finance\BalanceSheetReport;
 use App\Filament\Pages\Finance\CashFlowStatementReport;
+use App\Filament\Pages\Finance\DepreciationBookReport;
+use App\Filament\Pages\Finance\FixedAssetLedgerEntries;
+use App\Filament\Pages\Finance\FixedAssetListReport;
 use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\Finance\GroupSummaryReport;
 use App\Filament\Pages\Finance\ProfitAndLossReport;
@@ -64,6 +67,9 @@ class FinancePanelProvider extends PanelProvider
                 GroupSummaryReport::class,
                 BalanceSheetReport::class,
                 CashFlowStatementReport::class,
+                FixedAssetListReport::class,
+                DepreciationBookReport::class,
+                FixedAssetLedgerEntries::class,
             ])
             ->widgets([
                 FinanceStatsOverview::class,
