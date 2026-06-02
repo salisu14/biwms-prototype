@@ -6,7 +6,9 @@ use App\Enums\ContactRole;
 use App\Enums\ContactType;
 use App\Models\Contact;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\User;
 use App\Models\Vendor;
+use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -91,5 +93,70 @@ class VendorFactory extends Factory
                     'vendor_posting_group' => $vendor->vendor_posting_group ?: $vendorPostingGroup?->code,
                 ])->saveQuietly();
             });
+    }
+
+    public function vendorWithLedgerHistory(): static
+    {
+        return $this->afterCreating(function (Vendor $vendor): void {
+            $user = User::factory()->create();
+
+            VendorLedgerEntry::query()->create([
+                'entry_number' => 1,
+                'vendor_id' => $vendor->id,
+                'document_type' => 'PURCHASE_INVOICE',
+                'document_number' => 'PINV-'.$vendor->id.'-001',
+                'description' => 'Seeded purchase invoice',
+                'posting_date' => now()->subDays(10),
+                'document_date' => now()->subDays(10),
+                'due_date' => now()->addDays(20),
+                'debit_amount' => 250000,
+                'credit_amount' => 0,
+                'amount' => 250000,
+                'running_balance' => 250000,
+                'remaining_amount' => 50000,
+                'open' => true,
+                'fully_applied' => false,
+                'currency_code' => 'NGN',
+                'original_debit_amount' => 250000,
+                'original_credit_amount' => 0,
+                'currency_factor' => 1,
+                'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+                'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+                'source_type' => Vendor::class,
+                'source_id' => $vendor->id,
+                'created_by' => $user->id,
+            ]);
+
+            VendorLedgerEntry::query()->create([
+                'entry_number' => 2,
+                'vendor_id' => $vendor->id,
+                'document_type' => 'PAYMENT',
+                'document_number' => 'VPAY-'.$vendor->id.'-001',
+                'description' => 'Seeded vendor payment',
+                'posting_date' => now()->subDays(3),
+                'document_date' => now()->subDays(3),
+                'debit_amount' => 0,
+                'credit_amount' => 200000,
+                'amount' => -200000,
+                'running_balance' => 50000,
+                'remaining_amount' => 0,
+                'open' => false,
+                'fully_applied' => true,
+                'currency_code' => 'NGN',
+                'original_debit_amount' => 0,
+                'original_credit_amount' => 200000,
+                'currency_factor' => 1,
+                'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+                'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+                'applied_to_entries' => [[
+                    'document_number' => 'PINV-'.$vendor->id.'-001',
+                    'amount' => 200000,
+                    'entry_number' => 1,
+                ]],
+                'source_type' => Vendor::class,
+                'source_id' => $vendor->id,
+                'created_by' => $user->id,
+            ]);
+        });
     }
 }

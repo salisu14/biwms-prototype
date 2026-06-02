@@ -2,12 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Models\BankAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Item;
 use App\Models\Payment;
-use App\Models\BankAccount;
 use App\Models\Vendor;
+use App\Models\VendorLedgerEntry;
+use App\Services\BankReconciliationService;
+use App\Services\Finance\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -101,4 +104,92 @@ it('creates customers with seeded ledger history for subledger scenarios', funct
         ->and($ledgerEntries[1]->document_type)->toBe('PAYMENT')
         ->and($ledgerEntries[1]->fully_applied)->toBeTrue()
         ->and((float) $ledgerEntries[1]->running_balance)->toBe(7670.40);
+});
+
+it('creates vendors with seeded ledger history for ap subledger scenarios', function (): void {
+    $vendor = Vendor::factory()->vendorWithLedgerHistory()->create();
+
+    $ledgerEntries = VendorLedgerEntry::query()
+        ->where('vendor_id', $vendor->id)
+        ->orderBy('entry_number')
+        ->get();
+
+    expect($ledgerEntries)->toHaveCount(2)
+        ->and($ledgerEntries[0]->document_type)->toBe('PURCHASE_INVOICE')
+        ->and((float) $ledgerEntries[0]->remaining_amount)->toBe(50000.00)
+        ->and($ledgerEntries[1]->document_type)->toBe('PAYMENT')
+        ->and($ledgerEntries[1]->fully_applied)->toBeTrue()
+        ->and((float) $ledgerEntries[1]->running_balance)->toBe(50000.00);
+});
+
+it('provides a shared receivable and payable payment fixture helper', function (): void {
+    $receivableFixture = $this->createReceivablePaymentFixture();
+    $payableFixture = $this->createPayablePaymentFixture();
+
+    expect($receivableFixture['customer'])->toBeInstanceOf(Customer::class)
+        ->and($receivableFixture['bankAccount'])->toBeInstanceOf(BankAccount::class)
+        ->and($receivableFixture['documentEntry'])->toBeInstanceOf(CustomerLedgerEntry::class)
+        ->and($receivableFixture['payment'])->toBeInstanceOf(Payment::class)
+        ->and($receivableFixture['paymentEntry'])->toBeInstanceOf(CustomerLedgerEntry::class)
+        ->and($receivableFixture['payment']->party_type)->toBe('CUSTOMER')
+        ->and($receivableFixture['payment']->payment_direction)->toBe('RECEIPT')
+        ->and((float) $receivableFixture['documentEntry']->remaining_amount)->toBe(37670.40)
+        ->and($payableFixture['vendor'])->toBeInstanceOf(Vendor::class)
+        ->and($payableFixture['bankAccount'])->toBeInstanceOf(BankAccount::class)
+        ->and($payableFixture['documentEntry'])->toBeInstanceOf(VendorLedgerEntry::class)
+        ->and($payableFixture['payment'])->toBeInstanceOf(Payment::class)
+        ->and($payableFixture['paymentEntry'])->toBeInstanceOf(VendorLedgerEntry::class)
+        ->and($payableFixture['payment']->party_type)->toBe('VENDOR')
+        ->and($payableFixture['payment']->payment_direction)->toBe('DISBURSEMENT')
+        ->and((float) $payableFixture['documentEntry']->remaining_amount)->toBe(250000.00);
+});
+
+it('provides posted receivable and payable application fixtures for payment service tests', function (): void {
+    $receivableFixture = $this->createPostedReceivableApplicationFixture();
+    $payableFixture = $this->createPostedPayableApplicationFixture();
+
+    expect($receivableFixture['postedInvoice']->customer_id)->toBe($receivableFixture['customer']->id)
+        ->and($receivableFixture['documentEntry']->document_number)->toBe($receivableFixture['postedInvoice']->document_number)
+        ->and($receivableFixture['payment']->party_id)->toBe($receivableFixture['customer']->id)
+        ->and($payableFixture['postedInvoice']->vendor_id)->toBe($payableFixture['vendor']->id)
+        ->and($payableFixture['documentEntry']->document_number)->toBe($payableFixture['postedInvoice']->document_number)
+        ->and($payableFixture['payment']->party_id)->toBe($payableFixture['vendor']->id);
+});
+
+it('lets payment service apply a seeded customer receipt to a posted sales invoice', function (): void {
+    $fixture = $this->createPostedReceivableApplicationFixture();
+
+    $application = app(PaymentService::class)->applyToDocument(
+        $fixture['payment'],
+        [
+            'document_type' => 'SALES_INVOICE',
+            'document_id' => $fixture['postedInvoice']->id,
+            'amount' => 30000.00,
+        ],
+        $fixture['user']->id,
+    );
+
+    $fixture['postedInvoice']->refresh();
+    $fixture['payment']->refresh();
+
+    expect((float) $application->amount_applied)->toBe(30000.00)
+        ->and((float) $fixture['postedInvoice']->amount_paid)->toBe(30000.00)
+        ->and((float) $fixture['postedInvoice']->remaining_amount)->toBe(7670.40)
+        ->and((float) $fixture['payment']->applied_amount)->toBe(30000.00)
+        ->and((float) $fixture['payment']->unapplied_amount)->toBe(0.00);
+});
+
+it('provides a bank reconciliation fixture that auto-matches cleanly', function (): void {
+    $fixture = $this->createBankReconciliationFixture();
+
+    $matchedEntry = app(BankReconciliationService::class)->autoMatch($fixture['statementLine']);
+
+    $fixture['statementLine']->refresh();
+    $fixture['ledgerEntry']->refresh();
+
+    expect($matchedEntry)->not->toBeNull()
+        ->and($matchedEntry?->id)->toBe($fixture['ledgerEntry']->id)
+        ->and($fixture['statementLine']->reconciled)->toBeTrue()
+        ->and($fixture['statementLine']->bank_account_ledger_entry_id)->toBe($fixture['ledgerEntry']->id)
+        ->and((string) $fixture['ledgerEntry']->status->value)->toBe('reconciled');
 });

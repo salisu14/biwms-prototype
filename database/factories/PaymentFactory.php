@@ -31,12 +31,7 @@ class PaymentFactory extends Factory
             'party_id' => Vendor::factory(),
             'party_name' => null,
             'payment_method' => 'BANK_TRANSFER',
-            'currency_id' => Currency::factory()->state([
-                'code' => 'NGN',
-                'description' => 'Nigerian Naira',
-                'symbol' => '₦',
-                'is_lcy' => true,
-            ]),
+            'currency_id' => $this->localCurrencyId(),
             'currency_code' => null,
             'currency_factor' => 1.0,
             'payment_direction' => 'DISBURSEMENT',
@@ -75,5 +70,20 @@ class PaymentFactory extends Factory
             'VENDOR' => Vendor::query()->find($payment->party_id)?->vendor_name,
             default => null,
         };
+    }
+
+    private function localCurrencyId(): int
+    {
+        return Currency::query()->firstOrCreate(
+            ['code' => 'NGN'],
+            [
+                'description' => 'Nigerian Naira',
+                'symbol' => '₦',
+                'decimal_places' => 2,
+                'is_active' => true,
+                'is_lcy' => true,
+                'exchange_rate' => 1.0,
+            ],
+        )->id;
     }
 }
