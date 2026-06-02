@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\SalesInvoices\Pages;
 
-use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
+use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\PostedSalesInvoice;
 use App\Services\Print\PostedSalesInvoicePrintService;
@@ -79,10 +79,8 @@ class PostedSalesInvoices extends ListRecords
                     ->label('View Subledger')
                     ->icon('heroicon-o-book-open')
                     ->color('gray')
-                    ->url(fn (PostedSalesInvoice $record) => CustomerLedgerEntryResource::getUrl('index', [
-                        'tableFilters' => [
-                            'customer_id' => ['value' => $record->customer_id],
-                        ],
+                    ->url(fn (PostedSalesInvoice $record) => CustomerSubledgerSummary::getUrl([
+                        'customerId' => $record->customer_id,
                     ])),
                 Action::make('printPostedInvoice')
                     ->label('Print Posted Invoice')

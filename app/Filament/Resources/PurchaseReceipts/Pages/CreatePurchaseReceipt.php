@@ -4,6 +4,9 @@ namespace App\Filament\Resources\PurchaseReceipts\Pages;
 
 use App\Filament\Resources\PurchaseReceipts\PurchaseReceiptResource;
 use App\Models\PurchaseOrder;
+use App\Services\Purchase\PurchaseReceiptHeaderPrefillService;
+use App\Services\Purchase\PurchaseReceiptLinePrefillService;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreatePurchaseReceipt extends CreateRecord
@@ -15,16 +18,30 @@ class CreatePurchaseReceipt extends CreateRecord
         $purchaseOrderId = (int) ($data['purchase_order_id'] ?? 0);
 
         if ($purchaseOrderId > 0) {
-            $purchaseOrder = PurchaseOrder::query()->with('vendor')->find($purchaseOrderId);
+            $purchaseOrder = PurchaseOrder::query()->with(['vendor.contact', 'location'])->find($purchaseOrderId);
 
             if ($purchaseOrder) {
-                $data['purchase_order_no'] = $data['purchase_order_no'] ?? $purchaseOrder->order_number;
-                $data['vendor_id'] = $data['vendor_id'] ?? $purchaseOrder->vendor_id;
-                $data['buy_from_vendor_name'] = $data['buy_from_vendor_name'] ?? $purchaseOrder->vendor_name;
-                $data['pay_to_vendor_no'] = $data['pay_to_vendor_no'] ?? ($purchaseOrder->vendor?->vendor_code ?? null);
+                $data = app(PurchaseReceiptHeaderPrefillService::class)->defaultsForPurchaseOrder($purchaseOrder, $data);
             }
         }
 
         return $data;
+    }
+
+    protected function afterCreate(): void
+    {
+        $createdLines = app(PurchaseReceiptLinePrefillService::class)->prefillFromPurchaseOrder($this->record);
+
+        if ($this->record->purchase_order_id === null) {
+            return;
+        }
+
+        Notification::make()
+            ->title($createdLines > 0 ? 'Receipt lines copied from purchase order' : 'No remaining purchase order lines to copy')
+            ->body($createdLines > 0
+                ? "{$createdLines} line(s) were added from the selected purchase order."
+                : 'All available purchase order quantities may already be fully received.')
+            ->{$createdLines > 0 ? 'success' : 'warning'}()
+            ->send();
     }
 }

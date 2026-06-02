@@ -4,8 +4,10 @@ namespace App\Filament\Resources\PurchaseReceipts\Schemas;
 
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseReceipt;
+use App\Services\Purchase\PurchaseReceiptHeaderPrefillService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -13,6 +15,7 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
@@ -39,6 +42,13 @@ class PurchaseReceiptForm
                                         ->extraInputAttributes(['style' => 'text-transform: uppercase'])
                                         ->helperText('The code cannot be changed once the Purchase receipt is created.'),
 
+                                    Toggle::make('allow_header_override')
+                                        ->label('Edit Auto-Filled Header')
+                                        ->helperText('Turn on only if you need to override purchase-order-driven header values.')
+                                        ->default(false)
+                                        ->live()
+                                        ->dehydrated(false),
+
                                     Select::make('purchase_order_id')
                                         ->label('Purchase Order')
                                         ->relationship('purchaseOrder', 'order_number')
@@ -50,23 +60,23 @@ class PurchaseReceiptForm
                                                 return;
                                             }
 
-                                            $order = PurchaseOrder::with('vendor')->find($state);
+                                            $order = PurchaseOrder::with(['vendor.contact', 'location'])->find($state);
                                             if ($order) {
-                                                $set('purchase_order_no', $order->order_number);
-                                                $set('vendor_id', $order->vendor_id);
-                                                $set('pay_to_vendor_no', $order->vendor?->vendor_code ?? '');
-                                                $set('buy_from_vendor_name', $order->vendor_name);
-                                                $set('receiving_location_id', $order->location_id);
-                                                $set('location_code', $order->location?->code ?? $order->location_id);
+                                                $defaults = app(PurchaseReceiptHeaderPrefillService::class)->defaultsForPurchaseOrder($order);
 
-                                                // Automatically pull vendor address details if available on order
-                                                if ($order->vendor) {
-                                                    $set('buy_from_address', $order->vendor->address);
-                                                    $set('buy_from_city', $order->vendor->city);
-                                                    $set('buy_from_post_code', $order->vendor->post_code);
+                                                foreach ($defaults as $field => $value) {
+                                                    if ($value !== null) {
+                                                        $set($field, $value);
+                                                    }
                                                 }
                                             }
                                         }),
+
+                                    Placeholder::make('purchase_order_defaults_notice')
+                                        ->label('Purchase Order Defaults')
+                                        ->content('Header, address, and logistics values are inherited from the selected purchase order. Use the unlock toggles only when you intentionally need to override those defaults.')
+                                        ->visible(fn (Get $get): bool => filled($get('purchase_order_id')))
+                                        ->columnSpanFull(),
 
                                     TextInput::make('status')
                                         ->disabled()
@@ -74,12 +84,12 @@ class PurchaseReceiptForm
 
                                     TextInput::make('pay_to_vendor_no')
                                         ->label('Vendor Number')
-                                        ->disabled()
+                                        ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_header_override'))
                                         ->dehydrated(),
 
                                     TextInput::make('buy_from_vendor_name')
                                         ->label('Vendor Name')
-                                        ->disabled()
+                                        ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_header_override'))
                                         ->dehydrated(),
 
                                     Select::make('vendor_id')
@@ -93,8 +103,10 @@ class PurchaseReceiptForm
                                         ->label('Vendor Shipment No.'),
 
                                     DatePicker::make('posting_date')
+                                        ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_header_override'))
                                         ->default(now()),
                                     DatePicker::make('document_date')
+                                        ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_header_override'))
                                         ->default(now()),
                                     DatePicker::make('actual_receipt_date'),
                                 ]),
@@ -105,17 +117,31 @@ class PurchaseReceiptForm
                                 Grid::make(2)->schema([
                                     Section::make('Buy-from Address')
                                         ->schema([
-                                            TextInput::make('buy_from_address'),
-                                            TextInput::make('buy_from_city'),
-                                            TextInput::make('buy_from_post_code'),
-                                            TextInput::make('buy_from_contact'),
+                                            TextInput::make('buy_from_address')
+                                                ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_address_override')),
+                                            TextInput::make('buy_from_city')
+                                                ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_address_override')),
+                                            TextInput::make('buy_from_post_code')
+                                                ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_address_override')),
+                                            TextInput::make('buy_from_contact')
+                                                ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_address_override')),
                                         ])->columnSpan(1),
                                     Section::make('Ship-to Address')
                                         ->schema([
-                                            TextInput::make('ship_to_name'),
-                                            TextInput::make('ship_to_address'),
-                                            TextInput::make('ship_to_city'),
-                                            TextInput::make('ship_to_contact'),
+                                            Toggle::make('allow_address_override')
+                                                ->label('Edit Auto-Filled Addresses')
+                                                ->helperText('Unlock buy-from and ship-to fields when the receipt comes from a purchase order.')
+                                                ->default(false)
+                                                ->live()
+                                                ->dehydrated(false),
+                                            TextInput::make('ship_to_name')
+                                                ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_address_override')),
+                                            TextInput::make('ship_to_address')
+                                                ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_address_override')),
+                                            TextInput::make('ship_to_city')
+                                                ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_address_override')),
+                                            TextInput::make('ship_to_contact')
+                                                ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_address_override')),
                                         ])->columnSpan(1),
                                 ]),
                             ]),
@@ -130,9 +156,17 @@ class PurchaseReceiptForm
                                     Select::make('posted_by')
                                         ->relationship('postedByUser', 'name')
                                         ->disabled(),
-                                    TextInput::make('location_code'),
+                                    TextInput::make('location_code')
+                                        ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_logistics_override')),
                                     Select::make('receiving_location_id')
-                                        ->relationship('receivingLocation', 'name'),
+                                        ->relationship('receivingLocation', 'name')
+                                        ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_logistics_override')),
+                                    Toggle::make('allow_logistics_override')
+                                        ->label('Edit Auto-Filled Logistics')
+                                        ->helperText('Unlock receiving location and logistics fields when needed.')
+                                        ->default(false)
+                                        ->live()
+                                        ->dehydrated(false),
                                     TextInput::make('package_tracking_no'),
                                 ]),
                             ]),

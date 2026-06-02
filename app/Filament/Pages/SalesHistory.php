@@ -3,7 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\SalesOrderStatus;
-use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
+use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\SalesInvoice;
 use App\Models\SalesOrder;
@@ -31,7 +31,7 @@ class SalesHistory extends Page
             'postedInvoiceCount' => SalesInvoice::where('status', 'posted')->count(),
             'archivedOrderCount' => SalesOrder::where('status', SalesOrderStatus::CLOSED->value)->count(),
             'canAccessPostedInvoices' => $canAccessPostedInvoices,
-            'financeReceivablesUrl' => CustomerLedgerEntryResource::getUrl('index'),
+            'financeReceivablesUrl' => CustomerSubledgerSummary::getUrl(),
         ];
     }
 }

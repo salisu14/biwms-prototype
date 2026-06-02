@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\Customers\Tables;
 
-use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
+use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -64,10 +64,8 @@ class CustomersTable
                     ->label('Subledger')
                     ->icon('heroicon-o-book-open')
                     ->color('gray')
-                    ->url(fn ($record) => CustomerLedgerEntryResource::getUrl('index', [
-                        'tableFilters' => [
-                            'customer_id' => ['value' => $record->id],
-                        ],
+                    ->url(fn ($record) => CustomerSubledgerSummary::getUrl([
+                        'customerId' => $record->id,
                     ])),
                 ViewAction::make(),
                 EditAction::make(),

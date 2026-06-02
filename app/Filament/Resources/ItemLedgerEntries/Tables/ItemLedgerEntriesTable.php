@@ -62,6 +62,14 @@ class ItemLedgerEntriesTable
             ->filters([
                 SelectFilter::make('entry_type')
                     ->options(ItemLedgerEntryType::class),
+                SelectFilter::make('item_id')
+                    ->relationship('item', 'description')
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('location_id')
+                    ->relationship('location', 'name')
+                    ->searchable()
+                    ->preload(),
                 SelectFilter::make('open')
                     ->label('Entry Status')
                     ->options([

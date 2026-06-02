@@ -164,7 +164,7 @@ class PurchaseReceiptLine extends Model
 
     public function item(): BelongsTo
     {
-        return $this->belongsTo(Item::class, 'no');
+        return $this->belongsTo(Item::class, 'no', 'item_code');
     }
 
     public function location(): BelongsTo

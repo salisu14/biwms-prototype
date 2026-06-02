@@ -8,6 +8,7 @@ use App\Filament\Pages\Finance\DepreciationBookReport;
 use App\Filament\Pages\Finance\ExpenseReport;
 use App\Filament\Pages\Finance\FixedAssetListReport;
 use App\Filament\Pages\Finance\GeneralJournals;
+use App\Filament\Pages\Finance\ItemLedgerSummary;
 use App\Filament\Pages\FiscalYearManagement;
 use App\Filament\Pages\PurchaseHistory;
 use App\Filament\Pages\SalesHistory;
@@ -304,6 +305,16 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-arrow-uturn-left')
                                     ->url('/admin/posted-purchase-credit-memos'),
 
+                                NavigationItem::make('Purchase Receipts')
+                                    ->icon('heroicon-o-receipt-percent')
+                                    ->url('/admin/purchase-receipts')
+                                    ->isActiveWhen(fn () => request()->is('admin/purchase-receipts*')),
+
+                                NavigationItem::make('Item Charges')
+                                    ->icon('heroicon-o-receipt-percent')
+                                    ->url('/admin/item-charges')
+                                    ->isActiveWhen(fn () => request()->is('admin/item-charges*')),
+
                                 NavigationItem::make('Purchases History')
                                     ->icon('heroicon-o-document-check')
                                     ->url(PurchaseHistory::getUrl())
@@ -491,8 +502,8 @@ class AdminPanelProvider extends PanelProvider
 
                                 NavigationItem::make('Item Ledger Entries')
                                     ->icon('heroicon-o-book-open')
-                                    ->url('/admin/item-ledger-entries')
-                                    ->isActiveWhen(fn () => request()->is('admin/item-ledger-entries*')),
+                                    ->url(ItemLedgerSummary::getUrl())
+                                    ->isActiveWhen(fn () => request()->is('admin/item-ledger-entries*') || request()->is('admin/item-ledger-summary*')),
 
                                 NavigationItem::make('Physical Inventories')
                                     ->icon('heroicon-o-clipboard')
@@ -642,11 +653,6 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-square-2-stack')
                                         ->url('/admin/social-security-tiers')
                                         ->isActiveWhen(fn () => request()->is('admin/social-security-tiers*')),
-
-                                    NavigationItem::make('Purchase Receipts')
-                                        ->icon('heroicon-o-receipt-percent')
-                                        ->url('/admin/purchase-receipts')
-                                        ->isActiveWhen(fn () => request()->is('admin/purchase-receipts*')),
 
                                     //                                NavigationItem::make('WIP Valuation')
                                     //                                    ->icon('heroicon-o-currency-dollar')

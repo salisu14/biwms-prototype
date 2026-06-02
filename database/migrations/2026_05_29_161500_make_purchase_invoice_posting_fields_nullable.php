@@ -1,19 +1,24 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('ALTER TABLE purchase_invoices ALTER COLUMN posted_by DROP NOT NULL');
-        DB::statement('ALTER TABLE purchase_invoices ALTER COLUMN posted_at DROP NOT NULL');
+        Schema::table('purchase_invoices', function (Blueprint $table): void {
+            $table->foreignId('posted_by')->nullable()->change();
+            $table->timestamp('posted_at')->nullable()->change();
+        });
     }
 
     public function down(): void
     {
-        DB::statement('ALTER TABLE purchase_invoices ALTER COLUMN posted_by SET NOT NULL');
-        DB::statement('ALTER TABLE purchase_invoices ALTER COLUMN posted_at SET NOT NULL');
+        Schema::table('purchase_invoices', function (Blueprint $table): void {
+            $table->foreignId('posted_by')->nullable(false)->change();
+            $table->timestamp('posted_at')->nullable(false)->change();
+        });
     }
 };

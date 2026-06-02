@@ -141,6 +141,9 @@
                         <p class="text-sm text-gray-500">
                             Method: {{ ucfirst($reportData['method']) }}
                         </p>
+                        <p class="text-xs text-gray-500">
+                            Depreciation add-back appears in Indirect method only.
+                        </p>
                         @if(isset($reportData['compare_period']))
                             <p class="text-sm text-gray-500">
                                 Comparison: {{ $reportData['compare_period']['start'] }} to {{ $reportData['compare_period']['end'] }}

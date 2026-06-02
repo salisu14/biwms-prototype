@@ -42,7 +42,7 @@ class PurchaseReceiptResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\LinesRelationManager::class,
         ];
     }
 

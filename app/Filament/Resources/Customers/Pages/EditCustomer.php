@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\Customers\Pages;
 
-use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
+use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\Customers\CustomerResource;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -20,10 +20,8 @@ class EditCustomer extends EditRecord
                 ->label('View Subledger')
                 ->icon('heroicon-o-book-open')
                 ->color('gray')
-                ->url(fn () => CustomerLedgerEntryResource::getUrl('index', [
-                    'tableFilters' => [
-                        'customer_id' => ['value' => $this->record->id],
-                    ],
+                ->url(fn () => CustomerSubledgerSummary::getUrl([
+                    'customerId' => $this->record->id,
                 ])),
             ViewAction::make(),
             DeleteAction::make(),
