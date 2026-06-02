@@ -150,22 +150,41 @@
                 </div>
             </a>
 
-            {{-- Posted Sales Invoices Card --}}
-            <a href="{{ \App\Filament\Resources\SalesInvoices\SalesInvoiceResource::getUrl('posted') }}" class="history-card card-success">
-                <div class="card-header">
-                    <div class="icon-box">
-                        <x-heroicon-o-document-text style="width: 1.5rem; height: 1.5rem;"/>
+            @if($canAccessPostedInvoices ?? false)
+                {{-- Posted Sales Invoices Card --}}
+                <a href="{{ \App\Filament\Resources\SalesInvoices\SalesInvoiceResource::getUrl('posted') }}" class="history-card card-success">
+                    <div class="card-header">
+                        <div class="icon-box">
+                            <x-heroicon-o-document-text style="width: 1.5rem; height: 1.5rem;"/>
+                        </div>
+                        <div class="count-text">{{ $postedInvoiceCount ?? 0 }}</div>
                     </div>
-                    <div class="count-text">{{ $postedInvoiceCount ?? 0 }}</div>
-                </div>
-                <div class="card-content">
-                    <h3>Posted Invoices</h3>
-                    <p>Verified billing and payment history.</p>
-                </div>
-                <div class="card-footer">
-                    View Ledger <x-heroicon-m-arrow-right style="width: 0.875rem; height: 0.875rem;"/>
-                </div>
-            </a>
+                    <div class="card-content">
+                        <h3>Posted Invoices</h3>
+                        <p>Verified billing and payment history.</p>
+                    </div>
+                    <div class="card-footer">
+                        View Ledger <x-heroicon-m-arrow-right style="width: 0.875rem; height: 0.875rem;"/>
+                    </div>
+                </a>
+            @else
+                {{-- Finance-safe Receivables Card (no invoice access) --}}
+                <a href="{{ $financeReceivablesUrl }}" class="history-card card-success">
+                    <div class="card-header">
+                        <div class="icon-box">
+                            <x-heroicon-o-book-open style="width: 1.5rem; height: 1.5rem;"/>
+                        </div>
+                        <div class="count-text">{{ $postedInvoiceCount ?? 0 }}</div>
+                    </div>
+                    <div class="card-content">
+                        <h3>Customer Subledger</h3>
+                        <p>Finance receivables view without direct invoice access.</p>
+                    </div>
+                    <div class="card-footer">
+                        Open Subledger <x-heroicon-m-arrow-right style="width: 0.875rem; height: 0.875rem;"/>
+                    </div>
+                </a>
+            @endif
 
             {{-- Archived Sales Orders Card --}}
             <a href="{{ \App\Filament\Resources\SalesOrders\SalesOrderResource::getUrl('archived') }}" class="history-card card-warning">

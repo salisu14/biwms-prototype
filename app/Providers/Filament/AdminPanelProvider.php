@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\AdminDashboard;
+use App\Filament\Pages\Finance\CashFlowStatementReport;
 use App\Filament\Pages\Finance\ExpenseReport;
 use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\FiscalYearManagement;
@@ -230,6 +231,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-scale')
                                     ->isActiveWhen(fn () => request()->is('admin/balance-sheet-report*'))
                                     ->url('/admin/balance-sheet-report'),
+
+                                NavigationItem::make('Cash Flow Statement')
+                                    ->icon('heroicon-o-arrows-right-left')
+                                    ->isActiveWhen(fn () => request()->is('admin/cash-flow-statement-report*'))
+                                    ->url(CashFlowStatementReport::getUrl()),
 
                                 NavigationItem::make('WIP Valuation')
                                     ->icon('heroicon-o-currency-dollar')

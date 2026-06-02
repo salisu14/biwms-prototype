@@ -20,6 +20,11 @@ class PostedSalesInvoices extends ListRecords
 
     protected static ?string $navigationLabel = 'Posted Invoices';
 
+    public static function canAccess(array $parameters = []): bool
+    {
+        return SalesInvoiceResource::canAccessPostedInvoiceHistory();
+    }
+
     // This filters to only posted invoices
     protected function getTableQuery(): Builder
     {

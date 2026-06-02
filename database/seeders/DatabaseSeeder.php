@@ -43,6 +43,7 @@ class DatabaseSeeder extends Seeder
             OverheadCostCategorySeeder::class,
             BalanceSheetAccountScheduleSeeder::class,
             ProfitAndLossAccountScheduleSeeder::class,
+            CashFlowStatementAccountScheduleSeeder::class,
         ]);
     }
 }

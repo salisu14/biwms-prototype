@@ -2,9 +2,12 @@
 
 namespace App\Filament\Resources\AccountSchedules\Tables;
 
+use Database\Seeders\CashFlowStatementAccountScheduleSeeder;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -47,6 +50,21 @@ class AccountSchedulesTable
                 //
             ])
             ->recordActions([
+                Action::make('repairCashFlow')
+                    ->label('Run/Repair Default Cash Flow')
+                    ->icon('heroicon-o-wrench-screwdriver')
+                    ->color('warning')
+                    ->visible(fn ($record): bool => $record->name === 'Default Cash Flow Statement')
+                    ->requiresConfirmation()
+                    ->modalDescription('This will restore the seeded rows for the Default Cash Flow Statement schedule.')
+                    ->action(function (): void {
+                        app(CashFlowStatementAccountScheduleSeeder::class)->run();
+
+                        Notification::make()
+                            ->title('Default Cash Flow Statement repaired')
+                            ->success()
+                            ->send();
+                    }),
                 EditAction::make(),
             ])
             ->toolbarActions([

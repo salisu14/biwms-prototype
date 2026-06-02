@@ -4,10 +4,12 @@ namespace App\Providers\Filament;
 
 use App\Filament\Finance\Widgets\FinanceStatsOverview;
 use App\Filament\Pages\Finance\BalanceSheetReport;
+use App\Filament\Pages\Finance\CashFlowStatementReport;
 use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\Finance\GroupSummaryReport;
 use App\Filament\Pages\Finance\ProfitAndLossReport;
 use App\Filament\Pages\MyAttendance;
+use App\Filament\Resources\AccountSchedules\AccountScheduleResource;
 use App\Filament\Resources\BankAccounts\BankAccountResource;
 use App\Filament\Resources\CurrencyAdjustmentLedgers\CurrencyAdjustmentLedgerResource;
 use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
@@ -52,6 +54,7 @@ class FinancePanelProvider extends PanelProvider
                 JournalLineResource::class,
                 CurrencyAdjustmentLedgerResource::class,
                 CustomerLedgerEntryResource::class,
+                AccountScheduleResource::class,
             ])
             ->pages([
                 Dashboard::class,
@@ -60,6 +63,7 @@ class FinancePanelProvider extends PanelProvider
                 ProfitAndLossReport::class,
                 GroupSummaryReport::class,
                 BalanceSheetReport::class,
+                CashFlowStatementReport::class,
             ])
             ->widgets([
                 FinanceStatsOverview::class,

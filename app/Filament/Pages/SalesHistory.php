@@ -3,6 +3,8 @@
 namespace App\Filament\Pages;
 
 use App\Enums\SalesOrderStatus;
+use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
+use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\SalesInvoice;
 use App\Models\SalesOrder;
 use App\Models\SalesShipmentHeader;
@@ -22,10 +24,14 @@ class SalesHistory extends Page
 
     public function getViewData(): array
     {
+        $canAccessPostedInvoices = SalesInvoiceResource::canAccessPostedInvoiceHistory();
+
         return [
             'postedShipmentCount' => SalesShipmentHeader::count(),
             'postedInvoiceCount' => SalesInvoice::where('status', 'posted')->count(),
             'archivedOrderCount' => SalesOrder::where('status', SalesOrderStatus::CLOSED->value)->count(),
+            'canAccessPostedInvoices' => $canAccessPostedInvoices,
+            'financeReceivablesUrl' => CustomerLedgerEntryResource::getUrl('index'),
         ];
     }
 }

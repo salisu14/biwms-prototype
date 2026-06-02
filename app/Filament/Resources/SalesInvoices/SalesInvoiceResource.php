@@ -17,10 +17,35 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 
 class SalesInvoiceResource extends Resource
 {
     protected static ?string $model = SalesInvoice::class;
+
+    /**
+     * Posted invoice history is intentionally restricted to admin/sales roles,
+     * even if another role is accidentally granted generic sales invoice permissions.
+     */
+    public static function canAccessPostedInvoiceHistory(): bool
+    {
+        $user = Auth::user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if (! $user->can('viewAny', SalesInvoice::class)) {
+            return false;
+        }
+
+        return $user->hasAnyRole([
+            'super_admin',
+            'admin',
+            'sales-manager',
+            'sales-representative',
+        ]);
+    }
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 

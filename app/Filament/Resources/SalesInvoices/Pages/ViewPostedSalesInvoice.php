@@ -19,6 +19,11 @@ class ViewPostedSalesInvoice extends Page
 
     public PostedSalesInvoice $record;
 
+    public static function canAccess(array $parameters = []): bool
+    {
+        return SalesInvoiceResource::canAccessPostedInvoiceHistory();
+    }
+
     public function mount(PostedSalesInvoice|int|string $record): void
     {
         if ($record instanceof PostedSalesInvoice) {

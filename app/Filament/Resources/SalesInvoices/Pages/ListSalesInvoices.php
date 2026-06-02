@@ -28,7 +28,8 @@ class ListSalesInvoices extends ListRecords
             Action::make('postedInvoices')
                 ->label('Posted Invoices')
                 ->icon('heroicon-o-document-check')
-                ->url(route('filament.admin.resources.sales-invoices.posted')),
+                ->url(route('filament.admin.resources.sales-invoices.posted'))
+                ->visible(fn (): bool => SalesInvoiceResource::canAccessPostedInvoiceHistory()),
         ];
     }
 }
