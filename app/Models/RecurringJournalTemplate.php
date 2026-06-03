@@ -83,6 +83,16 @@ class RecurringJournalTemplate extends Model
         return $this->belongsTo(NumberSeries::class, 'posting_no_series_id');
     }
 
+    public function numberSeries(): BelongsTo
+    {
+        return $this->belongsTo(NumberSeries::class, 'posting_no_series_id');
+    }
+
+    public function defaultBalancingAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'default_balancing_account_id');
+    }
+
     // --- Helpers ---
 
     /** All active lines due for posting today. */

@@ -113,9 +113,6 @@ class RecurringJournalTemplatesTable
             ->recordActions([
                 EditAction::make(),
                 DeleteAction::make(),
-            ])
-            ->headerActions([
-                CreateAction::make(),
             ]);
     }
 }
