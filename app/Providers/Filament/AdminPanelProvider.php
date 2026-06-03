@@ -190,10 +190,30 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/customer-price-overrides')
                                     ->isActiveWhen(fn () => request()->is('admin/customer-price-overrides*')),
 
+                                NavigationItem::make('Pricing Groups')
+                                    ->icon('heroicon-o-arrow-path-rounded-square')
+                                    ->url('/admin/pricing-groups')
+                                    ->isActiveWhen(fn () => request()->is('admin/pricing-groups*')),
+
                                 NavigationItem::make('Price Change Templates')
-                                    ->icon('heroicon-o-document')
+                                    ->icon('heroicon-o-calculator')
                                     ->url('/admin/price-change-templates')
                                     ->isActiveWhen(fn () => request()->is('admin/price-change-templates*')),
+
+                                NavigationItem::make('Pricing Masters')
+                                    ->icon('heroicon-o-document')
+                                    ->url('/admin/pricing-masters')
+                                    ->isActiveWhen(fn () => request()->is('admin/pricing-masters*')),
+
+                                NavigationItem::make('Price Lists')
+                                    ->icon('heroicon-o-folder-minus')
+                                    ->url('/admin/price-lists')
+                                    ->isActiveWhen(fn () => request()->is('admin/price-lists*')),
+
+                                NavigationItem::make('Pricing Master Quantity Breaks')
+                                    ->icon('heroicon-o-magnifying-glass-plus')
+                                    ->url('/admin/pricing-master-quantity-breaks')
+                                    ->isActiveWhen(fn () => request()->is('admin/pricing-master-quantity-breaks*')),
 
                                 NavigationItem::make('Discount Rules')
                                     ->icon('heroicon-o-minus-circle')
