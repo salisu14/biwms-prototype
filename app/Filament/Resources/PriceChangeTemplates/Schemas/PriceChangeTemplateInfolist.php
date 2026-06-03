@@ -9,6 +9,11 @@ use Filament\Support\Enums\TextSize;
 
 class PriceChangeTemplateInfolist
 {
+    protected static function isPercentageAdjustment(string $adjustmentType): bool
+    {
+        return in_array($adjustmentType, ['increase', 'decrease'], true);
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -36,7 +41,7 @@ class PriceChangeTemplateInfolist
 
                         TextEntry::make('value')
                             ->label('Value')
-                            ->formatStateUsing(fn ($record, $state) => $record->adjustment_type === 'percentage' ? $state.'%' : '₦'.number_format($state, 2)),
+                            ->formatStateUsing(fn ($record, $state) => self::isPercentageAdjustment((string) $record->adjustment_type) ? $state.'%' : '₦'.number_format((float) $state, 2)),
 
                         TextEntry::make('base')
                             ->formatStateUsing(fn (string $state): string => 'Based on '.ucfirst($state)),

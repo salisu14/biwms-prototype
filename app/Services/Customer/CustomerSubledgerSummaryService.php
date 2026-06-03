@@ -57,7 +57,7 @@ class CustomerSubledgerSummaryService
             ->all();
 
         $today = now()->startOfDay();
-        $openEntries = $entries->filter(fn (CustomerLedgerEntry $entry): bool => (bool) $entry->open && (float) $entry->remaining_amount > 0);
+        $openEntries = $entries->filter(fn (CustomerLedgerEntry $entry): bool => (bool) $entry->open && abs((float) $entry->remaining_amount) > 0);
         $aging = [
             'current' => 0.0,
             '1_30' => 0.0,
@@ -67,8 +67,8 @@ class CustomerSubledgerSummaryService
         ];
 
         foreach ($openEntries as $entry) {
-            $remainingAmount = (float) $entry->remaining_amount;
-            $referenceDate = $entry->due_date ?? $entry->posting_date;
+            $remainingAmount = $entry->signed_remaining_amount;
+            $referenceDate = $entry->is_invoice ? ($entry->due_date ?? $entry->posting_date) : null;
 
             if ($referenceDate === null) {
                 $aging['current'] += $remainingAmount;
@@ -102,7 +102,9 @@ class CustomerSubledgerSummaryService
                 'debit' => (float) $entries->sum('debit_amount'),
                 'credit' => (float) $entries->sum('credit_amount'),
                 'net' => (float) $entries->sum(fn (CustomerLedgerEntry $entry): float => (float) $entry->debit_amount - (float) $entry->credit_amount),
-                'open_remaining' => (float) $entries->where('open', true)->sum('remaining_amount'),
+                'open_remaining' => (float) $entries
+                    ->where('open', true)
+                    ->sum(fn (CustomerLedgerEntry $entry): float => $entry->signed_remaining_amount),
             ],
         ];
     }

@@ -16,6 +16,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class ProductionOrderResource extends Resource
 {
@@ -30,6 +31,8 @@ class ProductionOrderResource extends Resource
     protected static ?string $pluralLabel = 'Planned Production Orders';
 
     protected static ?int $navigationSort = 1;
+
+    protected static ?string $recordTitleAttribute = 'document_number';
 
     public static function form(Schema $schema): Schema
     {
@@ -66,6 +69,39 @@ class ProductionOrderResource extends Resource
             'routing' => RelationManagers\RoutingRelationManager::class,
             'glEntries' => RelationManagers\GlEntriesRelationManager::class,
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'document_number',
+            'source_no',
+            'description',
+            'item.item_code',
+            'item.description',
+            'location.name',
+            'location_code',
+            'status',
+        ];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var ProductionOrder $record */
+        return [
+            'Item' => $record->item?->description ?: '—',
+            'Source No.' => $record->source_no ?: '—',
+            'Status' => $record->status?->value ?? '—',
+            'Quantity' => number_format((float) $record->quantity, 2).' '.($record->unit_of_measure_code ?: ''),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with([
+            'item',
+            'location',
+        ]);
     }
 
     public static function getPages(): array

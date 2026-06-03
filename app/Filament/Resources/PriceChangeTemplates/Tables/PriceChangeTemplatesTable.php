@@ -16,6 +16,11 @@ use Filament\Tables\Table;
 
 class PriceChangeTemplatesTable
 {
+    protected static function isPercentageAdjustment(string $adjustmentType): bool
+    {
+        return in_array($adjustmentType, ['increase', 'decrease'], true);
+    }
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -44,7 +49,7 @@ class PriceChangeTemplatesTable
                     ->label('Adj. Value')
                     ->numeric()
                     ->sortable()
-                    ->formatStateUsing(fn ($record, $state) => $record->adjustment_type === 'percentage' ? $state.'%' : '₦'.number_format($state, 2)),
+                    ->formatStateUsing(fn ($record, $state) => self::isPercentageAdjustment((string) $record->adjustment_type) ? $state.'%' : '₦'.number_format((float) $state, 2)),
 
                 TextColumn::make('base')
                     ->label('Base')
@@ -74,13 +79,15 @@ class PriceChangeTemplatesTable
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (PriceChangeTemplate $record): bool => $record->status === 'approved' || $record->status === 'draft')
+                    ->visible(fn (PriceChangeTemplate $record): bool => in_array($record->status, ['approved', 'draft'], true)
+                        || $record->lines()->whereNull('applied_at')->exists())
                     ->action(function (PriceChangeTemplate $record, ItemService $service) {
                         try {
-                            $service->applyPriceTemplate($record);
+                            $updatedCount = $service->applyPriceTemplate($record);
 
                             Notification::make()
                                 ->title('Price Template Applied')
+                                ->body("Updated {$updatedCount} finished good price(s).")
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {

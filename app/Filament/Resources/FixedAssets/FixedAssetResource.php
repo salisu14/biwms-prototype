@@ -15,6 +15,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class FixedAssetResource extends Resource
 {
@@ -22,7 +24,7 @@ class FixedAssetResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
-    protected static ?string $recordTitleAttribute = 'description';
+    protected static ?string $recordTitleAttribute = null;
 
     public static function form(Schema $schema): Schema
     {
@@ -44,6 +46,58 @@ class FixedAssetResource extends Resource
         return [
             //
         ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof FixedAsset) {
+            return static::getModelLabel();
+        }
+
+        $assetNumber = $record->fa_no ?: 'Unknown Asset';
+        $description = $record->description ?: 'No description';
+
+        return "{$assetNumber} - {$description}";
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'fa_no',
+            'description',
+            'description_2',
+            'search_description',
+            'serial_no',
+            'barcode',
+            'insurance_policy_no',
+            'faClass.name',
+            'vendor.vendor_name',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var FixedAsset $record */
+        return static::getRecordTitle($record);
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var FixedAsset $record */
+        return [
+            'Class' => $record->faClass?->name ?: '—',
+            'Status' => $record->status?->value ?? '—',
+            'Serial No.' => $record->serial_no ?: '—',
+            'Net Book Value' => number_format((float) $record->net_book_value, 2),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with([
+            'faClass',
+            'vendor',
+        ]);
     }
 
     public static function getPages(): array

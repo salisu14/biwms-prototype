@@ -15,6 +15,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class ItemResource extends Resource
 {
@@ -22,7 +24,7 @@ class ItemResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
-    protected static ?string $recordTitleAttribute = 'description';
+    protected static ?string $recordTitleAttribute = null;
 
     public static function form(Schema $schema): Schema
     {
@@ -46,6 +48,47 @@ class ItemResource extends Resource
         ];
     }
 
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof Item) {
+            return static::getModelLabel();
+        }
+
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'item_code',
+            'sku',
+            'description',
+            'description_2',
+            'primaryCategory.category_name',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var Item $record */
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var Item $record */
+        return [
+            'Type' => $record->item_type?->value ?? '—',
+            'SKU' => $record->sku ?: '—',
+            'Price' => number_format((float) $record->unit_price, 2),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with('primaryCategory');
+    }
+
     public static function getPages(): array
     {
         return [
@@ -58,5 +101,13 @@ class ItemResource extends Resource
             'raw-materials' => Pages\ListRawMaterials::route('rm/raw-materials'),
             'finished-goods' => Pages\ListFinishedGoods::route('fg/finished-goods'),
         ];
+    }
+
+    protected static function formatRecordTitle(Item $record): string
+    {
+        $itemCode = $record->item_code ?: 'Unknown Item';
+        $description = $record->description ?: 'No description';
+
+        return "{$itemCode} - {$description}";
     }
 }

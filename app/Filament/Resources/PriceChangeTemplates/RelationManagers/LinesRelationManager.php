@@ -5,6 +5,8 @@ namespace App\Filament\Resources\PriceChangeTemplates\RelationManagers;
 use App\Filament\Resources\PriceChangeTemplates\PriceChangeTemplateResource;
 use App\Models\Business;
 use App\Models\CustomerGroup;
+use App\Models\Item;
+use App\Services\Inventory\ItemService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -73,6 +75,7 @@ class LinesRelationManager extends RelationManager
                                 ->orderBy('name')
                                 ->pluck('name', 'id')
                                 ->all())
+                            ->default(fn (): ?int => session('active_business_id'))
                             ->getOptionLabelUsing(fn ($value): ?string => filled($value)
                                 ? Business::query()->whereKey($value)->value('name')
                                 : null)
@@ -119,10 +122,70 @@ class LinesRelationManager extends RelationManager
                     ->description(fn ($record) => $record->item ? "Item: {$record->item->item_code}" : "Category Path: {$record->category?->full_path}")
                     ->searchable(['item.description', 'item.item_code', 'category.category_name']),
 
+                TextColumn::make('preview_new_unit_price')
+                    ->label('Preview New Price')
+                    ->state(function ($record): string|float|null {
+                        if ($record->applied_at) {
+                            return (float) ($record->new_unit_price ?? 0);
+                        }
+
+                        if ($record->item_id) {
+                            return app(ItemService::class)->previewNewUnitPrice($this->getOwnerRecord(), $record);
+                        }
+
+                        return null;
+                    })
+                    ->formatStateUsing(function ($state, $record): string {
+                        if (! $record->item_id) {
+                            return 'Varies by item';
+                        }
+
+                        return $state === null ? '—' : '₦'.number_format((float) $state, 2);
+                    })
+                    ->description(function (): string {
+                        $template = $this->getOwnerRecord();
+
+                        return match ($template->base) {
+                            'cost' => 'Based on Cost',
+                            'price' => 'Based on Current Retail Price',
+                            default => 'Based on Template Setting',
+                        };
+                    })
+                    ->badge()
+                    ->color(fn ($record): string => $record->applied_at ? 'success' : 'warning'),
+
+                TextColumn::make('estimated_affected_items')
+                    ->label('Affected Items')
+                    ->state(function ($record): int|string {
+                        if ($record->item_id) {
+                            return 1;
+                        }
+
+                        if ($record->category_id) {
+                            return Item::query()
+                                ->where('item_category_id', $record->category_id)
+                                ->where('item_type', 'FINISHED_GOOD')
+                                ->count();
+                        }
+
+                        return '—';
+                    })
+                    ->badge()
+                    ->color('info')
+                    ->tooltip(fn ($record): string => $record->item_id
+                        ? 'Single finished good'
+                        : 'Estimated finished goods in the selected category'),
+
                 TextColumn::make('category.category_name')
                     ->label('Category')
                     ->badge()
                     ->color('gray')
+                    ->toggleable(),
+
+                TextColumn::make('applied_at')
+                    ->label('Applied')
+                    ->since()
+                    ->placeholder('Pending')
                     ->toggleable(),
 
                 TextColumn::make('business.name')

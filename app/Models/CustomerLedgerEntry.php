@@ -205,6 +205,27 @@ class CustomerLedgerEntry extends Model
         };
     }
 
+    public function getSignedRemainingAmountAttribute(): float
+    {
+        $remainingAmount = (float) $this->remaining_amount;
+
+        if ($remainingAmount === 0.0) {
+            return 0.0;
+        }
+
+        if ($this->is_debit_entry) {
+            return abs($remainingAmount);
+        }
+
+        if ($this->is_credit_entry) {
+            return -abs($remainingAmount);
+        }
+
+        return (float) $this->amount >= 0
+            ? abs($remainingAmount)
+            : -abs($remainingAmount);
+    }
+
     // ==================== BUSINESS METHODS ====================
 
     /**
@@ -572,11 +593,11 @@ class CustomerLedgerEntry extends Model
         ];
 
         foreach ($openEntries as $entry) {
-            if ($entry->is_invoice) {
-                $category = $entry->aging_category;
-                $aging[$category] += $entry->remaining_amount;
-                $aging['TOTAL'] += $entry->remaining_amount;
-            }
+            $signedRemainingAmount = $entry->signed_remaining_amount;
+            $category = $entry->is_invoice ? $entry->aging_category : 'CURRENT';
+
+            $aging[$category] += $signedRemainingAmount;
+            $aging['TOTAL'] += $signedRemainingAmount;
         }
 
         return $aging;

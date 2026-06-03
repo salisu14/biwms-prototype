@@ -16,6 +16,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class PurchaseReceiptResource extends Resource
@@ -23,6 +24,8 @@ class PurchaseReceiptResource extends Resource
     protected static ?string $model = PurchaseReceipt::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static ?string $recordTitleAttribute = 'document_number';
 
     public static function form(Schema $schema): Schema
     {
@@ -44,6 +47,40 @@ class PurchaseReceiptResource extends Resource
         return [
             RelationManagers\LinesRelationManager::class,
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'document_number',
+            'external_document_no',
+            'purchase_order_no',
+            'vendor_shipment_no',
+            'vendor_invoice_no',
+            'buy_from_vendor_name',
+            'ship_to_name',
+            'location_code',
+        ];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var PurchaseReceipt $record */
+        return [
+            'Vendor' => $record->buy_from_vendor_name ?: '—',
+            'Purchase Order' => $record->purchase_order_no ?: '—',
+            'Status' => $record->status ?: '—',
+            'Location' => $record->receivingLocation?->name ?: ($record->location_code ?: '—'),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()
+            ->with('receivingLocation')
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
     }
 
     public static function getPages(): array

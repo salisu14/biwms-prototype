@@ -16,12 +16,16 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class EmployeeResource extends Resource
 {
     protected static ?string $model = Employee::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static ?string $recordTitleAttribute = null;
 
     public static function form(Schema $schema): Schema
     {
@@ -41,10 +45,55 @@ class EmployeeResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\CompensationsRelationManager::class,
+            CompensationsRelationManager::class,
             RelationManagers\BankAccountsRelationManager::class,
             RelationManagers\EmployeePayCodesRelationManager::class,
         ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof Employee) {
+            return static::getModelLabel();
+        }
+
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'employee_number',
+            'full_name',
+            'first_name',
+            'last_name',
+            'email',
+            'job_title',
+            'department_code',
+            'department.name',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var Employee $record */
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var Employee $record */
+        return [
+            'Email' => $record->email ?: '—',
+            'Job Title' => $record->job_title ?: '—',
+            'Department' => $record->department_code ?: ($record->department?->name ?: '—'),
+            'Assignment' => $record->assignment_type?->value ?? '—',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with('department');
     }
 
     public static function getPages(): array
@@ -55,5 +104,14 @@ class EmployeeResource extends Resource
             'view' => ViewEmployee::route('/{record}'),
             'edit' => EditEmployee::route('/{record}/edit'),
         ];
+    }
+
+    protected static function formatRecordTitle(Employee $record): string
+    {
+        $employeeNumber = $record->employee_number ?: 'Unknown Employee';
+        $employeeName = $record->full_name ?: trim(($record->first_name ?: '').' '.($record->last_name ?: ''));
+        $employeeName = $employeeName !== '' ? $employeeName : 'Unnamed Employee';
+
+        return "{$employeeNumber} - {$employeeName}";
     }
 }

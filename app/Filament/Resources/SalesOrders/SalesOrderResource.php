@@ -15,12 +15,16 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class SalesOrderResource extends Resource
 {
     protected static ?string $model = SalesOrder::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static ?string $recordTitleAttribute = 'order_number';
 
     public static function form(Schema $schema): Schema
     {
@@ -43,6 +47,35 @@ class SalesOrderResource extends Resource
             RelationManagers\LinesRelationManager::class,
             RelationManagers\GlEntriesRelationManager::class,
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'order_number',
+            'external_document_number',
+            'customer.name',
+            'customer.customer_number',
+            'customer_name',
+            'ship_to_name',
+            'status',
+        ];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var SalesOrder $record */
+        return [
+            'Customer' => $record->customer?->name ?: ($record->customer_name ?: '—'),
+            'External Doc' => $record->external_document_number ?: '—',
+            'Status' => $record->status?->value ?? '—',
+            'Total' => number_format((float) $record->grand_total, 2).' '.($record->currency_code ?: ''),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with('customer');
     }
 
     public static function getPages(): array

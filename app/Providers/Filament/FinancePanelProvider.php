@@ -48,6 +48,9 @@ class FinancePanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Blue,
             ])
+            ->globalSearch()
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->globalSearchFieldKeyBindingSuffix()
             ->brandName('BIFLI Globals - Finance Role Center')
             ->favicon(asset('favicon.ico'))
             ->resources([

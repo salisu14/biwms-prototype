@@ -15,12 +15,16 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class WarehouseShipmentResource extends Resource
 {
     protected static ?string $model = WarehouseShipment::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static ?string $recordTitleAttribute = 'document_number';
 
     public static function form(Schema $schema): Schema
     {
@@ -42,6 +46,41 @@ class WarehouseShipmentResource extends Resource
         return [
             RelationManagers\LinesRelationManager::class,
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'document_number',
+            'source_document',
+            'source_document_number',
+            'external_document_number',
+            'customer.name',
+            'customer.customer_number',
+            'shipping_agent_code',
+            'status',
+            'location.code',
+            'location.name',
+        ];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var WarehouseShipment $record */
+        return [
+            'Customer' => $record->customer?->name ?: '—',
+            'Source Doc' => $record->source_document_number ?: '—',
+            'Location' => $record->location?->name ?: '—',
+            'Status' => $record->status ?: '—',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with([
+            'customer',
+            'location',
+        ]);
     }
 
     public static function getPages(): array

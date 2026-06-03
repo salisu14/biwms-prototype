@@ -4,6 +4,7 @@ namespace App\Filament\Resources\SalesShipmentHeaders\Pages;
 
 use App\Filament\Resources\SalesShipmentHeaders\SalesShipmentHeaderResource;
 use App\Models\SalesShipmentHeader;
+use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\Page;
 use Filament\Tables\Columns\TextColumn;
@@ -93,6 +94,12 @@ class PostedShipments extends Page
             ])
             ->recordActions([
                 ViewAction::make(),
+                Action::make('print_waybill')
+                    ->label('Print Waybill')
+                    ->icon('heroicon-o-printer')
+                    ->color('success')
+                    ->url(fn (SalesShipmentHeader $record) => route('waybill.print', $record))
+                    ->openUrlInNewTab(),
                 // No EditAction - posted shipments are read-only
             ])
             ->toolbarActions([]);

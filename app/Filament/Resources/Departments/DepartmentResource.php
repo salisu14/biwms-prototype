@@ -16,6 +16,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class DepartmentResource extends Resource
@@ -46,6 +47,48 @@ class DepartmentResource extends Resource
         return [
             RelationManagers\EmployeesRelationManager::class,
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'department_code',
+            'name',
+            'search_name',
+            'department_path',
+            'location_code',
+            'manager.first_name',
+            'manager.last_name',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var Department $record */
+        $departmentCode = $record->department_code ?: 'Unknown Department';
+        $departmentName = $record->name ?: 'Unnamed Department';
+
+        return "{$departmentCode} - {$departmentName}";
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var Department $record */
+        return [
+            'Type' => $record->type?->value ?? '—',
+            'Status' => $record->status?->value ?? '—',
+            'Manager' => $record->manager?->full_name ?: '—',
+            'Location' => $record->location_code ?: '—',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()
+            ->with('manager')
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
     }
 
     public static function getPages(): array

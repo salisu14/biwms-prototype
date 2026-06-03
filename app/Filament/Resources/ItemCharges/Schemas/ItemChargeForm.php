@@ -22,7 +22,7 @@ class ItemChargeForm
                     ->schema([
                         Grid::make(2)
                             ->schema([
-                                TextInput::make('no')
+                                TextInput::make('number')
                                     ->label('Charge No.')
                                     ->required()
                                     ->unique(ignoreRecord: true)

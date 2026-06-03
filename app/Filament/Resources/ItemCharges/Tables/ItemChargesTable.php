@@ -17,7 +17,7 @@ class ItemChargesTable
     {
         return $table
             ->columns([
-                TextColumn::make('no')
+                TextColumn::make('number')
                     ->label('Charge No.')
                     ->searchable()
                     ->sortable()
@@ -75,7 +75,7 @@ class ItemChargesTable
                     DeleteBulkAction::make(),
                 ]),
             ])
-            ->defaultSort('no', 'asc')
+            ->defaultSort('number', 'asc')
             ->emptyStateHeading('No item charges')
             ->emptyStateDescription('Create an item charge to categorize additional costs like freight or insurance.')
             ->emptyStateIcon('heroicon-o-receipt-percent');

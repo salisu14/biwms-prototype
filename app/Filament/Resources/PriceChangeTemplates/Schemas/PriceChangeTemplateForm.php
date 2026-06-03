@@ -11,6 +11,11 @@ use Filament\Schemas\Schema;
 
 class PriceChangeTemplateForm
 {
+    protected static function isPercentageAdjustment(?string $adjustmentType): bool
+    {
+        return in_array($adjustmentType, ['increase', 'decrease'], true);
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -71,11 +76,15 @@ class PriceChangeTemplateForm
                             ->afterStateUpdated(fn (Set $set) => $set('value', null)),
 
                         TextInput::make('value')
-                            ->label(fn ($get) => $get('adjustment_type') === 'percentage' ? 'Percentage Value' : 'Fixed Amount')
+                            ->label(fn ($get) => self::isPercentageAdjustment($get('adjustment_type')) ? 'Percentage Value' : 'Fixed Amount')
                             ->required()
                             ->numeric()
-                            ->prefix(fn ($get) => $get('adjustment_type') === 'percentage' ? null : '₦')
-                            ->suffix(fn ($get) => $get('adjustment_type') === 'percentage' ? '%' : null),
+                            ->minValue(0)
+                            ->helperText(fn ($get) => self::isPercentageAdjustment($get('adjustment_type'))
+                                ? 'Enter the percentage to increase or decrease the selected base price.'
+                                : 'Enter the final fixed selling price amount.')
+                            ->prefix(fn ($get) => self::isPercentageAdjustment($get('adjustment_type')) ? null : '₦')
+                            ->suffix(fn ($get) => self::isPercentageAdjustment($get('adjustment_type')) ? '%' : null),
                     ]),
 
                 Section::make('Validity Period')

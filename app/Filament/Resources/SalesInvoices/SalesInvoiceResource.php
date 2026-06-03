@@ -17,12 +17,15 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
 class SalesInvoiceResource extends Resource
 {
     protected static ?string $model = SalesInvoice::class;
+
+    protected static ?string $recordTitleAttribute = null;
 
     /**
      * Posted invoice history is intentionally restricted to admin/sales roles,
@@ -70,6 +73,51 @@ class SalesInvoiceResource extends Resource
         return [
             RelationManagers\LinesRelationManager::class,
         ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof SalesInvoice) {
+            return static::getModelLabel();
+        }
+
+        return $record->invoice_number ?: static::getModelLabel();
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'invoice_number',
+            'customer.name',
+            'customer.customer_number',
+            'salesOrder.order_number',
+            'status',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var SalesInvoice $record */
+        return $record->invoice_number ?: static::getModelLabel();
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var SalesInvoice $record */
+        return [
+            'Customer' => $record->customer?->name ?: '—',
+            'Sales Order' => $record->salesOrder?->order_number ?: '—',
+            'Status' => $record->status?->value ?? '—',
+            'Total' => number_format((float) $record->total_amount, 2).' '.($record->currency_code ?: ''),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with([
+            'customer',
+            'salesOrder',
+        ]);
     }
 
     public static function canEdit(Model $record): bool

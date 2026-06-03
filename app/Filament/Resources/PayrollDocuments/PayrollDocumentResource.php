@@ -14,12 +14,16 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class PayrollDocumentResource extends Resource
 {
     protected static ?string $model = PayrollDocument::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static ?string $recordTitleAttribute = 'document_number';
 
     public static function form(Schema $schema): Schema
     {
@@ -36,6 +40,30 @@ class PayrollDocumentResource extends Resource
         return [
             //            RelationManagers\LinesRelationManager::class,
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'document_number',
+            'remarks',
+            'status',
+        ];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var PayrollDocument $record */
+        return [
+            'Period' => $record->period_start?->format('Y-m-d').' to '.$record->period_end?->format('Y-m-d'),
+            'Status' => $record->status?->value ?? '—',
+            'Net Pay' => number_format((float) $record->total_net_pay, 2),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with('period');
     }
 
     public static function getPages(): array

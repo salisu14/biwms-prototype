@@ -47,6 +47,9 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->spa(hasPrefetching: true)
             ->sidebarCollapsibleOnDesktop()
+            ->globalSearch()
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->globalSearchFieldKeyBindingSuffix()
             ->brandName('BIFLI Group')
             ->favicon(asset('favicon.ico'))
             ->renderHook(
@@ -181,6 +184,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-presentation-chart-bar')
                                     ->url('/admin/currency-adjustment-ledgers')
                                     ->isActiveWhen(fn () => request()->is('admin/currency-adjustment-ledger*')),
+
+                                NavigationItem::make('Price Change Templates')
+                                    ->icon('heroicon-o-document')
+                                    ->url('/admin/price-change-templates')
+                                    ->isActiveWhen(fn () => request()->is('admin/price-change-templates*')),
 
                                 NavigationItem::make('CapEx Projects')
                                     ->icon('heroicon-o-banknotes')
@@ -358,11 +366,6 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-bolt')
                                     ->url('/admin/items/fg/finished-goods')
                                     ->isActiveWhen(fn () => request()->is('admin/items/fg/finished-goods*')),
-
-                                NavigationItem::make('Price Change Templates')
-                                    ->icon('heroicon-o-document')
-                                    ->url('/admin/price-change-templates')
-                                    ->isActiveWhen(fn () => request()->is('admin/price-change-templates*')),
 
                                 NavigationItem::make('Sales Orders')
                                     ->icon('heroicon-o-clipboard-document-list')

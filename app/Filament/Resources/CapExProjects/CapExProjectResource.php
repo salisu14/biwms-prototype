@@ -16,6 +16,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class CapExProjectResource extends Resource
@@ -48,6 +49,44 @@ class CapExProjectResource extends Resource
         return [
             //
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'project_number',
+            'description',
+            'status',
+            'projectManager.name',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var CapExProject $record */
+        $projectNumber = $record->project_number ?: 'Unknown Project';
+        $description = $record->description ?: 'No description';
+
+        return "{$projectNumber} - {$description}";
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var CapExProject $record */
+        return [
+            'Status' => $record->status ?: '—',
+            'Project Manager' => $record->projectManager?->name ?: '—',
+            'Budget' => number_format((float) $record->budget_amount, 2),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()
+            ->with('projectManager')
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
     }
 
     public static function getPages(): array

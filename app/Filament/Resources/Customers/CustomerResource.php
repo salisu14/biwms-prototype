@@ -15,6 +15,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class CustomerResource extends Resource
 {
@@ -22,7 +24,7 @@ class CustomerResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
-    protected static ?string $recordTitleAttribute = 'name';
+    protected static ?string $recordTitleAttribute = null;
 
     public static function form(Schema $schema): Schema
     {
@@ -46,6 +48,47 @@ class CustomerResource extends Resource
         ];
     }
 
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof Customer) {
+            return static::getModelLabel();
+        }
+
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'customer_number',
+            'name',
+            'email',
+            'phone',
+            'group.code',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var Customer $record */
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var Customer $record */
+        return [
+            'Email' => $record->email ?: '—',
+            'Phone' => $record->phone ?: '—',
+            'Group' => $record->group?->code ?: '—',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with('group');
+    }
+
     public static function getPages(): array
     {
         return [
@@ -54,5 +97,13 @@ class CustomerResource extends Resource
             'view' => ViewCustomer::route('/{record}'),
             'edit' => EditCustomer::route('/{record}/edit'),
         ];
+    }
+
+    protected static function formatRecordTitle(Customer $record): string
+    {
+        $customerNumber = $record->customer_number ?: 'Unknown Customer';
+        $customerName = $record->name ?: 'Unnamed Customer';
+
+        return "{$customerNumber} - {$customerName}";
     }
 }

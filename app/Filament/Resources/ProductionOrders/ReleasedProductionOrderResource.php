@@ -11,6 +11,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class ReleasedProductionOrderResource extends Resource
 {
@@ -27,6 +28,8 @@ class ReleasedProductionOrderResource extends Resource
     protected static ?string $slug = 'released-production-orders';
 
     protected static ?int $navigationSort = 2;
+
+    protected static ?string $recordTitleAttribute = 'document_number';
 
     public static function form(Schema $schema): Schema
     {
@@ -52,6 +55,24 @@ class ReleasedProductionOrderResource extends Resource
     public static function getRelations(): array
     {
         return ProductionOrderResource::getRelations();
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ProductionOrderResource::getGloballySearchableAttributes();
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return ProductionOrderResource::getGlobalSearchResultDetails($record);
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return static::getEloquentQuery()->with([
+            'item',
+            'location',
+        ]);
     }
 
     public static function canCreate(): bool
