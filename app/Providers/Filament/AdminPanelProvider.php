@@ -185,6 +185,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/currency-adjustment-ledgers')
                                     ->isActiveWhen(fn () => request()->is('admin/currency-adjustment-ledger*')),
 
+                                NavigationItem::make('Customer Price Overrides')
+                                    ->icon('heroicon-o-divide')
+                                    ->url('/admin/customer-price-overrides')
+                                    ->isActiveWhen(fn () => request()->is('admin/customer-price-overrides*')),
+
                                 NavigationItem::make('Price Change Templates')
                                     ->icon('heroicon-o-document')
                                     ->url('/admin/price-change-templates')
