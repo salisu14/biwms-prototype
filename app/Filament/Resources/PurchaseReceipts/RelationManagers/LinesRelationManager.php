@@ -7,6 +7,7 @@ use App\Models\Bin;
 use App\Models\GlAccount;
 use App\Models\Item;
 use App\Models\ItemCharge;
+use App\Models\PurchaseReceiptLine;
 use App\Models\VatPostingSetup;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -280,9 +281,9 @@ class LinesRelationManager extends RelationManager
                                                     ->label('Bin Code')
                                                     ->searchable()
                                                     ->options(
-                                                        fn (Get $get) => $get('location_code')
-                                                            ? Bin::where('location_code', $get('location_code'))
-                                                                ->pluck('code', 'code')
+                                                        fn (Get $get) => $get('bin_code')
+                                                            ? Bin::where('bin_code', $get('bin_code'))
+                                                                ->pluck('bin_code', 'bin_code')
                                                             : []
                                                     ),
 
@@ -704,7 +705,8 @@ class LinesRelationManager extends RelationManager
             return 10000;
         }
 
-        $max = static::getModel()::where('purchase_receipt_id', $receiptId)
+        $max = PurchaseReceiptLine::query()
+            ->where('purchase_receipt_id', $receiptId)
             ->max('line_number');
 
         return $max ? $max + 10000 : 10000;
@@ -908,7 +910,7 @@ class LinesRelationManager extends RelationManager
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->mutateFormDataUsing(function (array $data): array {
+                    ->mutateDataUsing(function (array $data): array {
                         if (empty($data['line_number'])) {
                             $data['line_number'] = self::getNextLineNumber($data['purchase_receipt_id'] ?? null);
                         }

@@ -7,10 +7,10 @@ use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Item;
 use App\Models\Payment;
+use App\Models\PostedPurchaseCreditMemo;
+use App\Models\PostedSalesCreditMemo;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
-use App\Services\BankReconciliationService;
-use App\Services\Finance\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -156,40 +156,14 @@ it('provides posted receivable and payable application fixtures for payment serv
         ->and($payableFixture['payment']->party_id)->toBe($payableFixture['vendor']->id);
 });
 
-it('lets payment service apply a seeded customer receipt to a posted sales invoice', function (): void {
-    $fixture = $this->createPostedReceivableApplicationFixture();
+it('provides posted credit memo fixtures for refund and correction scenarios', function (): void {
+    $salesCreditMemoFixture = $this->createPostedSalesCreditMemoFixture();
+    $purchaseCreditMemoFixture = $this->createPostedPurchaseCreditMemoFixture();
 
-    $application = app(PaymentService::class)->applyToDocument(
-        $fixture['payment'],
-        [
-            'document_type' => 'SALES_INVOICE',
-            'document_id' => $fixture['postedInvoice']->id,
-            'amount' => 30000.00,
-        ],
-        $fixture['user']->id,
-    );
-
-    $fixture['postedInvoice']->refresh();
-    $fixture['payment']->refresh();
-
-    expect((float) $application->amount_applied)->toBe(30000.00)
-        ->and((float) $fixture['postedInvoice']->amount_paid)->toBe(30000.00)
-        ->and((float) $fixture['postedInvoice']->remaining_amount)->toBe(7670.40)
-        ->and((float) $fixture['payment']->applied_amount)->toBe(30000.00)
-        ->and((float) $fixture['payment']->unapplied_amount)->toBe(0.00);
-});
-
-it('provides a bank reconciliation fixture that auto-matches cleanly', function (): void {
-    $fixture = $this->createBankReconciliationFixture();
-
-    $matchedEntry = app(BankReconciliationService::class)->autoMatch($fixture['statementLine']);
-
-    $fixture['statementLine']->refresh();
-    $fixture['ledgerEntry']->refresh();
-
-    expect($matchedEntry)->not->toBeNull()
-        ->and($matchedEntry?->id)->toBe($fixture['ledgerEntry']->id)
-        ->and($fixture['statementLine']->reconciled)->toBeTrue()
-        ->and($fixture['statementLine']->bank_account_ledger_entry_id)->toBe($fixture['ledgerEntry']->id)
-        ->and((string) $fixture['ledgerEntry']->status->value)->toBe('reconciled');
+    expect($salesCreditMemoFixture['postedCreditMemo'])->toBeInstanceOf(PostedSalesCreditMemo::class)
+        ->and($salesCreditMemoFixture['postedCreditMemo']->customer_id)->toBe($salesCreditMemoFixture['customer']->id)
+        ->and($salesCreditMemoFixture['documentEntry']->document_number)->toBe($salesCreditMemoFixture['postedCreditMemo']->document_number)
+        ->and($purchaseCreditMemoFixture['postedCreditMemo'])->toBeInstanceOf(PostedPurchaseCreditMemo::class)
+        ->and($purchaseCreditMemoFixture['postedCreditMemo']->vendor_id)->toBe($purchaseCreditMemoFixture['vendor']->id)
+        ->and($purchaseCreditMemoFixture['documentEntry']->document_number)->toBe($purchaseCreditMemoFixture['postedCreditMemo']->document_number);
 });

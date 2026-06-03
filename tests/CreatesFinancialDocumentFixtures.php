@@ -14,7 +14,9 @@ use App\Models\BankReconciliation;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Payment;
+use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedPurchaseInvoice;
+use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
 use App\Models\User;
 use App\Models\Vendor;
@@ -415,6 +417,142 @@ trait CreatesFinancialDocumentFixtures
         ]);
 
         return $payable + compact('payment', 'paymentEntry', 'bankAccount');
+    }
+
+    /**
+     * @return array{customer: Customer, postedInvoice: PostedSalesInvoice, postedCreditMemo: PostedSalesCreditMemo, documentEntry: CustomerLedgerEntry, user: User}
+     */
+    protected function createPostedSalesCreditMemoFixture(float $creditAmount = 5000.00): array
+    {
+        $receivable = $this->createPostedReceivableFixture(max($creditAmount * 2, 10000));
+        $customer = $receivable['customer'];
+        $user = $receivable['user'];
+        $postedInvoice = $receivable['postedInvoice'];
+
+        $postedCreditMemo = PostedSalesCreditMemo::query()->create([
+            'document_number' => 'PSCM-'.$customer->id.'-001',
+            'corrected_invoice_id' => $postedInvoice->id,
+            'corrected_invoice_number' => $postedInvoice->document_number,
+            'customer_id' => $customer->id,
+            'customer_name' => $customer->name,
+            'customer_address' => (string) $customer->address,
+            'ship_to_name' => $customer->name,
+            'ship_to_address' => (string) $customer->address,
+            'general_business_posting_group_id' => $customer->general_business_posting_group_id,
+            'customer_posting_group_id' => $customer->customer_posting_group_id,
+            'vat_bus_posting_group' => $customer->vat_bus_posting_group,
+            'location_id' => $customer->location_id,
+            'credit_memo_type' => 'ALLOWANCE',
+            'posting_date' => now()->subDays(5),
+            'document_date' => now()->subDays(5),
+            'subtotal' => -$creditAmount,
+            'line_discount_total' => 0,
+            'total_amount' => -$creditAmount,
+            'total_vat' => 0,
+            'grand_total' => -$creditAmount,
+            'currency_code' => 'NGN',
+            'currency_factor' => 1,
+            'amount_applied' => 0,
+            'remaining_amount' => $creditAmount,
+            'fully_applied' => false,
+            'refunded' => false,
+            'refund_amount' => 0,
+            'posted_by' => $user->id,
+            'posted_at' => now()->subDays(5),
+            'corrected' => false,
+        ]);
+
+        $documentEntry = CustomerLedgerEntry::query()->create([
+            'entry_number' => 2,
+            'customer_id' => $customer->id,
+            'document_type' => 'SALES_CREDIT_MEMO',
+            'document_number' => $postedCreditMemo->document_number,
+            'description' => "Posted credit memo {$postedCreditMemo->document_number}",
+            'posting_date' => $postedCreditMemo->posting_date,
+            'document_date' => $postedCreditMemo->document_date,
+            'debit_amount' => 0,
+            'credit_amount' => $creditAmount,
+            'amount' => -$creditAmount,
+            'running_balance' => (float) $receivable['documentEntry']->running_balance - $creditAmount,
+            'remaining_amount' => $creditAmount,
+            'open' => true,
+            'fully_applied' => false,
+            'currency_code' => 'NGN',
+            'original_debit_amount' => 0,
+            'original_credit_amount' => $creditAmount,
+            'currency_factor' => 1,
+            'general_business_posting_group_id' => $customer->general_business_posting_group_id,
+            'customer_posting_group_id' => $customer->customer_posting_group_id,
+            'source_type' => PostedSalesCreditMemo::class,
+            'source_id' => $postedCreditMemo->id,
+            'created_by' => $user->id,
+        ]);
+
+        return compact('customer', 'postedInvoice', 'postedCreditMemo', 'documentEntry', 'user');
+    }
+
+    /**
+     * @return array{vendor: Vendor, postedInvoice: PostedPurchaseInvoice, postedCreditMemo: PostedPurchaseCreditMemo, documentEntry: VendorLedgerEntry, user: User}
+     */
+    protected function createPostedPurchaseCreditMemoFixture(float $creditAmount = 50000.00): array
+    {
+        $payable = $this->createPostedPayableFixture(max($creditAmount * 2, 100000));
+        $vendor = $payable['vendor'];
+        $user = $payable['user'];
+        $postedInvoice = $payable['postedInvoice'];
+
+        $postedCreditMemo = PostedPurchaseCreditMemo::query()->create([
+            'document_number' => 'PPCM-'.$vendor->id.'-001',
+            'vendor_id' => $vendor->id,
+            'vendor_name' => $vendor->vendor_name,
+            'vendor_address' => (string) $vendor->address,
+            'vendor_city' => $vendor->city,
+            'vendor_post_code' => $vendor->postal_code,
+            'vendor_country' => $vendor->country,
+            'posting_date' => now()->subDays(5),
+            'document_date' => now()->subDays(5),
+            'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+            'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+            'currency_code' => 'NGN',
+            'currency_factor' => 1,
+            'subtotal' => -$creditAmount,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'grand_total' => -$creditAmount,
+            'posted' => true,
+            'posted_at' => now()->subDays(5),
+            'posted_by' => $user->id,
+            'corrects_invoice_number' => $postedInvoice->document_number,
+            'description' => 'Fixture purchase credit memo',
+        ]);
+
+        $documentEntry = VendorLedgerEntry::query()->create([
+            'entry_number' => 2,
+            'vendor_id' => $vendor->id,
+            'document_type' => 'PURCHASE_CREDIT_MEMO',
+            'document_number' => $postedCreditMemo->document_number,
+            'description' => "Posted credit memo {$postedCreditMemo->document_number}",
+            'posting_date' => $postedCreditMemo->posting_date,
+            'document_date' => $postedCreditMemo->document_date,
+            'debit_amount' => 0,
+            'credit_amount' => $creditAmount,
+            'amount' => -$creditAmount,
+            'running_balance' => (float) $payable['documentEntry']->running_balance - $creditAmount,
+            'remaining_amount' => $creditAmount,
+            'open' => true,
+            'fully_applied' => false,
+            'currency_code' => 'NGN',
+            'original_debit_amount' => 0,
+            'original_credit_amount' => $creditAmount,
+            'currency_factor' => 1,
+            'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+            'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+            'source_type' => PostedPurchaseCreditMemo::class,
+            'source_id' => $postedCreditMemo->id,
+            'created_by' => $user->id,
+        ]);
+
+        return compact('vendor', 'postedInvoice', 'postedCreditMemo', 'documentEntry', 'user');
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PurchaseInvoices;
 use App\Filament\Resources\PurchaseInvoices\Pages\CreatePurchaseInvoice;
 use App\Filament\Resources\PurchaseInvoices\Pages\EditPurchaseInvoice;
 use App\Filament\Resources\PurchaseInvoices\Pages\ListPurchaseInvoices;
+use App\Filament\Resources\PurchaseInvoices\Pages\ViewPostedPurchaseInvoice;
 use App\Filament\Resources\PurchaseInvoices\Pages\ViewPurchaseInvoice;
 use App\Filament\Resources\PurchaseInvoices\Schemas\PurchaseInvoiceForm;
 use App\Filament\Resources\PurchaseInvoices\Schemas\PurchaseInvoiceInfolist;
@@ -63,6 +64,7 @@ class PurchaseInvoiceResource extends Resource
             'view' => ViewPurchaseInvoice::route('/{record}'),
             'edit' => EditPurchaseInvoice::route('/{record}/edit'),
             'posted' => Pages\PostedPurchaseInvoices::route('/history/posted'),
+            'view-posted' => ViewPostedPurchaseInvoice::route('/history/posted/{record}'),
         ];
     }
 }

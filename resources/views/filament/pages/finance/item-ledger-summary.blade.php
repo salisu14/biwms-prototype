@@ -189,9 +189,17 @@
                         @forelse($entries as $entry)
                             <tr>
                                 <td class="px-3 py-2">{{ optional($entry->posting_date)->toDateString() ?? '—' }}</td>
-                                <td class="px-3 py-2">{{ $entry->entry_number }}</td>
+                                <td class="px-3 py-2">
+                                    <a href="{{ \App\Filament\Resources\ItemLedgerEntries\ItemLedgerEntryResource::getUrl('view', ['record' => $entry]) }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                                        {{ $entry->entry_number }}
+                                    </a>
+                                </td>
                                 <td class="px-3 py-2">{{ $entry->entry_type->value }}</td>
-                                <td class="px-3 py-2">{{ $entry->document_number }}</td>
+                                <td class="px-3 py-2">
+                                    <a href="{{ \App\Filament\Resources\ItemLedgerEntries\ItemLedgerEntryResource::getUrl('view', ['record' => $entry]) }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                                        {{ $entry->document_number }}
+                                    </a>
+                                </td>
                                 <td class="px-3 py-2">
                                     @if($entry->item_id)
                                         <a

@@ -215,6 +215,7 @@ class ReviewPayrollDocument extends Page
                 $benefits = (float) $lines->where('line_type', 'Benefit')->sum('amount');
 
                 return [
+                    'employee_id' => $employee?->id,
                     'employee_number' => $employee?->employee_number,
                     'employee_name' => trim(($employee?->first_name ?? '').' '.($employee?->last_name ?? '')),
                     'earnings' => $earnings,

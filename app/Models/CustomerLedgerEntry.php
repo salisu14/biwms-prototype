@@ -294,15 +294,22 @@ class CustomerLedgerEntry extends Model
         ]]);
 
         // Update invoice paid status
+        $newAmountPaid = (float) $invoice->amount_paid + $applyAmount;
+
         if ($applyAmount >= $invoice->remaining_amount - 0.01) {
             $invoice->update([
+                'amount_paid' => $newAmountPaid,
                 'paid_in_full' => true,
                 'paid_in_full_date' => now(),
                 'remaining_amount' => 0,
             ]);
         } else {
-            $invoice->decrement('remaining_amount', $applyAmount);
-            $invoice->increment('amount_paid', $applyAmount);
+            $invoice->update([
+                'amount_paid' => $newAmountPaid,
+                'remaining_amount' => max(0, (float) $invoice->remaining_amount - $applyAmount),
+                'paid_in_full' => false,
+                'paid_in_full_date' => null,
+            ]);
         }
     }
 

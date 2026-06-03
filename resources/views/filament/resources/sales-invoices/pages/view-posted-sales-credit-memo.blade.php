@@ -8,10 +8,13 @@
         $cellValueClass = 'border border-gray-200 px-4 py-3 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100';
         $headCellClass = 'border border-gray-200 px-4 py-3 dark:border-gray-700';
         $bodyCellClass = 'border border-gray-200 px-4 py-3 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100';
-        $invoiceStatus = $this->record->paid_in_full ? 'Paid in Full' : ((float) $this->record->amount_paid > 0 ? 'Partially Paid' : 'Open');
-        $invoiceStatusColor = match ($invoiceStatus) {
-            'Paid in Full' => 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
-            'Partially Paid' => 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+        $creditStatus = $this->record->refunded
+            ? 'Refunded'
+            : ((float) $this->record->remaining_amount <= 0.0001 ? 'Fully Applied' : ((float) $this->record->amount_applied > 0 ? 'Partially Applied' : 'Open'));
+        $creditStatusColor = match ($creditStatus) {
+            'Refunded' => 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+            'Fully Applied' => 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
+            'Partially Applied' => 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300',
             default => 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300',
         };
     @endphp
@@ -26,13 +29,13 @@
             </section>
             <section class="{{ $tableWrapper }}">
                 <div class="px-4 py-4">
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Amount Paid</p>
-                    <p class="mt-1 text-2xl font-semibold text-gray-950 dark:text-white">{{ $currencyCode }} {{ number_format((float) $this->record->amount_paid, 2) }}</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Applied Amount</p>
+                    <p class="mt-1 text-2xl font-semibold text-gray-950 dark:text-white">{{ $currencyCode }} {{ number_format((float) $this->record->amount_applied, 2) }}</p>
                 </div>
             </section>
             <section class="{{ $tableWrapper }}">
                 <div class="px-4 py-4">
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Remaining Amount</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Remaining Credit</p>
                     <p class="mt-1 text-2xl font-semibold text-gray-950 dark:text-white">{{ $currencyCode }} {{ number_format((float) $this->record->remaining_amount, 2) }}</p>
                 </div>
             </section>
@@ -46,14 +49,14 @@
                 <table class="{{ $tableClass }}">
                     <tbody>
                         <tr>
-                            <td class="{{ $cellLabelClass }}">Invoice Number</td>
+                            <td class="{{ $cellLabelClass }}">Credit Memo Number</td>
                             <td class="{{ $cellValueClass }}">{{ $this->record->document_number }}</td>
                             <td class="{{ $cellLabelClass }}">Status</td>
                             <td class="{{ $cellValueClass }}">
                                 <div class="flex items-center gap-2">
                                     <span>{{ $this->record->status }}</span>
-                                    <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium {{ $invoiceStatusColor }}">
-                                        {{ $invoiceStatus }}
+                                    <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium {{ $creditStatusColor }}">
+                                        {{ $creditStatus }}
                                     </span>
                                 </div>
                             </td>
@@ -65,16 +68,10 @@
                             <td class="{{ $cellValueClass }}">{{ optional($this->record->posted_at)->format('Y-m-d H:i') }}</td>
                         </tr>
                         <tr>
-                            <td class="{{ $cellLabelClass }}">Document Date</td>
-                            <td class="{{ $cellValueClass }}">{{ optional($this->record->document_date)->format('Y-m-d') }}</td>
-                            <td class="{{ $cellLabelClass }}">Due Date</td>
-                            <td class="{{ $cellValueClass }}">{{ optional($this->record->due_date)->format('Y-m-d') }}</td>
-                        </tr>
-                        <tr>
-                            <td class="{{ $cellLabelClass }}">Order Number</td>
-                            <td class="{{ $cellValueClass }}">{{ $this->record->order_number ?: '—' }}</td>
-                            <td class="{{ $cellLabelClass }}">Currency</td>
-                            <td class="{{ $cellValueClass }}">{{ $currencyCode }}</td>
+                            <td class="{{ $cellLabelClass }}">Corrected Invoice</td>
+                            <td class="{{ $cellValueClass }}">{{ $this->record->corrected_invoice_number ?: '—' }}</td>
+                            <td class="{{ $cellLabelClass }}">Credit Memo Type</td>
+                            <td class="{{ $cellValueClass }}">{{ $this->record->credit_memo_type ?: '—' }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -83,11 +80,11 @@
 
         <section class="{{ $tableWrapper }}">
             <div class="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
-                <h3 class="text-base font-semibold text-gray-950 dark:text-white">Customer & Shipping</h3>
+                <h3 class="text-base font-semibold text-gray-950 dark:text-white">Customer Details</h3>
             </div>
             <div class="overflow-x-auto">
                 <table class="{{ $tableClass }}">
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    <tbody>
                         <tr>
                             <td class="{{ $cellLabelClass }}">Customer</td>
                             <td class="{{ $cellValueClass }}">{{ $this->record->customer_name }}</td>
@@ -131,8 +128,8 @@
                             <td class="{{ $bodyCellClass }} text-right font-semibold">{{ $currencyCode }} {{ number_format((float) $this->record->grand_total, 2) }}</td>
                         </tr>
                         <tr>
-                            <td class="{{ $bodyCellClass }}">Amount Paid</td>
-                            <td class="{{ $bodyCellClass }} text-right">{{ $currencyCode }} {{ number_format((float) $this->record->amount_paid, 2) }}</td>
+                            <td class="{{ $bodyCellClass }}">Applied Amount</td>
+                            <td class="{{ $bodyCellClass }} text-right">{{ $currencyCode }} {{ number_format((float) $this->record->amount_applied, 2) }}</td>
                         </tr>
                         <tr>
                             <td class="{{ $bodyCellClass }} font-semibold">Remaining Amount</td>
@@ -144,8 +141,20 @@
         </section>
 
         <section class="{{ $tableWrapper }}">
-            <div class="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+            <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
                 <h3 class="text-base font-semibold text-gray-950 dark:text-white">Applications</h3>
+                <div class="flex items-center gap-2">
+                    @if($this->applications->isNotEmpty())
+                        <span class="inline-flex items-center rounded-full border border-success-200 bg-success-50 px-2.5 py-0.5 text-xs font-medium text-success-700 dark:border-success-800 dark:bg-success-950/40 dark:text-success-300">
+                            Credit Applications
+                        </span>
+                    @endif
+                    @if($this->record->refunded)
+                        <span class="inline-flex items-center rounded-full border border-warning-200 bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-700 dark:border-warning-800 dark:bg-warning-950/40 dark:text-warning-300">
+                            Refunded
+                        </span>
+                    @endif
+                </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="{{ $tableClass }}">
@@ -163,40 +172,29 @@
                     <tbody>
                         @forelse($this->applications as $application)
                             <tr>
-                                <td class="{{ $bodyCellClass }}">{{ optional($application['applied_at'])->format('Y-m-d H:i') ?: '—' }}</td>
+                                <td class="{{ $bodyCellClass }}">{{ \Illuminate\Support\Carbon::parse($application['applied_at'])->format('Y-m-d H:i') }}</td>
                                 <td class="{{ $bodyCellClass }}">
-                                    @php
-                                        $applicationStatusClass = $application['source_type'] === 'Credit Memo'
-                                            ? 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300'
-                                            : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300';
-                                    @endphp
-                                    <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium {{ $applicationStatusClass }}">
-                                        {{ $application['source_type'] === 'Credit Memo' ? 'Credit Applied' : 'Payment Applied' }}
+                                    <span class="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
+                                        Credit Applied
                                     </span>
                                 </td>
-                                <td class="{{ $bodyCellClass }}">{{ $application['source_type'] }}</td>
+                                <td class="{{ $bodyCellClass }}">Sales Invoice</td>
                                 <td class="{{ $bodyCellClass }}">
-                                    @if(!empty($application['source_url']))
-                                        <a href="{{ $application['source_url'] }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
-                                            {{ $application['source_document'] ?: '—' }}
+                                    @if(!empty($application['invoice_record_id']))
+                                        <a href="{{ \App\Filament\Resources\SalesInvoices\SalesInvoiceResource::getUrl('view-posted', ['record' => $application['invoice_record_id']]) }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                                            {{ $application['document_number'] ?? '—' }}
                                         </a>
                                     @else
-                                        {{ $application['source_document'] ?: '—' }}
+                                        {{ $application['document_number'] ?? '—' }}
                                     @endif
                                 </td>
-                                <td class="{{ $bodyCellClass }}">{{ $application['reference'] ?: '—' }}</td>
-                                <td class="{{ $bodyCellClass }} text-right">{{ $currencyCode }} {{ number_format((float) $application['amount'], 2) }}</td>
-                                <td class="{{ $bodyCellClass }} text-right">
-                                    @if(is_null($application['balance_after']))
-                                        —
-                                    @else
-                                        {{ $currencyCode }} {{ number_format((float) $application['balance_after'], 2) }}
-                                    @endif
-                                </td>
+                                <td class="{{ $bodyCellClass }}">Credit memo application</td>
+                                <td class="{{ $bodyCellClass }} text-right">{{ $currencyCode }} {{ number_format((float) ($application['amount'] ?? 0), 2) }}</td>
+                                <td class="{{ $bodyCellClass }} text-right">—</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="border border-gray-200 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">No payment or credit memo applications recorded yet.</td>
+                                <td colspan="7" class="border border-gray-200 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">No applications recorded for this posted sales credit memo yet.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -245,5 +243,34 @@
                 </table>
             </div>
         </section>
+
+        @if($this->record->refunded)
+            <section class="{{ $tableWrapper }}">
+                <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+                    <h3 class="text-base font-semibold text-gray-950 dark:text-white">Refund</h3>
+                    <span class="inline-flex items-center rounded-full border border-warning-200 bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-700 dark:border-warning-800 dark:bg-warning-950/40 dark:text-warning-300">
+                        Refunded
+                    </span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="{{ $tableClass }}">
+                        <tbody>
+                            <tr>
+                                <td class="{{ $cellLabelClass }}">Refund Reference</td>
+                                <td class="{{ $cellValueClass }}">{{ $this->record->refund_reference ?: '—' }}</td>
+                                <td class="{{ $cellLabelClass }}">Refunded At</td>
+                                <td class="{{ $cellValueClass }}">{{ optional($this->record->refunded_at)->format('Y-m-d H:i') ?: '—' }}</td>
+                            </tr>
+                            <tr>
+                                <td class="{{ $cellLabelClass }}">Refund Amount</td>
+                                <td class="{{ $cellValueClass }}">{{ $currencyCode }} {{ number_format((float) $this->record->refund_amount, 2) }}</td>
+                                <td class="{{ $cellLabelClass }}">Refunded</td>
+                                <td class="{{ $cellValueClass }}">Yes</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        @endif
     </div>
 </x-filament-panels::page>

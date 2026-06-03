@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Finance;
 
+use App\Filament\Resources\ExpenseTransactions\ExpenseTransactionResource;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseTransaction;
 use Filament\Actions\Action;
@@ -179,8 +180,18 @@ class ExpenseReport extends Page implements HasForms
         $latest = (clone $baseQuery)
             ->latest('posting_date')
             ->limit(20)
-            ->get(['document_no', 'posting_date', 'category_code', 'expense_type', 'amount', 'status'])
-            ->toArray();
+            ->get(['id', 'document_no', 'posting_date', 'category_code', 'expense_type', 'amount', 'status'])
+            ->map(fn (ExpenseTransaction $transaction): array => [
+                'id' => $transaction->id,
+                'document_no' => $transaction->document_no,
+                'posting_date' => $transaction->posting_date?->toDateString(),
+                'category_code' => $transaction->category_code,
+                'expense_type' => $transaction->expense_type,
+                'amount' => (float) $transaction->amount,
+                'status' => $transaction->status,
+                'source_url' => ExpenseTransactionResource::getUrl('view', ['record' => $transaction]),
+            ])
+            ->all();
 
         return [
             'period' => [

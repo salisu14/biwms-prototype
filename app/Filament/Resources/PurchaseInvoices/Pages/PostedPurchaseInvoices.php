@@ -4,7 +4,7 @@ namespace App\Filament\Resources\PurchaseInvoices\Pages;
 
 use App\Filament\Resources\PurchaseInvoices\PurchaseInvoiceResource;
 use App\Models\PostedPurchaseInvoice;
-use Filament\Actions\ViewAction;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -28,6 +28,9 @@ class PostedPurchaseInvoices extends ListRecords
     public function table(Table $table): Table
     {
         return $table
+            ->recordUrl(fn (PostedPurchaseInvoice $record): string => PurchaseInvoiceResource::getUrl('view-posted', [
+                'record' => $record,
+            ]))
             ->columns([
                 TextColumn::make('document_number')->label('Invoice No.')->searchable()->sortable(),
                 TextColumn::make('vendor_name')->label('Vendor')->searchable()->sortable(),
@@ -39,7 +42,12 @@ class PostedPurchaseInvoices extends ListRecords
                 TextColumn::make('status')->badge(),
             ])
             ->recordActions([
-                ViewAction::make(),
+                Action::make('view')
+                    ->label('View')
+                    ->icon('heroicon-o-eye')
+                    ->url(fn (PostedPurchaseInvoice $record): string => PurchaseInvoiceResource::getUrl('view-posted', [
+                        'record' => $record,
+                    ])),
             ]);
     }
 

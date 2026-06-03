@@ -3,11 +3,16 @@
 namespace App\Filament\Resources\SalesInvoices\Pages;
 
 use App\Filament\Pages\Finance\CustomerSubledgerSummary;
+use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
+use App\Models\CustomerLedgerEntry;
+use App\Models\PaymentApplication;
+use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
 use App\Services\Print\PostedSalesInvoicePrintService;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\Page;
+use Illuminate\Support\Collection;
 
 class ViewPostedSalesInvoice extends Page
 {
@@ -66,5 +71,55 @@ class ViewPostedSalesInvoice extends Page
                     );
                 }),
         ];
+    }
+
+    public function getApplicationsProperty(): Collection
+    {
+        $paymentApplications = PaymentApplication::query()
+            ->with(['payment'])
+            ->active()
+            ->forDocument('SALES_INVOICE', $this->record->id)
+            ->get()
+            ->map(function (PaymentApplication $application): array {
+                return [
+                    'applied_at' => $application->applied_at,
+                    'source_type' => 'Payment',
+                    'source_document' => $application->payment?->payment_number ?: $application->document_number,
+                    'reference' => $application->payment?->external_reference ?: $application->payment?->memo,
+                    'amount' => (float) $application->amount_applied,
+                    'balance_after' => (float) $application->document_remaining_after,
+                    'source_url' => $application->payment
+                        ? PaymentResource::getUrl('view', ['record' => $application->payment])
+                        : null,
+                ];
+            });
+
+        $creditMemoApplications = CustomerLedgerEntry::query()
+            ->where('customer_id', $this->record->customer_id)
+            ->where('document_type', 'CREDIT_MEMO_APPLICATION')
+            ->where('description', 'like', '%'.$this->record->document_number.'%')
+            ->get()
+            ->map(function (CustomerLedgerEntry $entry): array {
+                $creditMemo = PostedSalesCreditMemo::query()
+                    ->where('document_number', $entry->document_number)
+                    ->first();
+
+                return [
+                    'applied_at' => $entry->posting_date,
+                    'source_type' => 'Credit Memo',
+                    'source_document' => $entry->document_number,
+                    'reference' => $entry->description,
+                    'amount' => (float) $entry->credit_amount,
+                    'balance_after' => null,
+                    'source_url' => $creditMemo
+                        ? SalesInvoiceResource::getUrl('view-posted-credit-memo', ['record' => $creditMemo])
+                        : null,
+                ];
+            });
+
+        return $paymentApplications
+            ->concat($creditMemoApplications)
+            ->sortByDesc(fn (array $application) => optional($application['applied_at'])->timestamp ?? 0)
+            ->values();
     }
 }

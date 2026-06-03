@@ -2,6 +2,7 @@
 
 namespace App\Services\Print;
 
+use App\Models\PaymentApplication;
 use App\Models\PostedPurchaseInvoice;
 use App\Services\Company\CompanyInformationService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -16,6 +17,19 @@ class PostedPurchaseInvoicePrintService
     {
         $invoice->loadMissing(['lines', 'vendor']);
         $header = $this->companyInformationService->getReportHeader();
+        $applications = PaymentApplication::query()
+            ->active()
+            ->forDocument('PURCHASE_INVOICE', $invoice->id)
+            ->with('payment')
+            ->latest('applied_at')
+            ->get()
+            ->map(fn (PaymentApplication $application): array => [
+                'applied_at' => optional($application->applied_at)->format('d/m/Y H:i'),
+                'payment_number' => $application->payment?->payment_number,
+                'reference' => $application->payment?->external_reference ?: $application->payment?->memo,
+                'amount_applied' => (float) $application->amount_applied,
+                'document_remaining_after' => (float) $application->document_remaining_after,
+            ]);
 
         $data = [
             'title' => 'PURCHASE INVOICE',
@@ -40,6 +54,7 @@ class PostedPurchaseInvoicePrintService
                 'vat' => (float) $invoice->total_vat,
                 'grand_total' => (float) $invoice->grand_total,
             ],
+            'applications' => $applications,
             'company' => [
                 'name' => $header['name'] ?? config('app.name', 'Bifli WMS'),
                 'address_lines' => $header['address_lines'] ?? [],

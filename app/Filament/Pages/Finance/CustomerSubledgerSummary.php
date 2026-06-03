@@ -5,7 +5,13 @@ declare(strict_types=1);
 namespace App\Filament\Pages\Finance;
 
 use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
+use App\Filament\Resources\Payments\PaymentResource;
+use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\Customer;
+use App\Models\CustomerLedgerEntry;
+use App\Models\Payment;
+use App\Models\PostedSalesCreditMemo;
+use App\Models\PostedSalesInvoice;
 use App\Services\Customer\CustomerSubledgerSummaryService;
 use Filament\Pages\Page;
 
@@ -74,11 +80,29 @@ class CustomerSubledgerSummary extends Page
             'printUrl' => $this->printUrl,
             'csvUrl' => $this->csvUrl,
             'detailUrl' => CustomerLedgerEntryResource::getUrl('index', [
+                'customerId' => $this->customerId,
                 'tableFilters' => array_filter([
                     'customer_id' => $this->customerId !== null ? ['value' => $this->customerId] : null,
                     'document_type' => $this->documentTypeFilter !== null ? ['value' => $this->documentTypeFilter] : null,
                 ]),
             ]),
         ];
+    }
+
+    public function resolveEntrySourceUrl(CustomerLedgerEntry $entry): ?string
+    {
+        if ($entry->source_type === PostedSalesInvoice::class && $entry->source_id) {
+            return SalesInvoiceResource::getUrl('view-posted', ['record' => $entry->source_id]);
+        }
+
+        if ($entry->source_type === PostedSalesCreditMemo::class && $entry->source_id) {
+            return SalesInvoiceResource::getUrl('view-posted-credit-memo', ['record' => $entry->source_id]);
+        }
+
+        if ($entry->source_type === Payment::class && $entry->source_id) {
+            return PaymentResource::getUrl('view', ['record' => $entry->source_id]);
+        }
+
+        return null;
     }
 }

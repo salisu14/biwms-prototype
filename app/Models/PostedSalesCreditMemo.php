@@ -222,46 +222,84 @@ class PostedSalesCreditMemo extends Model
         // $applications = [['invoice_id' => 1, 'amount' => 100.00], ...]
 
         DB::transaction(function () use ($applications) {
-            $totalApplied = 0;
+            $creditMemoEntry = CustomerLedgerEntry::query()
+                ->where('customer_id', $this->customer_id)
+                ->where('document_type', 'SALES_CREDIT_MEMO')
+                ->where('source_type', self::class)
+                ->where('source_id', $this->id)
+                ->first();
+
+            if (! $creditMemoEntry) {
+                throw new \Exception('Customer ledger entry not found for credit memo');
+            }
 
             foreach ($applications as $app) {
-                $invoice = PostedSalesInvoice::find($app['invoice_id']);
+                $invoice = PostedSalesInvoice::query()->find($app['invoice_id']);
                 if (! $invoice || $invoice->customer_id !== $this->customer_id) {
                     continue;
                 }
 
-                $amount = min($app['amount'], $this->remaining_amount, $invoice->remaining_amount);
+                $amount = min(
+                    (float) $app['amount'],
+                    (float) $creditMemoEntry->remaining_amount,
+                    (float) $invoice->remaining_amount
+                );
 
                 if ($amount <= 0) {
                     continue;
                 }
 
-                // Create application entry
+                $nextEntryNumber = (CustomerLedgerEntry::query()
+                    ->where('customer_id', $this->customer_id)
+                    ->max('entry_number') ?? 0) + 1;
+
+                $runningBalance = (float) (CustomerLedgerEntry::query()
+                    ->where('customer_id', $this->customer_id)
+                    ->orderByDesc('entry_number')
+                    ->value('running_balance') ?? 0);
+
                 CustomerLedgerEntry::create([
+                    'entry_number' => $nextEntryNumber,
                     'customer_id' => $this->customer_id,
                     'posting_date' => now(),
+                    'document_date' => now(),
                     'document_type' => 'CREDIT_MEMO_APPLICATION',
                     'document_number' => $this->document_number,
                     'description' => "Applied to {$invoice->document_number}",
                     'debit_amount' => 0,
                     'credit_amount' => $amount,
+                    'amount' => -$amount,
+                    'running_balance' => $runningBalance,
                     'remaining_amount' => 0,
+                    'open' => false,
+                    'fully_applied' => true,
+                    'currency_code' => $this->currency_code,
+                    'original_debit_amount' => 0,
+                    'original_credit_amount' => $amount,
+                    'currency_factor' => $this->currency_factor ?: 1,
+                    'general_business_posting_group_id' => $this->general_business_posting_group_id,
+                    'customer_posting_group_id' => $this->customer_posting_group_id,
+                    'source_type' => self::class,
+                    'source_id' => $this->id,
+                    'created_by' => $this->posted_by,
                 ]);
 
-                // Update invoice
-                $invoice->applyPayment($amount, now());
-
-                $totalApplied += $amount;
+                $creditMemoEntry->applyToInvoice($invoice, $amount);
             }
 
-            // Update credit memo
-            $this->amount_applied += $totalApplied;
-            $this->remaining_amount = abs($this->grand_total) - $this->amount_applied;
+            $creditMemoEntry->refresh();
+
+            $amountApplied = max(0, abs((float) $this->grand_total) - (float) $creditMemoEntry->remaining_amount);
+            $this->amount_applied = $amountApplied;
+            $this->remaining_amount = max(0, (float) $creditMemoEntry->remaining_amount);
 
             if ($this->remaining_amount <= 0.01) {
                 $this->fully_applied = true;
                 $this->fully_applied_date = now();
                 $this->remaining_amount = 0;
+            } else {
+                $this->fully_applied = false;
+                $this->fully_applied_date = null;
             }
 
             $this->save();

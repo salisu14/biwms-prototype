@@ -149,8 +149,12 @@
                     <tbody>
                         @forelse($report['latest'] as $row)
                             <tr>
-                                <td class="border border-gray-200 px-3 py-2 dark:border-gray-700">{{ $row['document_no'] }}</td>
-                                <td class="border border-gray-200 px-3 py-2 dark:border-gray-700">{{ \Illuminate\Support\Carbon::parse($row['posting_date'])->toDateString() }}</td>
+                                <td class="border border-gray-200 px-3 py-2 dark:border-gray-700">
+                                    <a href="{{ $row['source_url'] }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                                        {{ $row['document_no'] }}
+                                    </a>
+                                </td>
+                                <td class="border border-gray-200 px-3 py-2 dark:border-gray-700">{{ $row['posting_date'] }}</td>
                                 <td class="border border-gray-200 px-3 py-2 dark:border-gray-700">{{ $row['category_code'] ?? '-' }}</td>
                                 <td class="border border-gray-200 px-3 py-2 dark:border-gray-700">{{ ucfirst($row['expense_type'] ?? 'unspecified') }}</td>
                                 <td class="border border-gray-200 px-3 py-2 text-right dark:border-gray-700">NGN {{ number_format((float) $row['amount'], 2) }}</td>

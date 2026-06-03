@@ -344,44 +344,54 @@ class AdminPanelProvider extends PanelProvider
 
                                 NavigationItem::make('Finished Goods')
                                     ->icon('heroicon-o-bolt')
-                                    ->url('/admin/items/fg/finished-goods'),
+                                    ->url('/admin/items/fg/finished-goods')
+                                    ->isActiveWhen(fn () => request()->is('admin/items/fg/finished-goods*')),
 
                                 NavigationItem::make('Price Change Templates')
                                     ->icon('heroicon-o-document')
-                                    ->url('/admin/price-change-templates'),
+                                    ->url('/admin/price-change-templates')
+                                    ->isActiveWhen(fn () => request()->is('admin/price-change-templates*')),
 
                                 NavigationItem::make('Sales Orders')
                                     ->icon('heroicon-o-clipboard-document-list')
-                                    ->url('/admin/sales-orders'),
+                                    ->url('/admin/sales-orders')
+                                    ->isActiveWhen(fn () => request()->is('admin/sales-orders*')),
 
                                 NavigationItem::make('Sales Quotes')
                                     ->icon('heroicon-o-sparkles')
-                                    ->url('/admin/sales-quotes'),
+                                    ->url('/admin/sales-quotes')
+                                    ->isActiveWhen(fn () => request()->is('admin/sales-quotes*')),
 
                                 NavigationItem::make('Blanket Orders')
                                     ->icon('heroicon-o-archive-box-arrow-down')
-                                    ->url('/admin/blanket-sales-orders'),
+                                    ->url('/admin/blanket-sales-orders')
+                                    ->isActiveWhen(fn () => request()->is('admin/blanket-sales-orders*')),
 
                                 NavigationItem::make('Sales Quote Revisions')
                                     ->icon('heroicon-o-star')
-                                    ->url('/admin/sales-quote-revisions'),
+                                    ->url('/admin/sales-quote-revisions')
+                                    ->isActiveWhen(fn () => request()->is('admin/sales-quote-revisions*')),
 
                                 NavigationItem::make('Sales Invoices')
                                     ->icon('heroicon-o-document-currency-dollar')
-                                    ->url('/admin/sales-invoices'),
+                                    ->url('/admin/sales-invoices')
+                                    ->isActiveWhen(fn () => request()->is('admin/sales-invoices*')),
 
                                 NavigationItem::make('Sales Credit Memos')
                                     ->icon('heroicon-o-arrow-uturn-left')
-                                    ->url('/admin/sales-credit-memos'),
+                                    ->url('/admin/sales-credit-memos')
+                                    ->isActiveWhen(fn () => request()->is('admin/sales-credit-memos*')),
 
                                 // Shipping
                                 NavigationItem::make('Shipping Agents')
                                     ->icon('heroicon-o-truck')
-                                    ->url('/admin/shipping-agents'),
+                                    ->url('/admin/shipping-agents')
+                                    ->isActiveWhen(fn () => request()->is('admin/shipping-agents*')),
 
                                 NavigationItem::make('Shipment Methods')
                                     ->icon('heroicon-o-paper-airplane')
-                                    ->url('/admin/shipment-methods'),
+                                    ->url('/admin/shipment-methods')
+                                    ->isActiveWhen(fn () => request()->is('admin/shipment-methods*')),
 
                                 NavigationItem::make('History')
                                     ->icon('heroicon-o-document-check')

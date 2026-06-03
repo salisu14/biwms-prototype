@@ -87,6 +87,31 @@
             </td>
         </tr>
     </table>
+
+    @if(!empty($applications) && count($applications) > 0)
+        <table class="lines" style="margin-top: 16px;">
+            <thead>
+                <tr>
+                    <th>Applied At</th>
+                    <th>Payment</th>
+                    <th>Reference</th>
+                    <th class="text-right">Applied</th>
+                    <th class="text-right">Balance After</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($applications as $application)
+                    <tr>
+                        <td>{{ $application['applied_at'] }}</td>
+                        <td>{{ $application['payment_number'] ?: '-' }}</td>
+                        <td>{{ $application['reference'] ?: '-' }}</td>
+                        <td class="text-right">{{ $currency }} {{ number_format($application['amount_applied'], 2) }}</td>
+                        <td class="text-right">{{ $currency }} {{ number_format($application['document_remaining_after'], 2) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
     @if(!empty($company['invoice_footer']))
         <div style="margin-top: 18px; font-size: 11px; color: #4b5563;">
             {{ $company['invoice_footer'] }}
@@ -94,4 +119,3 @@
     @endif
 </body>
 </html>
-

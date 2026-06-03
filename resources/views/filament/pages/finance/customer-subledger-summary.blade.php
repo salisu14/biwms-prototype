@@ -193,7 +193,16 @@
                                 <td class="px-3 py-2">{{ optional($entry->posting_date)->toDateString() ?? '—' }}</td>
                                 <td class="px-3 py-2">{{ $entry->customer?->name ?? '—' }}</td>
                                 <td class="px-3 py-2">{{ $entry->document_type }}</td>
-                                <td class="px-3 py-2">{{ $entry->document_number }}</td>
+                                <td class="px-3 py-2">
+                                    @php($sourceUrl = $this->resolveEntrySourceUrl($entry))
+                                    @if($sourceUrl)
+                                        <a href="{{ $sourceUrl }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                                            {{ $entry->document_number }}
+                                        </a>
+                                    @else
+                                        {{ $entry->document_number }}
+                                    @endif
+                                </td>
                                 <td class="px-3 py-2">{{ $entry->description }}</td>
                                 <td class="px-3 py-2 text-right tabular-nums">{{ number_format((float) $entry->debit_amount, 2) }}</td>
                                 <td class="px-3 py-2 text-right tabular-nums">{{ number_format((float) $entry->credit_amount, 2) }}</td>
