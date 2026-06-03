@@ -205,31 +205,37 @@ class AdminPanelProvider extends PanelProvider
                                 // Dimensions
                                 NavigationItem::make('Dimensions')
                                     ->icon('heroicon-o-square-3-stack-3d')
-                                    ->url('/admin/dimensions'),
+                                    ->url('/admin/dimensions')
+                                    ->isActiveWhen(fn () => request()->is('admin/dimensions*')),
 
                                 // Payment Terms
                                 NavigationItem::make('Payment Terms')
                                     ->icon('heroicon-o-calendar-days')
-                                    ->url('/admin/payment-terms'),
+                                    ->url('/admin/payment-terms')
+                                    ->isActiveWhen(fn () => request()->is('admin/payment-terms*')),
 
                                 // Units of Measure
                                 NavigationItem::make('Units of Measure')
                                     ->icon('heroicon-o-scale')
-                                    ->url('/admin/unit-of-measures'),
+                                    ->url('/admin/unit-of-measures')
+                                    ->isActiveWhen(fn () => request()->is('admin/unit-of-measures*')),
 
                                 // Number Series
                                 NavigationItem::make('Number Series')
                                     ->icon('heroicon-o-hashtag')
-                                    ->url('/admin/number-series'),
+                                    ->url('/admin/number-series')
+                                    ->isActiveWhen(fn () => request()->is('admin/number-series*')),
 
                                 NavigationItem::make('Profit & Loss Report')
                                     ->icon('heroicon-o-document-chart-bar')
                                     ->isActiveWhen(fn () => request()->is('admin/profit-and-loss-report*'))
                                     ->url('/admin/profit-and-loss-report'),
+
                                 NavigationItem::make('Group Summary / Trial Balance')
                                     ->icon('heroicon-o-table-cells')
                                     ->isActiveWhen(fn () => request()->is('admin/group-summary-report*'))
                                     ->url('/admin/group-summary-report'),
+
                                 NavigationItem::make('Balance Sheet')
                                     ->icon('heroicon-o-scale')
                                     ->isActiveWhen(fn () => request()->is('admin/balance-sheet-report*'))
@@ -283,27 +289,33 @@ class AdminPanelProvider extends PanelProvider
 
                                 NavigationItem::make('Raw & Packaging Materials')
                                     ->icon('heroicon-o-shopping-bag')
-                                    ->url('/admin/items/rm/raw-materials'),
+                                    ->url('/admin/items/rm/raw-materials')
+                                    ->isActiveWhen(fn () => request()->is('admin/items/rm/raw-materials*')),
 
                                 NavigationItem::make('Purchase Quotes')
                                     ->icon('heroicon-o-document')
-                                    ->url('/admin/purchase-quotes'),
+                                    ->url('/admin/purchase-quotes')
+                                    ->isActiveWhen(fn () => request()->is('admin/purchase-quotes*')),
 
                                 NavigationItem::make('Blanket Orders')
                                     ->icon('heroicon-o-shopping-cart')
-                                    ->url('/admin/blanket-purchase-orders'),
+                                    ->url('/admin/blanket-purchase-orders')
+                                    ->isActiveWhen(fn () => request()->is('admin/blanket-purchase-orders*')),
 
                                 NavigationItem::make('Purchase Orders')
                                     ->icon('heroicon-o-clipboard-document-list')
-                                    ->url('/admin/purchase-orders'),
+                                    ->url('/admin/purchase-orders')
+                                    ->isActiveWhen(fn () => request()->is('admin/purchase-orders*')),
 
                                 NavigationItem::make('Purchase Invoices')
                                     ->icon('heroicon-o-document-currency-dollar')
-                                    ->url('/admin/purchase-invoices'),
+                                    ->url('/admin/purchase-invoices')
+                                    ->isActiveWhen(fn () => request()->is('admin/purchase-invoices*')),
 
                                 NavigationItem::make('Purchase Credit Memos')
                                     ->icon('heroicon-o-arrow-uturn-left')
-                                    ->url('/admin/posted-purchase-credit-memos'),
+                                    ->url('/admin/posted-purchase-credit-memos')
+                                    ->isActiveWhen(fn () => request()->is('admin/posted-purchase-credit-memos*')),
 
                                 NavigationItem::make('Purchase Receipts')
                                     ->icon('heroicon-o-receipt-percent')
@@ -318,7 +330,7 @@ class AdminPanelProvider extends PanelProvider
                                 NavigationItem::make('Purchases History')
                                     ->icon('heroicon-o-document-check')
                                     ->url(PurchaseHistory::getUrl())
-                                    ->isActiveWhen(fn () => request()->routeIs('filament.admin.pages.purchases-history')),
+                                    ->isActiveWhen(fn () => request()->routeIs('filament.admin.pages.purchase-history')),
                             ])
                     )
 
@@ -413,7 +425,8 @@ class AdminPanelProvider extends PanelProvider
 
                                 NavigationItem::make('Categories')
                                     ->icon('heroicon-o-folder')
-                                    ->url('/admin/categories'),
+                                    ->url('/admin/categories')
+                                    ->isActiveWhen(fn () => request()->is('admin/categories*')),
 
                                 NavigationItem::make('Item Categories')
                                     ->icon('heroicon-o-folder')
@@ -637,7 +650,7 @@ class AdminPanelProvider extends PanelProvider
                                     NavigationItem::make('Employee Attendances')
                                         ->icon('heroicon-o-user-group')
                                         ->url('/admin/attendance-ledger-entries')
-                                        ->isActiveWhen(fn () => request()->is('admin//attendance-ledger-entries*')),
+                                        ->isActiveWhen(fn () => request()->is('admin/attendance-ledger-entries*')),
 
                                     NavigationItem::make('Pay Codes')
                                         ->icon('heroicon-o-banknotes')
@@ -663,18 +676,12 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-square-2-stack')
                                         ->url('/admin/social-security-tiers')
                                         ->isActiveWhen(fn () => request()->is('admin/social-security-tiers*')),
-
-                                    //                                NavigationItem::make('WIP Valuation')
-                                    //                                    ->icon('heroicon-o-currency-dollar')
-                                    //                                    ->url('/admin/wip-valuation-report')
-                                    //                                    ->isActiveWhen(fn() => request()->is('admin/wip-valuation-report*')),
                                 ])
                         )
 
                     // Setup & Administration
                         ->group(
                             NavigationGroup::make('Auth')
-//                            ->icon('heroicon-o-cog')
                                 ->collapsible()
                                 ->items([
                                     // Company Information
