@@ -316,14 +316,14 @@ class AdminPanelProvider extends PanelProvider
 //                            ->icon('heroicon-o-shopping-cart')
                             ->items([
                                 NavigationItem::make('Vendors')
-                                    ->icon('heroicon-o-truck')
+                                    ->icon('heroicon-o-users')
                                     ->url('/admin/vendors')
                                     ->isActiveWhen(fn () => request()->is('admin/vendors*')),
 
-                                //                                NavigationItem::make('Vendor Contacts')
-                                //                                    ->icon('heroicon-o-users')
-                                //                                    ->url('/admin/vendor-contacts')
-                                //                                    ->isActiveWhen(fn () => request()->is('admin/vendor-contacts*')),
+                                NavigationItem::make('Vendor Ledger Entries')
+                                    ->icon('heroicon-o-truck')
+                                    ->url('/admin/vendor-ledger-entries')
+                                    ->isActiveWhen(fn () => request()->is('admin/vendor-ledger-entries*')),
 
                                 NavigationItem::make('Raw & Packaging Materials')
                                     ->icon('heroicon-o-shopping-bag')
