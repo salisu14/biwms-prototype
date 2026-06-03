@@ -195,6 +195,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/price-change-templates')
                                     ->isActiveWhen(fn () => request()->is('admin/price-change-templates*')),
 
+                                NavigationItem::make('Discount Rules')
+                                    ->icon('heroicon-o-minus-circle')
+                                    ->url('/admin/discount-rules')
+                                    ->isActiveWhen(fn () => request()->is('admin/discount-rules*')),
+
                                 NavigationItem::make('CapEx Projects')
                                     ->icon('heroicon-o-banknotes')
                                     ->url('/admin/capex-projects')
