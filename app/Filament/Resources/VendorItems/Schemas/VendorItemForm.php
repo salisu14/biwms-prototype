@@ -35,7 +35,10 @@ class VendorItemForm
                                     ->relationship(
                                         name: 'item',
                                         titleAttribute: 'description',
-                                        modifyQueryUsing: fn ($query) => $query->where('blocked', false)->orderBy('item_code')
+                                        modifyQueryUsing: fn ($query) => $query
+                                            ->where('item_type', '!=', \App\Enums\ItemType::FINISHED_GOOD) // Excludes Finished Goods
+                                            ->where('blocked', false)
+                                            ->orderBy('item_code')
                                     )
                                     ->searchable()
 //                                    ->searchColumns(['item_code', 'description'])
