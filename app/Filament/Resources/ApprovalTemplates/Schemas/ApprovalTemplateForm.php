@@ -62,7 +62,7 @@ class ApprovalTemplateForm
                         TextInput::make('amount_limit')
                             ->label('Min. Amount Limit')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->helperText('Trigger approval if the document amount exceeds this value.')
                             ->placeholder('0.00'),
                     ]),

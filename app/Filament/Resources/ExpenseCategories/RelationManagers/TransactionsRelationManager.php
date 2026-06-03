@@ -53,7 +53,7 @@ class TransactionsRelationManager extends RelationManager
                     ->limit(30),
                 TextColumn::make('amount_lcy')
                     ->label('Amount (LCY)')
-                    ->money()
+                    ->money('NGN')
                     ->sortable()
                     ->alignment('right'),
                 TextColumn::make('vendor.vendor_name')
@@ -91,7 +91,7 @@ class TransactionsRelationManager extends RelationManager
                         Grid::make(3)->schema([
                             TextEntry::make('document_no')->label('Document No.'),
                             TextEntry::make('posting_date')->date(),
-                            TextEntry::make('amount_lcy')->money()->label('Amount (LCY)'),
+                            TextEntry::make('amount_lcy')->money('NGN')->label('Amount (LCY)'),
                             TextEntry::make('vendor.vendor_name')->label('Vendor'),
                             TextEntry::make('purchase_order_no')->label('PO Ref'),
                             TextEntry::make('expenseAccount.name')->label('G/L Account'),
@@ -104,7 +104,7 @@ class TransactionsRelationManager extends RelationManager
                                 Grid::make(3)->schema([
                                     TextEntry::make('targetAccount.name')->label('Target G/L'),
                                     TextEntry::make('allocation_percentage')->suffix('%'),
-                                    TextEntry::make('allocated_amount')->money(),
+                                    TextEntry::make('allocated_amount')->money('NGN'),
                                 ]),
                             ]),
                     ]),

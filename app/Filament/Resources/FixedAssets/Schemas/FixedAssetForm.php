@@ -119,10 +119,10 @@ class FixedAssetForm
                                     TextInput::make('acquisition_cost')
                                         ->numeric()
                                         ->required()
-                                        ->prefix('$'),
+                                        ->prefix('₦'),
                                     TextInput::make('salvage_value')
                                         ->numeric()
-                                        ->prefix('$'),
+                                        ->prefix('₦'),
                                     TextInput::make('salvage_value_percentage')
                                         ->numeric()
                                         ->suffix('%'),
@@ -170,15 +170,15 @@ class FixedAssetForm
                                     ->columns(3)
                                     ->schema([
                                         TextInput::make('insurance_policy_no'),
-                                        TextInput::make('insurance_value')->numeric()->prefix('$'),
+                                        TextInput::make('insurance_value')->numeric()->prefix('₦'),
                                         DatePicker::make('insurance_expiry_date'),
                                     ]),
                                 Section::make('Disposal')
                                     ->columns(3)
                                     ->schema([
                                         DatePicker::make('disposal_date'),
-                                        TextInput::make('disposal_proceeds')->numeric()->prefix('$'),
-                                        TextInput::make('disposal_cost')->numeric()->prefix('$'),
+                                        TextInput::make('disposal_proceeds')->numeric()->prefix('₦'),
+                                        TextInput::make('disposal_cost')->numeric()->prefix('₦'),
                                     ]),
                             ]),
                     ]),

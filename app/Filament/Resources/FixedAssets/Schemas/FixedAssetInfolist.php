@@ -27,12 +27,12 @@ class FixedAssetInfolist
                 Section::make('Financial Status')
                     ->columns(3)
                     ->schema([
-                        TextEntry::make('acquisition_cost')->money(),
-                        TextEntry::make('accumulated_depreciation')->money(),
-                        TextEntry::make('book_value')->label('Book Value')->money(),
+                        TextEntry::make('acquisition_cost')->money("NGN"),
+                        TextEntry::make('accumulated_depreciation')->money('NGN'),
+                        TextEntry::make('book_value')->label('Book Value')->money('NGN'),
                         TextEntry::make('depreciation_method')->badge(),
                         TextEntry::make('useful_life_years')->suffix(' Years'),
-                        TextEntry::make('salvage_value')->money(),
+                        TextEntry::make('salvage_value')->money('NGN'),
                     ]),
 
                 Section::make('Acquisition & Dates')

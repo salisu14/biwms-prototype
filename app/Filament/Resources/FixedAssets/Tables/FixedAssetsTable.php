@@ -42,13 +42,13 @@ class FixedAssetsTable
                     ->sortable(),
 
                 TextColumn::make('acquisition_cost')
-                    ->money()
+                    ->money('NGN')
                     ->sortable()
                     ->toggleable(),
 
                 TextColumn::make('book_value')
                     ->label('Current Value')
-                    ->money()
+                    ->money('NGN')
                     ->sortable(),
 
                 IconColumn::make('blocked')

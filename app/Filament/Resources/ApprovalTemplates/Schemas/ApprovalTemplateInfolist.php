@@ -37,7 +37,7 @@ class ApprovalTemplateInfolist
                     ->schema([
                         TextEntry::make('amount_limit')
                             ->label('Trigger Amount')
-                            ->money()
+                            ->money('NGN')
                             ->placeholder('No Limit'),
 
                         TextEntry::make('location_filter')

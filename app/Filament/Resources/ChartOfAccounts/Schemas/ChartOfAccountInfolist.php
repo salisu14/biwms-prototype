@@ -146,14 +146,14 @@ class ChartOfAccountInfolist
                                 ->schema([
                                     TextEntry::make('balance')
                                         ->label('Current Balance')
-                                        ->money()
+                                        ->money('NGN')
                                         ->size('lg')
                                         ->weight('bold')
                                         ->color(fn($state) => $state < 0 ? 'danger' : 'success'),
 
                                     TextEntry::make('balance_at_date')
                                         ->label('Balance at Date')
-                                        ->money()
+                                        ->money('NGN')
                                         ->color('gray'),
                                 ]),
 

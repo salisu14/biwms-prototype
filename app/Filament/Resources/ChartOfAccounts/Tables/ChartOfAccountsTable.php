@@ -43,7 +43,7 @@ class ChartOfAccountsTable
 
                 TextColumn::make('balance')
                     ->label('Balance')
-                    ->money()
+                    ->money('NGN')
                     ->alignment('right')
                     ->weight('bold')
                     ->color(fn($state) => $state < 0 ? 'danger' : null)

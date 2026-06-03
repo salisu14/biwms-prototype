@@ -40,14 +40,14 @@ class GlEntryRelationManager extends RelationManager
 
                 TextColumn::make('debit_amount')
                     ->label('Debit')
-                    ->money()
+                    ->money('NGN')
                     ->alignment('right')
                     ->sortable()
                     ->color('danger'),
 
                 TextColumn::make('credit_amount')
                     ->label('Credit')
-                    ->money()
+                    ->money('NGN')
                     ->alignment('right')
                     ->sortable()
                     ->color('success'),

@@ -32,11 +32,11 @@ class ExpenseTransactionInfolist
                         Tabs\Tab::make('Financials')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextEntry::make('amount')->money()->color('primary'),
+                                    TextEntry::make('amount')->money('NGN')->color('primary'),
                                     TextEntry::make('currency_code')->label('Currency'),
                                     TextEntry::make('currency_factor')->label('Exch. Rate'),
-                                    TextEntry::make('amount_lcy')->label('Total (LCY)')->money()->weight('bold'),
-                                    TextEntry::make('vat_amount')->label('VAT')->money(),
+                                    TextEntry::make('amount_lcy')->label('Total (LCY)')->money('NGN')->weight('bold'),
+                                    TextEntry::make('vat_amount')->label('VAT')->money('NGN'),
                                     TextEntry::make('vat_bus_posting_group')->label('VAT Group'),
                                 ]),
                             ]),

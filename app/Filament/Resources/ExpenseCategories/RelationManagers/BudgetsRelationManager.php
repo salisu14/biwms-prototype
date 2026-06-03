@@ -118,7 +118,7 @@ class BudgetsRelationManager extends RelationManager
                     ->description(fn ($record) => $record->is_active ? 'Currently Active' : 'Draft/Inactive'),
                 TextColumn::make('annual_total')
                     ->label('Total Budget')
-                    ->money()
+                    ->money('NGN')
                     ->sortable()
                     ->alignment('right'),
                 IconColumn::make('is_active')

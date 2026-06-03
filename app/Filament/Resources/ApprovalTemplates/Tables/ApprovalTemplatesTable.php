@@ -35,7 +35,7 @@ class ApprovalTemplatesTable
 
                 TextColumn::make('amount_limit')
                     ->label('Min. Amount')
-                    ->money()
+                    ->money('NGN')
                     ->sortable()
                     ->alignment('right'),
 

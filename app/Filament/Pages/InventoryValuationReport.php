@@ -90,7 +90,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('opening_value')
                             ->label('Value')
-                            ->money()
+                            ->money("NGN")
                             ->alignRight(),
                     ]),
 
@@ -103,7 +103,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('purchase_in_value')
                             ->label('Value')
-                            ->money()
+                            ->money('NGN')
                             ->alignRight(),
                     ]),
 
@@ -116,7 +116,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('pos_adj_value')
                             ->label('Value')
-                            ->money()
+                            ->money('NGN')
                             ->alignRight(),
                     ]),
 
@@ -128,7 +128,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('production_output_value')
                             ->label('Value')
-                            ->money()
+                            ->money('NGN')
                             ->alignRight(),
                     ]),
 
@@ -140,7 +140,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('production_consumption_value')
                             ->label('Value')
-                            ->money()
+                            ->money('NGN')
                             ->alignRight(),
                     ]),
 
@@ -152,7 +152,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('assembly_output_value')
                             ->label('Value')
-                            ->money()
+                            ->money('NGN')
                             ->alignRight(),
                     ]),
 
@@ -164,7 +164,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('assembly_consumption_value')
                             ->label('Value')
-                            ->money()
+                            ->money('NGN')
                             ->alignRight(),
                     ]),
 
@@ -177,7 +177,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('sale_out_value')
                             ->label('Value')
-                            ->money()
+                            ->money("NGN")
                             ->alignRight(),
                     ]),
 
@@ -206,7 +206,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                                 $record->sale_out_value + $record->sale_in_value +
                                 $record->transfer_value
                             )
-                            ->money()
+                            ->money('NGN')
                             ->alignRight(),
                     ]),
             ])

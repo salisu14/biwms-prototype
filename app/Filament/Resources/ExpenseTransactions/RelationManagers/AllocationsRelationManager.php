@@ -84,7 +84,7 @@ class AllocationsRelationManager extends RelationManager
                             TextInput::make('allocated_amount')
                                 ->label('Allocated Amount')
                                 ->numeric()
-                                ->prefix('$')
+                                ->prefix('₦')
                                 ->step(0.0001)
                                 ->visible(fn ($get) => $get('allocation_type') === 'amount')
                                 ->required(fn ($get) => $get('allocation_type') === 'amount'),
@@ -153,7 +153,7 @@ class AllocationsRelationManager extends RelationManager
                     ->alignment('right'),
 
                 TextColumn::make('allocated_amount')
-                    ->money()
+                    ->money('NGN')
                     ->label('Amount')
                     ->weight('bold')
                     ->alignment('right'),
