@@ -325,6 +325,16 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/vendor-ledger-entries')
                                     ->isActiveWhen(fn () => request()->is('admin/vendor-ledger-entries*')),
 
+                                NavigationItem::make('Vendor Invoices')
+                                    ->icon('heroicon-o-arrow-right-start-on-rectangle')
+                                    ->url('/admin/vendor-invoices')
+                                    ->isActiveWhen(fn () => request()->is('admin/vendor-invoices*')),
+
+                                NavigationItem::make('Vendor Items')
+                                    ->icon('heroicon-o-arrow-up-circle')
+                                    ->url('/admin/vendor-items')
+                                    ->isActiveWhen(fn () => request()->is('admin/vendor-items*')),
+
                                 NavigationItem::make('Raw & Packaging Materials')
                                     ->icon('heroicon-o-shopping-bag')
                                     ->url('/admin/items/rm/raw-materials')

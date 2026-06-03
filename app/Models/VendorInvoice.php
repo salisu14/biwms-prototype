@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class VendorInvoice extends Model
 {
@@ -120,12 +121,12 @@ class VendorInvoice extends Model
 
     public function payableAccount(): BelongsTo
     {
-        return $this->belongsTo(Accounting\GlAccount::class, 'payable_gl_account_id');
+        return $this->belongsTo(ChartOfAccount::class, 'payable_gl_account_id');
     }
 
     public function expenseAccount(): BelongsTo
     {
-        return $this->belongsTo(GlAccount::class, 'expense_gl_account_id');
+        return $this->belongsTo(ChartOfAccount::class, 'expense_gl_account_id');
     }
 
     // Polymorphic source document
