@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\PriceChangeTemplates\RelationManagers;
 
 use App\Filament\Resources\PriceChangeTemplates\PriceChangeTemplateResource;
+use App\Models\Business;
+use App\Models\CustomerGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -66,10 +68,29 @@ class LinesRelationManager extends RelationManager
                     ->schema([
                         Select::make('business_id')
                             ->label('Business Unit')
+                            ->options(fn (): array => Business::query()
+                                ->where('is_active', true)
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->getOptionLabelUsing(fn ($value): ?string => filled($value)
+                                ? Business::query()->whereKey($value)->value('name')
+                                : null)
+                            ->searchable()
+                            ->preload()
                             ->placeholder('All Businesses'),
 
                         Select::make('customer_group_id')
                             ->label('Customer Group')
+                            ->options(fn (): array => CustomerGroup::query()
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->getOptionLabelUsing(fn ($value): ?string => filled($value)
+                                ? CustomerGroup::query()->whereKey($value)->value('name')
+                                : null)
+                            ->searchable()
+                            ->preload()
                             ->placeholder('All Customer Groups'),
                     ]),
             ]);
@@ -104,12 +125,12 @@ class LinesRelationManager extends RelationManager
                     ->color('gray')
                     ->toggleable(),
 
-                TextColumn::make('business_id')
+                TextColumn::make('business.name')
                     ->label('Business')
                     ->placeholder('Global')
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                TextColumn::make('customer_group_id')
+                TextColumn::make('customerGroup.name')
                     ->label('Cust. Group')
                     ->placeholder('All Groups')
                     ->toggleable(isToggledHiddenByDefault: true),

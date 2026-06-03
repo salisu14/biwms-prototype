@@ -42,4 +42,14 @@ class PriceChangeTemplateLine extends Model
     {
         return $this->belongsTo(Category::class);
     }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
+
+    public function customerGroup(): BelongsTo
+    {
+        return $this->belongsTo(CustomerGroup::class);
+    }
 }

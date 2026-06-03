@@ -78,7 +78,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                     ->sortable()
                     ->description(fn (Item $record): string => $record->description),
 
-                TextColumn::make('uoms.uom_code')
+                TextColumn::make('base_unit_of_measure')
                     ->label('UoM'),
 
                 // Opening
@@ -120,6 +120,54 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                     ]),
 
+                ColumnGroup::make('Production Output')
+                    ->columns([
+                        TextColumn::make('production_output_qty')
+                            ->label('Qty')
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('production_output_value')
+                            ->label('Value')
+                            ->money()
+                            ->alignRight(),
+                    ]),
+
+                ColumnGroup::make('Consumption')
+                    ->columns([
+                        TextColumn::make('production_consumption_qty')
+                            ->label('Qty')
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('production_consumption_value')
+                            ->label('Value')
+                            ->money()
+                            ->alignRight(),
+                    ]),
+
+                ColumnGroup::make('Assembly Output')
+                    ->columns([
+                        TextColumn::make('assembly_output_qty')
+                            ->label('Qty')
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('assembly_output_value')
+                            ->label('Value')
+                            ->money()
+                            ->alignRight(),
+                    ]),
+
+                ColumnGroup::make('Assembly Cons.')
+                    ->columns([
+                        TextColumn::make('assembly_consumption_qty')
+                            ->label('Qty')
+                            ->numeric(2)
+                            ->alignRight(),
+                        TextColumn::make('assembly_consumption_value')
+                            ->label('Value')
+                            ->money()
+                            ->alignRight(),
+                    ]),
+
                 // Sales
                 ColumnGroup::make('Sales')
                     ->columns([
@@ -141,6 +189,8 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->getStateUsing(fn ($record) => $record->opening_qty +
                                 $record->purchase_in_qty + $record->purchase_out_qty +
                                 $record->pos_adj_qty + $record->neg_adj_qty +
+                                $record->production_output_qty + $record->production_consumption_qty +
+                                $record->assembly_output_qty + $record->assembly_consumption_qty +
                                 $record->sale_out_qty + $record->sale_in_qty +
                                 $record->transfer_qty
                             )
@@ -151,6 +201,8 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->getStateUsing(fn ($record) => $record->opening_value +
                                 $record->purchase_in_value + $record->purchase_out_value +
                                 $record->pos_adj_value + $record->neg_adj_value +
+                                $record->production_output_value + $record->production_consumption_value +
+                                $record->assembly_output_value + $record->assembly_consumption_value +
                                 $record->sale_out_value + $record->sale_in_value +
                                 $record->transfer_value
                             )

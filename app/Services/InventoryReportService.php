@@ -16,7 +16,7 @@ class InventoryReportService
     public function getMovementSummary(Carbon $startDate, Carbon $endDate, ?int $locationId = null): Builder
     {
         $query = Item::query()
-            ->with(['uoms'])
+            ->with(['baseUom'])
             ->select('items.*');
 
         // Opening Balance (Qty & Value)
@@ -26,7 +26,7 @@ class InventoryReportService
                 ->where('posting_date', '<', $startDate)
                 ->when($locationId, fn ($q) => $q->where('location_id', $locationId)),
 
-            'opening_value' => ItemLedgerEntry::selectRaw('COALESCE(SUM(cost_amount_actual), 0)')
+            'opening_value' => ItemLedgerEntry::selectRaw($this->signedValueSelectSql())
                 ->whereColumn('item_id', 'items.id')
                 ->where('posting_date', '<', $startDate)
                 ->when($locationId, fn ($q) => $q->where('location_id', $locationId)),
@@ -48,6 +48,10 @@ class InventoryReportService
             'transfer' => [ItemLedgerEntryType::TRANSFER, null],
             'pos_adj' => [ItemLedgerEntryType::POSITIVE_ADJUSTMENT, null],
             'neg_adj' => [ItemLedgerEntryType::NEGATIVE_ADJUSTMENT, null],
+            'production_output' => [ItemLedgerEntryType::OUTPUT, null],
+            'production_consumption' => [ItemLedgerEntryType::CONSUMPTION, null],
+            'assembly_output' => [ItemLedgerEntryType::ASSEMBLY_OUTPUT, null],
+            'assembly_consumption' => [ItemLedgerEntryType::ASSEMBLY_CONSUMPTION, null],
         ];
 
         foreach ($types as $key => $config) {
@@ -63,7 +67,7 @@ class InventoryReportService
                     ->when($qtyCheck, fn ($q) => $q->where('quantity', $qtyCheck, 0))
                     ->when($locationId, fn ($q) => $q->where('location_id', $locationId)),
 
-                "{$key}_value" => ItemLedgerEntry::selectRaw('COALESCE(SUM(cost_amount_actual), 0)')
+                "{$key}_value" => ItemLedgerEntry::selectRaw($this->signedValueSelectSql())
                     ->whereColumn('item_id', 'items.id')
                     ->whereBetween('posting_date', [$startDate, $endDate])
                     ->where('entry_type', $type->value)
@@ -71,5 +75,14 @@ class InventoryReportService
                     ->when($locationId, fn ($q) => $q->where('location_id', $locationId)),
             ]);
         }
+    }
+
+    protected function signedValueSelectSql(): string
+    {
+        return 'COALESCE(SUM(CASE
+            WHEN quantity < 0 THEN -ABS(COALESCE(cost_amount_actual, 0))
+            WHEN quantity > 0 THEN ABS(COALESCE(cost_amount_actual, 0))
+            ELSE 0
+        END), 0)';
     }
 }
