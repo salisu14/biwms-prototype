@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PayrollDocuments\Pages;
 
 use App\Enums\PayrollStatus;
 use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
+use App\Filament\Resources\SocialSecurityTiers\SocialSecurityTierResource;
 use App\Models\Employee;
 use App\Models\PayCode;
 use App\Models\PayrollDocument;
@@ -41,6 +42,11 @@ class ReviewPayrollDocument extends Page
     public function getHeading(): string
     {
         return 'Payroll Review '.$this->record->document_number;
+    }
+
+    public function getSocialSecurityTiersUrl(): string
+    {
+        return SocialSecurityTierResource::getUrl();
     }
 
     protected function getHeaderActions(): array

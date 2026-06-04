@@ -44,6 +44,23 @@
             </div>
         @endif
 
+        <div class="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <p class="text-sm font-semibold uppercase tracking-wide">Social Security</p>
+                    <p class="text-sm">
+                        Payroll uses the active social security tiers to calculate statutory deductions such as NSSF and NHIF / SHIF.
+                    </p>
+                </div>
+                <a
+                    href="{{ $this->getSocialSecurityTiersUrl() }}"
+                    class="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
+                >
+                    View Social Security Tiers
+                </a>
+            </div>
+        </div>
+
         <div class="grid gap-4 md:grid-cols-3">
             <section class="{{ $tableWrapper }}">
                 <div class="px-4 py-4">

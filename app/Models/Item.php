@@ -480,6 +480,11 @@ class Item extends Model
         return $this->belongsTo(VatProductPostingGroup::class);
     }
 
+    public function priceLists(): HasMany
+    {
+        return $this->hasMany(PriceList::class);
+    }
+
     protected static function booted(): void
     {
         static::saving(function (Item $item): void {

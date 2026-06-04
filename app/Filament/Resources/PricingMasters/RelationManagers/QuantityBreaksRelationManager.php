@@ -21,46 +21,54 @@ class QuantityBreaksRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
+        $currencyCode = $this->getOwnerRecord()->currency_code ?? config('app.default_currency', 'USD');
+
         return $table
             ->columns([
+                TextColumn::make('tier_summary')
+                    ->label('Tier')
+                    ->state(fn ($record) => $record->getTierDescription($currencyCode))
+                    ->badge()
+                    ->color('gray')
+                    ->weight('bold')
+                    ->wrap(),
+
                 TextColumn::make('line_number')
-                    ->label('Line No.')
+                    ->label('Line')
                     ->sortable()
-                    ->weight('bold'),
+                    ->alignCenter()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
-                TextColumn::make('minimum_quantity')
-                    ->label('Min Qty')
-                    ->numeric(decimalPlaces: 0),
+                TextColumn::make('range')
+                    ->label('Range')
+                    ->state(function ($record): string {
+                        $minimumQuantity = number_format((float) $record->minimum_quantity, 0);
+                        $maximumQuantity = $record->maximum_quantity ? number_format((float) $record->maximum_quantity, 0) : 'Unlimited';
 
-                TextColumn::make('maximum_quantity')
-                    ->label('Max Qty')
-                    ->numeric(decimalPlaces: 0)
-                    ->default('Unlimited'),
+                        return "{$minimumQuantity} - {$maximumQuantity}";
+                    }),
 
-                TextColumn::make('unit_price')
-                    ->label('Unit Price')
-                    ->formatStateUsing(function ($state, $record): string {
-                        if ($state === null) {
-                            return '-';
+                TextColumn::make('unit_of_measure_code')
+                    ->label('UoM')
+                    ->badge()
+                    ->toggleable(),
+
+                TextColumn::make('pricing_rule')
+                    ->label('Pricing Rule')
+                    ->state(function ($record) use ($currencyCode): string {
+                        if ($record->unit_price !== null) {
+                            return Number::currency((float) $record->unit_price, $currencyCode);
                         }
 
-                        return Number::currency((float) $state, $record->pricingMaster?->currency_code ?? config('app.default_currency', 'USD'));
-                    })
-                    ->alignEnd(),
-
-                TextColumn::make('discount_percent')
-                    ->label('Disc. %')
-                    ->suffix('%')
-                    ->alignEnd(),
-
-                TextColumn::make('discount_amount')
-                    ->label('Disc. Amt')
-                    ->formatStateUsing(function ($state, $record): string {
-                        if ($state === null) {
-                            return '-';
+                        if ($record->discount_percent !== null) {
+                            return $record->discount_percent.'% discount';
                         }
 
-                        return Number::currency((float) $state, $record->pricingMaster?->currency_code ?? config('app.default_currency', 'USD'));
+                        if ($record->discount_amount !== null) {
+                            return '-'.Number::currency((float) $record->discount_amount, $currencyCode);
+                        }
+
+                        return '—';
                     })
                     ->alignEnd(),
             ])

@@ -2,13 +2,16 @@
 
 namespace App\Filament\Resources\PricingMasters\Schemas;
 
+use App\Models\Customer;
 use App\Models\Item;
+use App\Models\PricingGroup;
+use App\Models\UnitOfMeasure;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
@@ -16,10 +19,21 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class PricingMasterForm
 {
+    private static function currencySymbol(?string $currencyCode): string
+    {
+        return match ($currencyCode) {
+            'USD' => '$',
+            'EUR' => '€',
+            'GBP' => '£',
+            default => '₦',
+        };
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -56,6 +70,7 @@ class PricingMasterForm
                                                     'CUSTOMER' => 'Specific Customer',
                                                     'CUSTOMER_GROUP' => 'Customer Group',
                                                     'CAMPAIGN' => 'Campaign / Promo',
+                                                    'TRANSFER' => 'Transfer',
                                                 ])
                                                 ->required()
                                                 ->default('ALL_CUSTOMERS')
@@ -67,6 +82,21 @@ class PricingMasterForm
                                                 ->relationship('customer', 'name')
                                                 ->searchable()
                                                 ->preload()
+                                                ->getSearchResultsUsing(
+                                                    fn (string $search) => Customer::query()
+                                                        ->where(function ($query) use ($search) {
+                                                            $query->where('customer_number', 'like', "%{$search}%")
+                                                                ->orWhere('name', 'like', "%{$search}%");
+                                                        })
+                                                        ->limit(50)
+                                                        ->get()
+                                                        ->mapWithKeys(fn (Customer $record) => [
+                                                            $record->id => "{$record->customer_number} — {$record->name}",
+                                                        ])
+                                                )
+                                                ->getOptionLabelFromRecordUsing(
+                                                    fn (Customer $record) => "{$record->customer_number} — {$record->name}"
+                                                )
                                                 ->visible(fn (Get $get) => $get('price_list_type') === 'CUSTOMER')
                                                 ->required(fn (Get $get) => $get('price_list_type') === 'CUSTOMER'),
 
@@ -75,6 +105,21 @@ class PricingMasterForm
                                                 ->relationship('pricingGroup', 'name')
                                                 ->searchable()
                                                 ->preload()
+                                                ->getSearchResultsUsing(
+                                                    fn (string $search) => PricingGroup::query()
+                                                        ->where(function ($query) use ($search) {
+                                                            $query->where('code', 'like', "%{$search}%")
+                                                                ->orWhere('name', 'like', "%{$search}%");
+                                                        })
+                                                        ->limit(50)
+                                                        ->get()
+                                                        ->mapWithKeys(fn (PricingGroup $record) => [
+                                                            $record->id => "{$record->code} — {$record->name}",
+                                                        ])
+                                                )
+                                                ->getOptionLabelFromRecordUsing(
+                                                    fn (PricingGroup $record) => "{$record->code} — {$record->name}"
+                                                )
                                                 ->visible(fn (Get $get) => in_array($get('price_list_type'), ['CUSTOMER_GROUP', 'CAMPAIGN']))
                                                 ->required(fn (Get $get) => $get('price_list_type') === 'CUSTOMER_GROUP'),
                                         ]),
@@ -84,13 +129,31 @@ class PricingMasterForm
                                                 ->relationship(
                                                     name: 'item',
                                                     titleAttribute: 'description',
-                                                    modifyQueryUsing: fn ($query) => $query->finishedGoods()->where('blocked', false)
+                                                    modifyQueryUsing: fn ($query) => $query->finishedGoods()->where('blocked', false)->orderBy('item_code')
                                                 )
                                                 ->searchable()
 //                                                ->searchColumns(['item_code', 'description'])
+                                                ->getSearchResultsUsing(
+                                                    fn (string $search) => Item::query()
+                                                        ->finishedGoods()
+                                                        ->where('blocked', false)
+                                                        ->where(function ($query) use ($search) {
+                                                            $query->where('item_code', 'like', "%{$search}%")
+                                                                ->orWhere('description', 'like', "%{$search}%");
+                                                        })
+                                                        ->limit(50)
+                                                        ->get()
+                                                        ->mapWithKeys(fn (Item $record) => [
+                                                            $record->id => "{$record->item_code} — {$record->description}",
+                                                        ])
+                                                )
                                                 ->getOptionLabelFromRecordUsing(fn (Item $record) => "{$record->item_code} — {$record->description}")
                                                 ->preload()
-                                                ->required(),
+                                                ->required()
+                                                ->live()
+                                                ->afterStateUpdated(function (Set $set) {
+                                                    $set('unit_of_measure_code', null);
+                                                }),
 
                                             TextInput::make('variant_code')
                                                 ->label('Variant Code')
@@ -98,13 +161,44 @@ class PricingMasterForm
 
                                             Select::make('unit_of_measure_code')
                                                 ->label('Unit of Measure')
-                                                ->relationship('item.baseUom', 'uom_code') // Adjust if using a dedicated UoM relation
-                                                ->searchable(),
+                                                ->options(function (Get $get) {
+                                                    $itemId = $get('item_id');
+
+                                                    if (! $itemId) {
+                                                        return [];
+                                                    }
+
+                                                    $item = Item::query()
+                                                        ->with(['baseUom', 'uoms'])
+                                                        ->find($itemId);
+
+                                                    if (! $item) {
+                                                        return [];
+                                                    }
+
+                                                    $options = $item->uoms()
+                                                        ->get()
+                                                        ->mapWithKeys(fn (UnitOfMeasure $uom) => [
+                                                            $uom->uom_code => $uom->uom_code.($uom->description ? " — {$uom->description}" : ''),
+                                                        ])
+                                                        ->toArray();
+
+                                                    $baseUomCode = $item->baseUom?->uom_code;
+                                                    if ($baseUomCode && ! array_key_exists($baseUomCode, $options)) {
+                                                        $options[$baseUomCode] = $baseUomCode.($item->baseUom?->description ? " — {$item->baseUom->description}" : '');
+                                                    }
+
+                                                    return $options;
+                                                })
+                                                ->searchable()
+                                                ->live()
+                                                ->helperText('Only UoMs assigned to the selected item are shown.'),
 
                                             Select::make('currency_code')
                                                 ->label('Currency')
                                                 ->options(['NGN' => 'NGN (₦)', 'USD' => 'USD ($)', 'EUR' => 'EUR (€)', 'GBP' => 'GBP (£)'])
                                                 ->required()
+                                                ->live()
                                                 ->default('NGN')
                                                 ->native(false),
                                         ]),
@@ -132,6 +226,7 @@ class PricingMasterForm
                                                 'AMOUNT_DISCOUNT' => 'Discount Amount',
                                                 'COST_PLUS_PERCENT' => 'Cost + %',
                                                 'COST_PLUS_AMOUNT' => 'Cost + Amount',
+                                                'FORMULA' => 'Formula',
                                             ])
                                             ->required()
                                             ->default('UNIT_PRICE')
@@ -142,7 +237,7 @@ class PricingMasterForm
                                             TextInput::make('unit_price')
                                                 ->label('Unit Price')
                                                 ->numeric()
-                                                ->prefix('₦')
+                                                ->prefix(fn (Get $get) => self::currencySymbol($get('currency_code')))
                                                 ->minValue(0)
                                                 ->step(0.0001)
                                                 ->visible(fn (Get $get) => $get('price_type') === 'UNIT_PRICE')
@@ -161,7 +256,7 @@ class PricingMasterForm
                                             TextInput::make('discount_amount')
                                                 ->label('Discount Amount')
                                                 ->numeric()
-                                                ->prefix('₦')
+                                                ->prefix(fn (Get $get) => self::currencySymbol($get('currency_code')))
                                                 ->minValue(0)
                                                 ->step(0.0001)
                                                 ->visible(fn (Get $get) => in_array($get('price_type'), ['AMOUNT_DISCOUNT']))
@@ -209,7 +304,7 @@ class PricingMasterForm
                                             TextInput::make('minimum_order_amount')
                                                 ->label('Min. Order Amount')
                                                 ->numeric()
-                                                ->prefix('₦')
+                                                ->prefix(fn (Get $get) => self::currencySymbol($get('currency_code')))
                                                 ->step(0.01),
 
                                             TextInput::make('minimum_order_quantity')
@@ -278,7 +373,13 @@ class PricingMasterForm
                                     ->schema([
                                         Grid::make(3)->schema([
                                             Select::make('status')
-                                                ->options(['DRAFT' => 'Draft', 'ACTIVE' => 'Active', 'INACTIVE' => 'Inactive', 'EXPIRED' => 'Expired'])
+                                                ->options([
+                                                    'DRAFT' => 'Draft',
+                                                    'PENDING_APPROVAL' => 'Pending Approval',
+                                                    'ACTIVE' => 'Active',
+                                                    'EXPIRED' => 'Expired',
+                                                    'CANCELLED' => 'Cancelled',
+                                                ])
                                                 ->required()
                                                 ->default('DRAFT')
                                                 ->native(false),
@@ -302,7 +403,7 @@ class PricingMasterForm
                                         Grid::make(2)->schema([
                                             Select::make('approved_by')
                                                 ->label('Approved By')
-                                                ->relationship('approvedByUser', 'name') // Assuming relationship to User
+                                                ->relationship('approvedByUser', 'name')
                                                 ->searchable()
                                                 ->disabled(),
 

@@ -26,6 +26,9 @@
                         <img src="{{ $company['logo_data_uri'] }}" alt="Company Logo" class="logo">
                     @endif
                     <strong>{{ $company['name'] }}</strong><br>
+                    @if(!empty($company['trading_name']))
+                        <em>{{ $company['trading_name'] }}</em><br>
+                    @endif
                     @if(!empty($company['address_lines']))
                         {{ implode(', ', $company['address_lines']) }}<br>
                     @elseif(!empty($company['address']))
@@ -35,6 +38,7 @@
                     @if(!empty($company['phone'])) | {{ $company['phone'] }}@endif
                     @if(!empty($company['website'])) | {{ $company['website'] }}@endif
                     @if(!empty($company['tax_no']))<br><strong>Tax No:</strong> {{ $company['tax_no'] }}@endif
+                    @if(!empty($company['registration_no']))<br><strong>Reg. No:</strong> {{ $company['registration_no'] }}@endif
                 </td>
                 <td width="40%">
                     <strong>Invoice No:</strong> {{ $invoice_number }}<br>

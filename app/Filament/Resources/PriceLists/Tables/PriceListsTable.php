@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PriceLists\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -24,8 +25,13 @@ class PriceListsTable
                         $started = $record->starting_date <= now();
                         $expired = $record->ending_date && $record->ending_date < now();
 
-                        if ($expired) return 'expired';
-                        if ($started) return 'active';
+                        if ($expired) {
+                            return 'expired';
+                        }
+                        if ($started) {
+                            return 'active';
+                        }
+
                         return 'scheduled';
                     })
                     ->icon(fn (string $state): string => match ($state) {
@@ -132,6 +138,7 @@ class PriceListsTable
                     ->options(['NGN' => 'NGN', 'USD' => 'USD', 'EUR' => 'EUR', 'GBP' => 'GBP']),
             ])
             ->recordActions([
+                ViewAction::make(),
                 EditAction::make(),
             ])
             ->toolbarActions([

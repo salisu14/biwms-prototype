@@ -6,6 +6,7 @@ use App\Filament\Resources\CustomerGroups\Pages\CreateCustomerGroup;
 use App\Filament\Resources\CustomerGroups\Pages\EditCustomerGroup;
 use App\Filament\Resources\CustomerGroups\Pages\ListCustomerGroups;
 use App\Filament\Resources\CustomerGroups\RelationManagers\CustomersRelationManager;
+use App\Filament\Resources\CustomerGroups\RelationManagers\PriceListsRelationManager;
 use App\Filament\Resources\CustomerGroups\Schemas\CustomerGroupForm;
 use App\Filament\Resources\CustomerGroups\Tables\CustomerGroupsTable;
 use App\Models\CustomerGroup;
@@ -36,7 +37,8 @@ class CustomerGroupResource extends Resource
     public static function getRelations(): array
     {
         return [
-                CustomersRelationManager::class,
+            CustomersRelationManager::class,
+            PriceListsRelationManager::class,
         ];
     }
 

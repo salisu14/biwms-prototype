@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\PricingMasterQuantityBreaks\Schemas;
 
+use App\Models\PricingMaster;
+use App\Models\UnitOfMeasure;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
@@ -12,6 +14,42 @@ use Filament\Schemas\Schema;
 
 class PricingMasterQuantityBreakForm
 {
+    private static function currencySymbol(?string $currencyCode): string
+    {
+        return match ($currencyCode) {
+            'USD' => '$',
+            'EUR' => '€',
+            'GBP' => '£',
+            default => '₦',
+        };
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function unitOfMeasureOptions(?PricingMaster $pricingMaster): array
+    {
+        if (! $pricingMaster?->item) {
+            return [];
+        }
+
+        $pricingMaster->loadMissing(['item.baseUom', 'item.uoms']);
+
+        $options = $pricingMaster->item->uoms
+            ->mapWithKeys(fn (UnitOfMeasure $uom): array => [
+                $uom->uom_code => $uom->uom_code.($uom->description ? " — {$uom->description}" : ''),
+            ])
+            ->toArray();
+
+        $baseUom = $pricingMaster->item->baseUom;
+
+        if ($baseUom && ! array_key_exists($baseUom->uom_code, $options)) {
+            $options[$baseUom->uom_code] = $baseUom->uom_code.($baseUom->description ? " — {$baseUom->description}" : '');
+        }
+
+        return $options;
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -22,20 +60,29 @@ class PricingMasterQuantityBreakForm
                             ->schema([
                                 Select::make('pricing_master_id')
                                     ->label('Pricing Master')
-                                    ->relationship('pricingMaster', 'description') // Fallback, overridden below
+                                    ->relationship('pricingMaster', 'price_list_code')
                                     ->searchable()
                                     ->preload()
                                     ->required()
-                                    ->getOptionLabelFromRecordUsing(
-                                        fn (\App\Models\PricingMaster $record) => "{$record->code} — {$record->description}"
-                                    )
                                     ->getSearchResultsUsing(
-                                        fn (string $search) => \App\Models\PricingMaster::where('code', 'like', "%{$search}%")
-                                            ->orWhere('description', 'like', "%{$search}%")
+                                        fn (string $search) => PricingMaster::query()
+                                            ->where(function ($query) use ($search) {
+                                                $query->where('price_list_code', 'like', "%{$search}%")
+                                                    ->orWhere('description', 'like', "%{$search}%");
+                                            })
                                             ->limit(50)
                                             ->get()
-                                            ->mapWithKeys(fn ($pm) => [$pm->id => "{$pm->code} — {$pm->description}"])
-                                    ),
+                                            ->mapWithKeys(fn (PricingMaster $record) => [
+                                                $record->id => "{$record->price_list_code} — {$record->description}",
+                                            ])
+                                    )
+                                    ->getOptionLabelFromRecordUsing(
+                                        fn (PricingMaster $record) => "{$record->price_list_code} — {$record->description}"
+                                    )
+                                    ->live()
+                                    ->afterStateUpdated(function (Set $set) {
+                                        $set('unit_of_measure_code', null);
+                                    }),
 
                                 TextInput::make('line_number')
                                     ->label('Line No.')
@@ -75,11 +122,15 @@ class PricingMasterQuantityBreakForm
                                     ->minValue(fn (Get $get) => $get('minimum_quantity'))
                                     ->helperText('Leave empty for unlimited (e.g., 1000+)'),
 
-                                TextInput::make('unit_of_measure_code')
+                                Select::make('unit_of_measure_code')
                                     ->label('Unit of Measure')
-                                    ->maxLength(20),
-                                // If you have a UnitOfMeasure model, replace with:
-                                // Select::make('unit_of_measure_code')->relationship('uom', 'code')->searchable()
+                                    ->options(fn (Get $get): array => self::unitOfMeasureOptions(
+                                        $get('pricing_master_id') ? PricingMaster::query()->with(['item.baseUom', 'item.uoms'])->find($get('pricing_master_id')) : null
+                                    ))
+                                    ->searchable()
+                                    ->preload()
+                                    ->live()
+                                    ->helperText('Only UoMs assigned to the selected pricing master item are shown.'),
                             ]),
                     ]),
 
@@ -91,7 +142,7 @@ class PricingMasterQuantityBreakForm
                                 TextInput::make('unit_price')
                                     ->label('Unit Price')
                                     ->numeric()
-                                    ->prefix('₦')
+                                    ->prefix(fn (Get $get) => self::currencySymbol(PricingMaster::query()->find($get('pricing_master_id'))?->currency_code))
                                     ->step(0.0001)
                                     ->minValue(0),
 
@@ -106,7 +157,7 @@ class PricingMasterQuantityBreakForm
                                 TextInput::make('discount_amount')
                                     ->label('Discount Amount')
                                     ->numeric()
-                                    ->prefix('₦')
+                                    ->prefix(fn (Get $get) => self::currencySymbol(PricingMaster::query()->find($get('pricing_master_id'))?->currency_code))
                                     ->step(0.0001)
                                     ->minValue(0),
                             ]),

@@ -2,10 +2,11 @@
 
 namespace App\Filament\Resources\PricingGroups\Schemas;
 
+use App\Models\GeneralBusinessPostingGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -46,9 +47,11 @@ class PricingGroupForm
                                     ->label('Pricing Strategy')
                                     ->options([
                                         'STANDARD' => 'Standard Pricing',
-                                        'COST_PLUS' => 'Cost Plus Markup',
-                                        'DISCOUNT' => 'Discount from List',
-                                        'MARGIN' => 'Margin Based',
+                                        'TIERED' => 'Tiered Pricing',
+                                        'DYNAMIC' => 'Dynamic Pricing',
+                                        'COST_PLUS' => 'Cost Plus',
+                                        'DISCOUNT_PERCENT' => 'Discount Percent',
+                                        'DISCOUNT_AMOUNT' => 'Discount Amount',
                                     ])
                                     ->required()
                                     ->default('STANDARD')
@@ -125,9 +128,22 @@ class PricingGroupForm
                             ->schema([
                                 Select::make('general_business_posting_group_id')
                                     ->label('Gen. Bus. Posting Group')
-                                    ->relationship('generalBusinessPostingGroup', 'code') // Assuming 'code' is the display attribute
+                                    ->relationship('generalBusinessPostingGroup', 'code')
                                     ->searchable()
                                     ->preload()
+                                    ->getSearchResultsUsing(
+                                        fn (string $search) => GeneralBusinessPostingGroup::query()
+                                            ->where('code', 'like', "%{$search}%")
+                                            ->orWhere('name', 'like', "%{$search}%")
+                                            ->limit(50)
+                                            ->get()
+                                            ->mapWithKeys(fn (GeneralBusinessPostingGroup $record) => [
+                                                $record->id => "{$record->code} — {$record->name}",
+                                            ])
+                                    )
+                                    ->getOptionLabelFromRecordUsing(
+                                        fn (GeneralBusinessPostingGroup $record) => "{$record->code} — {$record->name}"
+                                    )
                                     ->helperText('Determines G/L accounts for this group.'),
 
                                 Toggle::make('blocked')

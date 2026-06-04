@@ -5,7 +5,9 @@ namespace App\Filament\Resources\PricingMasterQuantityBreaks;
 use App\Filament\Resources\PricingMasterQuantityBreaks\Pages\CreatePricingMasterQuantityBreak;
 use App\Filament\Resources\PricingMasterQuantityBreaks\Pages\EditPricingMasterQuantityBreak;
 use App\Filament\Resources\PricingMasterQuantityBreaks\Pages\ListPricingMasterQuantityBreaks;
+use App\Filament\Resources\PricingMasterQuantityBreaks\Pages\ViewPricingMasterQuantityBreak;
 use App\Filament\Resources\PricingMasterQuantityBreaks\Schemas\PricingMasterQuantityBreakForm;
+use App\Filament\Resources\PricingMasterQuantityBreaks\Schemas\PricingMasterQuantityBreakInfolist;
 use App\Filament\Resources\PricingMasterQuantityBreaks\Tables\PricingMasterQuantityBreaksTable;
 use App\Models\PricingMasterQuantityBreak;
 use BackedEnum;
@@ -20,9 +22,16 @@ class PricingMasterQuantityBreakResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    protected static ?string $recordTitleAttribute = 'line_number';
+
     public static function form(Schema $schema): Schema
     {
         return PricingMasterQuantityBreakForm::configure($schema);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return PricingMasterQuantityBreakInfolist::configure($schema);
     }
 
     public static function table(Table $table): Table
@@ -42,6 +51,7 @@ class PricingMasterQuantityBreakResource extends Resource
         return [
             'index' => ListPricingMasterQuantityBreaks::route('/'),
             'create' => CreatePricingMasterQuantityBreak::route('/create'),
+            'view' => ViewPricingMasterQuantityBreak::route('/{record}'),
             'edit' => EditPricingMasterQuantityBreak::route('/{record}/edit'),
         ];
     }

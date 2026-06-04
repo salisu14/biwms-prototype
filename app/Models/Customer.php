@@ -109,6 +109,11 @@ class Customer extends Model
         return $this->belongsTo(Contact::class);
     }
 
+    public function priceLists(): HasMany
+    {
+        return $this->hasMany(PriceList::class);
+    }
+
     public function getNameAttribute(): string
     {
         return $this->contact?->name

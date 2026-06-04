@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PricingMasters\Tables;
 
+use App\Enums\PricingStatus;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -14,6 +15,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Number;
 
 class PricingMastersTable
 {
@@ -33,13 +35,37 @@ class PricingMastersTable
                     ->limit(30)
                     ->tooltip(fn ($record) => $record->description),
 
+                TextColumn::make('pricingGroup.code')
+                    ->label('Pricing Group')
+                    ->searchable()
+                    ->sortable()
+                    ->default('—')
+                    ->toggleable(),
+
+                TextColumn::make('customer.customer_number')
+                    ->label('Customer')
+                    ->searchable()
+                    ->sortable()
+                    ->default('—')
+                    ->toggleable(),
+
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'ACTIVE' => 'success',
                         'DRAFT' => 'gray',
+                        'PENDING_APPROVAL' => 'warning',
                         'EXPIRED' => 'danger',
-                        default => 'warning',
+                        'CANCELLED' => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'ACTIVE' => 'Active',
+                        'DRAFT' => 'Draft',
+                        'PENDING_APPROVAL' => 'Pending Approval',
+                        'EXPIRED' => 'Expired',
+                        'CANCELLED' => 'Cancelled',
+                        default => str_replace('_', ' ', $state),
                     })
                     ->sortable(),
 
@@ -47,7 +73,14 @@ class PricingMastersTable
                     ->label('Applies To')
                     ->badge()
                     ->color('info')
-                    ->formatStateUsing(fn (string $state): string => str_replace('_', ' ', $state))
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'ALL_CUSTOMERS' => 'All Customers',
+                        'CUSTOMER' => 'Specific Customer',
+                        'CUSTOMER_GROUP' => 'Customer Group',
+                        'CAMPAIGN' => 'Campaign / Promo',
+                        'TRANSFER' => 'Transfer',
+                        default => str_replace('_', ' ', $state),
+                    })
                     ->searchable(),
 
                 TextColumn::make('item.item_code')
@@ -60,17 +93,33 @@ class PricingMastersTable
                     ->label('Pricing Method')
                     ->badge()
                     ->color('warning')
-                    ->formatStateUsing(fn (string $state): string => str_replace('_', ' ', $state))
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'UNIT_PRICE' => 'Fixed Unit Price',
+                        'PERCENT_DISCOUNT' => 'Discount %',
+                        'AMOUNT_DISCOUNT' => 'Discount Amount',
+                        'COST_PLUS_PERCENT' => 'Cost + %',
+                        'COST_PLUS_AMOUNT' => 'Cost + Amount',
+                        'FORMULA' => 'Formula',
+                        default => str_replace('_', ' ', $state),
+                    })
                     ->searchable(),
 
                 TextColumn::make('unit_price')
                     ->label('Price / Disc.')
-                    ->money('NGN')
                     ->sortable()
                     ->formatStateUsing(function ($record) {
-                        if ($record->price_type === 'UNIT_PRICE') return number_format($record->unit_price, 2);
-                        if ($record->price_type === 'PERCENT_DISCOUNT') return $record->discount_percent . '%';
-                        if ($record->price_type === 'AMOUNT_DISCOUNT') return '-' . number_format($record->discount_amount, 2);
+                        if ($record->price_type === 'UNIT_PRICE') {
+                            return Number::currency((float) $record->unit_price, $record->currency_code);
+                        }
+
+                        if ($record->price_type === 'PERCENT_DISCOUNT') {
+                            return $record->discount_percent.'%';
+                        }
+
+                        if ($record->price_type === 'AMOUNT_DISCOUNT') {
+                            return '-'.Number::currency((float) $record->discount_amount, $record->currency_code);
+                        }
+
                         return '-';
                     }),
 
@@ -104,7 +153,7 @@ class PricingMastersTable
             ->filters([
                 TrashedFilter::make(),
                 SelectFilter::make('status')
-                    ->options(['DRAFT' => 'Draft', 'ACTIVE' => 'Active', 'INACTIVE' => 'Inactive', 'EXPIRED' => 'Expired'])
+                    ->options(PricingStatus::options())
                     ->native(false),
                 SelectFilter::make('price_list_type')
                     ->options(['ALL_CUSTOMERS' => 'All Customers', 'CUSTOMER' => 'Customer', 'CUSTOMER_GROUP' => 'Group', 'CAMPAIGN' => 'Campaign']),

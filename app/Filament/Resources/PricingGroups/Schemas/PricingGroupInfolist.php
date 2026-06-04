@@ -25,7 +25,15 @@ class PricingGroupInfolist
                         TextEntry::make('pricing_strategy')
                             ->badge()
                             ->color('info')
-                            ->formatStateUsing(fn ($state) => str_replace('_', ' ', $state)),
+                            ->formatStateUsing(fn ($state) => match ($state) {
+                                'STANDARD' => 'Standard Pricing',
+                                'TIERED' => 'Tiered Pricing',
+                                'DYNAMIC' => 'Dynamic Pricing',
+                                'COST_PLUS' => 'Cost Plus',
+                                'DISCOUNT_PERCENT' => 'Discount Percent',
+                                'DISCOUNT_AMOUNT' => 'Discount Amount',
+                                default => str_replace('_', ' ', $state),
+                            }),
                         TextEntry::make('default_discount_percent')
                             ->suffix('%')
                             ->placeholder('-'),
@@ -50,8 +58,8 @@ class PricingGroupInfolist
                         TextEntry::make('currency_code')->badge()->color('gray'),
                         TextEntry::make('start_date')->date('d/m/Y')->placeholder('No Start Date'),
                         TextEntry::make('end_date')->date('d/m/Y')->placeholder('No End Date'),
-                        TextEntry::make('generalBusinessPostingGroup.code') // Adjust if your attribute is 'name' instead of 'code'
-                        ->label('Gen. Bus. Posting Group')
+                        TextEntry::make('generalBusinessPostingGroup.code')
+                            ->label('Gen. Bus. Posting Group')
                             ->placeholder('-')
                             ->badge(),
                         IconEntry::make('blocked')->boolean(),

@@ -44,12 +44,17 @@ class PricingGroup extends Model
     // Relationships
     public function customers(): HasMany
     {
-        return $this->hasMany(Customer::class);
+        return $this->hasMany(Customer::class, 'pricing_group_id');
     }
 
     public function pricingMasterEntries(): HasMany
     {
         return $this->hasMany(PricingMaster::class, 'pricing_group_id');
+    }
+
+    public function pricingMasters(): HasMany
+    {
+        return $this->pricingMasterEntries();
     }
 
     public function generalBusinessPostingGroup(): BelongsTo

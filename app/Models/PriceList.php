@@ -11,7 +11,6 @@ class PriceList extends Model
         'item_id',
         'customer_id',
         'customer_group_id',
-        'business_id',
         'price',
         'currency',
         'starting_date',

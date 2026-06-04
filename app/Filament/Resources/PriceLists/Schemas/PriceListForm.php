@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\PriceLists\Schemas;
 
+use App\Models\Customer;
+use App\Models\CustomerGroup;
 use App\Models\Item;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -27,11 +29,24 @@ class PriceListForm
                                     ->label('Item')
                                     ->relationship(
                                         name: 'item',
-                                        titleAttribute: 'description',
+                                        titleAttribute: 'item_code',
                                         modifyQueryUsing: fn ($query) => $query->finishedGoods()->where('blocked', false)->orderBy('item_code')
                                     )
                                     ->searchable()
-//                                    ->searchColumns(['item_code', 'description'])
+                                    ->getSearchResultsUsing(
+                                        fn (string $search) => Item::query()
+                                            ->finishedGoods()
+                                            ->where('blocked', false)
+                                            ->where(function ($query) use ($search) {
+                                                $query->where('item_code', 'like', "%{$search}%")
+                                                    ->orWhere('description', 'like', "%{$search}%");
+                                            })
+                                            ->limit(50)
+                                            ->get()
+                                            ->mapWithKeys(fn (Item $record) => [
+                                                $record->id => "{$record->item_code} — {$record->description}",
+                                            ])
+                                    )
                                     ->getOptionLabelFromRecordUsing(
                                         fn (Item $record) => "{$record->item_code} — {$record->description}"
                                     )
@@ -41,9 +56,26 @@ class PriceListForm
 
                                 Select::make('customer_id')
                                     ->label('Customer')
-                                    ->relationship('customer', 'name')
+                                    ->relationship('customer', 'customer_number')
                                     ->searchable()
                                     ->preload()
+                                    ->live()
+                                    ->afterStateUpdated(fn (Set $set) => $set('customer_group_id', null))
+                                    ->getSearchResultsUsing(
+                                        fn (string $search) => Customer::query()
+                                            ->where(function ($query) use ($search) {
+                                                $query->where('customer_number', 'like', "%{$search}%")
+                                                    ->orWhere('name', 'like', "%{$search}%");
+                                            })
+                                            ->limit(50)
+                                            ->get()
+                                            ->mapWithKeys(fn (Customer $record) => [
+                                                $record->id => "{$record->customer_number} — {$record->name}",
+                                            ])
+                                    )
+                                    ->getOptionLabelFromRecordUsing(
+                                        fn (Customer $record) => "{$record->customer_number} — {$record->name}"
+                                    )
                                     ->helperText('Leave empty to apply to the entire Customer Group below.'),
                             ]),
 
@@ -51,14 +83,27 @@ class PriceListForm
                             ->schema([
                                 Select::make('customer_group_id')
                                     ->label('Customer Group')
-                                    ->relationship('customerGroup', 'name')
+                                    ->relationship('customerGroup', 'code')
                                     ->searchable()
                                     ->preload()
+                                    ->live()
+                                    ->afterStateUpdated(fn (Set $set) => $set('customer_id', null))
+                                    ->getSearchResultsUsing(
+                                        fn (string $search) => CustomerGroup::query()
+                                            ->where(function ($query) use ($search) {
+                                                $query->where('code', 'like', "%{$search}%")
+                                                    ->orWhere('name', 'like', "%{$search}%");
+                                            })
+                                            ->limit(50)
+                                            ->get()
+                                            ->mapWithKeys(fn (CustomerGroup $record) => [
+                                                $record->id => "{$record->code} — {$record->name}",
+                                            ])
+                                    )
+                                    ->getOptionLabelFromRecordUsing(
+                                        fn (CustomerGroup $record) => "{$record->code} — {$record->name}"
+                                    )
                                     ->helperText('Leave empty to apply to all groups (or specific customer above).'),
-
-                                // Note: business_id is typically handled automatically by multi-tenancy.
-                                // If you need it explicitly, uncomment below:
-                                // Select::make('business_id')->relationship('business', 'name')->required(),
                             ]),
 
                         Grid::make(3)

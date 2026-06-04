@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Number;
 
 class PricingMasterQuantityBreak extends Model
 {
@@ -44,12 +45,13 @@ class PricingMasterQuantityBreak extends Model
     }
 
     // Get price display text
-    public function getTierDescription(): string
+    public function getTierDescription(?string $currencyCode = null): string
     {
         $max = $this->maximum_quantity ? number_format($this->maximum_quantity) : '+';
+        $currencyCode = $currencyCode ?? config('app.default_currency', 'USD');
 
         if ($this->unit_price !== null) {
-            return number_format($this->minimum_quantity).' - '.$max.' @ $'.number_format($this->unit_price, 2);
+            return number_format($this->minimum_quantity).' - '.$max.' @ '.Number::currency((float) $this->unit_price, $currencyCode);
         }
 
         if ($this->discount_percent !== null) {

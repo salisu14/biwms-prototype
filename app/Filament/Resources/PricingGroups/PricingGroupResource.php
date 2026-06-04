@@ -6,6 +6,8 @@ use App\Filament\Resources\PricingGroups\Pages\CreatePricingGroup;
 use App\Filament\Resources\PricingGroups\Pages\EditPricingGroup;
 use App\Filament\Resources\PricingGroups\Pages\ListPricingGroups;
 use App\Filament\Resources\PricingGroups\Pages\ViewPricingGroup;
+use App\Filament\Resources\PricingGroups\RelationManagers\CustomersRelationManager;
+use App\Filament\Resources\PricingGroups\RelationManagers\PricingMasterEntriesRelationManager;
 use App\Filament\Resources\PricingGroups\Schemas\PricingGroupForm;
 use App\Filament\Resources\PricingGroups\Schemas\PricingGroupInfolist;
 use App\Filament\Resources\PricingGroups\Tables\PricingGroupsTable;
@@ -15,6 +17,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class PricingGroupResource extends Resource
 {
@@ -42,8 +45,18 @@ class PricingGroupResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            CustomersRelationManager::class,
+            PricingMasterEntriesRelationManager::class,
         ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof PricingGroup) {
+            return static::getModelLabel();
+        }
+
+        return "{$record->code} - {$record->name}";
     }
 
     public static function getPages(): array

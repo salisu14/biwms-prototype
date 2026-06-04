@@ -5,9 +5,11 @@ namespace App\Filament\Resources\PricingMasterQuantityBreaks\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Number;
 
 class PricingMasterQuantityBreaksTable
 {
@@ -16,7 +18,7 @@ class PricingMasterQuantityBreaksTable
         return $table
             ->columns([
                 TextColumn::make('pricingMaster.price_list_code')
-                    ->label('Price List Code')
+                    ->label('Pricing Master')
                     ->searchable()
                     ->sortable()
                     ->weight('bold')
@@ -25,7 +27,7 @@ class PricingMasterQuantityBreaksTable
 
                 TextColumn::make('tier_summary')
                     ->label('Quantity Tier')
-                    ->state(fn ($record) => $record->getTierDescription())
+                    ->state(fn ($record) => $record->getTierDescription($record->pricingMaster?->currency_code))
                     ->searchable(false)
                     ->sortable(false)
                     ->badge()
@@ -47,8 +49,14 @@ class PricingMasterQuantityBreaksTable
 
                 TextColumn::make('unit_price')
                     ->label('Unit Price')
-                    ->money('NGN')
                     ->sortable()
+                    ->formatStateUsing(function ($state, $record): string {
+                        if ($state === null) {
+                            return '-';
+                        }
+
+                        return Number::currency((float) $state, $record->pricingMaster?->currency_code ?? config('app.default_currency', 'USD'));
+                    })
                     ->alignEnd(),
 
                 TextColumn::make('discount_percent')
@@ -61,8 +69,14 @@ class PricingMasterQuantityBreaksTable
 
                 TextColumn::make('discount_amount')
                     ->label('Disc. Amt')
-                    ->money('NGN')
                     ->sortable()
+                    ->formatStateUsing(function ($state, $record): string {
+                        if ($state === null) {
+                            return '-';
+                        }
+
+                        return Number::currency((float) $state, $record->pricingMaster?->currency_code ?? config('app.default_currency', 'USD'));
+                    })
                     ->alignEnd(),
 
                 TextColumn::make('unit_of_measure_code')
@@ -89,6 +103,7 @@ class PricingMasterQuantityBreaksTable
                     ->preload(),
             ])
             ->recordActions([
+                ViewAction::make(),
                 EditAction::make(),
             ])
             ->toolbarActions([
@@ -96,7 +111,7 @@ class PricingMasterQuantityBreaksTable
                     DeleteBulkAction::make(),
                 ]),
             ])
-            ->defaultSort('line_number', 'asc') // Crucial for quantity breaks so they evaluate in order!
+            ->defaultSort('line_number', 'asc')
             ->emptyStateHeading('No quantity breaks')
             ->emptyStateDescription('Define quantity tiers to apply bulk discounts or special pricing.')
             ->emptyStateIcon('heroicon-o-scale');

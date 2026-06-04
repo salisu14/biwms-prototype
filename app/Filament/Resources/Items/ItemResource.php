@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Items;
 
+use App\Filament\Resources\CustomerGroups\RelationManagers\PriceListsRelationManager;
 use App\Filament\Resources\Items\Pages\CreateItem;
 use App\Filament\Resources\Items\Pages\EditItem;
 use App\Filament\Resources\Items\Pages\ListItems;
@@ -44,7 +45,7 @@ class ItemResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            PriceListsRelationManager::class,
         ];
     }
 

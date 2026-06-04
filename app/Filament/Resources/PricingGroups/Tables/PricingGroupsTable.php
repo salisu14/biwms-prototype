@@ -33,9 +33,18 @@ class PricingGroupsTable
                 TextColumn::make('status')
                     ->label('Status')
                     ->state(function ($record) {
-                        if ($record->blocked) return 'Blocked';
-                        if ($record->start_date && $record->start_date > now()) return 'Scheduled';
-                        if ($record->end_date && $record->end_date < now()) return 'Expired';
+                        if ($record->blocked) {
+                            return 'Blocked';
+                        }
+
+                        if ($record->start_date && $record->start_date > now()) {
+                            return 'Scheduled';
+                        }
+
+                        if ($record->end_date && $record->end_date < now()) {
+                            return 'Expired';
+                        }
+
                         return 'Active';
                     })
                     ->badge()
@@ -59,7 +68,15 @@ class PricingGroupsTable
                     ->label('Strategy')
                     ->badge()
                     ->color('info')
-                    ->formatStateUsing(fn ($state) => str_replace('_', ' ', $state))
+                    ->formatStateUsing(fn ($state) => match ($state) {
+                        'STANDARD' => 'Standard Pricing',
+                        'TIERED' => 'Tiered Pricing',
+                        'DYNAMIC' => 'Dynamic Pricing',
+                        'COST_PLUS' => 'Cost Plus',
+                        'DISCOUNT_PERCENT' => 'Discount Percent',
+                        'DISCOUNT_AMOUNT' => 'Discount Amount',
+                        default => str_replace('_', ' ', $state),
+                    })
                     ->searchable(),
 
                 TextColumn::make('default_discount_percent')
@@ -87,8 +104,8 @@ class PricingGroupsTable
                     ->badge()
                     ->toggleable(),
 
-                TextColumn::make('generalBusinessPostingGroup.code') // Adjust to 'name' if needed
-                ->label('Posting Group')
+                TextColumn::make('generalBusinessPostingGroup.code')
+                    ->label('Posting Group')
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->searchable(),
 
@@ -109,7 +126,7 @@ class PricingGroupsTable
                     ->trueLabel('Active Only')
                     ->falseLabel('Inactive/Blocked')
                     ->queries(
-                        true: fn ($query) => $query->active(), // Leverages model scope
+                        true: fn ($query) => $query->active(),
                         false: fn ($query) => $query->where('blocked', true)
                             ->orWhere(function ($q) {
                                 $q->whereNotNull('end_date')->where('end_date', '<', now());
@@ -118,9 +135,11 @@ class PricingGroupsTable
                 SelectFilter::make('pricing_strategy')
                     ->options([
                         'STANDARD' => 'Standard',
+                        'TIERED' => 'Tiered',
+                        'DYNAMIC' => 'Dynamic',
                         'COST_PLUS' => 'Cost Plus',
-                        'DISCOUNT' => 'Discount',
-                        'MARGIN' => 'Margin',
+                        'DISCOUNT_PERCENT' => 'Discount Percent',
+                        'DISCOUNT_AMOUNT' => 'Discount Amount',
                     ]),
                 TernaryFilter::make('blocked')
                     ->label('Blocked Status'),

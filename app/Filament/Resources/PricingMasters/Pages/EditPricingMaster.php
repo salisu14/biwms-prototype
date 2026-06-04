@@ -13,6 +13,13 @@ class EditPricingMaster extends EditRecord
 {
     protected static string $resource = PricingMasterResource::class;
 
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $data['modified_by'] = (string) auth()->id();
+
+        return $data;
+    }
+
     protected function getHeaderActions(): array
     {
         return [

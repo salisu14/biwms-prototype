@@ -98,7 +98,7 @@ class PricingMaster extends Model
 
     public function quantityBreaks(): HasMany
     {
-        return $this->hasMany(PricingMasterQuantityBreak::class)->orderBy('minimum_quantity');
+        return $this->hasMany(PricingMasterQuantityBreak::class)->orderBy('line_number');
     }
 
     public function replaces(): BelongsTo
@@ -109,6 +109,21 @@ class PricingMaster extends Model
     public function replacedBy(): BelongsTo
     {
         return $this->belongsTo(self::class, 'replaced_by_id');
+    }
+
+    public function approvedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function createdByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function modifiedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'modified_by');
     }
 
     // Check if this price is effective now
@@ -160,7 +175,7 @@ class PricingMaster extends Model
             return false;
         }
 
-        if ($this->maximum_quantity && $quantity > $maximum_quantity) {
+        if ($this->maximum_quantity && $quantity > $this->maximum_quantity) {
             return false;
         }
 

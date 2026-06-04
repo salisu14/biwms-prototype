@@ -5,10 +5,12 @@ namespace App\Filament\Resources\SalesInvoices\Pages;
 use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
+use App\Filament\Resources\SalesShipmentHeaders\SalesShipmentHeaderResource;
 use App\Models\CustomerLedgerEntry;
 use App\Models\PaymentApplication;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
+use App\Models\SalesShipmentHeader;
 use App\Services\Print\PostedSalesInvoicePrintService;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\Page;
@@ -70,7 +72,35 @@ class ViewPostedSalesInvoice extends Page
                         $this->record->document_number.'.pdf'
                     );
                 }),
+            Action::make('viewRelatedShipment')
+                ->label('View Shipment')
+                ->icon('heroicon-o-truck')
+                ->color('gray')
+                ->visible(fn (): bool => $this->getRelatedShipmentProperty() !== null)
+                ->url(fn (): string => SalesShipmentHeaderResource::getUrl('view', [
+                    'record' => $this->getRelatedShipmentProperty(),
+                ])),
+            Action::make('printWaybill')
+                ->label('Print Waybill')
+                ->icon('heroicon-o-printer')
+                ->color('success')
+                ->visible(fn (): bool => $this->getRelatedShipmentProperty() !== null)
+                ->url(fn (): string => route('waybill.print', $this->getRelatedShipmentProperty()))
+                ->openUrlInNewTab(),
         ];
+    }
+
+    public function getRelatedShipmentProperty(): ?SalesShipmentHeader
+    {
+        if (blank($this->record->order_number)) {
+            return null;
+        }
+
+        return SalesShipmentHeader::query()
+            ->where('order_no', $this->record->order_number)
+            ->latest('posting_date')
+            ->latest('id')
+            ->first();
     }
 
     public function getApplicationsProperty(): Collection

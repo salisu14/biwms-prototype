@@ -194,15 +194,15 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/customer-price-overrides')
                                     ->isActiveWhen(fn () => request()->is('admin/customer-price-overrides*')),
 
-                                NavigationItem::make('Pricing Groups')
-                                    ->icon('heroicon-o-squares-2x2')
-                                    ->url('/admin/pricing-groups')
-                                    ->isActiveWhen(fn () => request()->is('admin/pricing-groups*')),
-
                                 NavigationItem::make('Price Change Templates')
                                     ->icon('heroicon-o-calculator')
                                     ->url('/admin/price-change-templates')
                                     ->isActiveWhen(fn () => request()->is('admin/price-change-templates*')),
+
+                                NavigationItem::make('Pricing Groups')
+                                    ->icon('heroicon-o-squares-2x2')
+                                    ->url('/admin/pricing-groups')
+                                    ->isActiveWhen(fn () => request()->is('admin/pricing-groups*')),
 
                                 NavigationItem::make('Pricing Masters')
                                     ->icon('heroicon-o-document-text')

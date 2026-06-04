@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Payments\Pages;
 
+use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedSalesInvoice;
@@ -114,6 +115,15 @@ class ViewPayment extends ViewRecord
                     ? route('filament.admin.resources.sales-invoices.index')
                     : route('filament.admin.resources.purchase-invoices.index'))
                 ->openUrlInNewTab(),
+
+            Action::make('openCustomerSubledger')
+                ->label('Open Customer Subledger')
+                ->icon('heroicon-o-book-open')
+                ->color('gray')
+                ->visible(fn ($record) => $record->party_type === 'CUSTOMER' && filled($record->party_id))
+                ->url(fn ($record) => CustomerSubledgerSummary::getUrl([
+                    'customerId' => $record->party_id,
+                ])),
 
             Action::make('markReconciled')
                 ->label('Mark Reconciled')
