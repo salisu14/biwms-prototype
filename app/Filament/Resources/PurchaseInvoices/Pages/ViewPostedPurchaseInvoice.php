@@ -10,6 +10,7 @@ use App\Services\Print\PostedPurchaseInvoicePrintService;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Number;
 
 class ViewPostedPurchaseInvoice extends Page
 {
@@ -24,33 +25,45 @@ class ViewPostedPurchaseInvoice extends Page
     public function mount(PostedPurchaseInvoice|int|string $record): void
     {
         if ($record instanceof PostedPurchaseInvoice) {
-            $this->record = $record->load(['lines', 'vendor', 'purchaseOrder']);
+            $this->record = $record->load(['lines', 'vendor', 'purchaseOrder', 'location']);
 
             return;
         }
 
         $this->record = PostedPurchaseInvoice::query()
-            ->with(['lines', 'vendor', 'purchaseOrder'])
+            ->with(['lines', 'vendor', 'purchaseOrder', 'location'])
             ->findOrFail($record);
     }
 
     public function getHeading(): string
     {
+        $vendor = $this->record->vendor_name ?: ($this->record->vendor?->vendor_name ?? 'Unknown Vendor');
+        $amount = Number::currency((float) $this->record->grand_total, $this->record->currency_code ?: config('app.default_currency', 'USD'));
+
         return ($this->record->document_number ?? 'Posted Purchase Invoice')
-            .' • Scope '.($this->record->vendor_name ?? '—')
-            .' • Attribute '.number_format((float) $this->record->grand_total, 2);
+            .' • '.$vendor
+            .' • '.$amount;
     }
 
     public function getSubheading(): string
     {
-        return ($this->record->order_number ?? 'No purchase order')
-            .' • '.($this->record->vendor?->vendor_name ?? $this->record->vendor_name ?? 'Unknown Vendor')
-            .' • Posted '.optional($this->record->posted_at)->format('d/m/Y H:i');
+        $vendor = $this->record->vendor_name ?: ($this->record->vendor?->vendor_name ?? 'Unknown Vendor');
+        $location = $this->record->location?->code
+            ? "{$this->record->location->code} - {$this->record->location->name}"
+            : ($this->record->location?->name ?? 'Unknown Location');
+
+        return trim(implode(' • ', array_filter([
+            $this->record->order_number ?: 'No purchase order',
+            $location,
+            'Posted '.optional($this->record->posted_at)->format('d/m/Y H:i'),
+        ])));
     }
 
     public function getBreadcrumb(): string
     {
-        return $this->record->document_number ?? 'Posted Purchase Invoice';
+        $vendor = $this->record->vendor_name ?: ($this->record->vendor?->vendor_name ?? 'Unknown Vendor');
+
+        return ($this->record->document_number ?? 'Posted Purchase Invoice').' - '.$vendor;
     }
 
     protected function getHeaderActions(): array

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ApprovalStatus;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SalesInvoice extends Model
@@ -33,17 +34,22 @@ class SalesInvoice extends Model
         'total_amount' => 'decimal:2',
     ];
 
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(SalesInvoiceLine::class);
     }
 
-    public function customer()
+    public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
     }
 
-    public function salesOrder()
+    public function salesOrder(): BelongsTo
     {
         return $this->belongsTo(SalesOrder::class);
     }

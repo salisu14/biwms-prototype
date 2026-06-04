@@ -2,8 +2,6 @@
 
 namespace App\Filament\Resources\PostedShipments;
 
-use App\Filament\Resources\PostedShipments\Pages\CreatePostedShipment;
-use App\Filament\Resources\PostedShipments\Pages\EditPostedShipment;
 use App\Filament\Resources\PostedShipments\Pages\ListPostedShipments;
 use App\Filament\Resources\PostedShipments\Pages\ViewPostedShipment;
 use App\Filament\Resources\PostedShipments\Schemas\PostedShipmentForm;
@@ -15,6 +13,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class PostedShipmentResource extends Resource
 {
@@ -41,6 +40,16 @@ class PostedShipmentResource extends Resource
         return PostedShipmentsTable::configure($table);
     }
 
+    public static function canEdit(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
     public static function getRelations(): array
     {
         return [
@@ -52,9 +61,7 @@ class PostedShipmentResource extends Resource
     {
         return [
             'index' => ListPostedShipments::route('/'),
-            'create' => CreatePostedShipment::route('/create'),
             'view' => ViewPostedShipment::route('/{record}'),
-            'edit' => EditPostedShipment::route('/{record}/edit'),
         ];
     }
 }

@@ -15,6 +15,7 @@ use App\Services\Print\PostedSalesInvoicePrintService;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Number;
 
 class ViewPostedSalesInvoice extends Page
 {
@@ -34,19 +35,44 @@ class ViewPostedSalesInvoice extends Page
     public function mount(PostedSalesInvoice|int|string $record): void
     {
         if ($record instanceof PostedSalesInvoice) {
-            $this->record = $record->load(['lines', 'customer', 'salesOrder']);
+            $this->record = $record->load(['lines', 'customer', 'salesOrder', 'location']);
 
             return;
         }
 
         $this->record = PostedSalesInvoice::query()
-            ->with(['lines', 'customer', 'salesOrder'])
+            ->with(['lines', 'customer', 'salesOrder', 'location'])
             ->findOrFail($record);
     }
 
     public function getHeading(): string
     {
-        return 'Posted Sales Invoice '.$this->record->document_number;
+        $customer = $this->record->customer?->customer_name ?? $this->record->customer?->name ?? 'Unknown Customer';
+        $amount = Number::currency((float) $this->record->total_amount, $this->record->currency_code ?: config('app.default_currency', 'USD'));
+
+        return ($this->record->document_number ?? 'Posted Sales Invoice')
+            .' • '.$customer
+            .' • '.$amount;
+    }
+
+    public function getSubheading(): string
+    {
+        $location = $this->record->location?->code
+            ? "{$this->record->location->code} - {$this->record->location->name}"
+            : ($this->record->location?->name ?? 'Unknown Location');
+
+        return trim(implode(' • ', array_filter([
+            $this->record->salesOrder?->order_number ?: 'No sales order',
+            $location,
+            'Posted '.optional($this->record->posting_date)->format('d/m/Y'),
+        ])));
+    }
+
+    public function getBreadcrumb(): string
+    {
+        $customer = $this->record->customer?->customer_name ?? $this->record->customer?->name ?? 'Unknown Customer';
+
+        return ($this->record->document_number ?? 'Posted Sales Invoice').' - '.$customer;
     }
 
     protected function getHeaderActions(): array

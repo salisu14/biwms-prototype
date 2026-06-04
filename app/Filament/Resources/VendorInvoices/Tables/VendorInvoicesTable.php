@@ -14,6 +14,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Number;
 
 class VendorInvoicesTable
 {
@@ -31,7 +32,8 @@ class VendorInvoicesTable
                     ->label('Vendor')
                     ->searchable()
                     ->sortable()
-                    ->limit(25),
+                    ->limit(25)
+                    ->description(fn ($record) => $record->vendor?->vendor_code),
                 TextColumn::make('vendor_invoice_no')
                     ->label('Vendor Inv. No.')
                     ->searchable(),
@@ -56,11 +58,11 @@ class VendorInvoicesTable
                     }),
                 TextColumn::make('amount_including_tax')
                     ->label('Total Amount')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
                     ->sortable(),
                 TextColumn::make('remaining_amount')
                     ->label('Remaining')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
                     ->sortable()
                     ->color('danger'),
                 TextColumn::make('posting_date')

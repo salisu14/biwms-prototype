@@ -24,7 +24,8 @@ class ItemChargesTable
                     ->sortable()
                     ->copyable()
                     ->weight('bold')
-                    ->color('primary'),
+                    ->color('primary')
+                    ->description(fn ($record) => $record->description ?: ''),
 
                 TextColumn::make('description')
                     ->label('Description')

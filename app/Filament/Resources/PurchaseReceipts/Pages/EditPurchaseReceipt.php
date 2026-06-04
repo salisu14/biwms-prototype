@@ -6,10 +6,6 @@ use App\Filament\Resources\PurchaseReceipts\PurchaseReceiptResource;
 use App\Models\PurchaseReceipt;
 use App\Services\Purchase\PurchaseReceiptLinePrefillService;
 use Filament\Actions\Action;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
-use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
@@ -20,26 +16,31 @@ class EditPurchaseReceipt extends EditRecord
     public function getHeading(): string
     {
         $record = $this->getRecord();
+        $vendor = $record->vendor?->vendor_name ?: $record->buy_from_vendor_name ?: 'Unknown Vendor';
 
         return ($record->document_number ?? 'Purchase Receipt')
-            .' • Scope '.($record->buy_from_vendor_name ?? '—')
-            .' • Attribute '.($record->posted ? 'Posted' : 'Open');
+            .' • '.$vendor
+            .' • '.($record->posted ? 'Posted' : 'Open');
     }
 
     public function getSubheading(): string
     {
         $record = $this->getRecord();
+        $location = $record->receivingLocation?->code
+            ? "{$record->receivingLocation->code} - {$record->receivingLocation->name}"
+            : ($record->receivingLocation?->name ?? 'Unknown Location');
 
         return ($record->purchase_order_no ?? 'No purchase order')
-            .' • '.($record->receivingLocation?->name ?? 'Unknown Location')
+            .' • '.$location
             .' • '.($record->actual_receipt_date?->format('d/m/Y') ?? 'Pending');
     }
 
     public function getBreadcrumb(): string
     {
         $record = $this->getRecord();
+        $vendor = $record->vendor?->vendor_name ?: $record->buy_from_vendor_name ?: 'Unknown Vendor';
 
-        return $record->document_number ?? 'Purchase Receipt';
+        return ($record->document_number ?? 'Purchase Receipt').' - '.$vendor;
     }
 
     protected function getHeaderActions(): array
@@ -76,10 +77,6 @@ class EditPurchaseReceipt extends EditRecord
                         Notification::make()->title('Unable to post receipt')->body($exception->getMessage())->danger()->send();
                     }
                 }),
-            ViewAction::make(),
-            DeleteAction::make(),
-            ForceDeleteAction::make(),
-            RestoreAction::make(),
         ];
     }
 }

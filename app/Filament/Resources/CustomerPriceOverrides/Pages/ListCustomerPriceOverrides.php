@@ -10,6 +10,8 @@ class ListCustomerPriceOverrides extends ListRecords
 {
     protected static string $resource = CustomerPriceOverrideResource::class;
 
+    protected static ?string $title = 'Customer Price Overrides';
+
     protected function getHeaderActions(): array
     {
         return [

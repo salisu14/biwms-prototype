@@ -46,6 +46,11 @@ enum SalesOrderStatus: string implements ApprovableStatus, HasColor, HasIcon, Ha
         };
     }
 
+    public function label(): ?string
+    {
+        return $this->getLabel();
+    }
+
     public function getColor(): string|array|null
     {
         return match ($this) {
@@ -97,4 +102,3 @@ enum SalesOrderStatus: string implements ApprovableStatus, HasColor, HasIcon, Ha
         return in_array($this, [self::APPROVED, self::RELEASED], true);
     }
 }
-

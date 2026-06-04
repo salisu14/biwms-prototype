@@ -37,11 +37,10 @@ class MaintenanceContractAssetsTable
 
                 TextColumn::make('asset_specific_limit')
                     ->label('Coverage Limit')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state) => $state === null ? 'Unlimited' : number_format((float) $state, 2))
                     ->sortable()
                     ->alignEnd()
-                    ->default('Unlimited')
-                    ->color(fn ($state) => $state > 0 ? 'primary' : 'gray'),
+                    ->color(fn ($state) => $state !== null ? 'primary' : 'gray'),
 
                 TextColumn::make('special_conditions')
                     ->label('Conditions')

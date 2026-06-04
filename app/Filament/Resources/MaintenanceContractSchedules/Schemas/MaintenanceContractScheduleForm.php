@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\MaintenanceContractSchedules\Schemas;
 
+use App\Models\FixedAsset;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -27,9 +28,19 @@ class MaintenanceContractScheduleForm
                                 ->preload()
                                 ->required(),
                             Select::make('fixed_asset_id')
-                                ->relationship('fixedAsset', 'description')
+                                ->relationship('fixedAsset', 'fa_no')
                                 ->searchable()
-                                ->preload(),
+                                ->preload()
+                                ->getOptionLabelFromRecordUsing(
+                                    fn (FixedAsset $record) => "{$record->fa_no} — {$record->description}"
+                                )
+                                ->getSearchResultsUsing(
+                                    fn (string $search) => FixedAsset::where('fa_no', 'like', "%{$search}%")
+                                        ->orWhere('description', 'like', "%{$search}%")
+                                        ->limit(50)
+                                        ->get()
+                                        ->mapWithKeys(fn ($asset) => [$asset->id => "{$asset->fa_no} — {$asset->description}"])
+                                ),
                             Select::make('frequency')
                                 ->options([
                                     'weekly' => 'Weekly',

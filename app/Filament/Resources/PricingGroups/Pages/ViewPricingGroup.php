@@ -12,16 +12,14 @@ class ViewPricingGroup extends ViewRecord
 
     public function getHeading(): string
     {
-        return 'Pricing Group Code '.($this->record->code ?? '—')
-            .' • Scope '.($this->record->name ?? '—')
-            .' • Attribute '.($this->record->blocked ? 'Blocked' : 'Active');
+        return 'pricing group • '.($this->record->code ?? '—')
+            .' • '.($this->record->pricing_strategy ?? '—');
     }
 
     public function getSubheading(): string
     {
-        return 'Code '.($this->record->code ?? '—')
-            .' • Scope '.($this->record->name ?? '—')
-            .' • Attribute '.($this->record->blocked ? 'Blocked' : 'Active');
+        return 'currency • '.($this->record->currency_code ?? '—')
+            .' • status • '.($this->record->blocked ? 'Blocked' : 'Active');
     }
 
     public function getBreadcrumb(): string

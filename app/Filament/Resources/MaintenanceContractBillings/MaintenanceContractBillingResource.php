@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class MaintenanceContractBillingResource extends Resource
@@ -22,6 +23,12 @@ class MaintenanceContractBillingResource extends Resource
     protected static ?string $model = MaintenanceContractBilling::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static ?string $navigationLabel = 'Service Contract Billings';
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Service Contracts';
+
+    protected static ?string $slug = 'service-contract-billings';
 
     public static function form(Schema $schema): Schema
     {
@@ -66,5 +73,33 @@ class MaintenanceContractBillingResource extends Resource
             : 'Unknown Contract';
 
         return "{$contract} - ".($record->billing_date?->format('d/m/Y') ?? 'Billing');
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var MaintenanceContractBilling $record */
+        return [
+            'Contract' => $record->maintenanceContract?->contract_no ?? '—',
+            'Status' => ucfirst((string) $record->status),
+            'Invoice' => $record->purchaseInvoice?->document_number ?? '—',
+            'Amount' => number_format((float) $record->amount, 2).' '.($record->maintenanceContract?->currency_code ?? config('app.default_currency', 'NGN')),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()
+            ->with(['maintenanceContract', 'purchaseInvoice']);
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'maintenanceContract.contract_no',
+            'maintenanceContract.description',
+            'billing_date',
+            'status',
+            'purchaseInvoice.document_number',
+        ];
     }
 }

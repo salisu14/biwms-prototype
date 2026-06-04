@@ -15,6 +15,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class SalesShipmentHeaderResource extends Resource
 {
@@ -37,11 +39,66 @@ class SalesShipmentHeaderResource extends Resource
         return SalesShipmentHeadersTable::configure($table);
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with(['customer', 'salesOrder', 'location']);
+    }
+
     public static function getRelations(): array
     {
         return [
             RelationManagers\LinesRelationManager::class,
         ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof SalesShipmentHeader) {
+            return static::getModelLabel();
+        }
+
+        $customer = $record->sell_to_customer_name ?? 'Unknown Customer';
+
+        return "{$record->document_no} - {$customer}";
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'document_no',
+            'order_no',
+            'sell_to_customer_no',
+            'sell_to_customer_name',
+            'shipment_date',
+            'shipment_method_code',
+            'location_code',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var SalesShipmentHeader $record */
+        $customer = $record->sell_to_customer_name ?? 'Unknown Customer';
+
+        return "{$record->document_no} - {$customer}";
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var SalesShipmentHeader $record */
+        return [
+            'Customer' => $record->sell_to_customer_no
+                ? "{$record->sell_to_customer_no} - ".($record->sell_to_customer_name ?? '—')
+                : ($record->sell_to_customer_name ?? '—'),
+            'Sales Order' => $record->order_no ?: '—',
+            'Shipment Date' => $record->shipment_date?->format('d/m/Y') ?? '—',
+            'Method' => $record->shipment_method_code ?: '—',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with(['customer', 'salesOrder', 'location']);
     }
 
     public static function getPages(): array

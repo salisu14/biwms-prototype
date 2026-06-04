@@ -25,23 +25,17 @@ class CustomerPriceOverridesTable
                     ->icon('heroicon-o-user-circle'),
 
                 TextColumn::make('item.item_code')
-                    ->label('Item No.')
+                    ->label('Item')
                     ->searchable()
                     ->sortable()
                     ->copyable()
-                    ->copyMessage('Item No. copied!')
-                    ->weight('bold'),
-
-                TextColumn::make('item.description')
-                    ->label('Item Description')
-                    ->searchable()
-                    ->limit(35)
-                    ->tooltip(fn ($record) => $record->item?->description)
-                    ->toggleable(),
+                    ->copyMessage('Item copied!')
+                    ->weight('bold')
+                    ->description(fn ($record) => $record->item?->description ?? ''),
 
                 TextColumn::make('item.unit_price')
                     ->label('Base Price')
-                    ->money(config('app.default_currency', 'USD'))
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->item?->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable()
                     ->color('gray')
 //                    ->strikeThrough(fn ($record) => $record->override_price != $record->item?->unit_price)
@@ -49,7 +43,7 @@ class CustomerPriceOverridesTable
 
                 TextColumn::make('override_price')
                     ->label('Override Price')
-                    ->money(config('app.default_currency', 'USD'))
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->item?->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable()
                     ->weight('bold')
                     ->color(function ($record) {

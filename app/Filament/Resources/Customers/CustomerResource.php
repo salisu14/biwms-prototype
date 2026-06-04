@@ -66,6 +66,9 @@ class CustomerResource extends Resource
             'email',
             'phone',
             'group.code',
+            'group.name',
+            'location.code',
+            'location.name',
         ];
     }
 
@@ -79,6 +82,7 @@ class CustomerResource extends Resource
     {
         /** @var Customer $record */
         return [
+            'Customer' => "{$record->customer_number} - {$record->name}",
             'Email' => $record->email ?: '—',
             'Phone' => $record->phone ?: '—',
             'Group' => $record->group

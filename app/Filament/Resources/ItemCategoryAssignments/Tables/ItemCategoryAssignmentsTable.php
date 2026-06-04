@@ -47,7 +47,7 @@ class ItemCategoryAssignmentsTable
                     ->description(fn ($record): string => $record->category?->category_code ?? ''),
 
                 IconColumn::make('is_primary')
-                    ->label('Primary')
+                    ->label('Scope')
                     ->boolean()
                     ->sortable()
                     ->alignCenter(),

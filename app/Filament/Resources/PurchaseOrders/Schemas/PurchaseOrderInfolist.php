@@ -79,8 +79,11 @@ class PurchaseOrderInfolist
                             ->label('Vendor')
                             ->helperText(fn ($record): string => $record->payment_terms ?? 'No payment terms set'),
 
-                        TextEntry::make('location.location_name')
+                        TextEntry::make('location.name')
                             ->label('Ship To Location')
+                            ->state(fn ($record): string => $record->location
+                                ? "{$record->location->code} - {$record->location->name}"
+                                : '—')
                             ->badge()
                             ->color('gray'),
                     ]),

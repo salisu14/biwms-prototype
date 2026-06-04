@@ -17,34 +17,33 @@ class ItemTrackingCodesTable
         return $table
             ->columns([
                 TextColumn::make('code')
-                    ->label('Code')
+                    ->label('Code / Description')
                     ->searchable()
                     ->sortable()
                     ->weight('bold')
-                    ->copyable(),
-
-                TextColumn::make('description')
-                    ->label('Description')
-                    ->searchable()
-                    ->wrap(),
+                    ->copyable()
+                    ->formatStateUsing(fn ($state, $record): string => $record->code
+                        ? "{$record->code} - {$record->description}"
+                        : ($record->description ?? '—'))
+                    ->description(fn ($record): string => $record->description ?? ''),
 
                 // Visual indicators of what this code actually does
                 IconColumn::make('snspecific_tracking')
-                    ->label('SN Track')
+                    ->label('Serial')
                     ->boolean()
                     ->trueIcon('heroicon-s-check-circle')
                     ->falseIcon('heroicon-o-minus')
                     ->color('primary'),
 
                 IconColumn::make('lotspecific_tracking')
-                    ->label('Lot Track')
+                    ->label('Lot')
                     ->boolean()
                     ->trueIcon('heroicon-s-check-circle')
                     ->falseIcon('heroicon-o-minus')
                     ->color('success'),
 
                 IconColumn::make('strict_expiration_posting')
-                    ->label('Strict Exp.')
+                    ->label('Expiration')
                     ->boolean()
                     ->toggleable(),
 

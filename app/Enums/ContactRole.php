@@ -9,6 +9,16 @@ enum ContactRole: string
     case PROSPECT = 'prospect';
     case BOTH = 'both';
 
+    public function label(): string
+    {
+        return match ($this) {
+            self::CUSTOMER => 'Customer',
+            self::VENDOR => 'Vendor',
+            self::PROSPECT => 'Prospect',
+            self::BOTH => 'Customer & Vendor',
+        };
+    }
+
     /**
      * Determine if this role is allowed to access the billing portal.
      */

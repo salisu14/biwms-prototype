@@ -17,6 +17,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Number;
 
 class PurchasePriceResource extends Resource
 {
@@ -96,13 +97,27 @@ class PurchasePriceResource extends Resource
             'Item' => $record->item
                 ? "{$record->item->item_code} - {$record->item->description}"
                 : '—',
-            'Unit Cost' => number_format((float) $record->direct_unit_cost, 2),
+            'Unit Cost' => Number::currency((float) $record->direct_unit_cost, $record->currency_code ?? config('app.default_currency', 'USD')),
             'Min Qty' => (string) $record->minimum_quantity,
+            'UoM' => $record->unit_of_measure_code ?: 'Base',
         ];
     }
 
     public static function getGlobalSearchEloquentQuery(): Builder
     {
         return parent::getGlobalSearchEloquentQuery()->with(['vendor', 'item']);
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var PurchasePrice $record */
+        $vendor = $record->vendor
+            ? "{$record->vendor->vendor_code} - {$record->vendor->vendor_name}"
+            : 'Unknown Vendor';
+        $item = $record->item
+            ? "{$record->item->item_code} - {$record->item->description}"
+            : 'Unknown Item';
+
+        return "{$vendor} • {$item}";
     }
 }

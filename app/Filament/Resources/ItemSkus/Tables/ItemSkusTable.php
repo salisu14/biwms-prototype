@@ -26,7 +26,10 @@ class ItemSkusTable
                     ->searchable()
                     ->sortable()
                     ->weight('bold')
-                    ->copyable(),
+                    ->copyable()
+                    ->description(fn ($record): string => $record->item
+                        ? "{$record->item->item_code} - {$record->item->description}"
+                        : ''),
 
                 TextColumn::make('barcode')
                     ->searchable()
@@ -130,7 +133,7 @@ class ItemSkusTable
 
                 SelectFilter::make('location_id')
                     ->label('Location')
-                    ->relationship('location', 'location_name')
+                    ->relationship('location', 'name')
                     ->searchable()
                     ->preload(),
 

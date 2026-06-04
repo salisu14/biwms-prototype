@@ -2,9 +2,6 @@
 
 namespace App\Filament\Resources\VendorLedgerEntries\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -62,7 +59,7 @@ class VendorLedgerEntriesTable
 
                 TextColumn::make('debit_amount')
                     ->label('Debit')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable()
                     ->alignEnd()
                     ->color('danger')
@@ -70,7 +67,7 @@ class VendorLedgerEntriesTable
 
                 TextColumn::make('credit_amount')
                     ->label('Credit')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable()
                     ->alignEnd()
                     ->color('success')
@@ -78,7 +75,7 @@ class VendorLedgerEntriesTable
 
                 TextColumn::make('remaining_amount')
                     ->label('Remaining')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable()
                     ->alignEnd()
                     ->weight('bold')
@@ -154,12 +151,6 @@ class VendorLedgerEntriesTable
             ])
             ->recordActions([
                 ViewAction::make(),
-                EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
             ])
             ->defaultSort('entry_number', 'desc');
     }

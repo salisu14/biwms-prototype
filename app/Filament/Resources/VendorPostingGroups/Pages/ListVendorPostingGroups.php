@@ -10,6 +10,8 @@ class ListVendorPostingGroups extends ListRecords
 {
     protected static string $resource = VendorPostingGroupResource::class;
 
+    protected static ?string $title = 'Vendor Posting Groups';
+
     protected function getHeaderActions(): array
     {
         return [

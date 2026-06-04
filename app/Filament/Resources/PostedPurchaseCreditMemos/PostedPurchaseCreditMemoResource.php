@@ -2,8 +2,6 @@
 
 namespace App\Filament\Resources\PostedPurchaseCreditMemos;
 
-use App\Filament\Resources\PostedPurchaseCreditMemos\Pages\CreatePostedPurchaseCreditMemo;
-use App\Filament\Resources\PostedPurchaseCreditMemos\Pages\EditPostedPurchaseCreditMemo;
 use App\Filament\Resources\PostedPurchaseCreditMemos\Pages\ListPostedPurchaseCreditMemos;
 use App\Filament\Resources\PostedPurchaseCreditMemos\Pages\ViewPostedPurchaseCreditMemo;
 use App\Filament\Resources\PostedPurchaseCreditMemos\Schemas\PostedPurchaseCreditMemoForm;
@@ -17,6 +15,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Number;
 
 class PostedPurchaseCreditMemoResource extends Resource
 {
@@ -41,6 +40,21 @@ class PostedPurchaseCreditMemoResource extends Resource
         return PostedPurchaseCreditMemosTable::configure($table);
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with(['vendor', 'reasonCode', 'location']);
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
     public static function getRelations(): array
     {
         return [
@@ -61,6 +75,14 @@ class PostedPurchaseCreditMemoResource extends Resource
         ];
     }
 
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var PostedPurchaseCreditMemo $record */
+        $vendor = $record->vendor_name ?: ($record->vendor?->vendor_name ?? 'Unknown Vendor');
+
+        return "{$record->document_number} - {$vendor}";
+    }
+
     public static function getGlobalSearchResultDetails(Model $record): array
     {
         /** @var PostedPurchaseCreditMemo $record */
@@ -68,22 +90,20 @@ class PostedPurchaseCreditMemoResource extends Resource
             'Vendor' => $record->vendor_name ?: '—',
             'Corrects Invoice' => $record->corrects_invoice_number ?: '—',
             'Posted' => $record->posted ? 'Yes' : 'No',
-            'Total' => number_format((float) $record->grand_total, 2).' '.($record->currency_code ?: ''),
+            'Total' => Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD')),
         ];
     }
 
     public static function getGlobalSearchEloquentQuery(): Builder
     {
-        return parent::getGlobalSearchEloquentQuery()->with('vendor');
+        return parent::getGlobalSearchEloquentQuery()->with(['vendor', 'reasonCode', 'location']);
     }
 
     public static function getPages(): array
     {
         return [
             'index' => ListPostedPurchaseCreditMemos::route('/'),
-            'create' => CreatePostedPurchaseCreditMemo::route('/create'),
             'view' => ViewPostedPurchaseCreditMemo::route('/{record}'),
-            'edit' => EditPostedPurchaseCreditMemo::route('/{record}/edit'),
         ];
     }
 }

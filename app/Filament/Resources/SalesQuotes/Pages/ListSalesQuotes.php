@@ -10,6 +10,8 @@ class ListSalesQuotes extends ListRecords
 {
     protected static string $resource = SalesQuoteResource::class;
 
+    protected static ?string $title = 'Sales Quotes';
+
     protected function getHeaderActions(): array
     {
         return [

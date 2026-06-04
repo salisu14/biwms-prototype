@@ -30,15 +30,21 @@ class SalesOrdersTable
         return $table
             ->columns([
                 TextColumn::make('order_number')
+                    ->label('Order')
                     ->searchable()
                     ->sortable()
                     ->weight('bold')
-                    ->copyable(),
+                    ->copyable()
+                    ->formatStateUsing(fn ($state, $record): string => $record->order_number
+                        ? "{$record->order_number} - ".($record->customer?->name ?? $record->customer_name ?? '—')
+                        : '—')
+                    ->description(fn ($record): string => $record->customer?->customer_number ?? ''),
 
                 TextColumn::make('customer.name')
                     ->label('Customer')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn ($record): string => $record->customer?->customer_number ?? ''),
 
                 TextColumn::make('order_date')
                     ->date()
@@ -46,6 +52,7 @@ class SalesOrdersTable
 
                 TextColumn::make('status')
                     ->badge()
+                    ->formatStateUsing(fn ($state) => $state?->label() ?? (string) $state)
                     ->sortable(),
 
                 TextColumn::make('grand_total')

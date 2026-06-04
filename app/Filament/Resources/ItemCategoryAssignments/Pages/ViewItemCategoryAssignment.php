@@ -16,7 +16,7 @@ class ViewItemCategoryAssignment extends ViewRecord
         $itemCode = $record->item?->item_code ?? 'Item';
         $categoryCode = $record->category?->category_code ?? 'Category';
 
-        return "{$itemCode} • {$categoryCode}";
+        return "{$itemCode} • Scope ".($record->is_primary ? 'Primary' : 'Secondary').' • Attribute '.$categoryCode;
     }
 
     public function getSubheading(): ?string
@@ -33,7 +33,7 @@ class ViewItemCategoryAssignment extends ViewRecord
         $itemCode = $record->item?->item_code ?? 'Item';
         $categoryCode = $record->category?->category_code ?? 'Category';
 
-        return "{$itemCode} • {$categoryCode}";
+        return "{$itemCode} - {$categoryCode}";
     }
 
     protected function getHeaderActions(): array

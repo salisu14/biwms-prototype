@@ -10,6 +10,8 @@ class ListSalesShipmentHeaders extends ListRecords
 {
     protected static string $resource = SalesShipmentHeaderResource::class;
 
+    protected static ?string $title = 'Sales Shipments';
+
     protected function getHeaderActions(): array
     {
         return [

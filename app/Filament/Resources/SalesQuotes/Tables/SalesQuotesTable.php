@@ -23,16 +23,21 @@ class SalesQuotesTable
         return $table
             ->columns([
                 TextColumn::make('quote_no')
-                    ->label('Quote #')
+                    ->label('Quote')
                     ->searchable()
                     ->sortable()
                     ->copyable()
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->formatStateUsing(fn ($state, $record): string => $record->quote_no
+                        ? "{$record->quote_no} - ".($record->customer?->name ?? '—')
+                        : '—')
+                    ->description(fn ($record): string => $record->customer?->customer_number ?? ''),
 
                 TextColumn::make('customer.name')
                     ->label('Customer')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn ($record): string => $record->customer?->customer_number ?? ''),
 
                 TextColumn::make('quote_date')
                     ->label('Date')
@@ -47,7 +52,7 @@ class SalesQuotesTable
 
                 TextColumn::make('total_amount')
                     ->label('Total')
-                    ->money('USD') // Uses local currency formatting
+                    ->money(fn ($record) => $record->currency_code ?: 'USD')
                     ->sortable()
                     ->alignment('right'),
 

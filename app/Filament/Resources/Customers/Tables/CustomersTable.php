@@ -20,13 +20,14 @@ class CustomersTable
         return $table
             ->columns([
                 TextColumn::make('customer_number')
-                    ->label('No.')
-                    ->sortable()
-                    ->searchable(),
-                TextColumn::make('name')
                     ->label('Customer')
-                    ->formatStateUsing(fn ($state, $record): string => "{$record->customer_number} - {$state}")
+                    ->sortable()
+                    ->searchable()
                     ->weight('bold')
+                    ->formatStateUsing(fn ($state, $record): string => "{$record->customer_number} - {$record->name}")
+                    ->description(fn ($record): string => $record->group?->code ?? ''),
+                TextColumn::make('name')
+                    ->label('Name')
                     ->searchable(),
                 TextColumn::make('email')
                     ->icon('heroicon-m-envelope')
@@ -46,9 +47,12 @@ class CustomersTable
                     ->formatStateUsing(fn ($state) => ucfirst(strtolower($state))),
                 TextColumn::make('group.code')
                     ->label('Group')
-                    ->toggleable(),
+                    ->toggleable()
+                    ->description(fn ($record) => $record->group?->name ?? ''),
                 TextColumn::make('location.name')
-                    ->placeholder('N/A'),
+                    ->label('Location')
+                    ->placeholder('N/A')
+                    ->description(fn ($record) => $record->location?->code ?? ''),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([

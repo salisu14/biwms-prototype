@@ -16,7 +16,9 @@ class EditItemUomAssignment extends EditRecord
         $itemCode = $record->item?->item_code ?? 'Item';
         $uomCode = $record->uom?->uom_code ?? 'UoM';
 
-        return $record->item?->item_code ? "Edit {$itemCode} • {$uomCode}" : 'Edit Item UOM Assignment';
+        return $record->item?->item_code
+            ? "{$itemCode} • Scope {$record->uom_type_label} • Attribute {$uomCode}"
+            : 'Item UOM Assignment';
     }
 
     public function getSubheading(): ?string
@@ -24,7 +26,7 @@ class EditItemUomAssignment extends EditRecord
         $record = $this->getRecord();
         $itemDescription = $record->item?->description ?? 'Item';
 
-        return "{$itemDescription} • {$record->uom_type_label}";
+        return "{$itemDescription} • Factor ".number_format((float) $record->conversion_factor, 6).' • '.($record->is_default ? 'Default' : 'Additional');
     }
 
     public function getBreadcrumb(): string
@@ -33,7 +35,7 @@ class EditItemUomAssignment extends EditRecord
         $itemCode = $record->item?->item_code ?? 'Item';
         $uomCode = $record->uom?->uom_code ?? 'UoM';
 
-        return $record->item?->item_code ? "{$itemCode} • {$uomCode}" : 'Item UOM Assignment';
+        return $record->item?->item_code ? "{$itemCode} - {$uomCode}" : 'Item UOM Assignment';
     }
 
     protected function getHeaderActions(): array

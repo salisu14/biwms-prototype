@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use UnitEnum;
 
 class CustomerContactResource extends Resource
@@ -27,9 +28,20 @@ class CustomerContactResource extends Resource
 
     protected static ?string $navigationLabel = 'Customer Contacts';
 
+    protected static ?string $recordTitleAttribute = null;
+
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->customers();
+        return parent::getEloquentQuery()
+            ->customers()
+            ->with(['customer', 'vendor']);
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()
+            ->customers()
+            ->with(['customer', 'vendor']);
     }
 
     public static function form(Schema $schema): Schema
@@ -45,6 +57,56 @@ class CustomerContactResource extends Resource
     public static function table(Table $table): Table
     {
         return ContactsTable::configure($table);
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof Contact) {
+            return static::getModelLabel();
+        }
+
+        return $record->full_name
+            ?: $record->name
+            ?: $record->company_name
+            ?: 'Customer Contact';
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'name',
+            'full_name',
+            'company_name',
+            'email',
+            'phone',
+            'mobile',
+            'city',
+            'country',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var Contact $record */
+        return $record->full_name
+            ?: $record->name
+            ?: $record->company_name
+            ?: 'Customer Contact';
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var Contact $record */
+        return [
+            'Type' => $record->type?->label() ?? '—',
+            'Role' => $record->role?->label() ?? '—',
+            'Email' => $record->email ?? '—',
+            'Phone' => $record->phone ?? '—',
+            'Location' => trim(implode(', ', array_filter([
+                $record->city,
+                $record->country,
+            ]))) ?: '—',
+        ];
     }
 
     public static function getRelations(): array

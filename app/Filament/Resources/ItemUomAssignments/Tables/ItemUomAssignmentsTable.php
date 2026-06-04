@@ -46,7 +46,7 @@ class ItemUomAssignmentsTable
                         : null),
 
                 TextColumn::make('uom_type')
-                    ->label('Type')
+                    ->label('Scope')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'BASE' => 'success',

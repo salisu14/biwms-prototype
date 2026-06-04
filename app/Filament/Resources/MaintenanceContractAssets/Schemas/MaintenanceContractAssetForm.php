@@ -54,14 +54,14 @@ class MaintenanceContractAssetForm
                                         }
                                     })
                                     ->getOptionLabelFromRecordUsing(
-                                        fn (FixedAsset $record) => "{$record->asset_code} — {$record->description}"
+                                        fn (FixedAsset $record) => "{$record->fa_no} — {$record->description}"
                                     )
                                     ->getSearchResultsUsing(
                                         fn (string $search) => FixedAsset::where('fa_no', 'like', "%{$search}%")
                                             ->orWhere('description', 'like', "%{$search}%")
                                             ->limit(50)
                                             ->get()
-                                            ->mapWithKeys(fn ($asset) => [$asset->id => "{$asset->asset_code} — {$asset->description}"])
+                                            ->mapWithKeys(fn ($asset) => [$asset->id => "{$asset->fa_no} — {$asset->description}"])
                                     ),
                             ]),
                         Grid::make(2)

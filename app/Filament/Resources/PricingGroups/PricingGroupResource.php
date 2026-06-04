@@ -79,7 +79,7 @@ class PricingGroupResource extends Resource
             'pricing_strategy',
             'currency_code',
             'generalBusinessPostingGroup.code',
-            'generalBusinessPostingGroup.name',
+            'generalBusinessPostingGroup.description',
         ];
     }
 

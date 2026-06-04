@@ -27,6 +27,8 @@ class PurchaseReceiptResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'document_number';
 
+    protected static ?string $slug = 'purchase-receipts';
+
     public static function form(Schema $schema): Schema
     {
         return PurchaseReceiptForm::configure($schema);
@@ -40,6 +42,21 @@ class PurchaseReceiptResource extends Resource
     public static function table(Table $table): Table
     {
         return PurchaseReceiptsTable::configure($table);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with(['vendor', 'receivingLocation', 'purchaseOrder']);
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return ! $record->posted;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return ! $record->posted;
     }
 
     public static function getRelations(): array
@@ -58,26 +75,43 @@ class PurchaseReceiptResource extends Resource
             'vendor_shipment_no',
             'vendor_invoice_no',
             'buy_from_vendor_name',
+            'vendor.vendor_code',
+            'vendor.vendor_name',
             'ship_to_name',
             'location_code',
+            'receivingLocation.code',
+            'receivingLocation.name',
+            'posted',
         ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var PurchaseReceipt $record */
+        $vendor = $record->vendor?->vendor_name ?: $record->buy_from_vendor_name ?: 'Unknown Vendor';
+
+        return "{$record->document_number} - {$vendor}";
     }
 
     public static function getGlobalSearchResultDetails(Model $record): array
     {
         /** @var PurchaseReceipt $record */
         return [
-            'Vendor' => $record->buy_from_vendor_name ?: '—',
+            'Vendor' => $record->vendor?->vendor_code
+                ? "{$record->vendor->vendor_code} - ".($record->vendor?->vendor_name ?? $record->buy_from_vendor_name ?? '—')
+                : ($record->buy_from_vendor_name ?: '—'),
             'Purchase Order' => $record->purchase_order_no ?: '—',
-            'Status' => $record->status ?: '—',
-            'Location' => $record->receivingLocation?->name ?: ($record->location_code ?: '—'),
+            'Status' => $record->posted ? 'Posted' : 'Open',
+            'Location' => $record->receivingLocation?->code
+                ? "{$record->receivingLocation->code} - {$record->receivingLocation->name}"
+                : ($record->receivingLocation?->name ?: ($record->location_code ?: '—')),
         ];
     }
 
     public static function getGlobalSearchEloquentQuery(): Builder
     {
         return parent::getGlobalSearchEloquentQuery()
-            ->with('receivingLocation')
+            ->with(['receivingLocation', 'vendor'])
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
@@ -89,7 +123,7 @@ class PurchaseReceiptResource extends Resource
             return static::getModelLabel();
         }
 
-        $vendor = $record->buy_from_vendor_name ?: 'Unknown Vendor';
+        $vendor = $record->vendor?->vendor_name ?: $record->buy_from_vendor_name ?: 'Unknown Vendor';
 
         return "{$record->document_number} - {$vendor}";
     }

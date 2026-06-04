@@ -59,14 +59,40 @@ class SalesOrderResource extends Resource
             'customer_name',
             'ship_to_name',
             'status',
+            'location.code',
+            'location.name',
         ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof SalesOrder) {
+            return static::getModelLabel();
+        }
+
+        $customer = $record->customer?->name ?: $record->customer_name ?: 'Unknown Customer';
+
+        return "{$record->order_number} - {$customer}";
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var SalesOrder $record */
+        $customer = $record->customer?->name ?: $record->customer_name ?: 'Unknown Customer';
+
+        return "{$record->order_number} - {$customer}";
     }
 
     public static function getGlobalSearchResultDetails(Model $record): array
     {
         /** @var SalesOrder $record */
         return [
-            'Customer' => $record->customer?->name ?: ($record->customer_name ?: '—'),
+            'Customer' => $record->customer?->customer_number
+                ? "{$record->customer->customer_number} - ".($record->customer?->name ?: $record->customer_name ?: '—')
+                : ($record->customer?->name ?: $record->customer_name ?: '—'),
+            'Location' => $record->location?->code
+                ? "{$record->location->code} - {$record->location->name}"
+                : ($record->location?->name ?? '—'),
             'External Doc' => $record->external_document_number ?: '—',
             'Status' => $record->status?->value ?? '—',
             'Total' => number_format((float) $record->grand_total, 2).' '.($record->currency_code ?: ''),
@@ -75,7 +101,7 @@ class SalesOrderResource extends Resource
 
     public static function getGlobalSearchEloquentQuery(): Builder
     {
-        return parent::getGlobalSearchEloquentQuery()->with('customer');
+        return parent::getGlobalSearchEloquentQuery()->with(['customer', 'location']);
     }
 
     public static function getPages(): array

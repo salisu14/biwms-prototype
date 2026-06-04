@@ -2,15 +2,13 @@
 
 namespace App\Filament\Resources\PostedPurchaseCreditMemos\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Number;
 
 class PostedPurchaseCreditMemosTable
 {
@@ -25,20 +23,23 @@ class PostedPurchaseCreditMemosTable
                 TextColumn::make('vendor_name')
                     ->label('Vendor')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn ($record) => $record->vendor?->vendor_code ?? ''),
                 TextColumn::make('posting_date')
                     ->date()
                     ->sortable(),
                 TextColumn::make('grand_total')
-                    ->money(fn ($record) => $record->currency_code)
+                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
                     ->sortable()
                     ->alignment('right'),
                 IconColumn::make('posted')
                     ->boolean()
                     ->label('Posted'),
                 TextColumn::make('reason_code')
+                    ->label('Reason')
                     ->toggleable(),
                 TextColumn::make('location_code')
+                    ->label('Location')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
                     ->dateTime()
@@ -46,7 +47,8 @@ class PostedPurchaseCreditMemosTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                TernaryFilter::make('posted'),
+                TernaryFilter::make('posted')
+                    ->label('Posted Status'),
                 SelectFilter::make('vendor_id')
                     ->relationship('vendor', 'vendor_name')
                     ->searchable(),
@@ -54,12 +56,6 @@ class PostedPurchaseCreditMemosTable
             ])
             ->recordActions([
                 ViewAction::make(),
-                EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
             ]);
     }
 }

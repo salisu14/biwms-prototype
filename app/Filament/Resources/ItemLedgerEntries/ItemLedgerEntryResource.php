@@ -77,7 +77,7 @@ class ItemLedgerEntryResource extends Resource
             'Location' => $record->location
                 ? "{$record->location->code} - {$record->location->name}"
                 : '—',
-            'Type' => $record->entry_type->value ?? (string) $record->entry_type,
+            'Type' => $record->entry_type?->label() ?? (string) $record->entry_type,
             'Open' => $record->open ? 'Yes' : 'No',
         ];
     }

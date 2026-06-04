@@ -10,6 +10,7 @@ use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Support\Number;
 
 class ViewPurchaseInvoice extends ViewRecord
 {
@@ -18,26 +19,34 @@ class ViewPurchaseInvoice extends ViewRecord
     public function getHeading(): string
     {
         $record = $this->getRecord();
+        $vendor = $record->vendor_name ?: ($record->vendor?->vendor_name ?? 'Unknown Vendor');
+        $amount = Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD'));
 
         return ($record->document_number ?? 'Purchase Invoice')
-            .' • Scope '.($record->vendor_name ?? '—')
-            .' • Attribute '.number_format((float) $record->grand_total, 2);
+            .' • '.$vendor
+            .' • '.$amount;
     }
 
     public function getSubheading(): string
     {
         $record = $this->getRecord();
+        $location = $record->location?->code
+            ? "{$record->location->code} - {$record->location->name}"
+            : ($record->location?->name ?? 'Unknown Location');
 
-        return ($record->order_number ?? 'No purchase order')
-            .' • '.($record->location?->name ?? 'Unknown Location')
-            .' • '.($record->due_date?->format('d/m/Y') ?? 'No due date');
+        return trim(implode(' • ', array_filter([
+            $record->order_number ?: 'No purchase order',
+            $location,
+            $record->due_date?->format('d/m/Y') ?: 'No due date',
+        ])));
     }
 
     public function getBreadcrumb(): string
     {
         $record = $this->getRecord();
+        $vendor = $record->vendor_name ?: ($record->vendor?->vendor_name ?? 'Unknown Vendor');
 
-        return $record->document_number ?? 'Purchase Invoice';
+        return ($record->document_number ?? 'Purchase Invoice').' - '.$vendor;
     }
 
     protected function getHeaderActions(): array

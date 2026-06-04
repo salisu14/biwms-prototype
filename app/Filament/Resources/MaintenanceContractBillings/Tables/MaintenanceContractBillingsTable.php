@@ -34,7 +34,7 @@ class MaintenanceContractBillingsTable
 
                 TextColumn::make('amount')
                     ->label('Amount')
-                    ->money('NGN')
+                    ->money(fn ($record) => $record->maintenanceContract?->currency_code ?: 'NGN')
                     ->sortable()
                     ->weight('bold')
                     ->alignEnd(),

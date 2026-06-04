@@ -18,6 +18,16 @@ class ArchivedPurchaseOrders extends ListRecords
 
     protected static ?string $navigationLabel = 'Archived Orders';
 
+    public function getHeading(): string
+    {
+        return 'Archived Purchase Orders';
+    }
+
+    public function getBreadcrumb(): string
+    {
+        return 'Archived Purchase Orders';
+    }
+
     protected function getTableQuery(): Builder
     {
         return parent::getTableQuery()

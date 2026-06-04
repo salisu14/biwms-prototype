@@ -15,7 +15,7 @@ class ViewMaintenanceContractBilling extends ViewRecord
         $record = $this->getRecord();
 
         return ($record->maintenanceContract?->contract_no ?? 'Billing')
-            .' • Scope '.($record->billing_date?->format('d/m/Y') ?? '—')
+            .' • Scope '.($record->purchaseInvoice?->document_number ?? 'No invoice')
             .' • Attribute '.number_format((float) $record->amount, 2);
     }
 
@@ -25,7 +25,7 @@ class ViewMaintenanceContractBilling extends ViewRecord
 
         return ($record->maintenanceContract?->description ?? 'Unknown Contract')
             .' • '.ucfirst((string) $record->status)
-            .' • '.($record->purchaseInvoice?->document_number ?? 'No invoice');
+            .' • '.($record->billing_date?->format('d/m/Y') ?? 'No billing date');
     }
 
     public function getBreadcrumb(): string
@@ -33,7 +33,7 @@ class ViewMaintenanceContractBilling extends ViewRecord
         $record = $this->getRecord();
 
         return $record->maintenanceContract
-            ? "{$record->maintenanceContract->contract_no} - {$record->billing_date?->format('d/m/Y')}"
+            ? "{$record->maintenanceContract->contract_no} - ".($record->purchaseInvoice?->document_number ?? $record->billing_date?->format('d/m/Y') ?? 'Billing')
             : 'Maintenance Contract Billing';
     }
 

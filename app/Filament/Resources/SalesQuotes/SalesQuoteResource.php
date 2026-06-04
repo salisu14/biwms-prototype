@@ -17,6 +17,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class SalesQuoteResource extends Resource
 {
@@ -45,6 +47,54 @@ class SalesQuoteResource extends Resource
             'items' => ItemsRelationManager::class,
             RevisionsRelationManager::class,
         ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof SalesQuote) {
+            return static::getModelLabel();
+        }
+
+        $customer = $record->customer?->name ?? 'Unknown Customer';
+
+        return "{$record->quote_no} - {$customer}";
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'quote_no',
+            'customer.name',
+            'customer.customer_number',
+            'status',
+            'approval_status',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var SalesQuote $record */
+        $customer = $record->customer?->name ?? 'Unknown Customer';
+
+        return "{$record->quote_no} - {$customer}";
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var SalesQuote $record */
+        return [
+            'Customer' => $record->customer?->customer_number
+                ? "{$record->customer->customer_number} - ".($record->customer?->name ?? '—')
+                : ($record->customer?->name ?? '—'),
+            'Status' => $record->status?->label() ?? (string) $record->status,
+            'Approval' => $record->approval_status?->label() ?? (string) $record->approval_status,
+            'Total' => number_format((float) $record->total_amount, 2).' '.($record->currency_code ?: ''),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with(['customer']);
     }
 
     public static function getPages(): array

@@ -10,6 +10,8 @@ class ListVendorContacts extends ListRecords
 {
     protected static string $resource = VendorContactResource::class;
 
+    protected static ?string $title = 'Vendor Contacts';
+
     protected function getHeaderActions(): array
     {
         return [

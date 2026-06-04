@@ -13,24 +13,31 @@ class ViewItemLedgerEntry extends ViewRecord
     public function getHeading(): string
     {
         $record = $this->getRecord();
+        $itemCode = $record->item?->item_code ?? 'Item';
+        $locationCode = $record->location?->code ?? 'Location';
+        $entryType = $record->entry_type?->label() ?? (string) $record->entry_type;
 
-        return "#{$record->entry_number}";
+        return "#{$record->entry_number}"
+            .' • Scope '.$itemCode
+            .' • Attribute '.$entryType;
     }
 
     public function getSubheading(): ?string
     {
         $record = $this->getRecord();
         $itemCode = $record->item?->item_code ?? 'Item';
-        $locationCode = $record->location?->code ?? 'Location';
+        $locationCode = $record->location?->code
+            ? "{$record->location->code} - {$record->location->name}"
+            : ($record->location?->name ?? 'Location');
 
-        return "{$itemCode} • {$locationCode} • {$record->entry_type->value}";
+        return "{$itemCode} • {$locationCode} • ".($record->open ? 'Open' : 'Closed');
     }
 
     public function getBreadcrumb(): string
     {
         $record = $this->getRecord();
 
-        return "#{$record->entry_number}";
+        return "#{$record->entry_number}".($record->item?->item_code ? ' - '.$record->item->item_code : '');
     }
 
     protected function getHeaderActions(): array

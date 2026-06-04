@@ -22,21 +22,26 @@ class ItemsTable
         return $table
             ->columns([
                 TextColumn::make('item_code')
-                    ->label('Code')
+                    ->label('Item')
                     ->searchable()
                     ->sortable()
                     ->copyable()
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->formatStateUsing(fn ($state, $record): string => $record->item_code
+                        ? "{$record->item_code} - {$record->description}"
+                        : ($record->description ?? '—'))
+                    ->description(fn ($record): string => $record->description_2 ?? ''),
                 TextColumn::make('sku')
                     ->label('SKU')
                     ->searchable()
                     ->sortable()
                     ->toggleable(),
                 TextColumn::make('primaryCategory.category_name')
-                    ->label('Category')
+                    ->label('Scope')
                     ->searchable()
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->description(fn ($record): string => $record->primaryCategory?->category_code ?? ''),
 
                 TextColumn::make('description')
                     ->label('Description')
@@ -45,7 +50,9 @@ class ItemsTable
                     ->tooltip(fn ($record) => $record->description_2 ?? $record->description),
 
                 TextColumn::make('item_type')
+                    ->label('Attribute')
                     ->badge()
+                    ->formatStateUsing(fn ($state) => $state?->label() ?? (string) $state)
                     ->sortable(),
 
                 TextColumn::make('ledger_on_hand')
@@ -103,13 +110,13 @@ class ItemsTable
 
                 TextColumn::make('unit_price')
                     ->label('Price')
-                    ->money('NGN', locale: 'ng')
+                    ->money(fn ($record) => $record->currency?->code ?? 'NGN', locale: 'ng')
                     ->alignRight()
                     ->sortable(),
 
                 TextColumn::make('unit_cost')
                     ->label('Cost')
-                    ->money('NGN')
+                    ->money(fn ($record) => $record->currency?->code ?? 'NGN')
                     ->alignRight()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),

@@ -21,6 +21,36 @@ class EditSalesOrder extends EditRecord
 
     use PreventsEditingPostedRecords;
 
+    public function getHeading(): string
+    {
+        $record = $this->getRecord();
+        $customer = $record->customer?->name ?: $record->customer_name ?: 'Unknown Customer';
+
+        return ($record->order_number ?? 'Sales Order')
+            .' • Scope '.$customer
+            .' • Attribute '.($record->status?->label() ?? $record->status?->value ?? 'Unknown Status');
+    }
+
+    public function getSubheading(): string
+    {
+        $record = $this->getRecord();
+        $location = $record->location?->code
+            ? "{$record->location->code} - {$record->location->name}"
+            : ($record->location?->name ?? 'Unknown Location');
+
+        return ($record->external_document_number ?: 'No external reference')
+            .' • '.$location
+            .' • '.number_format((float) $record->grand_total, 2).' '.($record->currency_code ?: '');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        $record = $this->getRecord();
+        $customer = $record->customer?->name ?: $record->customer_name ?: 'Unknown Customer';
+
+        return ($record->order_number ?? 'Sales Order').' - '.$customer;
+    }
+
     protected function getHeaderActions(): array
     {
         return [

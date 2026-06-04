@@ -10,6 +10,8 @@ class ListVendorItems extends ListRecords
 {
     protected static string $resource = VendorItemResource::class;
 
+    protected static ?string $title = 'Vendor Items';
+
     protected function getHeaderActions(): array
     {
         return [

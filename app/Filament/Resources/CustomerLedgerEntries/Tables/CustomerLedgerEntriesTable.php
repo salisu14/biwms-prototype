@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\CustomerLedgerEntries\Tables;
 
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\Summarizers\Sum;
@@ -36,21 +37,21 @@ class CustomerLedgerEntriesTable
                     ->wrap(),
                 TextColumn::make('debit_amount')
                     ->label('Debit')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable()
                     ->summarize(Sum::make()->label('Total Dr')),
                 TextColumn::make('credit_amount')
                     ->label('Credit')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable()
                     ->summarize(Sum::make()->label('Total Cr')),
                 TextColumn::make('running_balance')
                     ->label('Balance')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable(),
                 TextColumn::make('remaining_amount')
                     ->label('Remaining')
-                    ->money('NGN')
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
                     ->sortable()
                     ->toggleable(),
                 IconColumn::make('open')
@@ -93,7 +94,9 @@ class CustomerLedgerEntriesTable
                             ->when($data['until'] ?? null, fn (Builder $q, $date) => $q->whereDate('posting_date', '<=', $date));
                     }),
             ])
-            ->recordActions([])
+            ->recordActions([
+                ViewAction::make(),
+            ])
             ->toolbarActions([]);
     }
 }

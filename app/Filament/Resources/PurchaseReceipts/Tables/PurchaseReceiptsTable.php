@@ -4,11 +4,7 @@ namespace App\Filament\Resources\PurchaseReceipts\Tables;
 
 use App\Models\PurchaseReceipt;
 use Filament\Actions\Action;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
@@ -31,7 +27,9 @@ class PurchaseReceiptsTable
                     ->label('Vendor')
                     ->searchable()
                     ->sortable()
-                    ->description(fn ($record) => $record->vendor?->vendor_code ?? ''),
+                    ->description(fn ($record) => $record->vendor?->vendor_code
+                        ? "{$record->vendor->vendor_code} - ".($record->vendor?->vendor_name ?? $record->buy_from_vendor_name ?? '')
+                        : ''),
                 TextColumn::make('purchase_order_no')
                     ->label('Order No.')
                     ->searchable(),
@@ -40,14 +38,17 @@ class PurchaseReceiptsTable
                     ->sortable(),
                 TextColumn::make('receivingLocation.name')
                     ->label('Location')
-                    ->description(fn ($record) => $record->location_code ?? ''),
+                    ->description(fn ($record) => $record->receivingLocation?->code
+                        ? "{$record->receivingLocation->code} - {$record->receivingLocation->name}"
+                        : ($record->location_code ?? '')),
                 IconColumn::make('posted')
                     ->boolean(),
-                TextColumn::make('status')
+                TextColumn::make('posted')
+                    ->label('Status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'POSTED' => 'success',
-                        'PENDING' => 'warning',
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'Posted' : 'Open')
+                    ->color(fn (bool $state): string => match ($state) {
+                        true => 'success',
                         default => 'gray',
                     }),
                 TextColumn::make('actual_receipt_date')
@@ -78,14 +79,7 @@ class PurchaseReceiptsTable
                         }
                     }),
                 ViewAction::make(),
-                EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
-                ]),
+                EditAction::make()->visible(fn (PurchaseReceipt $record): bool => ! $record->posted),
             ]);
     }
 }

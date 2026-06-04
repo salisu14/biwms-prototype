@@ -8,6 +8,7 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
+use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -26,7 +27,7 @@ class MaintenanceContractsTable
                 TextColumn::make('contract_type')->badge(),
                 TextColumn::make('status')->badge(),
                 TextColumn::make('end_date')->date()->sortable(),
-                TextColumn::make('contract_value')->money('USD')->sortable(),
+                TextColumn::make('contract_value')->money(fn ($record) => $record->currency_code ?: 'USD')->sortable(),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -40,6 +41,7 @@ class MaintenanceContractsTable
                 TrashedFilter::make(),
             ])
             ->recordActions([
+                ViewAction::make(),
                 Action::make('activate')
                     ->label('Activate')
                     ->icon('heroicon-m-check-badge')

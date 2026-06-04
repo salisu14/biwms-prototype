@@ -81,7 +81,9 @@ class SalesInvoiceResource extends Resource
             return static::getModelLabel();
         }
 
-        return $record->invoice_number ?: static::getModelLabel();
+        $customer = $record->customer?->name ?: 'Unknown Customer';
+
+        return "{$record->invoice_number} - {$customer}";
     }
 
     public static function getGloballySearchableAttributes(): array
@@ -98,14 +100,18 @@ class SalesInvoiceResource extends Resource
     public static function getGlobalSearchResultTitle(Model $record): string
     {
         /** @var SalesInvoice $record */
-        return $record->invoice_number ?: static::getModelLabel();
+        $customer = $record->customer?->name ?: 'Unknown Customer';
+
+        return "{$record->invoice_number} - {$customer}";
     }
 
     public static function getGlobalSearchResultDetails(Model $record): array
     {
         /** @var SalesInvoice $record */
         return [
-            'Customer' => $record->customer?->name ?: '—',
+            'Customer' => $record->customer?->customer_number
+                ? "{$record->customer->customer_number} - ".($record->customer?->name ?? '—')
+                : ($record->customer?->name ?? '—'),
             'Sales Order' => $record->salesOrder?->order_number ?: '—',
             'Status' => $record->status?->value ?? '—',
             'Total' => number_format((float) $record->total_amount, 2).' '.($record->currency_code ?: ''),

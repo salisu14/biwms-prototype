@@ -10,6 +10,7 @@ use App\Models\VendorLedgerEntry;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Number;
 
 class ViewPostedPurchaseCreditMemo extends Page
 {
@@ -36,7 +37,32 @@ class ViewPostedPurchaseCreditMemo extends Page
 
     public function getHeading(): string
     {
-        return 'Posted Purchase Credit Memo '.$this->record->document_number;
+        $vendor = $this->record->vendor_name ?: ($this->record->vendor?->vendor_name ?? 'Unknown Vendor');
+        $amount = Number::currency((float) $this->record->grand_total, $this->record->currency_code ?: config('app.default_currency', 'USD'));
+
+        return ($this->record->document_number ?? 'Posted Purchase Credit Memo')
+            .' • '.$vendor
+            .' • '.$amount;
+    }
+
+    public function getSubheading(): string
+    {
+        $location = $this->record->location?->code
+            ? "{$this->record->location->code} - {$this->record->location->name}"
+            : ($this->record->location?->name ?? 'Unknown Location');
+
+        return trim(implode(' • ', array_filter([
+            $this->record->corrects_invoice_number ?: 'No linked invoice',
+            $location,
+            'Posted '.optional($this->record->posted_at)->format('d/m/Y H:i'),
+        ])));
+    }
+
+    public function getBreadcrumb(): string
+    {
+        $vendor = $this->record->vendor_name ?: ($this->record->vendor?->vendor_name ?? 'Unknown Vendor');
+
+        return ($this->record->document_number ?? 'Posted Purchase Credit Memo').' - '.$vendor;
     }
 
     protected function getHeaderActions(): array
@@ -46,10 +72,6 @@ class ViewPostedPurchaseCreditMemo extends Page
                 ->label('Back to Posted Purchase Credit Memos')
                 ->color('gray')
                 ->url(PostedPurchaseCreditMemoResource::getUrl('index')),
-            Action::make('edit')
-                ->label('Edit')
-                ->icon('heroicon-o-pencil-square')
-                ->url(PostedPurchaseCreditMemoResource::getUrl('edit', ['record' => $this->record])),
         ];
     }
 

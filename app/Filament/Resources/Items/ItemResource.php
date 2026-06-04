@@ -66,6 +66,9 @@ class ItemResource extends Resource
             'description',
             'description_2',
             'primaryCategory.category_name',
+            'location.code',
+            'location.name',
+            'item_type',
         ];
     }
 
@@ -79,15 +82,19 @@ class ItemResource extends Resource
     {
         /** @var Item $record */
         return [
-            'Type' => $record->item_type?->value ?? '—',
+            'Type' => $record->item_type?->label() ?? '—',
             'SKU' => $record->sku ?: '—',
-            'Price' => number_format((float) $record->unit_price, 2),
+            'Category' => $record->primaryCategory?->category_name ?? '—',
+            'Location' => $record->location?->code
+                ? "{$record->location->code} - {$record->location->name}"
+                : ($record->location?->name ?? '—'),
+            'Price' => number_format((float) $record->unit_price, 2).' '.($record->currency?->code ?? ''),
         ];
     }
 
     public static function getGlobalSearchEloquentQuery(): Builder
     {
-        return parent::getGlobalSearchEloquentQuery()->with('primaryCategory');
+        return parent::getGlobalSearchEloquentQuery()->with(['primaryCategory', 'location', 'currency']);
     }
 
     public static function getPages(): array

@@ -13,6 +13,8 @@ class ListCustomerLedgerEntries extends ListRecords
 {
     protected static string $resource = CustomerLedgerEntryResource::class;
 
+    protected static ?string $title = 'Customer Ledger Entries';
+
     public ?int $customerId = null;
 
     public ?Customer $customer = null;

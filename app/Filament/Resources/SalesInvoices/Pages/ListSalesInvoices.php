@@ -14,6 +14,8 @@ class ListSalesInvoices extends ListRecords
 {
     protected static string $resource = SalesInvoiceResource::class;
 
+    protected static ?string $title = 'Sales Invoices';
+
     protected function getTableQuery(): Builder
     {
         return SalesInvoice::query()

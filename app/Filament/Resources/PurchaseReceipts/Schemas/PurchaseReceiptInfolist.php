@@ -32,14 +32,16 @@ class PurchaseReceiptInfolist
                                             ->badge(),
                                         TextEntry::make('buy_from_vendor_name')
                                             ->label('Vendor')
-                                            ->state(fn (PurchaseReceipt $record): string => $record->vendor?->vendor_name ?? $record->buy_from_vendor_name ?? '—')
+                                            ->state(fn (PurchaseReceipt $record): string => $record->vendor?->vendor_code
+                                                ? "{$record->vendor->vendor_code} - ".($record->vendor?->vendor_name ?? $record->buy_from_vendor_name ?? '—')
+                                                : ($record->buy_from_vendor_name ?? '—'))
                                             ->url(fn (PurchaseReceipt $record): ?string => $record->vendor
                                                 ? VendorResource::getUrl('view', ['record' => $record->vendor])
                                                 : null),
                                         TextEntry::make('purchase_order_link')
                                             ->label('Purchase Order')
                                             ->state(fn (PurchaseReceipt $record): string => $record->purchaseOrder
-                                                ? "{$record->purchaseOrder->order_number} - {$record->purchaseOrder->vendor_name}"
+                                                ? "{$record->purchaseOrder->order_number} - ".($record->purchaseOrder->vendor_name ?? 'Unknown Vendor')
                                                 : ($record->purchase_order_no ?? '—'))
                                             ->url(fn (PurchaseReceipt $record): ?string => $record->purchaseOrder
                                                 ? PurchaseOrderResource::getUrl('view', ['record' => $record->purchaseOrder])
@@ -63,7 +65,9 @@ class PurchaseReceiptInfolist
                                             ->label('Receiving Location'),
                                         TextEntry::make('location_link')
                                             ->label('Location')
-                                            ->state(fn (PurchaseReceipt $record): string => $record->receivingLocation?->name ?? $record->location_code ?? '—')
+                                            ->state(fn (PurchaseReceipt $record): string => $record->receivingLocation?->code
+                                                ? "{$record->receivingLocation->code} - {$record->receivingLocation->name}"
+                                                : ($record->receivingLocation?->name ?? $record->location_code ?? '—'))
                                             ->url(fn (PurchaseReceipt $record): ?string => $record->receivingLocation
                                                 ? LocationResource::getUrl('view', ['record' => $record->receivingLocation])
                                                 : null),

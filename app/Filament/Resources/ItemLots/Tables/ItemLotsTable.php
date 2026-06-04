@@ -30,7 +30,7 @@ class ItemLotsTable
                     ->description(fn ($record): string => $record->item?->description ?? ''),
 
                 TextColumn::make('lot_number')
-                    ->label('Lot No')
+                    ->label('Lot No.')
                     ->searchable(),
                 TextColumn::make('supplier_lot')
                     ->label('Supplier Lot')
@@ -49,6 +49,7 @@ class ItemLotsTable
                     ->alignEnd()
                     ->sortable(),
                 TextColumn::make('quantity_remaining')
+                    ->label('Remaining Qty')
                     ->numeric()
                     ->alignEnd()
                     ->sortable(),

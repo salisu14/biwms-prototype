@@ -20,6 +20,31 @@ class EditPurchaseOrder extends EditRecord
 {
     protected static string $resource = PurchaseOrderResource::class;
 
+    public function getHeading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->order_number ?? 'Purchase Order')
+            .' • Scope '.($record->vendor?->vendor_name ?? $record->vendor_name ?? 'Unknown Vendor')
+            .' • Attribute '.number_format((float) $record->grand_total, 2);
+    }
+
+    public function getSubheading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->order_type?->value ?? 'Order')
+            .' • '.($record->location?->code ? "{$record->location->code} - {$record->location->name}" : ($record->location?->name ?? 'Unknown Location'))
+            .' • '.($record->status?->value ?? 'Unknown Status');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        $record = $this->getRecord();
+
+        return $record->order_number ? "{$record->order_number} - ".($record->vendor?->vendor_name ?? $record->vendor_name ?? 'Vendor') : 'Purchase Order';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

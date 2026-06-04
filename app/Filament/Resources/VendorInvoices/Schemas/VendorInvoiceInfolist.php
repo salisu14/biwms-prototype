@@ -7,6 +7,7 @@ use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Number;
 
 class VendorInvoiceInfolist
 {
@@ -18,29 +19,45 @@ class VendorInvoiceInfolist
                     ->icon('heroicon-o-document-text')
                     ->schema([
                         TextEntry::make('document_number')->label('Invoice No.')->badge()->color('primary'),
-                        TextEntry::make('vendor.name')->label('Vendor'),
+                        TextEntry::make('vendor.vendor_name')->label('Vendor'),
                         TextEntry::make('vendor_invoice_no')->label('Vendor Inv. No.'),
-                        TextEntry::make('document_type')->badge(),
+                        TextEntry::make('document_type')->badge()->formatStateUsing(fn ($state) => str_replace('_', ' ', (string) $state)),
                         TextEntry::make('source_document_no')->label('Source Doc')->placeholder('-'),
-                        TextEntry::make('status')->badge()->color(fn ($state) => match($state) { 'OPEN' => 'gray', 'APPROVED' => 'info', 'POSTED' => 'success', 'PAID' => 'primary', default => 'warning' }),
+                        TextEntry::make('status')->badge()->color(fn ($state) => match ($state) {
+                            'OPEN' => 'gray', 'APPROVED' => 'info', 'POSTED' => 'success', 'PAID' => 'primary', default => 'warning'
+                        }),
                     ])->columns(3),
 
                 Section::make('Financials')
                     ->icon('heroicon-o-currency-dollar')
                     ->schema([
-                        TextEntry::make('amount')->label('Subtotal')->money('NGN'),
-                        TextEntry::make('discount_amount')->label('Discount')->money('NGN'),
-                        TextEntry::make('tax_amount')->label('Tax')->money('NGN'),
-                        TextEntry::make('amount_including_tax')->label('Total')->money('NGN')->weight('bold'),
-                        TextEntry::make('remaining_amount')->label('Remaining')->money('NGN')->color('danger'),
+                        TextEntry::make('amount')
+                            ->label('Subtotal')
+                            ->state(fn (VendorInvoice $record): string => Number::currency((float) $record->amount, $record->currency_code ?: config('app.default_currency', 'USD'))),
+                        TextEntry::make('discount_amount')
+                            ->label('Discount')
+                            ->state(fn (VendorInvoice $record): string => Number::currency((float) $record->discount_amount, $record->currency_code ?: config('app.default_currency', 'USD'))),
+                        TextEntry::make('tax_amount')
+                            ->label('Tax')
+                            ->state(fn (VendorInvoice $record): string => Number::currency((float) $record->tax_amount, $record->currency_code ?: config('app.default_currency', 'USD'))),
+                        TextEntry::make('amount_including_tax')
+                            ->label('Total')
+                            ->state(fn (VendorInvoice $record): string => Number::currency((float) $record->amount_including_tax, $record->currency_code ?: config('app.default_currency', 'USD')))
+                            ->weight('bold'),
+                        TextEntry::make('remaining_amount')
+                            ->label('Remaining')
+                            ->state(fn (VendorInvoice $record): string => Number::currency((float) $record->remaining_amount, $record->currency_code ?: config('app.default_currency', 'USD')))
+                            ->color('danger'),
                         TextEntry::make('payment_status')
                             ->label('Payment Status')
                             ->badge()
-                            ->color(fn (VendorInvoice $record) => match($record->getPaymentStatus()) { 'PAID' => 'success', 'PARTIAL' => 'warning', 'UNPAID' => 'danger', default => 'gray' })
+                            ->color(fn (VendorInvoice $record) => match ($record->getPaymentStatus()) {
+                                'PAID' => 'success', 'PARTIAL' => 'warning', 'UNPAID' => 'danger', default => 'gray'
+                            })
                             ->state(fn (VendorInvoice $record) => $record->getPaymentStatus()),
                         TextEntry::make('days_overdue')
                             ->label('Days Overdue')
-                            ->state(fn (VendorInvoice $record) => $record->getDaysOverdue() ? $record->getDaysOverdue() . ' days' : 'N/A')
+                            ->state(fn (VendorInvoice $record) => $record->getDaysOverdue() ? $record->getDaysOverdue().' days' : 'N/A')
                             ->color(fn (VendorInvoice $record) => $record->getDaysOverdue() ? 'danger' : 'gray'),
                         TextEntry::make('currency_code')->badge(),
                         TextEntry::make('exchange_rate')->numeric(),
@@ -54,7 +71,7 @@ class VendorInvoiceInfolist
                         TextEntry::make('due_date')->date('d/m/Y')->color(fn ($record) => $record->due_date < now() && $record->remaining_amount > 0 ? 'danger' : 'gray'),
                         TextEntry::make('receipt_date')->date('d/m/Y')->placeholder('-'),
                         TextEntry::make('payableAccount.name')->label('Payable Account')->placeholder('-'),
-                        TextEntry::make('capExProject.name')->label('CapEx Project')->placeholder('-'),
+                        TextEntry::make('capExProject.description')->label('CapEx Project')->placeholder('-'),
                         IconEntry::make('capitalized')->boolean()->visible(fn ($record) => $record->capex_project_id !== null),
                     ])->columns(3),
 

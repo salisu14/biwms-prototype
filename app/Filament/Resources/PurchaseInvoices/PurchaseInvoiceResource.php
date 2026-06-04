@@ -19,6 +19,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Number;
 
 class PurchaseInvoiceResource extends Resource
 {
@@ -43,6 +44,20 @@ class PurchaseInvoiceResource extends Resource
         return PurchaseInvoicesTable::configure($table);
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with([
+            'vendor',
+            'purchaseOrder',
+            'location',
+            'capExProject',
+            'payableAccount',
+            'requester',
+            'approver',
+            'poster',
+        ]);
+    }
+
     public static function getRelations(): array
     {
         return [
@@ -60,18 +75,6 @@ class PurchaseInvoiceResource extends Resource
         return ! $record->isPosted();
     }
 
-    public static function getPages(): array
-    {
-        return [
-            'index' => ListPurchaseInvoices::route('/'),
-            'create' => CreatePurchaseInvoice::route('/create'),
-            'view' => ViewPurchaseInvoice::route('/{record}'),
-            'edit' => EditPurchaseInvoice::route('/{record}/edit'),
-            'posted' => Pages\PostedPurchaseInvoices::route('/history/posted'),
-            'view-posted' => ViewPostedPurchaseInvoice::route('/history/posted/{record}'),
-        ];
-    }
-
     public static function getRecordTitle(?Model $record): string
     {
         if (! $record instanceof PurchaseInvoice) {
@@ -83,27 +86,6 @@ class PurchaseInvoiceResource extends Resource
         return "{$record->document_number} - {$vendor}";
     }
 
-    public static function getGlobalSearchResultDetails(Model $record): array
-    {
-        /** @var PurchaseInvoice $record */
-        return [
-            'Vendor' => $record->vendor_name ?: ($record->vendor?->vendor_name ?? '—'),
-            'Purchase Order' => $record->order_number ?: '—',
-            'Status' => $record->status?->value ?? '—',
-            'Location' => $record->location?->name ?? '—',
-            'Total' => number_format((float) $record->grand_total, 2).' '.($record->currency_code ?: ''),
-        ];
-    }
-
-    public static function getGlobalSearchEloquentQuery(): Builder
-    {
-        return parent::getGlobalSearchEloquentQuery()
-            ->with(['vendor', 'purchaseOrder', 'location'])
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
-    }
-
     public static function getGloballySearchableAttributes(): array
     {
         return [
@@ -112,8 +94,62 @@ class PurchaseInvoiceResource extends Resource
             'order_number',
             'vendor_name',
             'vendor.vendor_code',
+            'vendor.vendor_name',
             'status',
+            'location.code',
             'location.name',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var PurchaseInvoice $record */
+        $vendor = $record->vendor_name ?: ($record->vendor?->vendor_name ?? 'Unknown Vendor');
+
+        return "{$record->document_number} - {$vendor}";
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var PurchaseInvoice $record */
+        return [
+            'Vendor' => $record->vendor?->vendor_code
+                ? "{$record->vendor->vendor_code} - ".($record->vendor_name ?: ($record->vendor?->vendor_name ?? '—'))
+                : ($record->vendor_name ?: ($record->vendor?->vendor_name ?? '—')),
+            'Purchase Order' => $record->order_number ?: '—',
+            'Status' => $record->status?->value ?? '—',
+            'Location' => $record->location?->code
+                ? "{$record->location->code} - {$record->location->name}"
+                : ($record->location?->name ?? '—'),
+            'Total' => Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD')),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with([
+            'vendor',
+            'purchaseOrder',
+            'location',
+            'capExProject',
+            'payableAccount',
+            'requester',
+            'approver',
+            'poster',
+        ])->withoutGlobalScopes([
+            SoftDeletingScope::class,
+        ]);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListPurchaseInvoices::route('/'),
+            'create' => CreatePurchaseInvoice::route('/create'),
+            'view' => ViewPurchaseInvoice::route('/{record}'),
+            'edit' => EditPurchaseInvoice::route('/{record}/edit'),
+            'posted' => Pages\PostedPurchaseInvoices::route('/history/posted'),
+            'view-posted' => ViewPostedPurchaseInvoice::route('/history/posted/{record}'),
         ];
     }
 }

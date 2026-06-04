@@ -16,6 +16,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Number;
 
 class PurchaseInvoicesTable
 {
@@ -29,7 +30,10 @@ class PurchaseInvoicesTable
                     ->sortable(),
                 TextColumn::make('vendor_name')
                     ->label('Vendor')
-                    ->searchable(),
+                    ->searchable()
+                    ->description(fn ($record) => $record->vendor?->vendor_code
+                        ? "{$record->vendor->vendor_code} - ".($record->vendor?->vendor_name ?? $record->vendor_name ?? '')
+                        : ''),
                 TextColumn::make('posting_date')
                     ->date()
                     ->sortable(),
@@ -39,14 +43,14 @@ class PurchaseInvoicesTable
                     ->color(fn ($record) => $record->is_overdue ? 'danger' : null),
                 TextColumn::make('grand_total')
                     ->label('Total')
-                    ->money(fn ($record) => $record->currency_code)
+                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
                     ->sortable()
                     ->alignment('right'),
                 SelectColumn::make('status')
                     ->options(ApprovalStatus::class)
                     ->disabled(fn ($record) => $record->isPosted()),
                 TextColumn::make('remaining_amount')
-                    ->money(fn ($record) => $record->currency_code)
+                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
                     ->label('Balance')
                     ->color(fn ($state) => $state > 0 ? 'warning' : 'success')
                     ->alignment('right'),
@@ -60,6 +64,7 @@ class PurchaseInvoicesTable
                     ->toggleable(),
                 TextColumn::make('location.name')
                     ->label('Location')
+                    ->description(fn ($record) => $record->location?->code ?? '')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('posted_at')
                     ->dateTime()

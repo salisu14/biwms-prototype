@@ -11,6 +11,7 @@ use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Number;
 
 class PostedSalesInvoices extends ListRecords
 {
@@ -29,6 +30,7 @@ class PostedSalesInvoices extends ListRecords
     protected function getTableQuery(): Builder
     {
         return PostedSalesInvoice::query()
+            ->with(['customer', 'location', 'salesOrder'])
             ->whereNotNull('posted_at')
             ->latest('posted_at');
     }
@@ -45,11 +47,12 @@ class PostedSalesInvoices extends ListRecords
                 TextColumn::make('customer_name')
                     ->label('Customer')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn (PostedSalesInvoice $record): string => $record->customer?->customer_code ?? ''),
 
                 TextColumn::make('grand_total')
                     ->label('Amount')
-                    ->money(fn (PostedSalesInvoice $record) => $record->currency_code ?: 'NGN')
+                    ->formatStateUsing(fn ($state, PostedSalesInvoice $record): string => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
                     ->sortable(),
 
                 TextColumn::make('posted_at')
@@ -59,11 +62,13 @@ class PostedSalesInvoices extends ListRecords
 
                 TextColumn::make('status')
                     ->badge()
-                    ->state(fn (PostedSalesInvoice $record): string => $record->status),
-                // color is provided by the model's computed status text
-            ])
-            ->filters([
-                // Add filters if needed
+                    ->state(fn (PostedSalesInvoice $record): string => str_replace('_', ' ', $record->status))
+                    ->color(fn (PostedSalesInvoice $record): string => match ($record->status) {
+                        'PAID' => 'success',
+                        'OVERDUE' => 'danger',
+                        'CANCELLED' => 'gray',
+                        default => 'warning',
+                    }),
             ])
             ->recordUrl(fn (PostedSalesInvoice $record): string => SalesInvoiceResource::getUrl('view-posted', [
                 'record' => $record->id,
@@ -102,7 +107,6 @@ class PostedSalesInvoices extends ListRecords
                     }),
             ])
             ->toolbarActions([
-                // No bulk delete for posted invoices
             ]);
     }
 
@@ -110,7 +114,6 @@ class PostedSalesInvoices extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            // No CreateAction here
         ];
     }
 }

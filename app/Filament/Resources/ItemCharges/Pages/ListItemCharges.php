@@ -10,6 +10,8 @@ class ListItemCharges extends ListRecords
 {
     protected static string $resource = ItemChargeResource::class;
 
+    protected static ?string $title = 'Item Charges';
+
     protected function getHeaderActions(): array
     {
         return [

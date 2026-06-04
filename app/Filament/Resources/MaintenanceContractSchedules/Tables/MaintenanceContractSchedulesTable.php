@@ -6,6 +6,7 @@ use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -18,11 +19,19 @@ class MaintenanceContractSchedulesTable
     {
         return $table
             ->columns([
-                TextColumn::make('maintenanceContract.contract_no')->label('Contract')->searchable(),
-                TextColumn::make('fixedAsset.description')->label('Asset')->toggleable(),
+                TextColumn::make('maintenanceContract.contract_no')
+                    ->label('Contract')
+                    ->searchable()
+                    ->description(fn ($record) => $record->maintenanceContract?->description),
+                TextColumn::make('fixedAsset.fa_no')
+                    ->label('Asset')
+                    ->toggleable()
+                    ->description(fn ($record) => $record->fixedAsset?->description),
                 TextColumn::make('frequency')->badge(),
                 TextColumn::make('next_service_date')->date()->sortable(),
-                TextColumn::make('estimated_cost')->money('USD')->sortable(),
+                TextColumn::make('estimated_cost')
+                    ->money(fn ($record) => $record->maintenanceContract?->currency_code ?: 'NGN')
+                    ->sortable(),
                 IconColumn::make('is_active')->boolean(),
             ])
             ->filters([
@@ -30,6 +39,7 @@ class MaintenanceContractSchedulesTable
                     ->query(fn ($query) => $query->whereDate('next_service_date', '<=', now())),
             ])
             ->recordActions([
+                ViewAction::make(),
                 Action::make('complete_service')
                     ->label('Complete Service')
                     ->icon('heroicon-m-check-circle')

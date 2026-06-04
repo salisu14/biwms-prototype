@@ -2,8 +2,6 @@
 
 namespace App\Filament\Resources\VendorLedgerEntries;
 
-use App\Filament\Resources\VendorLedgerEntries\Pages\CreateVendorLedgerEntry;
-use App\Filament\Resources\VendorLedgerEntries\Pages\EditVendorLedgerEntry;
 use App\Filament\Resources\VendorLedgerEntries\Pages\ListVendorLedgerEntries;
 use App\Filament\Resources\VendorLedgerEntries\Pages\ViewVendorLedgerEntry;
 use App\Filament\Resources\VendorLedgerEntries\Schemas\VendorLedgerEntryForm;
@@ -15,6 +13,9 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Number;
 
 class VendorLedgerEntryResource extends Resource
 {
@@ -23,6 +24,11 @@ class VendorLedgerEntryResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static ?string $recordTitleAttribute = 'description';
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with(['vendor', 'currency']);
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -39,6 +45,69 @@ class VendorLedgerEntryResource extends Resource
         return VendorLedgerEntriesTable::configure($table);
     }
 
+    public static function canEdit(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof VendorLedgerEntry) {
+            return static::getModelLabel();
+        }
+
+        $vendor = $record->vendor
+            ? "{$record->vendor->vendor_code} - {$record->vendor->vendor_name}"
+            : 'Unknown Vendor';
+
+        return "{$record->entry_number} - {$vendor}";
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'entry_number',
+            'vendor.vendor_code',
+            'vendor.vendor_name',
+            'document_type',
+            'document_number',
+            'external_document_number',
+            'description',
+            'remaining_amount',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var VendorLedgerEntry $record */
+        $vendor = $record->vendor
+            ? "{$record->vendor->vendor_code} - {$record->vendor->vendor_name}"
+            : 'Unknown Vendor';
+
+        return "{$record->entry_number} • {$vendor}";
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var VendorLedgerEntry $record */
+        return [
+            'Vendor' => $record->vendor
+                ? "{$record->vendor->vendor_code} - {$record->vendor->vendor_name}"
+                : '—',
+            'Document' => trim(implode(' • ', array_filter([
+                $record->document_type,
+                $record->document_number,
+            ]))),
+            'Posting Date' => $record->posting_date?->toDateString() ?? '—',
+            'Amount' => Number::currency((float) $record->amount, $record->currency_code ?? config('app.default_currency', 'USD')),
+        ];
+    }
+
     public static function getRelations(): array
     {
         return [
@@ -50,9 +119,7 @@ class VendorLedgerEntryResource extends Resource
     {
         return [
             'index' => ListVendorLedgerEntries::route('/'),
-            'create' => CreateVendorLedgerEntry::route('/create'),
             'view' => ViewVendorLedgerEntry::route('/{record}'),
-            'edit' => EditVendorLedgerEntry::route('/{record}/edit'),
         ];
     }
 }

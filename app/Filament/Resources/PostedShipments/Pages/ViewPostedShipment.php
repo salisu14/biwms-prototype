@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\PostedShipments\Pages;
 
 use App\Filament\Resources\PostedShipments\PostedShipmentResource;
-use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 
 class ViewPostedShipment extends ViewRecord
@@ -12,8 +11,6 @@ class ViewPostedShipment extends ViewRecord
 
     protected function getHeaderActions(): array
     {
-        return [
-            EditAction::make(),
-        ];
+        return [];
     }
 }

@@ -17,6 +17,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Number;
 
 class PurchaseOrderResource extends Resource
 {
@@ -29,6 +30,11 @@ class PurchaseOrderResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return PurchaseOrderForm::configure($schema);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with(['vendor', 'location']);
     }
 
     public static function infolist(Schema $schema): Schema
@@ -56,7 +62,9 @@ class PurchaseOrderResource extends Resource
             return static::getModelLabel();
         }
 
-        return $record->order_number ?: static::getModelLabel();
+        $vendor = $record->vendor?->vendor_name ?? $record->vendor_name ?? 'Unknown Vendor';
+
+        return "{$record->order_number} - {$vendor}";
     }
 
     public static function getGloballySearchableAttributes(): array
@@ -67,13 +75,17 @@ class PurchaseOrderResource extends Resource
             'vendor.vendor_code',
             'vendor_name',
             'status',
+            'location.code',
+            'location.name',
         ];
     }
 
     public static function getGlobalSearchResultTitle(Model $record): string
     {
         /** @var PurchaseOrder $record */
-        return $record->order_number ?: static::getModelLabel();
+        $vendor = $record->vendor?->vendor_name ?? $record->vendor_name ?? 'Unknown Vendor';
+
+        return "{$record->order_number} - {$vendor}";
     }
 
     public static function getGlobalSearchResultDetails(Model $record): array
@@ -81,15 +93,16 @@ class PurchaseOrderResource extends Resource
         /** @var PurchaseOrder $record */
         return [
             'Vendor' => $record->vendor?->vendor_name ?: $record->vendor_name ?: '—',
+            'Location' => $record->location?->code ? "{$record->location->code} - {$record->location->name}" : ($record->location?->name ?? '—'),
             'Status' => $record->status?->value ?? '—',
             'Order Type' => $record->order_type?->value ?? '—',
-            'Total' => number_format((float) $record->grand_total, 2).' '.($record->currency_code ?: ''),
+            'Total' => Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD')),
         ];
     }
 
     public static function getGlobalSearchEloquentQuery(): Builder
     {
-        return parent::getGlobalSearchEloquentQuery()->with('vendor');
+        return parent::getGlobalSearchEloquentQuery()->with(['vendor', 'location']);
     }
 
     public static function getPages(): array

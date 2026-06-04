@@ -26,14 +26,21 @@ class SalesInvoicesTable
         return $table
             ->columns([
                 TextColumn::make('invoice_number')
+                    ->label('Invoice')
                     ->searchable()
                     ->sortable()
                     ->copyable()
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->formatStateUsing(fn ($state, $record): string => $record->invoice_number
+                        ? "{$record->invoice_number} - ".($record->customer?->name ?? '—')
+                        : '—')
+                    ->description(fn ($record): string => $record->customer?->customer_number ?? ''),
 
                 TextColumn::make('customer.name')
+                    ->label('Customer')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn ($record): string => $record->customer?->customer_number ?? ''),
 
                 TextColumn::make('invoice_date')
                     ->date()
@@ -50,6 +57,7 @@ class SalesInvoicesTable
 
                 TextColumn::make('status')
                     ->badge()
+                    ->formatStateUsing(fn ($state) => $state?->label() ?? (string) $state)
                     ->color(fn (ApprovalStatus $state): string => match ($state) {
                         ApprovalStatus::DRAFT => 'gray',
                         ApprovalStatus::PENDING => 'warning',

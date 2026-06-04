@@ -16,14 +16,18 @@ class VendorPostingGroupsTable
         return $table
             ->columns([
                 TextColumn::make('code')
+                    ->label('Code')
                     ->searchable()
                     ->weight('bold'),
                 TextColumn::make('description')
+                    ->label('Posting Group')
                     ->searchable(),
                 TextColumn::make('payablesAccount.name')
                     ->label('Payables Account')
+                    ->description(fn ($record) => $record->payablesAccount?->no ?? '')
                     ->searchable(),
                 IconColumn::make('blocked')
+                    ->label('Blocked')
                     ->boolean()
                     ->sortable(),
                 TextColumn::make('updated_at')

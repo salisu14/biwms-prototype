@@ -44,10 +44,10 @@ class ItemInfolist
                         ->schema([
                             TextEntry::make('unit_price')
                                 ->label('Selling Price')
-                                ->money(),
+                                ->money(fn ($record) => $record->currency?->code ?? 'NGN'),
                             TextEntry::make('standard_cost')
                                 ->label('Standard Cost')
-                                ->money(),
+                                ->money(fn ($record) => $record->currency?->code ?? 'NGN'),
                             TextEntry::make('inventory_method')
                                 ->label('Inventory Method')
                                 ->badge(),

@@ -10,6 +10,8 @@ class ListVendorInvoices extends ListRecords
 {
     protected static string $resource = VendorInvoiceResource::class;
 
+    protected static ?string $title = 'Vendor Invoices';
+
     protected function getHeaderActions(): array
     {
         return [

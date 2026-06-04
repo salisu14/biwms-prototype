@@ -12,6 +12,8 @@ class ListPurchaseOrders extends ListRecords
 {
     protected static string $resource = PurchaseOrderResource::class;
 
+    protected static ?string $title = 'Purchase Orders';
+
     protected function getTableQuery(): Builder
     {
         return parent::getTableQuery()

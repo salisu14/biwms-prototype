@@ -10,6 +10,8 @@ class ListCustomerContacts extends ListRecords
 {
     protected static string $resource = CustomerContactResource::class;
 
+    protected static ?string $title = 'Customer Contacts';
+
     protected function getHeaderActions(): array
     {
         return [

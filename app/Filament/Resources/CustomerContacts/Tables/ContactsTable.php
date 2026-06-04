@@ -23,16 +23,32 @@ class ContactsTable
     {
         return $table
             ->columns([
-                TextColumn::make('name')->weight('bold')->searchable()->sortable(),
-                TextColumn::make('company_name')->searchable()->toggleable(),
-                TextColumn::make('email')->icon('heroicon-m-envelope')->searchable(),
-                TextColumn::make('phone')->searchable()->toggleable(),
-                TextColumn::make('type')->badge()->color('gray'),
+                TextColumn::make('full_name')
+                    ->label('Contact')
+                    ->state(fn (Contact $record) => $record->full_name ?: $record->name ?: $record->company_name)
+                    ->weight('bold')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('company_name')
+                    ->label('Company')
+                    ->searchable()
+                    ->toggleable(),
+                TextColumn::make('email')
+                    ->icon('heroicon-m-envelope')
+                    ->searchable(),
+                TextColumn::make('phone')
+                    ->searchable()
+                    ->toggleable(),
+                TextColumn::make('type')
+                    ->badge()
+                    ->color('gray'),
                 TextColumn::make('role')
                     ->badge()
                     ->color(fn ($state) => $state->color()),
-                TextColumn::make('city')->toggleable(),
-                TextColumn::make('country')->toggleable(),
+                TextColumn::make('city')
+                    ->toggleable(),
+                TextColumn::make('country')
+                    ->toggleable(),
             ])
             ->filters([
                 //

@@ -24,7 +24,7 @@ class ItemLedgerEntriesTable
         return $table
             ->columns([
                 TextColumn::make('entry_number')
-                    ->label('Entry')
+                    ->label('Entry No.')
                     ->numeric()
                     ->sortable()
                     ->weight('bold'),
@@ -34,10 +34,15 @@ class ItemLedgerEntriesTable
                 TextColumn::make('entry_type')
                     ->badge()
                     ->searchable()
-                    ->color(fn (string $state): string => match ($state) {
-                        'PURCHASE', 'POSITIVE_ADJUSTMENT', 'TRANSFER', 'OUTPUT', 'ASSEMBLY_OUTPUT' => 'success',
-                        'SALE', 'NEGATIVE_ADJUSTMENT', 'CONSUMPTION', 'ASSEMBLY_CONSUMPTION' => 'danger',
-                        default => 'gray',
+                    ->formatStateUsing(fn ($state) => $state?->label() ?? (string) $state)
+                    ->color(function ($state): string {
+                        $value = $state instanceof ItemLedgerEntryType ? $state->value : (string) $state;
+
+                        return match ($value) {
+                            'PURCHASE', 'POSITIVE_ADJUSTMENT', 'TRANSFER', 'OUTPUT', 'ASSEMBLY_OUTPUT' => 'success',
+                            'SALE', 'NEGATIVE_ADJUSTMENT', 'CONSUMPTION', 'ASSEMBLY_CONSUMPTION' => 'danger',
+                            default => 'gray',
+                        };
                     }),
                 TextColumn::make('document_number')
                     ->label('Doc No.')
@@ -68,7 +73,7 @@ class ItemLedgerEntriesTable
                     ->alignEnd()
                     ->sortable(),
                 TextColumn::make('remaining_quantity')
-                    ->label('Rem. Qty')
+                    ->label('Remaining')
                     ->numeric(decimalPlaces: 2)
                     ->alignEnd()
                     ->color(fn ($state) => $state > 0 ? 'warning' : 'gray'),
@@ -77,7 +82,7 @@ class ItemLedgerEntriesTable
                     ->money()
                     ->sortable(),
                 IconColumn::make('open')
-                    ->label('Open')
+                    ->label('Status')
                     ->boolean(),
                 TextColumn::make('serial_number')
                     ->toggleable(isToggledHiddenByDefault: true),
