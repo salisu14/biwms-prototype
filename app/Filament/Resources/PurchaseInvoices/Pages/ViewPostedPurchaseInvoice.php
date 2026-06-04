@@ -36,7 +36,21 @@ class ViewPostedPurchaseInvoice extends Page
 
     public function getHeading(): string
     {
-        return 'Posted Purchase Invoice '.$this->record->document_number;
+        return ($this->record->document_number ?? 'Posted Purchase Invoice')
+            .' • Scope '.($this->record->vendor_name ?? '—')
+            .' • Attribute '.number_format((float) $this->record->grand_total, 2);
+    }
+
+    public function getSubheading(): string
+    {
+        return ($this->record->order_number ?? 'No purchase order')
+            .' • '.($this->record->vendor?->vendor_name ?? $this->record->vendor_name ?? 'Unknown Vendor')
+            .' • Posted '.optional($this->record->posted_at)->format('d/m/Y H:i');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        return $this->record->document_number ?? 'Posted Purchase Invoice';
     }
 
     protected function getHeaderActions(): array

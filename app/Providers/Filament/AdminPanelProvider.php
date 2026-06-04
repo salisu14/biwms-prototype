@@ -74,6 +74,22 @@ class AdminPanelProvider extends PanelProvider
                     ])->render();
                 }
             )
+            ->renderHook(
+                PanelsRenderHook::STYLES_AFTER,
+                fn (): string => <<<'HTML'
+                    <style>
+                        html:not(.dark) .fi-body,
+                        html:not(.dark) body {
+                            background-color: rgb(243 244 246);
+                        }
+
+                        html.dark .fi-body,
+                        html.dark body {
+                            background-color: rgb(3 7 18);
+                        }
+                    </style>
+                    HTML
+            )
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

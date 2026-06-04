@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\PurchaseReceipts\Schemas;
 
+use App\Filament\Resources\Locations\LocationResource;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
+use App\Filament\Resources\Vendors\VendorResource;
 use App\Models\PurchaseReceipt;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -29,34 +31,19 @@ class PurchaseReceiptInfolist
                                         TextEntry::make('status')
                                             ->badge(),
                                         TextEntry::make('buy_from_vendor_name')
-                                            ->label('Vendor'),
+                                            ->label('Vendor')
+                                            ->state(fn (PurchaseReceipt $record): string => $record->vendor?->vendor_name ?? $record->buy_from_vendor_name ?? '—')
+                                            ->url(fn (PurchaseReceipt $record): ?string => $record->vendor
+                                                ? VendorResource::getUrl('view', ['record' => $record->vendor])
+                                                : null),
                                         TextEntry::make('purchase_order_link')
                                             ->label('Purchase Order')
-                                            ->state(function ($record): string {  // ✅ Removed type hint
-                                                // Ensure we're working with a PurchaseReceipt
-                                                $purchaseReceipt = $record instanceof PurchaseReceipt
-                                                    ? $record
-                                                    : $record->purchaseReceipt ?? $record->purchase_receipt ?? null;
-
-                                                if (! $purchaseReceipt instanceof PurchaseReceipt) {
-                                                    return '—';
-                                                }
-
-                                                return $purchaseReceipt->purchaseOrder
-                                                    ? "{$purchaseReceipt->purchaseOrder->order_number} - {$purchaseReceipt->purchaseOrder->vendor_name}"
-                                                    : ($purchaseReceipt->purchase_order_no ?? '—');
-                                            })
-                                            ->url(function ($record): ?string {
-                                                $purchaseReceipt = $record instanceof PurchaseReceipt
-                                                    ? $record
-                                                    : $record->purchaseReceipt ?? $record->purchase_receipt ?? null;
-
-                                                if (! $purchaseReceipt instanceof PurchaseReceipt || ! $purchaseReceipt->purchaseOrder) {
-                                                    return null;
-                                                }
-
-                                                return PurchaseOrderResource::getUrl('view', ['record' => $purchaseReceipt->purchaseOrder]);
-                                            }),
+                                            ->state(fn (PurchaseReceipt $record): string => $record->purchaseOrder
+                                                ? "{$record->purchaseOrder->order_number} - {$record->purchaseOrder->vendor_name}"
+                                                : ($record->purchase_order_no ?? '—'))
+                                            ->url(fn (PurchaseReceipt $record): ?string => $record->purchaseOrder
+                                                ? PurchaseOrderResource::getUrl('view', ['record' => $record->purchaseOrder])
+                                                : null),
                                     ]),
                                 ]),
 
@@ -74,6 +61,12 @@ class PurchaseReceiptInfolist
                                             ->placeholder('—'),
                                         TextEntry::make('receivingLocation.name')
                                             ->label('Receiving Location'),
+                                        TextEntry::make('location_link')
+                                            ->label('Location')
+                                            ->state(fn (PurchaseReceipt $record): string => $record->receivingLocation?->name ?? $record->location_code ?? '—')
+                                            ->url(fn (PurchaseReceipt $record): ?string => $record->receivingLocation
+                                                ? LocationResource::getUrl('view', ['record' => $record->receivingLocation])
+                                                : null),
                                         TextEntry::make('shipment_method_code')
                                             ->label('Shipment Method')
                                             ->placeholder('—'),
