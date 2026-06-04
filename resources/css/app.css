@@ -9,3 +9,13 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+@layer base {
+    .fi-body {
+        background-color: rgb(243 244 246);
+    }
+
+    html.dark .fi-body {
+        background-color: rgb(3 7 18);
+    }
+}
