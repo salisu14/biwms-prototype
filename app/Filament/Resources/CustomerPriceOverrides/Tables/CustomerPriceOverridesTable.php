@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources\CustomerPriceOverrides\Tables;
 
+use App\Models\Item;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -19,7 +21,7 @@ class CustomerPriceOverridesTable
                     ->label('Customer')
                     ->searchable()
                     ->sortable()
-                    ->description(fn ($record) => $record->customer?->no ?? '')
+                    ->description(fn ($record) => $record->customer?->customer_number ?? '')
                     ->icon('heroicon-o-user-circle'),
 
                 TextColumn::make('item.item_code')
@@ -39,7 +41,7 @@ class CustomerPriceOverridesTable
 
                 TextColumn::make('item.unit_price')
                     ->label('Base Price')
-                    ->money('NGN')
+                    ->money(config('app.default_currency', 'USD'))
                     ->sortable()
                     ->color('gray')
 //                    ->strikeThrough(fn ($record) => $record->override_price != $record->item?->unit_price)
@@ -47,16 +49,22 @@ class CustomerPriceOverridesTable
 
                 TextColumn::make('override_price')
                     ->label('Override Price')
-                    ->money('NGN')
+                    ->money(config('app.default_currency', 'USD'))
                     ->sortable()
                     ->weight('bold')
                     ->color(function ($record) {
                         // Visual cue: green if cheaper than base, red if more expensive
-                        if (! $record->item?->unit_price) return 'primary';
+                        if (! $record->item?->unit_price) {
+                            return 'primary';
+                        }
+
                         return $record->override_price < $record->item->unit_price ? 'success' : 'danger';
                     })
                     ->icon(function ($record) {
-                        if (! $record->item?->unit_price) return null;
+                        if (! $record->item?->unit_price) {
+                            return null;
+                        }
+
                         return $record->override_price < $record->item->unit_price
                             ? 'heroicon-o-arrow-trending-down'
                             : 'heroicon-o-arrow-trending-up';
@@ -81,10 +89,11 @@ class CustomerPriceOverridesTable
                     ->searchable()
                     ->preload()
                     ->getOptionLabelFromRecordUsing(
-                        fn (\App\Models\Item $record) => "{$record->no} — {$record->description}"
+                        fn (Item $record) => "{$record->item_code} — {$record->description}"
                     ),
             ])
             ->recordActions([
+                ViewAction::make(),
                 EditAction::make(),
             ])
             ->toolbarActions([

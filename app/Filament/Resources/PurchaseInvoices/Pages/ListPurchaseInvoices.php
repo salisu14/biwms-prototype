@@ -14,6 +14,11 @@ class ListPurchaseInvoices extends ListRecords
 {
     protected static string $resource = PurchaseInvoiceResource::class;
 
+    public function getTitle(): string
+    {
+        return 'Purchase Invoices';
+    }
+
     protected function getTableQuery(): Builder
     {
         return PurchaseInvoice::query()

@@ -2,6 +2,10 @@
 
 namespace App\Filament\Resources\PricingMasters\Schemas;
 
+use App\Filament\Resources\Customers\CustomerResource;
+use App\Filament\Resources\Items\ItemResource;
+use App\Filament\Resources\Locations\LocationResource;
+use App\Filament\Resources\PricingGroups\PricingGroupResource;
 use App\Models\PricingMaster;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -33,16 +37,57 @@ class PricingMasterInfolist
                             }),
                         TextEntry::make('customer.customer_number')
                             ->label('Customer')
-                            ->formatStateUsing(fn ($state, PricingMaster $record): string => $record->customer ? "{$record->customer->customer_number} - {$record->customer->name}" : 'All Customers')
+                            ->state(function (PricingMaster $record): string {
+                                if (! $record->customer) {
+                                    return 'All Customers';
+                                }
+
+                                return "{$record->customer->customer_number} - {$record->customer->name}";
+                            })
+                            ->url(fn (PricingMaster $record): ?string => $record->customer
+                                ? CustomerResource::getUrl('view', ['record' => $record->customer])
+                                : null)
                             ->placeholder('All Customers'),
                         TextEntry::make('pricingGroup.code')
                             ->label('Pricing Group')
-                            ->formatStateUsing(fn ($state, PricingMaster $record): string => $record->pricingGroup ? "{$record->pricingGroup->code} - {$record->pricingGroup->name}" : '-')
+                            ->state(function (PricingMaster $record): string {
+                                if (! $record->pricingGroup) {
+                                    return '-';
+                                }
+
+                                return "{$record->pricingGroup->code} - {$record->pricingGroup->name}";
+                            })
+                            ->url(fn (PricingMaster $record): ?string => $record->pricingGroup
+                                ? PricingGroupResource::getUrl('view', ['record' => $record->pricingGroup])
+                                : null)
                             ->placeholder('-'),
-                        TextEntry::make('item.item_code')->label('Item Code')->placeholder('-'),
-                        TextEntry::make('item.description')->label('Item Description')->placeholder('-'),
+                        TextEntry::make('item.item_code')
+                            ->label('Item')
+                            ->state(function (PricingMaster $record): string {
+                                if (! $record->item) {
+                                    return '-';
+                                }
+
+                                return "{$record->item->item_code} - {$record->item->description}";
+                            })
+                            ->url(fn (PricingMaster $record): ?string => $record->item
+                                ? ItemResource::getUrl('view', ['record' => $record->item])
+                                : null)
+                            ->placeholder('-'),
                         TextEntry::make('variant_code')->label('Variant')->placeholder('-'),
-                        TextEntry::make('location.name')->label('Location')->placeholder('All Locations'),
+                        TextEntry::make('location.name')
+                            ->label('Location')
+                            ->state(function (PricingMaster $record): string {
+                                if (! $record->location) {
+                                    return 'All Locations';
+                                }
+
+                                return "{$record->location->code} - {$record->location->name}";
+                            })
+                            ->url(fn (PricingMaster $record): ?string => $record->location
+                                ? LocationResource::getUrl('view', ['record' => $record->location])
+                                : null)
+                            ->placeholder('All Locations'),
                         TextEntry::make('currency_code')->badge()->color('gray'),
                     ])->columns(3),
 

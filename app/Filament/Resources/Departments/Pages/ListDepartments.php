@@ -10,6 +10,8 @@ class ListDepartments extends ListRecords
 {
     protected static string $resource = DepartmentResource::class;
 
+    protected static ?string $title = 'Departments';
+
     protected function getHeaderActions(): array
     {
         return [

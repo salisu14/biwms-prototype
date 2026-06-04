@@ -10,6 +10,8 @@ class ListItemCategoryAssignments extends ListRecords
 {
     protected static string $resource = ItemCategoryAssignmentResource::class;
 
+    protected static ?string $title = 'Item Category Assignments';
+
     protected function getHeaderActions(): array
     {
         return [

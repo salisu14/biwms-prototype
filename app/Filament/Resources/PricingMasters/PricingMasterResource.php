@@ -67,6 +67,49 @@ class PricingMasterResource extends Resource
         return "{$record->price_list_code} - {$item} - {$scope}";
     }
 
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'price_list_code',
+            'description',
+            'price_list_type',
+            'customer.customer_number',
+            'customer.name',
+            'pricingGroup.code',
+            'pricingGroup.name',
+            'item.item_code',
+            'item.description',
+            'location.name',
+        ];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var PricingMaster $record */
+        return [
+            'Item' => $record->item
+                ? "{$record->item->item_code} - {$record->item->description}"
+                : '—',
+            'Scope' => $record->customer
+                ? "{$record->customer->customer_number} - {$record->customer->name}"
+                : ($record->pricingGroup
+                    ? "{$record->pricingGroup->code} - {$record->pricingGroup->name}"
+                    : 'All Customers'),
+            'Price Type' => $record->price_type ?: '—',
+            'Status' => $record->status ?: '—',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with([
+            'customer',
+            'pricingGroup',
+            'item',
+            'location',
+        ]);
+    }
+
     public static function getPages(): array
     {
         return [

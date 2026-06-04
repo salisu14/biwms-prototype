@@ -129,11 +129,14 @@ class SalesOrderService
             foreach ($order->getLinesToInvoice($shipmentIds) as $lineData) {
                 $soLine = $lineData['so_line'];
                 $quantity = $lineData['quantity'];
+                $effectiveUnitPrice = $quantity > 0
+                    ? (float) $soLine->line_amount / max((float) $soLine->quantity, 1)
+                    : (float) $soLine->unit_price;
                 $this->postingService->postSale(
                     customer: $order->customer,
                     item: $soLine->item,
                     quantity: $quantity,
-                    unitPrice: $soLine->unit_price,
+                    unitPrice: $effectiveUnitPrice,
                     unitCost: $soLine->unit_cost,
                     postingDate: $postingDate,
                     documentNumber: $documentNumber ?? 'INV-'.$order->id

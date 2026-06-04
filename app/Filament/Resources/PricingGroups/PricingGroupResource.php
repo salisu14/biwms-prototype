@@ -17,6 +17,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class PricingGroupResource extends Resource
@@ -67,5 +68,33 @@ class PricingGroupResource extends Resource
             'view' => ViewPricingGroup::route('/{record}'),
             'edit' => EditPricingGroup::route('/{record}/edit'),
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'code',
+            'name',
+            'description',
+            'pricing_strategy',
+            'currency_code',
+            'generalBusinessPostingGroup.code',
+            'generalBusinessPostingGroup.name',
+        ];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var PricingGroup $record */
+        return [
+            'Strategy' => $record->pricing_strategy ?: '—',
+            'Currency' => $record->currency_code ?: '—',
+            'Posting Group' => $record->generalBusinessPostingGroup?->code ?: '—',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with('generalBusinessPostingGroup');
     }
 }

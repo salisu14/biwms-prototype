@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Departments\Schemas;
 
+use App\Filament\Resources\Employees\EmployeeResource;
+use App\Models\Department;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -61,11 +63,39 @@ class DepartmentInfolist
                                         IconEntry::make('is_profit_center')->label('PC')->boolean(),
                                     ]),
                                 ]),
+                            Section::make('People')
+                                ->schema([
+                                    TextEntry::make('manager_link')
+                                        ->label('Manager')
+                                        ->state(function (Department $record): string {
+                                            $employee = $record->manager;
+
+                                            if (! $employee) {
+                                                return 'Unassigned';
+                                            }
+
+                                            return "{$employee->employee_number} - {$employee->first_name} {$employee->last_name}";
+                                        })
+                                        ->url(fn (Department $record): ?string => $record->manager
+                                            ? EmployeeResource::getUrl('view', ['record' => $record->manager])
+                                            : null),
+                                    TextEntry::make('approver_link')
+                                        ->label('Default Approver')
+                                        ->state(function (Department $record): string {
+                                            $employee = $record->approver?->employee;
+
+                                            if (! $employee) {
+                                                return $record->approver?->name ?? 'Unassigned';
+                                            }
+
+                                            return "{$employee->employee_number} - {$employee->first_name} {$employee->last_name}";
+                                        })
+                                        ->url(fn (Department $record): ?string => $record->approver?->employee
+                                            ? EmployeeResource::getUrl('view', ['record' => $record->approver->employee])
+                                            : null),
+                                ]),
                             Section::make('Administration')
                                 ->schema([
-                                    // FIX: Changed 'manager.id' to 'manager.name' to show the actual name
-                                    TextEntry::make('manager.name')->label('Manager'),
-                                    TextEntry::make('approver.name')->label('Approver'),
                                     TextEntry::make('starting_date')->date(),
                                     TextEntry::make('blocked_at')->dateTime()->color('danger'),
                                 ]),

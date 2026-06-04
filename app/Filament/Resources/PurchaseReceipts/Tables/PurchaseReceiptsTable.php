@@ -30,7 +30,8 @@ class PurchaseReceiptsTable
                 TextColumn::make('buy_from_vendor_name')
                     ->label('Vendor')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn ($record) => $record->vendor?->vendor_code ?? ''),
                 TextColumn::make('purchase_order_no')
                     ->label('Order No.')
                     ->searchable(),
@@ -38,7 +39,8 @@ class PurchaseReceiptsTable
                     ->date()
                     ->sortable(),
                 TextColumn::make('receivingLocation.name')
-                    ->label('Location'),
+                    ->label('Location')
+                    ->description(fn ($record) => $record->location_code ?? ''),
                 IconColumn::make('posted')
                     ->boolean(),
                 TextColumn::make('status')

@@ -7,7 +7,9 @@ use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
 use App\Models\Customer;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\SalesOrder;
+use App\Services\Sales\SalesPricingResolver;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -19,6 +21,7 @@ use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
@@ -92,7 +95,7 @@ class SalesOrderForm
                                                                     ->required()
                                                                     ->live()
                                                                     ->columnSpan(3)
-                                                                    ->afterStateUpdated(function ($state, Set $set) {
+                                                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                                                         if ($state) {
                                                                             $item = Item::find($state);
                                                                             $defaultSalesUom = $item?->uoms()
@@ -100,11 +103,25 @@ class SalesOrderForm
                                                                                 ->wherePivot('is_default', true)
                                                                                 ->first();
                                                                             $defaultUomCode = $defaultSalesUom?->uom_code ?? $item?->base_unit_of_measure;
+                                                                            $customer = Customer::find((int) $get('../../customer_id'));
+                                                                            $location = Location::find((int) $get('../../location_id'));
+                                                                            $quantity = (float) ($get('quantity') ?? 1);
+                                                                            $pricing = app(SalesPricingResolver::class)->resolve(
+                                                                                item: $item,
+                                                                                customer: $customer,
+                                                                                quantity: $quantity,
+                                                                                variantCode: null,
+                                                                                uom: $defaultUomCode,
+                                                                                location: $location
+                                                                            );
                                                                             $conversionFactor = $item?->getConversionFactorForUom($defaultUomCode) ?? 1;
 
                                                                             $set('description', $item?->description);
                                                                             $set('item_code', $item?->item_code);
-                                                                            $set('unit_price', ((float) ($item?->unit_price ?? 0)) * $conversionFactor);
+                                                                            $set('unit_price', $pricing['unit_price']);
+                                                                            $set('line_discount_percent', $pricing['discount_percent']);
+                                                                            $set('price_source', $pricing['price_source']);
+                                                                            $set('pricing_master_id', $pricing['pricing_master_id']);
                                                                             $set('unit_of_measure_code', $defaultUomCode);
                                                                             $set('qty_per_unit_of_measure', $conversionFactor);
                                                                         }
@@ -131,12 +148,28 @@ class SalesOrderForm
                                                                     ->live(onBlur: true)
                                                                     ->prefix(fn ($get) => $get('../../currency_code') ?? 'NGN'),
 
+                                                                TextInput::make('line_discount_percent')
+                                                                    ->label('Disc. %')
+                                                                    ->numeric()
+                                                                    ->default(0)
+                                                                    ->suffix('%')
+                                                                    ->columnSpan(2)
+                                                                    ->live(onBlur: true),
+
                                                                 // Hidden/Technical Row
                                                                 TextInput::make('item_code')
                                                                     ->label('Code')
                                                                     ->disabled()
                                                                     ->dehydrated()
                                                                     ->columnSpan(2),
+
+                                                                TextInput::make('price_source')
+                                                                    ->hidden()
+                                                                    ->dehydrated(),
+
+                                                                TextInput::make('pricing_master_id')
+                                                                    ->hidden()
+                                                                    ->dehydrated(),
 
                                                                 Select::make('unit_of_measure_code')
                                                                     ->label('UOM')
@@ -166,41 +199,31 @@ class SalesOrderForm
                                                                     })
                                                                     ->required()
                                                                     ->live()
-                                                                    ->afterStateUpdated(function ($state, Set $set, $get) {
+                                                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                                                         $itemId = $get('item_id');
                                                                         if (! $itemId) {
                                                                             return;
                                                                         }
 
                                                                         $item = Item::find($itemId);
+                                                                        $customer = Customer::find((int) $get('../../customer_id'));
+                                                                        $location = Location::find((int) $get('../../location_id'));
+                                                                        $currentQuantity = (float) ($get('quantity') ?? 1);
                                                                         $conversionFactor = $item?->getConversionFactorForUom($state) ?? 1;
-                                                                        $currentQtyPerUom = (float) ($get('qty_per_unit_of_measure') ?? 1);
-                                                                        $currentUnitPrice = (float) ($get('unit_price') ?? 0);
-                                                                        $baseUnitPrice = (float) ($item?->unit_price ?? 0);
-                                                                        $expectedCurrentAutoPrice = $baseUnitPrice * $currentQtyPerUom;
-                                                                        $isManualUnitPrice = abs($currentUnitPrice - $expectedCurrentAutoPrice) > 0.0001;
+                                                                        $newPricing = app(SalesPricingResolver::class)->resolve(
+                                                                            item: $item,
+                                                                            customer: $customer,
+                                                                            quantity: $currentQuantity,
+                                                                            variantCode: null,
+                                                                            uom: $state,
+                                                                            location: $location
+                                                                        );
 
                                                                         $set('qty_per_unit_of_measure', $conversionFactor);
-                                                                        if (! $isManualUnitPrice) {
-                                                                            $set('unit_price', $baseUnitPrice * $conversionFactor);
-                                                                        }
-
-                                                                        $qty = (float) ($get('quantity') ?? 0);
-                                                                        $price = (float) ($get('unit_price') ?? 0);
-                                                                        $discountPercent = (float) ($get('line_discount_percent') ?? 0);
-                                                                        $vatPercent = (float) ($get('vat_percentage') ?? 0);
-
-                                                                        $lineTotal = $qty * $price;
-                                                                        $discountAmount = $lineTotal * ($discountPercent / 100);
-                                                                        $lineAmount = $lineTotal - $discountAmount;
-                                                                        $vatAmount = $lineAmount * ($vatPercent / 100);
-
-                                                                        $set('quantity_base', $qty * ($conversionFactor > 0 ? $conversionFactor : 1));
-                                                                        $set('line_total', $lineTotal);
-                                                                        $set('line_discount_amount', $discountAmount);
-                                                                        $set('line_amount', $lineAmount);
-                                                                        $set('vat_amount', $vatAmount);
-                                                                        $set('amount_including_vat', $lineAmount + $vatAmount);
+                                                                        $set('unit_price', $newPricing['unit_price']);
+                                                                        $set('line_discount_percent', $newPricing['discount_percent']);
+                                                                        $set('price_source', $newPricing['price_source']);
+                                                                        $set('pricing_master_id', $newPricing['pricing_master_id']);
                                                                     })
                                                                     ->columnSpan(2),
 

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PricingGroups\Schemas;
 
+use App\Filament\Resources\GeneralBusinessPostingGroups\GeneralBusinessPostingGroupResource;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -61,7 +62,10 @@ class PricingGroupInfolist
                         TextEntry::make('generalBusinessPostingGroup.code')
                             ->label('Gen. Bus. Posting Group')
                             ->placeholder('-')
-                            ->badge(),
+                            ->badge()
+                            ->url(fn ($record): ?string => $record->generalBusinessPostingGroup
+                                ? GeneralBusinessPostingGroupResource::getUrl('view', ['record' => $record->generalBusinessPostingGroup])
+                                : null),
                         IconEntry::make('blocked')->boolean(),
                     ])->columns(3),
             ]);

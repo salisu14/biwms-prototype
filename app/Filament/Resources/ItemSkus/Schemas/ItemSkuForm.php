@@ -4,7 +4,7 @@ namespace App\Filament\Resources\ItemSkus\Schemas;
 
 use App\Models\Item;
 use App\Models\Location;
-use Filament\Forms\Components\DatePicker; // Added for date fields
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -29,6 +29,7 @@ class ItemSkuForm
                                 name: 'item',
                                 titleAttribute: 'item_code'
                             )
+                            ->getOptionLabelFromRecordUsing(fn (Item $record): string => "{$record->item_code} - {$record->description}")
                             ->searchable()
                             ->preload()
                             ->live()
@@ -41,8 +42,9 @@ class ItemSkuForm
                             ->label('Location')
                             ->relationship(
                                 name: 'location',
-                                titleAttribute: 'location_code'
+                                titleAttribute: 'code'
                             )
+                            ->getOptionLabelFromRecordUsing(fn (Location $record): string => "{$record->code} - {$record->name}")
                             ->searchable()
                             ->preload()
                             ->live()

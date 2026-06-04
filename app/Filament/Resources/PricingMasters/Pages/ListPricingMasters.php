@@ -10,6 +10,8 @@ class ListPricingMasters extends ListRecords
 {
     protected static string $resource = PricingMasterResource::class;
 
+    protected static ?string $title = 'Pricing Masters';
+
     protected function getHeaderActions(): array
     {
         return [

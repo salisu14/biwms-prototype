@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\ItemSkus\Schemas;
 
+use App\Filament\Resources\Items\ItemResource;
+use App\Filament\Resources\Locations\LocationResource;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -13,11 +15,11 @@ class ItemSkuInfolist
     {
         return $schema
             ->components([
-                Section::make('SKU Identification')
+                Section::make('Identification')
                     ->columns(2)
                     ->schema([
                         TextEntry::make('sku_code')
-                            ->label('SKU Code')
+                            ->label('SKU')
                             ->weight('bold'),
 
                         TextEntry::make('barcode')
@@ -26,16 +28,27 @@ class ItemSkuInfolist
                             ->placeholder('-'),
 
                         TextEntry::make('item.item_code')
-                            ->label('Item Code'),
-                        //                            ->description(fn ($record): string => $record->item->description ?? '-'),
+                            ->label('Item')
+                            ->formatStateUsing(fn ($state, $record): string => $record->item
+                                ? "{$record->item->item_code} - {$record->item->description}"
+                                : '—')
+                            ->url(fn ($record): ?string => $record->item
+                                ? ItemResource::getUrl('view', ['record' => $record->item])
+                                : null),
 
-                        TextEntry::make('location.location_name')
+                        TextEntry::make('location.name')
                             ->label('Location')
                             ->badge()
-                            ->color('gray'),
+                            ->color('gray')
+                            ->formatStateUsing(fn ($state, $record): string => $record->location
+                                ? "{$record->location->code} - {$record->location->name}"
+                                : '—')
+                            ->url(fn ($record): ?string => $record->location
+                                ? LocationResource::getUrl('view', ['record' => $record->location])
+                                : null),
                     ]),
 
-                Section::make('Inventory Parameters')
+                Section::make('Inventory')
                     ->columns(2)
                     ->schema([
                         TextEntry::make('current_quantity')

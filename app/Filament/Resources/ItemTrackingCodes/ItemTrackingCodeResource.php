@@ -15,6 +15,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class ItemTrackingCodeResource extends Resource
 {
@@ -23,6 +25,44 @@ class ItemTrackingCodeResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static ?string $recordTitleAttribute = 'description';
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'code',
+            'description',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var ItemTrackingCode $record */
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var ItemTrackingCode $record */
+        return [
+            'Serial' => $record->snspecific_tracking ? 'Yes' : 'No',
+            'Lot' => $record->lotspecific_tracking ? 'Yes' : 'No',
+            'Expiration' => $record->strict_expiration_posting ? 'Strict' : 'Flexible',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery();
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof ItemTrackingCode) {
+            return static::getModelLabel();
+        }
+
+        return static::formatRecordTitle($record);
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -54,5 +94,10 @@ class ItemTrackingCodeResource extends Resource
             'view' => ViewItemTrackingCode::route('/{record}'),
             'edit' => EditItemTrackingCode::route('/{record}/edit'),
         ];
+    }
+
+    protected static function formatRecordTitle(ItemTrackingCode $record): string
+    {
+        return "{$record->code} - {$record->description}";
     }
 }

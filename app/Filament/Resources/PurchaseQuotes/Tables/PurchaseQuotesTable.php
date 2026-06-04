@@ -30,9 +30,11 @@ class PurchaseQuotesTable
                     ->label('Document No.')
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('vendor.vendor_name') // Use name, not ID
+                TextColumn::make('vendor.vendor_name')
+                    ->label('Vendor')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn ($record) => $record->vendor?->vendor_code ?? ''),
                 TextColumn::make('status')
                     ->badge()
                     ->sortable(),
@@ -49,6 +51,7 @@ class PurchaseQuotesTable
                     ->toggleable(),
                 TextColumn::make('buyer.name')
                     ->label('Buyer')
+                    ->description(fn ($record) => $record->buyer?->email ?? '')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
                     ->dateTime()

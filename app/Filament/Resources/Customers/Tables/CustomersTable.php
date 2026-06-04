@@ -24,6 +24,8 @@ class CustomersTable
                     ->sortable()
                     ->searchable(),
                 TextColumn::make('name')
+                    ->label('Customer')
+                    ->formatStateUsing(fn ($state, $record): string => "{$record->customer_number} - {$state}")
                     ->weight('bold')
                     ->searchable(),
                 TextColumn::make('email')
@@ -72,7 +74,8 @@ class CustomersTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->label('Delete Selected'),
                 ]),
             ]);
     }

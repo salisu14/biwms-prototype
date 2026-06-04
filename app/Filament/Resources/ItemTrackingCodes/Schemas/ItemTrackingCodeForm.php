@@ -15,7 +15,7 @@ class ItemTrackingCodeForm
     {
         return $schema
             ->components([
-                Section::make('General')
+                Section::make('Identification')
                     ->description('Primary identification for the tracking policy.')
                     ->columns(12)
                     ->schema([

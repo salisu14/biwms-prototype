@@ -10,6 +10,8 @@ class ListPricingGroups extends ListRecords
 {
     protected static string $resource = PricingGroupResource::class;
 
+    protected static ?string $title = 'Pricing Groups';
+
     protected function getHeaderActions(): array
     {
         return [

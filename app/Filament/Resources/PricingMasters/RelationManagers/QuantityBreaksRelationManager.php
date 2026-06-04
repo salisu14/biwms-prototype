@@ -26,12 +26,13 @@ class QuantityBreaksRelationManager extends RelationManager
         return $table
             ->columns([
                 TextColumn::make('tier_summary')
-                    ->label('Tier')
+                    ->label('Quantity Break')
                     ->state(fn ($record) => $record->getTierDescription($currencyCode))
                     ->badge()
                     ->color('gray')
                     ->weight('bold')
-                    ->wrap(),
+                    ->wrap()
+                    ->description(fn ($record) => $record->unit_of_measure_code ? "UoM: {$record->unit_of_measure_code}" : 'UoM: -'),
 
                 TextColumn::make('line_number')
                     ->label('Line')

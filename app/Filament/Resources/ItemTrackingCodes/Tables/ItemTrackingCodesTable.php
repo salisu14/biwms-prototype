@@ -17,11 +17,14 @@ class ItemTrackingCodesTable
         return $table
             ->columns([
                 TextColumn::make('code')
+                    ->label('Code')
                     ->searchable()
                     ->sortable()
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->copyable(),
 
                 TextColumn::make('description')
+                    ->label('Description')
                     ->searchable()
                     ->wrap(),
 
@@ -64,7 +67,7 @@ class ItemTrackingCodesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()->label('Delete Selected'),
                 ]),
             ]);
     }

@@ -9,6 +9,7 @@ use App\Http\Controllers\FixedAssetLedgerEntriesPrintController;
 use App\Http\Controllers\FixedAssetListPrintController;
 use App\Http\Controllers\GroupSummaryPrintController;
 use App\Http\Controllers\ItemLedgerSummaryPrintController;
+use App\Http\Controllers\PhysicalInventoryJournalPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
 use App\Http\Controllers\WaybillController;
 use Illuminate\Support\Facades\Route;
@@ -59,6 +60,10 @@ Route::get('/admin/reports/customer-subledger-summary/print', CustomerSubledgerS
 
 Route::get('/admin/reports/item-ledger-summary/print', ItemLedgerSummaryPrintController::class)
     ->name('reports.item-ledger-summary.print')
+    ->middleware(['web', 'auth']);
+
+Route::get('/admin/physical-inventory-journals/{journal}/print', [PhysicalInventoryJournalPrintController::class, 'print'])
+    ->name('physical-inventory.print')
     ->middleware(['web', 'auth']);
 
 Route::get('/admin/reports/expense/export', ExpenseReportExportController::class)

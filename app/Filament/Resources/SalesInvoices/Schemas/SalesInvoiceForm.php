@@ -3,9 +3,11 @@
 namespace App\Filament\Resources\SalesInvoices\Schemas;
 
 use App\Enums\ApprovalStatus;
+use App\Models\Customer;
 use App\Models\Item;
 use App\Models\SalesInvoice;
 use App\Models\SalesOrder;
+use App\Services\Sales\SalesPricingResolver;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
@@ -114,16 +116,27 @@ class SalesInvoiceForm
                                     ->preload()
                                     ->required()
                                     ->live()
-                                    ->afterStateUpdated(function ($state, Set $set) {
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                         if (! $state) {
                                             return;
                                         }
 
                                         $item = Item::find($state);
                                         if ($item) {
+                                            $customer = Customer::find((int) $get('../../customer_id'));
+                                            $pricing = app(SalesPricingResolver::class)->resolve(
+                                                item: $item,
+                                                customer: $customer,
+                                                quantity: (float) ($get('quantity') ?? 1),
+                                                variantCode: null,
+                                                uom: $item->base_unit_of_measure
+                                            );
                                             $set('description', $item->description);
-                                            $set('unit_price', $item->unit_price);
+                                            $set('unit_price', $pricing['unit_price']);
                                             $set('unit_of_measure', $item->base_unit_of_measure);
+                                            $set('discount_percent', $pricing['discount_percent']);
+                                            $set('discount_amount', $pricing['discount_amount']);
+                                            SalesInvoiceForm::updateLineTotal($set, $get);
                                         }
                                     })
                                     ->columnSpan(2),
@@ -149,6 +162,22 @@ class SalesInvoiceForm
                                     ->required()
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateLineTotal($set, $get)),
+
+                                TextInput::make('discount_percent')
+                                    ->label('Disc. %')
+                                    ->numeric()
+                                    ->default(0)
+                                    ->suffix('%')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateLineTotal($set, $get)),
+
+                                TextInput::make('discount_amount')
+                                    ->label('Discount')
+                                    ->numeric()
+                                    ->prefix('$')
+                                    ->default(0)
+                                    ->readOnly()
+                                    ->dehydrated(),
 
                                 TextInput::make('vat_percent')
                                     ->label('VAT %')
@@ -194,12 +223,16 @@ class SalesInvoiceForm
     {
         $quantity = (float) ($get('quantity') ?? 0);
         $unitPrice = (float) ($get('unit_price') ?? 0);
+        $discountPercent = (float) ($get('discount_percent') ?? 0);
+        $discountAmount = $quantity * $unitPrice * ($discountPercent / 100);
         $vatPercent = (float) ($get('vat_percent') ?? 0);
 
         $subtotal = $quantity * $unitPrice;
-        $vatAmount = $subtotal * ($vatPercent / 100);
-        $total = $subtotal + $vatAmount;
+        $afterDiscount = max(0, $subtotal - $discountAmount);
+        $vatAmount = $afterDiscount * ($vatPercent / 100);
+        $total = $afterDiscount + $vatAmount;
 
+        $set('discount_amount', number_format($discountAmount, 2, '.', ''));
         $set('line_total', number_format($total, 2, '.', ''));
 
         // Push update to the grand total field outside the repeater
@@ -233,7 +266,9 @@ class SalesInvoiceForm
                     - (float) $line->quantity_invoiced
                 );
                 $lineNet = $quantityToInvoice * (float) $line->unit_price;
-                $lineVat = $lineNet * ((float) $line->vat_percentage / 100);
+                $lineDiscountAmount = $lineNet * ((float) $line->line_discount_percent / 100);
+                $lineAmount = $lineNet - $lineDiscountAmount;
+                $lineVat = $lineAmount * ((float) $line->vat_percentage / 100);
 
                 return [
                     'item_id' => $line->item_id,
@@ -241,8 +276,10 @@ class SalesInvoiceForm
                     'quantity' => $quantityToInvoice,
                     'unit_of_measure' => $line->unit_of_measure_code,
                     'unit_price' => (float) $line->unit_price,
+                    'discount_percent' => (float) $line->line_discount_percent,
+                    'discount_amount' => 0,
                     'vat_percent' => (float) $line->vat_percentage,
-                    'line_total' => number_format($lineNet + $lineVat, 2, '.', ''),
+                    'line_total' => number_format($lineAmount + $lineVat, 2, '.', ''),
                 ];
             })
             ->filter(fn (array $line): bool => (float) $line['quantity'] > 0)

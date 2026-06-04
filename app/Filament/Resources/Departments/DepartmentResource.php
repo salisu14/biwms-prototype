@@ -74,10 +74,14 @@ class DepartmentResource extends Resource
     public static function getGlobalSearchResultDetails(Model $record): array
     {
         /** @var Department $record */
+        $managerLabel = $record->manager
+            ? "{$record->manager->employee_number} - {$record->manager->first_name} {$record->manager->last_name}"
+            : '—';
+
         return [
             'Type' => $record->type?->value ?? '—',
             'Status' => $record->status?->value ?? '—',
-            'Manager' => $record->manager?->full_name ?: '—',
+            'Manager' => $managerLabel,
             'Location' => $record->location_code ?: '—',
         ];
     }

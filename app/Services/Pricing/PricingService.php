@@ -2,39 +2,32 @@
 
 namespace App\Services\Pricing;
 
-use App\Models\PriceList;
+use App\Models\Customer;
+use App\Models\Item;
+use App\Models\Location;
+use App\Services\Sales\SalesPricingResolver;
 
 class PricingService
 {
-    public function resolvePrice($item, $customer)
-    {
-        return PriceList::query()
-            ->where('item_id', $item->id)
+    public function __construct(protected SalesPricingResolver $resolver) {}
 
-            ->where(function ($q) use ($customer) {
-                $q->where('customer_id', $customer->id)
-                    ->orWhere('customer_group_id', $customer->customer_group_id)
-                    ->orWhere(function ($q) {
-                        $q->whereNull('customer_id')
-                            ->whereNull('customer_group_id');
-                    });
-            })
-
-            ->whereDate('starting_date', '<=', now())
-            ->where(function ($q) {
-                $q->whereNull('ending_date')
-                    ->orWhere('ending_date', '>=', now());
-            })
-
-            // Priority (VERY IMPORTANT)
-            ->orderByRaw('
-                CASE
-                    WHEN customer_id IS NOT NULL THEN 1
-                    WHEN customer_group_id IS NOT NULL THEN 2
-                    ELSE 3
-                END
-            ')
-
-            ->value('price');
+    public function resolvePrice(
+        Item $item,
+        ?Customer $customer,
+        float $quantity = 1,
+        ?string $variantCode = null,
+        ?string $uom = null,
+        ?Location $location = null,
+        ?\DateTimeInterface $date = null
+    ): float {
+        return $this->resolver->resolve(
+            item: $item,
+            customer: $customer,
+            quantity: $quantity,
+            variantCode: $variantCode,
+            uom: $uom,
+            location: $location,
+            date: $date
+        )['unit_price'];
     }
 }

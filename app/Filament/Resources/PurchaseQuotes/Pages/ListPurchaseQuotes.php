@@ -10,6 +10,11 @@ class ListPurchaseQuotes extends ListRecords
 {
     protected static string $resource = PurchaseQuoteResource::class;
 
+    public function getTitle(): string
+    {
+        return 'Purchase Quotes';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

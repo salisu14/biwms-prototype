@@ -5,6 +5,7 @@ namespace App\Filament\Resources\DiscountRules\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -24,8 +25,13 @@ class DiscountRulesTable
                         $started = $record->start_date <= now();
                         $expired = $record->end_date && $record->end_date < now();
 
-                        if ($expired) return 'expired';
-                        if ($started) return 'active';
+                        if ($expired) {
+                            return 'expired';
+                        }
+                        if ($started) {
+                            return 'active';
+                        }
+
                         return 'scheduled';
                     })
                     ->icon(fn (string $state): string => match ($state) {
@@ -116,6 +122,7 @@ class DiscountRulesTable
                     ->preload(),
             ])
             ->recordActions([
+                ViewAction::make(),
                 EditAction::make(),
             ])
             ->toolbarActions([

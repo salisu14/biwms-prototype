@@ -12,6 +12,7 @@ use App\Data\Purchase\RecalculatePurchaseOrderTotalsData;
 use App\Data\Purchase\UpdatePurchaseOrderData;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
+use App\Models\Item;
 use App\Models\NumberSeries;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
@@ -27,7 +28,8 @@ class PurchaseOrderService
     public function __construct(
         protected PostingService $postingService,
         protected PutAwayWorksheetService $putAwayService,
-        protected PurchaseInvoiceService $purchaseInvoiceService
+        protected PurchaseInvoiceService $purchaseInvoiceService,
+        protected PurchasePriceCalculationService $purchasePriceCalculationService
     ) {}
 
     /**
@@ -108,6 +110,20 @@ class PurchaseOrderService
 
         foreach ($linesData as $index => $line) {
             $lineId = $line['id'] ?? null;
+            $vendor = $order->vendor;
+            $item = isset($line['item_id']) ? Item::find($line['item_id']) : null;
+            $unitCost = (float) ($line['unit_cost'] ?? 0);
+
+            if ($vendor && $item && $unitCost <= 0.0) {
+                $priceInfo = $this->purchasePriceCalculationService->getUnitCost(
+                    $vendor,
+                    $item,
+                    (float) ($line['quantity'] ?? 1),
+                    $line['unit_of_measure'] ?? $item->base_unit_of_measure
+                );
+
+                $unitCost = (float) ($priceInfo['direct_unit_cost'] ?? 0);
+            }
 
             $attributes = [
                 'line_number' => $index + 1,
@@ -115,7 +131,7 @@ class PurchaseOrderService
                 'variant_code' => $line['variant_code'] ?? null,
                 'description' => $line['description'],
                 'quantity' => $line['quantity'],
-                'unit_cost' => $line['unit_cost'],
+                'unit_cost' => $unitCost,
                 'unit_of_measure' => $line['unit_of_measure'],
                 'vat_percentage' => $line['vat_percentage'] ?? 0,
                 'discount_percentage' => $line['discount_percentage'] ?? 0,

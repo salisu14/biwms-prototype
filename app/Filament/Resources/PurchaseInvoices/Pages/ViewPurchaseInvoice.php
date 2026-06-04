@@ -15,6 +15,31 @@ class ViewPurchaseInvoice extends ViewRecord
 {
     protected static string $resource = PurchaseInvoiceResource::class;
 
+    public function getHeading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->document_number ?? 'Purchase Invoice')
+            .' • Scope '.($record->vendor_name ?? '—')
+            .' • Attribute '.number_format((float) $record->grand_total, 2);
+    }
+
+    public function getSubheading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->order_number ?? 'No purchase order')
+            .' • '.($record->location?->name ?? 'Unknown Location')
+            .' • '.($record->due_date?->format('d/m/Y') ?? 'No due date');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        $record = $this->getRecord();
+
+        return $record->document_number ?? 'Purchase Invoice';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

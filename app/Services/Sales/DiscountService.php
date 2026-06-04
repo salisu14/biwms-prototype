@@ -10,8 +10,8 @@ class DiscountService
     {
         $discount = DiscountRule::query()
             ->where('item_id', $item->id)
-            ->where('customer_group_id', $customer->group_id)
-            ->whereDate('start_date', '<=', now())
+            ->where('customer_group_id', $customer->customer_group_id)
+            ->active()
             ->first();
 
         if (! $discount) {

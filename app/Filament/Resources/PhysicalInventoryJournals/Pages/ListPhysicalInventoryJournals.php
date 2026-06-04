@@ -26,11 +26,16 @@ class ListPhysicalInventoryJournals extends ListRecords
                 ->label('Calculate Inventory')
                 ->icon('heroicon-o-arrow-path')
                 ->color('gray')
+                ->modalHeading('Calculate Inventory for a Location')
+                ->modalDescription('Choose a location to generate a physical inventory journal with that location name in the header.')
+                ->modalSubmitActionLabel('Generate Journal')
                 ->schema([
                     Select::make('location_code')
-                        ->relationship('location', 'code')
+                        ->label('Location')
+                        ->relationship('location', 'name')
                         ->required(),
                     Select::make('items_filter')
+                        ->label('Item Scope')
                         ->options([
                             'all' => 'All Items',
                             'with_stock' => 'Items with Stock',

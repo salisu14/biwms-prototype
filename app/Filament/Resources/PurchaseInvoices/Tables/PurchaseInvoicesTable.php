@@ -38,6 +38,7 @@ class PurchaseInvoicesTable
                     ->sortable()
                     ->color(fn ($record) => $record->is_overdue ? 'danger' : null),
                 TextColumn::make('grand_total')
+                    ->label('Total')
                     ->money(fn ($record) => $record->currency_code)
                     ->sortable()
                     ->alignment('right'),
@@ -58,6 +59,7 @@ class PurchaseInvoicesTable
                     ->trueColor('danger')
                     ->toggleable(),
                 TextColumn::make('location.name')
+                    ->label('Location')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('posted_at')
                     ->dateTime()

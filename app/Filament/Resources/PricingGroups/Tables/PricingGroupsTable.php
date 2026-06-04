@@ -26,6 +26,8 @@ class PricingGroupsTable
                     ->weight('bold'),
 
                 TextColumn::make('name')
+                    ->label('Pricing Group')
+                    ->formatStateUsing(fn ($state, $record): string => "{$record->code} - {$state}")
                     ->searchable()
                     ->sortable()
                     ->limit(30),
@@ -150,7 +152,8 @@ class PricingGroupsTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->label('Delete Selected'),
                 ]),
             ])
             ->defaultSort('code', 'asc');

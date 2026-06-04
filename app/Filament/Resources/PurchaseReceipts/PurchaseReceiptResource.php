@@ -83,6 +83,17 @@ class PurchaseReceiptResource extends Resource
             ]);
     }
 
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof PurchaseReceipt) {
+            return static::getModelLabel();
+        }
+
+        $vendor = $record->buy_from_vendor_name ?: 'Unknown Vendor';
+
+        return "{$record->document_number} - {$vendor}";
+    }
+
     public static function getPages(): array
     {
         return [

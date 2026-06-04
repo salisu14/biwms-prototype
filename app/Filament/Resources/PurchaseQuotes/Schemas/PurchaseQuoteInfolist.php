@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\PurchaseQuotes\Schemas;
 
+use App\Filament\Resources\Vendors\VendorResource;
+use App\Models\PurchaseQuote;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
@@ -17,13 +19,22 @@ class PurchaseQuoteInfolist
             ->components([
                 Split::make([
                     Group::make([
-                        Section::make('General Information')
+                        Section::make('Scope')
                             ->schema([
                                 Grid::make(2)->schema([
                                     TextEntry::make('document_no')->weight('bold'),
                                     TextEntry::make('status')->badge(),
-                                    TextEntry::make('vendor.vendor_name'),
-                                    TextEntry::make('buyer.vendor_name'),
+                                    TextEntry::make('vendor_label')
+                                        ->label('Vendor')
+                                        ->state(fn (PurchaseQuote $record): string => $record->vendor
+                                            ? "{$record->vendor->vendor_code} - {$record->vendor->vendor_name}"
+                                            : '—')
+                                        ->url(fn (PurchaseQuote $record): ?string => $record->vendor
+                                            ? VendorResource::getUrl('view', ['record' => $record->vendor])
+                                            : null),
+                                    TextEntry::make('buyer_label')
+                                        ->label('Buyer')
+                                        ->state(fn (PurchaseQuote $record): string => $record->buyer?->name ?? '—'),
                                 ]),
                             ]),
                         Section::make('Notes')
@@ -49,8 +60,10 @@ class PurchaseQuoteInfolist
                         Section::make('Timeline')
                             ->schema([
                                 TextEntry::make('document_date')->date(),
+                                TextEntry::make('posting_date')->date(),
                                 TextEntry::make('due_date')->date(),
-                                TextEntry::make('released_at')->dateTime(),
+                                TextEntry::make('requested_receipt_date')->date(),
+                                TextEntry::make('promised_receipt_date')->date(),
                             ]),
                     ])->columnSpan(1),
                 ])->columnSpanFull(),

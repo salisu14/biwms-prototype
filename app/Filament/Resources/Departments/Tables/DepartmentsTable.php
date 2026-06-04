@@ -43,8 +43,17 @@ class DepartmentsTable
                     ->label('CC')
                     ->boolean()
                     ->toggleable(),
-                TextColumn::make('manager.id') // Assuming manager ID or name
+                TextColumn::make('manager_id')
                     ->label('Manager')
+                    ->formatStateUsing(function ($state, $record): string {
+                        $employee = $record->manager;
+
+                        if (! $employee) {
+                            return 'Not Assigned';
+                        }
+
+                        return "{$employee->employee_number} - {$employee->first_name} {$employee->last_name}";
+                    })
                     ->placeholder('Not Assigned')
                     ->toggleable(),
                 TextColumn::make('location_code')
@@ -67,9 +76,12 @@ class DepartmentsTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->label('Delete Selected'),
+                    ForceDeleteBulkAction::make()
+                        ->label('Force Delete Selected'),
+                    RestoreBulkAction::make()
+                        ->label('Restore Selected'),
                 ]),
             ]);
     }

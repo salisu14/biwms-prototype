@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ItemLots\Tables;
 
+use App\Filament\Resources\Items\ItemResource;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -15,11 +16,24 @@ class ItemLotsTable
     {
         return $table
             ->columns([
-                TextColumn::make('item.id')
-                    ->searchable(),
+                TextColumn::make('item.item_code')
+                    ->label('Item')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold')
+                    ->formatStateUsing(fn ($state, $record): string => $record->item
+                        ? "{$record->item->item_code} - {$record->item->description}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->item
+                        ? ItemResource::getUrl('view', ['record' => $record->item])
+                        : null)
+                    ->description(fn ($record): string => $record->item?->description ?? ''),
+
                 TextColumn::make('lot_number')
+                    ->label('Lot No')
                     ->searchable(),
                 TextColumn::make('supplier_lot')
+                    ->label('Supplier Lot')
                     ->searchable(),
                 TextColumn::make('receipt_date')
                     ->date()
@@ -32,13 +46,23 @@ class ItemLotsTable
                     ->sortable(),
                 TextColumn::make('quantity_received')
                     ->numeric()
+                    ->alignEnd()
                     ->sortable(),
                 TextColumn::make('quantity_remaining')
                     ->numeric()
+                    ->alignEnd()
                     ->sortable(),
                 TextColumn::make('status')
-                    ->searchable(),
+                    ->badge()
+                    ->searchable()
+                    ->color(fn (string $state): string => match ($state) {
+                        'APPROVED' => 'success',
+                        'QUARANTINE' => 'warning',
+                        'REJECTED', 'EXPIRED' => 'danger',
+                        default => 'gray',
+                    }),
                 TextColumn::make('coa_reference')
+                    ->label('COA Reference')
                     ->searchable(),
                 TextColumn::make('created_at')
                     ->dateTime()
@@ -58,7 +82,7 @@ class ItemLotsTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()->label('Delete Selected'),
                 ]),
             ]);
     }

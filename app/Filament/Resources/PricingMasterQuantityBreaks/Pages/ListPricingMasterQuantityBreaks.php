@@ -10,6 +10,8 @@ class ListPricingMasterQuantityBreaks extends ListRecords
 {
     protected static string $resource = PricingMasterQuantityBreakResource::class;
 
+    protected static ?string $title = 'Quantity Breaks';
+
     protected function getHeaderActions(): array
     {
         return [

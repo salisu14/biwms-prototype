@@ -25,6 +25,31 @@ class ViewPurchaseQuote extends ViewRecord
         $this->warnIfMissingApprovalTemplate($this->record, 'Purchase Quote');
     }
 
+    public function getHeading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->document_no ?? 'Purchase Quote')
+            .' • Scope '.($record->vendor?->vendor_code ?? '—')
+            .' • Attribute '.number_format((float) $record->amount_including_vat, 2);
+    }
+
+    public function getSubheading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->vendor?->vendor_name ?? 'Unknown Vendor')
+            .' • '.($record->buyer?->name ?? 'Unknown Buyer')
+            .' • '.($record->currency_code ?? 'USD');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        $record = $this->getRecord();
+
+        return $record->document_no ?? 'Purchase Quote';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

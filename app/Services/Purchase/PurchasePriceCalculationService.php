@@ -143,8 +143,8 @@ class PurchasePriceCalculationService
             return $cost;
         }
 
-        $fromQty = $item->getQtyPerUnitOfMeasure($fromUom);
-        $toQty = $item->getQtyPerUnitOfMeasure($toUom);
+        $fromQty = $item->getConversionFactorForUom($fromUom);
+        $toQty = $item->getConversionFactorForUom($toUom);
 
         return ($cost / $fromQty) * $toQty;
     }

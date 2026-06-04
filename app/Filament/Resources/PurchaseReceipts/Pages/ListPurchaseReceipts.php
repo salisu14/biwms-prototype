@@ -10,6 +10,11 @@ class ListPurchaseReceipts extends ListRecords
 {
     protected static string $resource = PurchaseReceiptResource::class;
 
+    public function getTitle(): string
+    {
+        return 'Purchase Receipts';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

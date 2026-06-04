@@ -10,6 +10,8 @@ class ListItemUomAssignments extends ListRecords
 {
     protected static string $resource = ItemUomAssignmentResource::class;
 
+    protected static ?string $title = 'Item UOM Assignments';
+
     protected function getHeaderActions(): array
     {
         return [

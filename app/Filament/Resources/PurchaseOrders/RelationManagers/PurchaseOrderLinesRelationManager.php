@@ -6,6 +6,7 @@ use App\Enums\UomType;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
 use App\Models\Item;
 use App\Models\PurchaseOrder;
+use App\Services\Purchase\PurchasePriceCalculationService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -58,8 +59,22 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                                 $baseUom = $item->getDefaultUom(UomType::BASE);
                                 $set('unit_of_measure', $baseUom?->uom_code ?? '');
 
-                                // Using the accessor from Item model
-                                $set('unit_cost', $item->current_standard_cost ?? 0);
+                                $purchaseOrder = $this->getOwnerRecord();
+                                $vendor = $purchaseOrder->vendor;
+
+                                if ($vendor) {
+                                    $priceInfo = app(PurchasePriceCalculationService::class)->getUnitCost(
+                                        $vendor,
+                                        $item,
+                                        (float) ($get('quantity') ?? 1),
+                                        $get('unit_of_measure') ?: $item->base_unit_of_measure
+                                    );
+
+                                    $set('unit_cost', $priceInfo['direct_unit_cost'] ?? 0);
+                                } else {
+                                    // Using the accessor from Item model as a fallback.
+                                    $set('unit_cost', $item->current_standard_cost ?? 0);
+                                }
                             }
                         }),
 

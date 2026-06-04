@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
+use App\Models\Location;
 use App\Models\PhysicalInventoryJournal;
 use App\Models\PhysicalInventoryLine;
 use Illuminate\Bus\Queueable;
@@ -28,11 +29,14 @@ class PopulatePhysicalInventoryLines implements ShouldQueue
     {
         $journal = PhysicalInventoryJournal::findOrFail($this->journalId);
         $locationCode = $this->filters['location_code'] ?? $journal->location_code;
+        $locationId = Location::query()
+            ->where('code', $locationCode)
+            ->value('id');
 
-        DB::transaction(function () use ($journal, $locationCode) {
+        DB::transaction(function () use ($journal, $locationCode, $locationId) {
             $query = Item::query()
-                ->whereHas('itemLedgerEntries', function ($q) use ($locationCode) {
-                    $q->where('location_code', $locationCode)
+                ->whereHas('ledgerEntries', function ($q) use ($locationId) {
+                    $q->where('location_id', $locationId)
                         ->where('open', true);
                 });
 
@@ -47,7 +51,7 @@ class PopulatePhysicalInventoryLines implements ShouldQueue
             foreach ($items as $item) {
                 // Calculate current stock for this location
                 $qtyOnHand = ItemLedgerEntry::where('item_id', $item->id)
-                    ->where('location_code', $locationCode)
+                    ->where('location_id', $locationId)
                     ->where('open', true)
                     ->sum('remaining_quantity');
 
@@ -57,10 +61,12 @@ class PopulatePhysicalInventoryLines implements ShouldQueue
 
                 // Get tracking info if applicable
                 $trackingEntries = ItemLedgerEntry::where('item_id', $item->id)
-                    ->where('location_code', $locationCode)
+                    ->where('location_id', $locationId)
                     ->where('open', true)
-                    ->whereNotNull('lot_no')
-                    ->orWhereNotNull('serial_no')
+                    ->where(function ($query): void {
+                        $query->whereNotNull('lot_number')
+                            ->orWhereNotNull('serial_number');
+                    })
                     ->get();
 
                 if ($trackingEntries->isNotEmpty()) {
@@ -82,8 +88,8 @@ class PopulatePhysicalInventoryLines implements ShouldQueue
                             'item_description' => $item->description,
                             'inventory_posting_group' => $item->inventory_posting_group,
                             'gen_prod_posting_group' => $item->gen_prod_posting_group,
-                            'serial_no' => $entry->serial_no,
-                            'lot_no' => $entry->lot_no,
+                            'serial_no' => $entry->serial_number,
+                            'lot_no' => $entry->lot_number,
                             'expiration_date' => $entry->expiration_date,
                             'use_item_tracking' => ! empty($item->item_tracking_code),
                         ]);

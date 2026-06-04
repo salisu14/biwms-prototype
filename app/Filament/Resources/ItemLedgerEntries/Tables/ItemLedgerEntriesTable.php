@@ -3,6 +3,12 @@
 namespace App\Filament\Resources\ItemLedgerEntries\Tables;
 
 use App\Enums\ItemLedgerEntryType;
+use App\Filament\Resources\Items\ItemResource;
+use App\Filament\Resources\Locations\LocationResource;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -18,26 +24,45 @@ class ItemLedgerEntriesTable
         return $table
             ->columns([
                 TextColumn::make('entry_number')
-                    ->label('#')
+                    ->label('Entry')
                     ->numeric()
-                    ->sortable(),
+                    ->sortable()
+                    ->weight('bold'),
                 TextColumn::make('posting_date')
                     ->date()
                     ->sortable(),
                 TextColumn::make('entry_type')
                     ->badge()
-                    ->searchable(),
+                    ->searchable()
+                    ->color(fn (string $state): string => match ($state) {
+                        'PURCHASE', 'POSITIVE_ADJUSTMENT', 'TRANSFER', 'OUTPUT', 'ASSEMBLY_OUTPUT' => 'success',
+                        'SALE', 'NEGATIVE_ADJUSTMENT', 'CONSUMPTION', 'ASSEMBLY_CONSUMPTION' => 'danger',
+                        default => 'gray',
+                    }),
                 TextColumn::make('document_number')
                     ->label('Doc No.')
                     ->searchable()
                     ->copyable(),
-                TextColumn::make('item.id')
+                TextColumn::make('item.item_code')
                     ->label('Item')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->formatStateUsing(fn ($state, $record): string => $record->item
+                        ? "{$record->item->item_code} - {$record->item->description}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->item
+                        ? ItemResource::getUrl('view', ['record' => $record->item])
+                        : null)
+                    ->description(fn ($record): string => $record->item?->description ?? ''),
                 TextColumn::make('location.name')
-                    ->label('Loc')
-                    ->searchable(),
+                    ->label('Location')
+                    ->searchable()
+                    ->formatStateUsing(fn ($state, $record): string => $record->location
+                        ? "{$record->location->code} - {$record->location->name}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->location
+                        ? LocationResource::getUrl('view', ['record' => $record->location])
+                        : null),
                 TextColumn::make('quantity')
                     ->numeric(decimalPlaces: 2)
                     ->alignEnd()
@@ -86,6 +111,15 @@ class ItemLedgerEntriesTable
                             ->when($data['from'], fn ($query, $date) => $query->whereDate('posting_date', '>=', $date))
                             ->when($data['until'], fn ($query, $date) => $query->whereDate('posting_date', '<=', $date));
                     }),
+            ])
+            ->recordActions([
+                ViewAction::make(),
+                EditAction::make(),
+            ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make()->label('Delete Selected'),
+                ]),
             ]);
     }
 }

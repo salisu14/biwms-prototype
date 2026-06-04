@@ -9,10 +9,10 @@ class SalesService
 {
     public function sell($item, $qty, $customer)
     {
-        $price = app(PricingService::class)
-            ->resolvePrice($item, $customer);
+        $pricing = app(PricingService::class)
+            ->getSalesPrice($item, $customer, (float) $qty);
 
-        $revenue = $price * $qty;
+        $revenue = ((float) $pricing['unit_price'] * $qty) - (float) $pricing['discount_amount'];
 
         $cost = app(InventoryService::class)
             ->consume($item->id, $qty);

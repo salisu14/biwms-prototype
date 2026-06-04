@@ -22,14 +22,17 @@ class CustomersRelationManager extends RelationManager
         return $table
             ->columns([
                 TextColumn::make('customer_number')
-                    ->label('Account #')
+                    ->label('Customer')
                     ->searchable()
                     ->sortable()
                     ->copyable()
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->formatStateUsing(fn ($state, $record): string => "{$record->customer_number} - {$record->name}")
+                    ->url(fn ($record): ?string => CustomerResource::getUrl('view', ['record' => $record]))
+                    ->description(fn ($record) => $record->name),
 
                 TextColumn::make('name')
-                    ->label('Customer Name')
+                    ->label('Contact')
                     ->searchable()
                     ->sortable()
                     ->limit(30),

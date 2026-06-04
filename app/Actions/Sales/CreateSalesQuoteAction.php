@@ -2,9 +2,10 @@
 
 namespace App\Actions\Sales;
 
-use App\Models\CustomerPriceOverride;
+use App\Models\Item;
 use App\Models\SalesQuote;
-use App\Services\Sales\FinalPricingService;
+use App\Services\Sales\CampaignService;
+use App\Services\Sales\SalesPricingResolver;
 use Illuminate\Support\Facades\DB;
 
 class CreateSalesQuoteAction
@@ -19,26 +20,21 @@ class CreateSalesQuoteAction
                 'status' => 'draft',
             ]);
 
-            $pricingService = app(FinalPricingService::class);
-
             foreach ($data['items'] as $item) {
-                // 1. Get base price from service
-                $unitPrice = $pricingService->getFinalPrice($item['item_id'], $quote->customer);
-
-                // 2. Check for specific overrides
-                $override = CustomerPriceOverride::where('customer_id', $quote->customer_id)
-                    ->where('item_id', $item['item_id'])
-                    ->first();
-
-                if ($override) {
-                    $unitPrice = $override->override_price;
-                }
+                $itemModel = Item::query()->findOrFail($item['item_id']);
+                $pricing = app(SalesPricingResolver::class)->resolve(
+                    item: $itemModel,
+                    customer: $quote->customer,
+                    quantity: (float) $item['qty'],
+                );
+                $unitPrice = app(CampaignService::class)->apply($itemModel, $pricing['unit_price']);
 
                 $quote->items()->create([
                     'item_id' => $item['item_id'],
                     'quantity' => $item['qty'],
                     'unit_price' => $unitPrice,
-                    'line_total' => $item['qty'] * $unitPrice,
+                    'discount' => $pricing['discount_amount'],
+                    'line_total' => ($item['qty'] * $unitPrice) - $pricing['discount_amount'],
                 ]);
             }
 

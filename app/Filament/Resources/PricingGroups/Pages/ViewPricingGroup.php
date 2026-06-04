@@ -24,6 +24,12 @@ class ViewPricingGroup extends ViewRecord
             .' • Attribute '.($this->record->blocked ? 'Blocked' : 'Active');
     }
 
+    public function getBreadcrumb(): string
+    {
+        return ($this->record->code ?? '—')
+            .' - '.($this->record->name ?? '—');
+    }
+
     protected function getHeaderActions(): array
     {
         return [

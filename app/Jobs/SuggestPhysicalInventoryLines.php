@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Models\BinContent;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
+use App\Models\Location;
 use App\Models\PhysicalInventoryJournal;
 use App\Models\PhysicalInventoryLine;
 use Illuminate\Bus\Queueable;
@@ -30,15 +31,18 @@ class SuggestPhysicalInventoryLines implements ShouldQueue
         $journal = PhysicalInventoryJournal::findOrFail($this->journalId);
         $filterType = $this->data['filter_type'] ?? 'all';
         $includeEmptyBins = $this->data['include_empty_bins'] ?? false;
+        $locationId = $journal->location_code
+            ? Location::query()->where('code', $journal->location_code)->value('id')
+            : null;
 
-        DB::transaction(function () use ($journal, $filterType, $includeEmptyBins) {
+        DB::transaction(function () use ($journal, $filterType, $includeEmptyBins, $locationId) {
             $lineNo = PhysicalInventoryLine::where('journal_id', $journal->id)->max('line_no') ?? 0;
             $lineNo = max($lineNo, 10000);
 
             if ($filterType === 'bin_mandatory') {
                 // Suggest based on bin contents
                 $binContents = BinContent::with('item')
-                    ->when($journal->location_code, fn ($q) => $q->where('location_code', $journal->location_code))
+                    ->when($locationId, fn ($q) => $q->whereHas('bin', fn ($binQuery) => $binQuery->where('location_id', $locationId)))
                     ->when($journal->bin_code, fn ($q) => $q->where('bin_code', $journal->bin_code))
                     ->get();
 
@@ -68,16 +72,16 @@ class SuggestPhysicalInventoryLines implements ShouldQueue
                 // Standard item-based suggestion
                 $items = Item::query()
                     ->when($filterType === 'with_stock', fn ($q) => $q->where('inventory', '>', 0))
-                    ->when($journal->location_code, function ($q) use ($journal) {
-                        $q->whereHas('itemLedgerEntries', fn ($sq) => $sq->where('location_code', $journal->location_code)
+                    ->when($locationId, function ($q) use ($locationId) {
+                        $q->whereHas('ledgerEntries', fn ($sq) => $sq->where('location_id', $locationId)
                         );
                     })
                     ->get();
 
                 foreach ($items as $item) {
-                    $qtyOnHand = $journal->location_code
+                    $qtyOnHand = $locationId
                         ? ItemLedgerEntry::where('item_id', $item->id)
-                            ->where('location_code', $journal->location_code)
+                            ->where('location_id', $locationId)
                             ->where('open', true)
                             ->sum('remaining_quantity')
                         : $item->inventory;

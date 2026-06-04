@@ -31,6 +31,7 @@ class PricingMastersTable
                     ->weight('bold'),
 
                 TextColumn::make('description')
+                    ->label('Pricing Master')
                     ->searchable()
                     ->limit(30)
                     ->tooltip(fn ($record) => $record->description),
@@ -170,9 +171,12 @@ class PricingMastersTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->label('Delete Selected'),
+                    ForceDeleteBulkAction::make()
+                        ->label('Force Delete Selected'),
+                    RestoreBulkAction::make()
+                        ->label('Restore Selected'),
                 ]),
             ])
             ->defaultSort('priority', 'desc');

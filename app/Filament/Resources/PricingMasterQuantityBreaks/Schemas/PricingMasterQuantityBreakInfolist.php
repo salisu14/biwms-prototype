@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PricingMasterQuantityBreaks\Schemas;
 
+use App\Filament\Resources\PricingMasters\PricingMasterResource;
 use App\Models\PricingMasterQuantityBreak;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -16,7 +17,19 @@ class PricingMasterQuantityBreakInfolist
             ->components([
                 Section::make('Quantity Break Details')
                     ->schema([
-                        TextEntry::make('pricingMaster.price_list_code')->label('Pricing Master')->placeholder('-'),
+                        TextEntry::make('pricingMaster.price_list_code')
+                            ->label('Pricing Master')
+                            ->state(function (PricingMasterQuantityBreak $record): string {
+                                if (! $record->pricingMaster) {
+                                    return '-';
+                                }
+
+                                return "{$record->pricingMaster->price_list_code} - {$record->pricingMaster->description}";
+                            })
+                            ->url(fn (PricingMasterQuantityBreak $record): ?string => $record->pricingMaster
+                                ? PricingMasterResource::getUrl('view', ['record' => $record->pricingMaster])
+                                : null)
+                            ->placeholder('-'),
                         TextEntry::make('pricingMaster.description')->label('Pricing Master Description')->placeholder('-'),
                         TextEntry::make('line_number')->label('Line No.'),
                         TextEntry::make('minimum_quantity')->numeric()->label('Min Qty'),

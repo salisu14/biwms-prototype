@@ -7,10 +7,12 @@ namespace App\Services;
 use App\Models\Customer;
 use App\Models\Item;
 use App\Models\Location;
-use App\Models\PricingMaster;
+use App\Services\Sales\SalesPricingResolver;
 
 class PricingService
 {
+    public function __construct(protected SalesPricingResolver $resolver) {}
+
     /**
      * Get price for sales order line
      */
@@ -23,8 +25,7 @@ class PricingService
         ?Location $location = null,
         ?\DateTime $date = null
     ): array {
-        // 1. Try price list hierarchy
-        $priceList = PricingMaster::getBestPrice(
+        return $this->resolver->resolve(
             item: $item,
             customer: $customer,
             variantCode: $variantCode,
@@ -33,35 +34,6 @@ class PricingService
             location: $location,
             date: $date
         );
-
-        if ($priceList) {
-            $calculation = $priceList->calculatePrice(
-                quantity: $quantity,
-                baseCost: $item->unit_cost,
-                listPrice: $item->unit_price
-            );
-
-            return [
-                'unit_price' => $calculation['final_price'],
-                'list_price' => $calculation['base_price'],
-                'discount_amount' => $calculation['discount_amount'],
-                'discount_percent' => $calculation['discount_percent'],
-                'price_source' => $priceList->price_list_code,
-                'pricing_master_id' => $priceList->id,
-                'currency' => $priceList->currency_code,
-            ];
-        }
-
-        // 2. Fallback to item card
-        return [
-            'unit_price' => $item->unit_price,
-            'list_price' => $item->unit_price,
-            'discount_amount' => 0,
-            'discount_percent' => 0,
-            'price_source' => 'ITEM_CARD',
-            'pricing_master_id' => null,
-            'currency' => config('app.default_currency', 'USD'),
-        ];
     }
 
     /**

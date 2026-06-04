@@ -18,6 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class PurchaseInvoiceResource extends Resource
 {
@@ -49,49 +50,6 @@ class PurchaseInvoiceResource extends Resource
         ];
     }
 
-    public static function getRecordTitle(?Model $record): string
-    {
-        if (! $record instanceof PurchaseInvoice) {
-            return static::getModelLabel();
-        }
-
-        return $record->document_number ?: static::getModelLabel();
-    }
-
-    public static function getGloballySearchableAttributes(): array
-    {
-        return [
-            'document_number',
-            'external_document_number',
-            'order_number',
-            'vendor_name',
-            'vendor.vendor_code',
-            'status',
-        ];
-    }
-
-    public static function getGlobalSearchResultTitle(Model $record): string
-    {
-        /** @var PurchaseInvoice $record */
-        return $record->document_number ?: static::getModelLabel();
-    }
-
-    public static function getGlobalSearchResultDetails(Model $record): array
-    {
-        /** @var PurchaseInvoice $record */
-        return [
-            'Vendor' => $record->vendor_name ?: ($record->vendor?->vendor_name ?: '—'),
-            'Purchase Order' => $record->order_number ?: '—',
-            'Status' => $record->status?->value ?? '—',
-            'Total' => number_format((float) $record->grand_total, 2).' '.($record->currency_code ?: ''),
-        ];
-    }
-
-    public static function getGlobalSearchEloquentQuery(): Builder
-    {
-        return parent::getGlobalSearchEloquentQuery()->with('vendor');
-    }
-
     public static function canEdit(Model $record): bool
     {
         return ! $record->isPosted();
@@ -111,6 +69,51 @@ class PurchaseInvoiceResource extends Resource
             'edit' => EditPurchaseInvoice::route('/{record}/edit'),
             'posted' => Pages\PostedPurchaseInvoices::route('/history/posted'),
             'view-posted' => ViewPostedPurchaseInvoice::route('/history/posted/{record}'),
+        ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof PurchaseInvoice) {
+            return static::getModelLabel();
+        }
+
+        $vendor = $record->vendor_name ?: ($record->vendor?->vendor_name ?? 'Unknown Vendor');
+
+        return "{$record->document_number} - {$vendor}";
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var PurchaseInvoice $record */
+        return [
+            'Vendor' => $record->vendor_name ?: ($record->vendor?->vendor_name ?? '—'),
+            'Purchase Order' => $record->order_number ?: '—',
+            'Status' => $record->status?->value ?? '—',
+            'Location' => $record->location?->name ?? '—',
+            'Total' => number_format((float) $record->grand_total, 2).' '.($record->currency_code ?: ''),
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()
+            ->with(['vendor', 'purchaseOrder', 'location'])
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'document_number',
+            'external_document_number',
+            'order_number',
+            'vendor_name',
+            'vendor.vendor_code',
+            'status',
+            'location.name',
         ];
     }
 }

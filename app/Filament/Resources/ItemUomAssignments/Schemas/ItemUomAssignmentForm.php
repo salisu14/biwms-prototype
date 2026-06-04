@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\ItemUomAssignments\Schemas;
 
+use App\Models\Item;
+use App\Models\UnitOfMeasure;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -21,8 +23,9 @@ class ItemUomAssignmentForm
                     ->columns(2)
                     ->schema([
                         Select::make('item_id')
+                            ->label('Item')
                             ->relationship('item', 'item_code')
-                            ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->item_code} - {$record->description}")
+                            ->getOptionLabelFromRecordUsing(fn (Item $record): string => "{$record->item_code} - {$record->description}")
                             ->searchable()
                             ->preload()
                             ->required()
@@ -32,6 +35,7 @@ class ItemUomAssignmentForm
                         Select::make('uom_id')
                             ->label('Unit of Measure')
                             ->relationship('uom', 'uom_code')
+                            ->getOptionLabelFromRecordUsing(fn (UnitOfMeasure $record): string => "{$record->uom_code} - {$record->description}")
                             ->searchable()
                             ->preload()
                             ->required()
@@ -43,7 +47,7 @@ class ItemUomAssignmentForm
                     ->columns(3)
                     ->schema([
                         Select::make('uom_type')
-                            ->label('UOM Type')
+                            ->label('UoM Type')
                             ->options([
                                 'BASE' => 'Base/Inventory',
                                 'SALES' => 'Sales',
@@ -64,7 +68,7 @@ class ItemUomAssignmentForm
                             ->helperText('The business context where this assignment is utilized.'),
 
                         TextInput::make('conversion_factor')
-                            ->label('Qty. per Unit of Measure')
+                            ->label('Qty. per UoM')
                             ->numeric()
                             ->required()
                             ->default(1.000000)

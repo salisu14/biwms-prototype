@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PricingGroups\RelationManagers;
 
+use App\Filament\Resources\Items\ItemResource;
 use App\Filament\Resources\PricingMasters\PricingMasterResource;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
@@ -23,15 +24,23 @@ class PricingMasterEntriesRelationManager extends RelationManager
         return $table
             ->columns([
                 TextColumn::make('price_list_code')
-                    ->label('Entry')
+                    ->label('Pricing Master')
                     ->searchable()
                     ->sortable()
                     ->copyable()
                     ->weight('bold')
+                    ->formatStateUsing(fn ($state, $record): string => "{$record->price_list_code} - {$record->description}")
+                    ->url(fn ($record): ?string => PricingMasterResource::getUrl('view', ['record' => $record]))
                     ->description(fn ($record) => $record->description),
 
                 TextColumn::make('item.item_code')
                     ->label('Item')
+                    ->formatStateUsing(fn ($state, $record): string => $record->item
+                        ? "{$record->item->item_code} - {$record->item->description}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->item
+                        ? ItemResource::getUrl('view', ['record' => $record->item])
+                        : null)
                     ->description(fn ($record) => $record->item?->description)
                     ->searchable()
                     ->sortable(),

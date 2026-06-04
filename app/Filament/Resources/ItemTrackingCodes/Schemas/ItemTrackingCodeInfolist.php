@@ -14,10 +14,10 @@ class ItemTrackingCodeInfolist
     {
         return $schema
             ->components([
-                Section::make('General Information')
+                Section::make('Identification')
                     ->columns(2)
                     ->schema([
-                        TextEntry::make('code')->weight('bold')->color('primary'),
+                        TextEntry::make('code')->label('Code')->weight('bold')->color('primary'),
                         TextEntry::make('description'),
                     ]),
 

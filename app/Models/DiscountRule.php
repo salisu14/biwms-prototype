@@ -35,9 +35,9 @@ class DiscountRule extends Model
     /**
      * Scope a query to only include currently active rules.
      */
-    public function scopeActive(Builder $query): void
+    public function scopeActive(Builder $query): Builder
     {
-        $query->where('start_date', '<=', now())
+        return $query->where('start_date', '<=', now())
             ->where(function ($q) {
                 $q->whereNull('end_date')->orWhere('end_date', '>=', now());
             });

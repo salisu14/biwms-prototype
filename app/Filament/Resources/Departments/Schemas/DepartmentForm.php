@@ -4,7 +4,9 @@ namespace App\Filament\Resources\Departments\Schemas;
 
 use App\Enums\DepartmentStatus;
 use App\Enums\DepartmentType;
+use App\Models\Employee;
 use App\Models\Location;
+use App\Models\User;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -15,6 +17,7 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class DepartmentForm
@@ -94,13 +97,80 @@ class DepartmentForm
                             ->schema([
                                 Grid::make(2)->schema([
                                     Select::make('manager_id')
-                                        ->relationship('manager', 'id') // Assuming Employee name or ID
                                         ->label('Department Manager')
-                                        ->searchable(),
+                                        ->searchable()
+                                        ->preload()
+                                        ->live()
+                                        ->options(fn (): array => Employee::query()
+                                            ->orderBy('employee_number')
+                                            ->limit(100)
+                                            ->get()
+                                            ->mapWithKeys(fn (Employee $employee): array => [
+                                                $employee->id => "{$employee->employee_number} - {$employee->first_name} {$employee->last_name}",
+                                            ])
+                                            ->all())
+                                        ->getSearchResultsUsing(
+                                            fn (string $search) => Employee::query()
+                                                ->where(function ($query) use ($search) {
+                                                    $query->where('employee_number', 'like', "%{$search}%")
+                                                        ->orWhere('first_name', 'like', "%{$search}%")
+                                                        ->orWhere('last_name', 'like', "%{$search}%");
+                                                })
+                                                ->limit(50)
+                                                ->get()
+                                                ->mapWithKeys(fn (Employee $employee): array => [
+                                                    $employee->id => "{$employee->employee_number} - {$employee->first_name} {$employee->last_name}",
+                                                ])
+                                        )
+                                        ->getOptionLabelFromRecordUsing(
+                                            fn (Employee $employee): string => "{$employee->employee_number} - {$employee->first_name} {$employee->last_name}"
+                                        )
+                                        ->afterStateUpdated(function ($state, Set $set): void {
+                                            $employee = Employee::find($state);
+
+                                            $set('email', $employee?->email);
+                                            $set('phone', $employee?->phone);
+                                        }),
                                     Select::make('approver_id')
-                                        ->relationship('approver', 'name')
                                         ->label('Default Approver')
-                                        ->searchable(),
+                                        ->searchable()
+                                        ->preload()
+                                        ->helperText('Select the system user linked to the employee who approves this department.')
+                                        ->options(fn (): array => User::query()
+                                            ->whereHas('employee')
+                                            ->with('employee')
+                                            ->orderBy('name')
+                                            ->limit(100)
+                                            ->get()
+                                            ->mapWithKeys(fn (User $user): array => [
+                                                $user->id => $user->employee
+                                                    ? "{$user->employee->employee_number} - {$user->employee->first_name} {$user->employee->last_name}"
+                                                    : $user->name,
+                                            ])
+                                            ->all())
+                                        ->getSearchResultsUsing(
+                                            fn (string $search) => User::query()
+                                                ->whereHas('employee', function ($query) use ($search) {
+                                                    $query->where(function ($employeeQuery) use ($search) {
+                                                        $employeeQuery->where('employee_number', 'like', "%{$search}%")
+                                                            ->orWhere('first_name', 'like', "%{$search}%")
+                                                            ->orWhere('last_name', 'like', "%{$search}%");
+                                                    });
+                                                })
+                                                ->with('employee')
+                                                ->limit(50)
+                                                ->get()
+                                                ->mapWithKeys(fn (User $user): array => [
+                                                    $user->id => $user->employee
+                                                        ? "{$user->employee->employee_number} - {$user->employee->first_name} {$user->employee->last_name}"
+                                                        : $user->name,
+                                                ])
+                                        )
+                                        ->getOptionLabelFromRecordUsing(
+                                            fn (User $user): string => $user->employee
+                                                ? "{$user->employee->employee_number} - {$user->employee->first_name} {$user->employee->last_name}"
+                                                : $user->name
+                                        ),
                                     TextInput::make('email')->email(),
                                     TextInput::make('phone')->tel(),
                                     TextInput::make('room_location'),

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PhysicalInventoryJournals;
 use App\Filament\Resources\PhysicalInventoryJournals\Pages\CreatePhysicalInventoryJournal;
 use App\Filament\Resources\PhysicalInventoryJournals\Pages\EditPhysicalInventoryJournal;
 use App\Filament\Resources\PhysicalInventoryJournals\Pages\ListPhysicalInventoryJournals;
+use App\Filament\Resources\PhysicalInventoryJournals\Pages\ViewPhysicalInventoryJournal;
 use App\Filament\Resources\PhysicalInventoryJournals\Schemas\PhysicalInventoryJournalForm;
 use App\Filament\Resources\PhysicalInventoryJournals\Tables\PhysicalInventoryJournalsTable;
 use App\Models\PhysicalInventoryJournal;
@@ -50,6 +51,7 @@ class PhysicalInventoryJournalResource extends Resource
         return [
             'index' => ListPhysicalInventoryJournals::route('/'),
             'create' => CreatePhysicalInventoryJournal::route('/create'),
+            'view' => ViewPhysicalInventoryJournal::route('/{record}'),
             'edit' => EditPhysicalInventoryJournal::route('/{record}/edit'),
         ];
     }

@@ -39,6 +39,12 @@ class ViewPricingMaster extends ViewRecord
             .' • Attribute '.($this->record->price_type ?? '—');
     }
 
+    public function getBreadcrumb(): string
+    {
+        return ($this->record->price_list_code ?? '—')
+            .' - '.($this->record->description ?? '—');
+    }
+
     protected function getHeaderActions(): array
     {
         return [

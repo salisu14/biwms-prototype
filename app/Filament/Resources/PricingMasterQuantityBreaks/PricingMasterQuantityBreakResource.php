@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class PricingMasterQuantityBreakResource extends Resource
 {
@@ -44,6 +45,31 @@ class PricingMasterQuantityBreakResource extends Resource
         return [
             //
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'pricingMaster.price_list_code',
+            'pricingMaster.description',
+            'minimum_quantity',
+            'maximum_quantity',
+            'unit_of_measure_code',
+        ];
+    }
+
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof PricingMasterQuantityBreak) {
+            return static::getModelLabel();
+        }
+
+        $pricingMaster = $record->pricingMaster;
+        $masterLabel = $pricingMaster
+            ? "{$pricingMaster->price_list_code} - {$pricingMaster->description}"
+            : 'Unknown Pricing Master';
+
+        return "{$masterLabel} • Line {$record->line_number}";
     }
 
     public static function getPages(): array

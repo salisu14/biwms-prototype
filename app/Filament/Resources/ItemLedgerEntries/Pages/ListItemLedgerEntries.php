@@ -12,6 +12,8 @@ class ListItemLedgerEntries extends ListRecords
 {
     protected static string $resource = ItemLedgerEntryResource::class;
 
+    protected static ?string $title = 'Item Ledger Entries';
+
     protected function getHeaderActions(): array
     {
         return [

@@ -10,6 +10,8 @@ class ListItemSkus extends ListRecords
 {
     protected static string $resource = ItemSkuResource::class;
 
+    protected static ?string $title = 'Item SKUs';
+
     protected function getHeaderActions(): array
     {
         return [

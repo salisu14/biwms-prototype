@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PricingMasterQuantityBreaks\Tables;
 
+use App\Filament\Resources\PricingMasters\PricingMasterResource;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -23,6 +24,12 @@ class PricingMasterQuantityBreaksTable
                     ->sortable()
                     ->weight('bold')
                     ->copyable()
+                    ->formatStateUsing(fn ($state, $record): string => $record->pricingMaster
+                        ? "{$record->pricingMaster->price_list_code} - {$record->pricingMaster->description}"
+                        : '-')
+                    ->url(fn ($record): ?string => $record->pricingMaster
+                        ? PricingMasterResource::getUrl('view', ['record' => $record->pricingMaster])
+                        : null)
                     ->description(fn ($record) => $record->pricingMaster?->description),
 
                 TextColumn::make('tier_summary')
@@ -108,7 +115,8 @@ class PricingMasterQuantityBreaksTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->label('Delete Selected'),
                 ]),
             ])
             ->defaultSort('line_number', 'asc')

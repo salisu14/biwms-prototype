@@ -2,12 +2,15 @@
 
 namespace App\Filament\Resources\PurchaseReceipts\Schemas;
 
+use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
+use App\Models\PurchaseReceipt;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Tables\Columns\Layout\Split;
 
 class PurchaseReceiptInfolist
 {
@@ -15,61 +18,93 @@ class PurchaseReceiptInfolist
     {
         return $schema
             ->components([
-                // Left Column (Receipt Details, Origin, Shipping)
-                Group::make([
-                    Section::make('Receipt Details')
-                        ->schema([
-                            Grid::make(3)->schema([
-                                TextEntry::make('document_number')
-                                    ->label('Receipt No.')
-                                    ->weight('bold'),
-                                TextEntry::make('purchase_order_no')
-                                    ->label('Order No.'),
-                                TextEntry::make('status')
-                                    ->badge(),
-                                TextEntry::make('buy_from_vendor_name')
-                                    ->label('Vendor'),
-                                TextEntry::make('external_document_no')
-                                    ->label('Vendor Shipment No.')
-                                    ->placeholder('-'),
-                                TextEntry::make('receivingLocation.name')
-                                    ->label('Receiving Location'),
+                Split::make([
+                    Group::make([
+                        Section::make('Scope')
+                            ->schema([
+                                Grid::make(2)->schema([
+                                    TextEntry::make('document_number')
+                                        ->label('Receipt No.')
+                                        ->weight('bold'),
+                                    TextEntry::make('status')
+                                        ->badge(),
+                                    TextEntry::make('buy_from_vendor_name')
+                                        ->label('Vendor'),
+                                    TextEntry::make('purchase_order_link')
+                                        ->label('Purchase Order')
+                                        ->state(function (PurchaseReceipt $record): string {
+                                            return $record->purchaseOrder
+                                                ? "{$record->purchaseOrder->order_number} - {$record->purchaseOrder->vendor_name}"
+                                                : ($record->purchase_order_no ?? '—');
+                                        })
+                                        ->url(fn (PurchaseReceipt $record): ?string => $record->purchaseOrder
+                                            ? PurchaseOrderResource::getUrl('view', ['record' => $record->purchaseOrder])
+                                            : null),
+                                ]),
                             ]),
-                        ]),
 
-                    // Nested Grid to handle side-by-side sections (Origin vs Shipping)
-                    Grid::make(2)->schema([
-                        Section::make('Origin Address')
+                        Section::make('Receipt Details')
                             ->schema([
-                                TextEntry::make('buy_from_address')->label('Address'),
-                                TextEntry::make('buy_from_city')->label('City'),
-                                TextEntry::make('buy_from_post_code')->label('Post Code'),
-                            ])->columnSpan(1),
-                        Section::make('Shipping Info')
-                            ->schema([
-                                TextEntry::make('shipment_method_code')->label('Method'),
-                                TextEntry::make('shipping_agent_code')->label('Agent'),
-                                TextEntry::make('package_tracking_no')->label('Tracking No.')->copyable(),
-                            ])->columnSpan(1),
-                    ]),
-                ]), // Removed ->grow() as Grid handles this
+                                Grid::make(3)->schema([
+                                    TextEntry::make('vendor_shipment_no')
+                                        ->label('Vendor Shipment No.')
+                                        ->placeholder('—'),
+                                    TextEntry::make('vendor_invoice_no')
+                                        ->label('Vendor Invoice No.')
+                                        ->placeholder('—'),
+                                    TextEntry::make('external_document_no')
+                                        ->label('Reference No.')
+                                        ->placeholder('—'),
+                                    TextEntry::make('receivingLocation.name')
+                                        ->label('Receiving Location'),
+                                    TextEntry::make('shipment_method_code')
+                                        ->label('Shipment Method')
+                                        ->placeholder('—'),
+                                    TextEntry::make('shipping_agent_code')
+                                        ->label('Shipping Agent')
+                                        ->placeholder('—'),
+                                ]),
+                            ]),
 
-                // Right Column (Dates, Audit)
-                Group::make([
-                    Section::make('Dates')
-                        ->schema([
-                            TextEntry::make('posting_date')->date(),
-                            TextEntry::make('document_date')->date(),
-                            TextEntry::make('actual_receipt_date')->date()->label('Received At'),
-                        ]),
-                    Section::make('Posting Audit')
-                        ->schema([
-                            IconEntry::make('posted')->boolean(),
-                            TextEntry::make('postedByUser.name')->label('Posted By'),
-                            TextEntry::make('posted_at')->dateTime(),
-                        ]),
-                ]), // Removed ->columnSpan(1) as Grid::make(2) handles this
+                        Section::make('Addresses')
+                            ->schema([
+                                Grid::make(2)->schema([
+                                    TextEntry::make('buy_from_address')
+                                        ->label('Buy-from Address')
+                                        ->placeholder('—'),
+                                    TextEntry::make('ship_to_name')
+                                        ->label('Ship-to Name')
+                                        ->placeholder('—'),
+                                    TextEntry::make('buy_from_city')
+                                        ->label('Buy-from City')
+                                        ->placeholder('—'),
+                                    TextEntry::make('ship_to_city')
+                                        ->label('Ship-to City')
+                                        ->placeholder('—'),
+                                ]),
+                            ]),
+                    ])->grow(),
+
+                    Group::make([
+                        Section::make('Timeline')
+                            ->schema([
+                                TextEntry::make('posting_date')->date(),
+                                TextEntry::make('document_date')->date(),
+                                TextEntry::make('expected_receipt_date')->date(),
+                                TextEntry::make('actual_receipt_date')->date(),
+                            ]),
+                        Section::make('Posting')
+                            ->schema([
+                                IconEntry::make('posted')->boolean(),
+                                TextEntry::make('postedByUser.name')
+                                    ->label('Posted By')
+                                    ->placeholder('—'),
+                                TextEntry::make('posted_at')
+                                    ->dateTime()
+                                    ->placeholder('—'),
+                            ]),
+                    ])->columnSpan(1),
+                ])->columnSpanFull(),
             ]);
-
     }
 }

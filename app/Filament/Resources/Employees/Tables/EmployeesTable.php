@@ -21,6 +21,8 @@ class EmployeesTable
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('full_name')
+                    ->label('Employee')
+                    ->formatStateUsing(fn ($state, $record): string => "{$record->employee_number} - {$state}")
                     ->searchable(['first_name', 'last_name'])
                     ->sortable(),
                 TextColumn::make('job_title')
@@ -54,7 +56,8 @@ class EmployeesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->label('Delete Selected'),
                 ]),
             ]);
     }

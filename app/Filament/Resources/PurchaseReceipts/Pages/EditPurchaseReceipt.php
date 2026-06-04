@@ -17,6 +17,31 @@ class EditPurchaseReceipt extends EditRecord
 {
     protected static string $resource = PurchaseReceiptResource::class;
 
+    public function getHeading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->document_number ?? 'Purchase Receipt')
+            .' • Scope '.($record->buy_from_vendor_name ?? '—')
+            .' • Attribute '.($record->posted ? 'Posted' : 'Open');
+    }
+
+    public function getSubheading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->purchase_order_no ?? 'No purchase order')
+            .' • '.($record->receivingLocation?->name ?? 'Unknown Location')
+            .' • '.($record->actual_receipt_date?->format('d/m/Y') ?? 'Pending');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        $record = $this->getRecord();
+
+        return $record->document_number ?? 'Purchase Receipt';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

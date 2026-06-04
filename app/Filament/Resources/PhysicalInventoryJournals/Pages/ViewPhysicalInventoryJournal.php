@@ -20,7 +20,7 @@ class ViewPhysicalInventoryJournal extends ViewRecord
             Actions\Action::make('print')
                 ->label('Print Counting Sheet')
                 ->icon('heroicon-o-printer')
-                ->url(fn ($record) => route('physical-inventory.print', $record))
+                ->url(fn ($record) => route('physical-inventory.print', ['journal' => $record]))
                 ->openUrlInNewTab(),
         ];
     }

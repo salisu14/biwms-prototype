@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\ItemSkus\Tables;
 
+use App\Filament\Resources\Items\ItemResource;
+use App\Filament\Resources\Locations\LocationResource;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -20,7 +22,7 @@ class ItemSkusTable
             ->defaultSort('sku_code')
             ->columns([
                 TextColumn::make('sku_code')
-                    ->label('SKU Code')
+                    ->label('SKU')
                     ->searchable()
                     ->sortable()
                     ->weight('bold')
@@ -31,19 +33,31 @@ class ItemSkusTable
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('item.item_code')
-                    ->label('Item Code')
+                    ->label('Item')
                     ->searchable()
                     ->sortable()
-                    ->tooltip(fn ($record): string => $record->item->description ?? '')
-                    ->description(fn ($record): string => $record->item->description ?? '')
+                    ->tooltip(fn ($record): string => $record->item ? "{$record->item->item_code} - {$record->item->description}" : '')
+                    ->description(fn ($record): string => $record->item?->description ?? '')
+                    ->formatStateUsing(fn ($state, $record): string => $record->item
+                        ? "{$record->item->item_code} - {$record->item->description}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->item
+                        ? ItemResource::getUrl('view', ['record' => $record->item])
+                        : null)
                     ->limit(30),
 
-                TextColumn::make('location.location_name')
+                TextColumn::make('location.name')
                     ->label('Location')
                     ->searchable()
                     ->sortable()
                     ->badge()
-                    ->color('gray'),
+                    ->color('gray')
+                    ->formatStateUsing(fn ($state, $record): string => $record->location
+                        ? "{$record->location->code} - {$record->location->name}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->location
+                        ? LocationResource::getUrl('view', ['record' => $record->location])
+                        : null),
 
                 TextColumn::make('current_quantity')
                     ->label('On Hand')

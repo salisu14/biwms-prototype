@@ -20,6 +20,26 @@ class ViewEmployee extends ViewRecord
 {
     protected static string $resource = EmployeeResource::class;
 
+    public function getHeading(): string
+    {
+        return 'Employee No. '.($this->record->employee_number ?? '—')
+            .' • Scope '.($this->record->full_name ?? '—')
+            .' • Attribute '.($this->record->assignment_type?->getLabel() ?? '—');
+    }
+
+    public function getSubheading(): string
+    {
+        return 'No. '.($this->record->employee_number ?? '—')
+            .' • Scope '.($this->record->full_name ?? '—')
+            .' • Attribute '.($this->record->job_title ?: 'Unassigned');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        return ($this->record->employee_number ?? '—')
+            .' - '.($this->record->full_name ?? '—');
+    }
+
     protected function getHeaderActions(): array
     {
         return [

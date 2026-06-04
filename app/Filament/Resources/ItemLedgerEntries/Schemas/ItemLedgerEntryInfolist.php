@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\ItemLedgerEntries\Schemas;
 
+use App\Filament\Resources\Items\ItemResource;
+use App\Filament\Resources\Locations\LocationResource;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -15,13 +17,12 @@ class ItemLedgerEntryInfolist
         return $schema
             ->components([
                 Grid::make(3)->schema([
-                    // Identity & Document Context
                     Section::make('Entry Details')
                         ->columnSpan(2)
                         ->columns(3)
                         ->schema([
                             TextEntry::make('entry_number')->label('Entry No.')->weight('bold'),
-                            TextEntry::make('entry_type')->badge()->color('primary'),
+                            TextEntry::make('entry_type')->badge(),
                             TextEntry::make('posting_date')->date(),
                             TextEntry::make('document_number')->label('Doc. No.')->copyable(),
                             TextEntry::make('document_type'),
@@ -40,9 +41,24 @@ class ItemLedgerEntryInfolist
                     Section::make('Item & Location')
                         ->columns(2)
                         ->schema([
-                            TextEntry::make('item.item_code')->label('Item Code')->weight('bold'),
+                            TextEntry::make('item.item_code')
+                                ->label('Item')
+                                ->weight('bold')
+                                ->formatStateUsing(fn ($state, $record): string => $record->item
+                                    ? "{$record->item->item_code} - {$record->item->description}"
+                                    : '—')
+                                ->url(fn ($record): ?string => $record->item
+                                    ? ItemResource::getUrl('view', ['record' => $record->item])
+                                    : null),
                             TextEntry::make('variant_code')->placeholder('-'),
-                            TextEntry::make('location.name')->label('Location'),
+                            TextEntry::make('location.name')
+                                ->label('Location')
+                                ->formatStateUsing(fn ($state, $record): string => $record->location
+                                    ? "{$record->location->code} - {$record->location->name}"
+                                    : '—')
+                                ->url(fn ($record): ?string => $record->location
+                                    ? LocationResource::getUrl('view', ['record' => $record->location])
+                                    : null),
                             TextEntry::make('bin_code')->placeholder('-'),
                         ]),
 

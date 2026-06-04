@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\ItemCategoryAssignments\Schemas;
 
+use App\Models\Category;
+use App\Models\Item;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -22,7 +24,7 @@ class ItemCategoryAssignmentForm
                             Select::make('item_id')
                                 ->label('Item')
                                 ->relationship('item', 'item_code')
-                                ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->item_code} - {$record->description}")
+                                ->getOptionLabelFromRecordUsing(fn (Item $record): string => "{$record->item_code} - {$record->description}")
                                 ->searchable()
                                 ->preload()
                                 ->required(),
@@ -30,7 +32,7 @@ class ItemCategoryAssignmentForm
                             Select::make('category_id')
                                 ->label('Category')
                                 ->relationship('category', 'category_name')
-                                ->getOptionLabelFromRecordUsing(fn ($record) => "[{$record->category_code}] {$record->category_name}")
+                                ->getOptionLabelFromRecordUsing(fn (Category $record): string => "[{$record->category_code}] {$record->category_name}")
                                 ->searchable()
                                 ->preload()
                                 ->required(),

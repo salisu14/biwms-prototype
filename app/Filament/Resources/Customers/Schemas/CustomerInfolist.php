@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\Customers\Schemas;
 
+use App\Filament\Resources\CustomerGroups\CustomerGroupResource;
+use App\Filament\Resources\Locations\LocationResource;
+use App\Models\Customer;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -17,16 +20,27 @@ class CustomerInfolist
                 Grid::make(3)->schema([
                     Section::make('Customer Profile')
                         ->schema([
-                            TextEntry::make('customer_number')->label('Account #')->weight('bold'),
-                            TextEntry::make('name')->size('lg')->weight('bold'),
+                            Grid::make(2)->schema([
+                                TextEntry::make('customer_number')->label('Customer No.')->weight('bold'),
+                                TextEntry::make('name')->label('Customer Name')->size('lg')->weight('bold'),
+                                TextEntry::make('group_link')
+                                    ->label('Customer Group')
+                                    ->state(function (Customer $record): string {
+                                        if (! $record->group) {
+                                            return 'No group assigned';
+                                        }
 
-                            // Added: Group display in profile
-                            TextEntry::make('group.name')
-                                ->label('Customer Group')
-                                ->badge()
-                                ->color('info')
-                                ->placeholder('No group assigned'),
-
+                                        return "{$record->group->code} - {$record->group->name}";
+                                    })
+                                    ->url(fn (Customer $record): ?string => $record->group
+                                        ? CustomerGroupResource::getUrl('view', ['record' => $record->group])
+                                        : null)
+                                    ->badge()
+                                    ->color('info'),
+                                TextEntry::make('contact.name')
+                                    ->label('Contact')
+                                    ->placeholder('Auto-created from customer details'),
+                            ]),
                             TextEntry::make('email')->icon('heroicon-m-envelope')->copyable(),
                             TextEntry::make('phone')->icon('heroicon-m-phone'),
                             TextEntry::make('address')->columnSpanFull(),
@@ -55,13 +69,17 @@ class CustomerInfolist
                 Grid::make(3)->schema([
                     Section::make('Account Setup')
                         ->schema([
-                            TextEntry::make('generalBusinessPostingGroup.id')->label('Gen. Bus. Posting'),
-                            TextEntry::make('customerPostingGroup.id')->label('Customer Posting'),
-                            TextEntry::make('vat_bus_posting_group')->label('VAT Group'),
+                            TextEntry::make('generalBusinessPostingGroup.description')
+                                ->label('Gen. Bus. Posting Group')
+                                ->placeholder('—'),
+                            TextEntry::make('customerPostingGroup.description')
+                                ->label('Customer Posting Group')
+                                ->placeholder('—'),
+                            TextEntry::make('vat_bus_posting_group')->label('VAT Bus. Posting Group'),
                             TextEntry::make('payment_terms_code')->label('Payment Terms'),
                         ])->columnSpan(2)->columns(2),
 
-                    Section::make('Status Details')
+                    Section::make('Status & Location')
                         ->schema([
                             IconEntry::make('blocked')
                                 ->boolean()
@@ -70,7 +88,18 @@ class CustomerInfolist
                                 ->badge()
                                 ->visible(fn ($record) => $record->blocked)
                                 ->color('danger'),
-                            TextEntry::make('location.name')->label('Preferred Location'),
+                            TextEntry::make('location_link')
+                                ->label('Preferred Location')
+                                ->state(function (Customer $record): string {
+                                    if (! $record->location) {
+                                        return 'Unassigned';
+                                    }
+
+                                    return "{$record->location->code} - {$record->location->name}";
+                                })
+                                ->url(fn (Customer $record): ?string => $record->location
+                                    ? LocationResource::getUrl('view', ['record' => $record->location])
+                                    : null),
                         ])->columnSpan(1),
                 ]),
             ]);

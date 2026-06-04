@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\PurchaseInvoices\Schemas;
 
-use App\Enums\ApprovalStatus;
+use App\Filament\Resources\Locations\LocationResource;
+use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
+use App\Filament\Resources\Vendors\VendorResource;
+use App\Models\PurchaseInvoice;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -16,58 +19,49 @@ class PurchaseInvoiceInfolist
     {
         return $schema
             ->components([
-                // Changed Split::make to Grid::make(2)
                 Grid::make(2)
                     ->schema([
-                        // Left Column (General, Status, Cancellation)
                         Group::make([
-                            Section::make('General Information')
+                            Section::make('Scope')
                                 ->schema([
                                     Grid::make(2)->schema([
                                         TextEntry::make('document_number')
                                             ->label('Invoice No.')
-                                            ->weight('bold')
-                                            ->copyable(),
-                                        TextEntry::make('external_document_number')
-                                            ->label('External Doc No.')
-                                            ->placeholder('-'),
-                                        TextEntry::make('vendor_name')
-                                            ->label('Vendor'),
-                                        TextEntry::make('vendor_address')
-                                            ->placeholder('-'),
-                                        TextEntry::make('order_number')
-                                            ->label('Source Order')
-                                            ->placeholder('-'),
-                                        TextEntry::make('location.name')
-                                            ->label('Location'),
+                                            ->weight('bold'),
+                                        TextEntry::make('status')
+                                            ->badge()
+                                            ->label('Approval'),
+                                        TextEntry::make('vendor_label')
+                                            ->label('Vendor')
+                                            ->state(function (PurchaseInvoice $record): string {
+                                                return $record->vendor_name ?: ($record->vendor?->vendor_name ?? '—');
+                                            })
+                                            ->url(fn (PurchaseInvoice $record): ?string => $record->vendor
+                                                ? VendorResource::getUrl('view', ['record' => $record->vendor])
+                                                : null),
+                                        TextEntry::make('order_label')
+                                            ->label('Purchase Order')
+                                            ->state(function (PurchaseInvoice $record): string {
+                                                return $record->order_number ?: '—';
+                                            })
+                                            ->url(fn (PurchaseInvoice $record): ?string => $record->purchaseOrder
+                                                ? PurchaseOrderResource::getUrl('view', ['record' => $record->purchaseOrder])
+                                                : null),
                                     ]),
                                 ]),
 
-                            Section::make('Status & Audit')
+                            Section::make('Addresses')
                                 ->schema([
-                                    Grid::make(3)->schema([
-                                        TextEntry::make('status')
-                                            ->badge()
-                                            ->label('Approval')
-                                            ->color(function ($state): string {
-                                                $value = $state instanceof ApprovalStatus ? $state->value : (string) $state;
-
-                                                return match ($value) {
-                                                    'draft' => 'gray',
-                                                    'pending' => 'warning',
-                                                    'approved' => 'success',
-                                                    'rejected' => 'danger',
-                                                    'posted' => 'info',
-                                                    default => 'gray',
-                                                };
-                                            }),
-                                        IconEntry::make('paid_in_full')
-                                            ->label('Paid')
-                                            ->boolean(),
-                                        IconEntry::make('cancelled')
-                                            ->label('Cancelled')
-                                            ->boolean()
-                                            ->trueColor('danger'),
+                                    Grid::make(2)->schema([
+                                        TextEntry::make('vendor_address')->label('Vendor Address')->placeholder('—'),
+                                        TextEntry::make('location.name')
+                                            ->label('Location')
+                                            ->url(fn (PurchaseInvoice $record): ?string => $record->location
+                                                ? LocationResource::getUrl('view', ['record' => $record->location])
+                                                : null),
+                                        TextEntry::make('external_document_number')
+                                            ->label('External Doc No.')
+                                            ->placeholder('—'),
                                         TextEntry::make('payment_status')
                                             ->badge()
                                             ->label('Payment Status')
@@ -78,16 +72,10 @@ class PurchaseInvoiceInfolist
                                                 default => 'warning',
                                             }),
                                     ]),
-                                    Grid::make(2)->schema([
-                                        TextEntry::make('poster.name')
-                                            ->label('Posted By'),
-                                        TextEntry::make('posted_at')
-                                            ->dateTime(),
-                                    ]),
                                 ]),
 
                             Section::make('Cancellation Details')
-                                ->visible(fn ($record) => $record->cancelled)
+                                ->visible(fn (PurchaseInvoice $record) => $record->cancelled)
                                 ->schema([
                                     TextEntry::make('corrective_document_number')
                                         ->label('Credit Memo Ref')
@@ -98,40 +86,53 @@ class PurchaseInvoiceInfolist
                                     TextEntry::make('cancelled_at')
                                         ->dateTime(),
                                 ]),
-                        ]), // Removed ->grow() as Grid handles this
+                        ])->grow(),
 
-                        // Right Column (Financials, Dates)
                         Group::make([
                             Section::make('Financial Summary')
                                 ->schema([
                                     TextEntry::make('grand_total')
                                         ->label('Total (Incl. VAT)')
-                                        ->money(fn ($record) => $record->currency_code)
+                                        ->money(fn (PurchaseInvoice $record) => $record->currency_code)
                                         ->size('lg')
                                         ->weight('bold'),
                                     TextEntry::make('total_vat')
                                         ->label('VAT Amount')
-                                        ->money(fn ($record) => $record->currency_code),
+                                        ->money(fn (PurchaseInvoice $record) => $record->currency_code),
                                     TextEntry::make('amount_paid')
                                         ->label('Paid to Date')
-                                        ->money(fn ($record) => $record->currency_code)
+                                        ->money(fn (PurchaseInvoice $record) => $record->currency_code)
                                         ->color('success'),
                                     TextEntry::make('remaining_amount')
                                         ->label('Balance Due')
-                                        ->money(fn ($record) => $record->currency_code)
+                                        ->money(fn (PurchaseInvoice $record) => $record->currency_code)
                                         ->color(fn ($state) => $state > 0 ? 'danger' : 'success')
                                         ->weight('bold'),
                                 ]),
 
-                            Section::make('Dates')
+                            Section::make('Timeline')
                                 ->schema([
                                     TextEntry::make('posting_date')->date(),
                                     TextEntry::make('document_date')->date(),
                                     TextEntry::make('due_date')
                                         ->date()
-                                        ->color(fn ($record) => $record->is_overdue ? 'danger' : null),
+                                        ->color(fn (PurchaseInvoice $record) => $record->is_overdue ? 'danger' : null),
+                                    TextEntry::make('posted_at')->dateTime(),
                                 ]),
-                        ]), // Removed ->columnSpan(1) as Grid::make(2) handles this
+
+                            Section::make('Audit')
+                                ->schema([
+                                    IconEntry::make('paid_in_full')
+                                        ->label('Paid')
+                                        ->boolean(),
+                                    IconEntry::make('cancelled')
+                                        ->label('Cancelled')
+                                        ->boolean()
+                                        ->trueColor('danger'),
+                                    TextEntry::make('poster.name')
+                                        ->label('Posted By'),
+                                ]),
+                        ])->columnSpan(1),
                     ]),
             ]);
     }

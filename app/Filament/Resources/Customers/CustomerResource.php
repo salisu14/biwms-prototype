@@ -81,13 +81,21 @@ class CustomerResource extends Resource
         return [
             'Email' => $record->email ?: '—',
             'Phone' => $record->phone ?: '—',
-            'Group' => $record->group?->code ?: '—',
+            'Group' => $record->group
+                ? "{$record->group->code} - {$record->group->name}"
+                : '—',
+            'Location' => $record->location
+                ? "{$record->location->code} - {$record->location->name}"
+                : '—',
         ];
     }
 
     public static function getGlobalSearchEloquentQuery(): Builder
     {
-        return parent::getGlobalSearchEloquentQuery()->with('group');
+        return parent::getGlobalSearchEloquentQuery()->with([
+            'group',
+            'location',
+        ]);
     }
 
     public static function getPages(): array

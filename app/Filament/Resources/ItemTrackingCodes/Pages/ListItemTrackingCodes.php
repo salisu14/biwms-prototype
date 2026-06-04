@@ -10,6 +10,8 @@ class ListItemTrackingCodes extends ListRecords
 {
     protected static string $resource = ItemTrackingCodeResource::class;
 
+    protected static ?string $title = 'Item Tracking Codes';
+
     protected function getHeaderActions(): array
     {
         return [

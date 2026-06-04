@@ -2,9 +2,12 @@
 
 namespace App\Filament\Resources\ItemUomAssignments\Tables;
 
+use App\Filament\Resources\Items\ItemResource;
+use App\Filament\Resources\UnitOfMeasures\UnitOfMeasureResource;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -18,21 +21,29 @@ class ItemUomAssignmentsTable
         return $table
             ->columns([
                 TextColumn::make('item.item_code')
-                    ->label('Item No.')
+                    ->label('Item')
                     ->searchable()
                     ->sortable()
-                    ->weight('bold'),
-
-                TextColumn::make('item.description')
-                    ->label('Description')
-                    ->searchable()
-                    ->limit(35),
+                    ->weight('bold')
+                    ->formatStateUsing(fn ($state, $record): string => $record->item
+                        ? "{$record->item->item_code} - {$record->item->description}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->item
+                        ? ItemResource::getUrl('view', ['record' => $record->item])
+                        : null)
+                    ->description(fn ($record): string => $record->item?->description ?? ''),
 
                 TextColumn::make('uom.uom_code')
-                    ->label('UOM Code')
+                    ->label('UoM')
                     ->searchable()
                     ->sortable()
-                    ->weight('medium'),
+                    ->weight('medium')
+                    ->formatStateUsing(fn ($state, $record): string => $record->uom
+                        ? "{$record->uom->uom_code} - {$record->uom->description}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->uom
+                        ? UnitOfMeasureResource::getUrl('view', ['record' => $record->uom])
+                        : null),
 
                 TextColumn::make('uom_type')
                     ->label('Type')
@@ -55,7 +66,7 @@ class ItemUomAssignmentsTable
                     }),
 
                 TextColumn::make('conversion_factor')
-                    ->label('Conversion Factor')
+                    ->label('Qty. per UoM')
                     ->numeric(6)
                     ->alignEnd(),
 
@@ -68,7 +79,7 @@ class ItemUomAssignmentsTable
                     ->numeric()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->defaultGroup('item.item_code') // Essential for clear ERP grouping of conversions
+            ->defaultGroup('item.item_code')
             ->filters([
                 SelectFilter::make('uom_type')
                     ->options([
@@ -84,11 +95,12 @@ class ItemUomAssignmentsTable
                     ->label('Is Default Unit'),
             ])
             ->recordActions([
+                ViewAction::make(),
                 EditAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()->label('Delete Selected'),
                 ]),
             ]);
     }
