@@ -6,6 +6,7 @@ use App\Filament\Resources\ChartOfAccounts\ChartOfAccountResource;
 use App\Filament\Resources\Employees\EmployeeResource;
 use App\Filament\Resources\Vendors\VendorResource;
 use App\Models\MaintenanceContract;
+use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -81,7 +82,7 @@ class MaintenanceContractInfolist
                                 ? "{$record->expenseAccount->account_number} - {$record->expenseAccount->name}"
                                 : '—')
                             ->url(fn (MaintenanceContract $record): ?string => $record->expenseAccount
-                                ? ChartOfAccountResource::getUrl('view', ['record' => $record->expenseAccount])
+                                ? ChartOfAccountResource::getUrl('edit', ['record' => $record->expenseAccount])
                                 : null),
                         TextEntry::make('prepaid_account')
                             ->label('Prepaid Account')
@@ -89,7 +90,7 @@ class MaintenanceContractInfolist
                                 ? "{$record->prepaidAccount->account_number} - {$record->prepaidAccount->name}"
                                 : '—')
                             ->url(fn (MaintenanceContract $record): ?string => $record->prepaidAccount
-                                ? ChartOfAccountResource::getUrl('view', ['record' => $record->prepaidAccount])
+                                ? ChartOfAccountResource::getUrl('edit', ['record' => $record->prepaidAccount])
                                 : null),
                         TextEntry::make('accrual_account')
                             ->label('Accrual Account')
@@ -97,14 +98,14 @@ class MaintenanceContractInfolist
                                 ? "{$record->accrualAccount->account_number} - {$record->accrualAccount->name}"
                                 : '—')
                             ->url(fn (MaintenanceContract $record): ?string => $record->accrualAccount
-                                ? ChartOfAccountResource::getUrl('view', ['record' => $record->accrualAccount])
+                                ? ChartOfAccountResource::getUrl('edit', ['record' => $record->accrualAccount])
                                 : null),
                     ]),
 
                 Section::make('Coverage')
                     ->columns(2)
                     ->schema([
-                        TextEntry::make('auto_renewal')->boolean()->label('Auto Renewal'),
+                        IconEntry::make('auto_renewal')->boolean()->label('Auto Renewal'),
                         TextEntry::make('auto_renewal_period_months')->label('Auto Renewal Period (Months)'),
                         TextEntry::make('scope_of_work')->columnSpanFull()->label('Scope of Work'),
                         TextEntry::make('special_terms')->columnSpanFull()->label('Special Terms'),

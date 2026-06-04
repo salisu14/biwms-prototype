@@ -14,10 +14,31 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Auth;
 
 class MaintenanceContract extends Model
 {
     use HasFactory, SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::creating(function (MaintenanceContract $contract): void {
+            if (! Auth::check()) {
+                return;
+            }
+
+            $contract->created_by ??= Auth::id();
+            $contract->modified_by ??= Auth::id();
+        });
+
+        static::updating(function (MaintenanceContract $contract): void {
+            if (! Auth::check()) {
+                return;
+            }
+
+            $contract->modified_by = Auth::id();
+        });
+    }
 
     protected $fillable = [
         'contract_no',

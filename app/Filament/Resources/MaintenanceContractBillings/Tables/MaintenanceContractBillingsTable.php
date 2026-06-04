@@ -59,7 +59,7 @@ class MaintenanceContractBillingsTable
                 TextColumn::make('actual_invoice_date')
                     ->label('Inv. Date')
                     ->date('d/m/Y')
-                    ->default('—')
+                    ->placeholder('—')
                     ->toggleable(),
 
                 TextColumn::make('created_at')

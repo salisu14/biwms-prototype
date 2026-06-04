@@ -5,6 +5,7 @@ namespace App\Filament\Resources\MaintenanceContractBillings\Pages;
 use App\Filament\Resources\MaintenanceContractBillings\MaintenanceContractBillingResource;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Support\Number;
 
 class ViewMaintenanceContractBilling extends ViewRecord
 {
@@ -13,19 +14,19 @@ class ViewMaintenanceContractBilling extends ViewRecord
     public function getHeading(): string
     {
         $record = $this->getRecord();
+        $currencyCode = $record->maintenanceContract?->currency_code ?? config('app.default_currency', 'NGN');
 
-        return ($record->maintenanceContract?->contract_no ?? 'Billing')
-            .' • Scope '.($record->purchaseInvoice?->document_number ?? 'No invoice')
-            .' • Attribute '.number_format((float) $record->amount, 2);
+        return 'billing • '.($record->maintenanceContract?->contract_no ?? '—')
+            .' • '.Number::currency((float) $record->amount, $currencyCode);
     }
 
     public function getSubheading(): string
     {
         $record = $this->getRecord();
 
-        return ($record->maintenanceContract?->description ?? 'Unknown Contract')
-            .' • '.ucfirst((string) $record->status)
-            .' • '.($record->billing_date?->format('d/m/Y') ?? 'No billing date');
+        return 'invoice • '.($record->purchaseInvoice?->document_number ?? '—')
+            .' • status • '.ucfirst((string) $record->status)
+            .' • billed • '.($record->billing_date?->format('d/m/Y') ?? '—');
     }
 
     public function getBreadcrumb(): string
@@ -33,7 +34,7 @@ class ViewMaintenanceContractBilling extends ViewRecord
         $record = $this->getRecord();
 
         return $record->maintenanceContract
-            ? "{$record->maintenanceContract->contract_no} - ".($record->purchaseInvoice?->document_number ?? $record->billing_date?->format('d/m/Y') ?? 'Billing')
+            ? "{$record->maintenanceContract->contract_no} - ".($record->billing_date?->format('d/m/Y') ?? 'Billing')
             : 'Maintenance Contract Billing';
     }
 

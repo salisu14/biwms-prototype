@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\VendorPostingGroups\Schemas;
 
 use Filament\Infolists\Components\Grid;
+use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Schema;
@@ -17,7 +18,7 @@ class VendorPostingGroupInfolist
                     Grid::make(3)->schema([
                         TextEntry::make('code')->label('Code'),
                         TextEntry::make('description')->label('Description'),
-                        TextEntry::make('blocked')->badge()->boolean(),
+                        IconEntry::make('blocked')->boolean()->label('Blocked'),
                     ]),
                 ]),
             Section::make('Account Mappings')

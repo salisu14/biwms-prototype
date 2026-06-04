@@ -10,6 +10,8 @@ class ListMaintenanceContractBillings extends ListRecords
 {
     protected static string $resource = MaintenanceContractBillingResource::class;
 
+    protected static ?string $title = 'Maintenance Contract Billings';
+
     protected function getHeaderActions(): array
     {
         return [

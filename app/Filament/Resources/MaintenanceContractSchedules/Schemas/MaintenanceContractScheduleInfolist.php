@@ -5,6 +5,7 @@ namespace App\Filament\Resources\MaintenanceContractSchedules\Schemas;
 use App\Filament\Resources\FixedAssets\FixedAssetResource;
 use App\Filament\Resources\MaintenanceContracts\MaintenanceContractResource;
 use App\Models\MaintenanceContractSchedule;
+use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -43,7 +44,7 @@ class MaintenanceContractScheduleInfolist
                             ->badge()
                             ->state(fn (MaintenanceContractSchedule $record): string => $record->frequency ? str($record->frequency)->replace('_', ' ')->title()->toString() : '—'),
                         TextEntry::make('interval_months')->label('Interval (Months)'),
-                        TextEntry::make('is_active')->boolean()->label('Active'),
+                        IconEntry::make('is_active')->boolean()->label('Active'),
                         TextEntry::make('first_service_date')->date()->label('First Service Date'),
                         TextEntry::make('next_service_date')->date()->label('Next Service Date'),
                         TextEntry::make('last_service_date')->date()->label('Last Service Date'),
