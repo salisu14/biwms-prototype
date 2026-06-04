@@ -5,6 +5,7 @@ namespace App\Filament\Resources\GeneralProductPostingGroups;
 use App\Filament\Resources\GeneralProductPostingGroups\Pages\CreateGeneralProductPostingGroup;
 use App\Filament\Resources\GeneralProductPostingGroups\Pages\EditGeneralProductPostingGroup;
 use App\Filament\Resources\GeneralProductPostingGroups\Pages\ListGeneralProductPostingGroups;
+use App\Filament\Resources\GeneralProductPostingGroups\Pages\ViewGeneralProductPostingGroup;
 use App\Filament\Resources\GeneralProductPostingGroups\Schemas\GeneralProductPostingGroupForm;
 use App\Filament\Resources\GeneralProductPostingGroups\Tables\GeneralProductPostingGroupsTable;
 use App\Models\GeneralProductPostingGroup;
@@ -45,6 +46,7 @@ class GeneralProductPostingGroupResource extends Resource
             'index' => ListGeneralProductPostingGroups::route('/'),
             'create' => CreateGeneralProductPostingGroup::route('/create'),
             'edit' => EditGeneralProductPostingGroup::route('/{record}/edit'),
+            'view' => ViewGeneralProductPostingGroup::route('/{record}'), //
         ];
     }
 }

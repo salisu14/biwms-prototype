@@ -55,7 +55,7 @@ class ItemCharge extends Model
      */
     public function purchaseOrderLines(): HasMany
     {
-        return $this->hasMany(PurchaseOrderLine::class, 'no', 'number')
+        return $this->hasMany(PurchaseOrderLine::class, 'item_code', 'number')
             ->where('type', 'CHARGE');
     }
 
