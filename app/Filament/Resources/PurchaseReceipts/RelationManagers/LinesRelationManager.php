@@ -286,14 +286,6 @@ class LinesRelationManager extends RelationManager
                                                                 ->pluck('bin_code', 'bin_code')
                                                             : []
                                                     ),
-
-                                                //                                                Placeholder::make('whse_posting_group_display')
-                                                //                                                    ->label('Whse. Posting Group')
-                                                //                                                    ->content(fn (Get $get) => $get('type') === 'ITEM'
-                                                //                                                        ? \App\Models\Item::where('no', $get('no'))->value('whse_posting_group') ?? '—'
-                                                //                                                        : '—'
-                                                //                                                    )
-                                                //                                                    ->visible(fn (Get $get) => $get('type') === 'ITEM'),
                                             ]),
                                     ]),
 

@@ -10,7 +10,6 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\Layout\Split;
 
 class PurchaseReceiptInfolist
 {
@@ -18,93 +17,111 @@ class PurchaseReceiptInfolist
     {
         return $schema
             ->components([
-                Split::make([
-                    Group::make([
-                        Section::make('Scope')
-                            ->schema([
-                                Grid::make(2)->schema([
-                                    TextEntry::make('document_number')
-                                        ->label('Receipt No.')
-                                        ->weight('bold'),
-                                    TextEntry::make('status')
-                                        ->badge(),
-                                    TextEntry::make('buy_from_vendor_name')
-                                        ->label('Vendor'),
-                                    TextEntry::make('purchase_order_link')
-                                        ->label('Purchase Order')
-                                        ->state(function (PurchaseReceipt $record): string {
-                                            return $record->purchaseOrder
-                                                ? "{$record->purchaseOrder->order_number} - {$record->purchaseOrder->vendor_name}"
-                                                : ($record->purchase_order_no ?? '—');
-                                        })
-                                        ->url(fn (PurchaseReceipt $record): ?string => $record->purchaseOrder
-                                            ? PurchaseOrderResource::getUrl('view', ['record' => $record->purchaseOrder])
-                                            : null),
-                                ]),
-                            ]),
+                Grid::make(3)
+                    ->schema([
+                        Group::make([
+                            Section::make('Scope')
+                                ->schema([
+                                    Grid::make(2)->schema([
+                                        TextEntry::make('document_number')
+                                            ->label('Receipt No.')
+                                            ->weight('bold'),
+                                        TextEntry::make('status')
+                                            ->badge(),
+                                        TextEntry::make('buy_from_vendor_name')
+                                            ->label('Vendor'),
+                                        TextEntry::make('purchase_order_link')
+                                            ->label('Purchase Order')
+                                            ->state(function ($record): string {  // ✅ Removed type hint
+                                                // Ensure we're working with a PurchaseReceipt
+                                                $purchaseReceipt = $record instanceof PurchaseReceipt
+                                                    ? $record
+                                                    : $record->purchaseReceipt ?? $record->purchase_receipt ?? null;
 
-                        Section::make('Receipt Details')
-                            ->schema([
-                                Grid::make(3)->schema([
-                                    TextEntry::make('vendor_shipment_no')
-                                        ->label('Vendor Shipment No.')
+                                                if (! $purchaseReceipt instanceof PurchaseReceipt) {
+                                                    return '—';
+                                                }
+
+                                                return $purchaseReceipt->purchaseOrder
+                                                    ? "{$purchaseReceipt->purchaseOrder->order_number} - {$purchaseReceipt->purchaseOrder->vendor_name}"
+                                                    : ($purchaseReceipt->purchase_order_no ?? '—');
+                                            })
+                                            ->url(function ($record): ?string {
+                                                $purchaseReceipt = $record instanceof PurchaseReceipt
+                                                    ? $record
+                                                    : $record->purchaseReceipt ?? $record->purchase_receipt ?? null;
+
+                                                if (! $purchaseReceipt instanceof PurchaseReceipt || ! $purchaseReceipt->purchaseOrder) {
+                                                    return null;
+                                                }
+
+                                                return PurchaseOrderResource::getUrl('view', ['record' => $purchaseReceipt->purchaseOrder]);
+                                            }),
+                                    ]),
+                                ]),
+
+                            Section::make('Receipt Details')
+                                ->schema([
+                                    Grid::make(3)->schema([
+                                        TextEntry::make('vendor_shipment_no')
+                                            ->label('Vendor Shipment No.')
+                                            ->placeholder('—'),
+                                        TextEntry::make('vendor_invoice_no')
+                                            ->label('Vendor Invoice No.')
+                                            ->placeholder('—'),
+                                        TextEntry::make('external_document_no')
+                                            ->label('Reference No.')
+                                            ->placeholder('—'),
+                                        TextEntry::make('receivingLocation.name')
+                                            ->label('Receiving Location'),
+                                        TextEntry::make('shipment_method_code')
+                                            ->label('Shipment Method')
+                                            ->placeholder('—'),
+                                        TextEntry::make('shipping_agent_code')
+                                            ->label('Shipping Agent')
+                                            ->placeholder('—'),
+                                    ]),
+                                ]),
+
+                            Section::make('Addresses')
+                                ->schema([
+                                    Grid::make(2)->schema([
+                                        TextEntry::make('buy_from_address')
+                                            ->label('Buy-from Address')
+                                            ->placeholder('—'),
+                                        TextEntry::make('ship_to_name')
+                                            ->label('Ship-to Name')
+                                            ->placeholder('—'),
+                                        TextEntry::make('buy_from_city')
+                                            ->label('Buy-from City')
+                                            ->placeholder('—'),
+                                        TextEntry::make('ship_to_city')
+                                            ->label('Ship-to City')
+                                            ->placeholder('—'),
+                                    ]),
+                                ]),
+                        ])->columnSpan(2),
+
+                        Group::make([
+                            Section::make('Timeline')
+                                ->schema([
+                                    TextEntry::make('posting_date')->date(),
+                                    TextEntry::make('document_date')->date(),
+                                    TextEntry::make('expected_receipt_date')->date(),
+                                    TextEntry::make('actual_receipt_date')->date(),
+                                ]),
+                            Section::make('Posting')
+                                ->schema([
+                                    IconEntry::make('posted')->boolean(),
+                                    TextEntry::make('postedByUser.name')
+                                        ->label('Posted By')
                                         ->placeholder('—'),
-                                    TextEntry::make('vendor_invoice_no')
-                                        ->label('Vendor Invoice No.')
-                                        ->placeholder('—'),
-                                    TextEntry::make('external_document_no')
-                                        ->label('Reference No.')
-                                        ->placeholder('—'),
-                                    TextEntry::make('receivingLocation.name')
-                                        ->label('Receiving Location'),
-                                    TextEntry::make('shipment_method_code')
-                                        ->label('Shipment Method')
-                                        ->placeholder('—'),
-                                    TextEntry::make('shipping_agent_code')
-                                        ->label('Shipping Agent')
+                                    TextEntry::make('posted_at')
+                                        ->dateTime()
                                         ->placeholder('—'),
                                 ]),
-                            ]),
-
-                        Section::make('Addresses')
-                            ->schema([
-                                Grid::make(2)->schema([
-                                    TextEntry::make('buy_from_address')
-                                        ->label('Buy-from Address')
-                                        ->placeholder('—'),
-                                    TextEntry::make('ship_to_name')
-                                        ->label('Ship-to Name')
-                                        ->placeholder('—'),
-                                    TextEntry::make('buy_from_city')
-                                        ->label('Buy-from City')
-                                        ->placeholder('—'),
-                                    TextEntry::make('ship_to_city')
-                                        ->label('Ship-to City')
-                                        ->placeholder('—'),
-                                ]),
-                            ]),
-                    ])->grow(),
-
-                    Group::make([
-                        Section::make('Timeline')
-                            ->schema([
-                                TextEntry::make('posting_date')->date(),
-                                TextEntry::make('document_date')->date(),
-                                TextEntry::make('expected_receipt_date')->date(),
-                                TextEntry::make('actual_receipt_date')->date(),
-                            ]),
-                        Section::make('Posting')
-                            ->schema([
-                                IconEntry::make('posted')->boolean(),
-                                TextEntry::make('postedByUser.name')
-                                    ->label('Posted By')
-                                    ->placeholder('—'),
-                                TextEntry::make('posted_at')
-                                    ->dateTime()
-                                    ->placeholder('—'),
-                            ]),
-                    ])->columnSpan(1),
-                ])->columnSpanFull(),
+                        ])->columnSpan(1),
+                    ]),
             ]);
     }
 }
