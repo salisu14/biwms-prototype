@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\Vendors\Schemas;
 
-use App\Models\Vendor;
+use App\Filament\Traits\HasSystemGeneratedField;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -14,6 +14,8 @@ use Filament\Schemas\Schema;
 
 class VendorForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -25,15 +27,14 @@ class VendorForm
                             ->icon('heroicon-o-user')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('vendor_code')
-                                        ->label('Vendor No.')
-//                                        ->required()
+                                    static::makeSystemGeneratedTextInput(
+                                        'vendor_code',
+                                        'Vendor No.',
+                                        'Generated automatically from the vendor number series and cannot be changed.',
+                                        'Auto-generated from Number Series (VENDOR)'
+                                    )
                                         ->unique(ignoreRecord: true)
-                                        ->readOnlyOn('create')
-                                        ->disabled(fn (?Vendor $record) => $record !== null)
-                                        ->dehydrated()
-                                        ->placeholder('Auto-generated from Number Series (VENDOR)')
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                        ->maxLength(255),
 
                                     TextInput::make('vendor_name')
                                         ->label('Name')

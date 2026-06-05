@@ -5,10 +5,10 @@ namespace App\Filament\Resources\SalesOrders\Schemas;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Customer;
 use App\Models\Item;
 use App\Models\Location;
-use App\Models\SalesOrder;
 use App\Services\Sales\SalesPricingResolver;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
@@ -27,6 +27,8 @@ use Filament\Schemas\Schema;
 
 class SalesOrderForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -39,16 +41,11 @@ class SalesOrderForm
                                     ->schema([
                                         Section::make('General Information')
                                             ->schema([
-                                                TextInput::make('order_number')
-                                                    ->label('Order Number')
-                                                    ->default(fn () => 'Draft')
-                                                    ->disabled()
-                                                    // Lock the field if the record already exists in the database
-                                                    ->disabled(fn (?SalesOrder $record) => $record !== null)
-                                                    // Ensure the value is still sent to the database during creation
-                                                    ->dehydrated(false)
-                                                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                                    ->helperText('The code cannot be changed once the Sales order is created.'),
+                                                static::makeSystemGeneratedTextInput(
+                                                    'order_number',
+                                                    'Order Number',
+                                                    'Generated automatically from the sales order number series and cannot be changed.'
+                                                ),
 
                                                 Select::make('order_type')
                                                     ->options(SalesOrderType::class)

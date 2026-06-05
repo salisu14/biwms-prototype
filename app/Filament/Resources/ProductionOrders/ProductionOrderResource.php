@@ -34,6 +34,8 @@ class ProductionOrderResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'document_number';
 
+    protected static ?int $globalSearchSort = -290;
+
     public static function form(Schema $schema): Schema
     {
         return ProductionOrderForm::configure($schema);
@@ -102,6 +104,23 @@ class ProductionOrderResource extends Resource
             'item',
             'location',
         ]);
+    }
+
+    public static function modifyGlobalSearchQuery(Builder $query, string $search): void
+    {
+        $qualifiedDocumentNumber = $query->qualifyColumn('document_number');
+        $qualifiedSourceNumber = $query->qualifyColumn('source_no');
+
+        $query->orderByRaw(
+            "case
+                when lower({$qualifiedDocumentNumber}::text) = lower(?) then 0
+                when lower({$qualifiedSourceNumber}::text) = lower(?) then 1
+                when lower({$qualifiedDocumentNumber}::text) like lower(?) then 2
+                when lower({$qualifiedSourceNumber}::text) like lower(?) then 3
+                else 4
+            end",
+            [$search, $search, "%{$search}%", "%{$search}%"],
+        )->orderByDesc($qualifiedDocumentNumber);
     }
 
     public static function getPages(): array

@@ -30,6 +30,8 @@ class VendorContactResource extends Resource
 
     protected static ?string $recordTitleAttribute = null;
 
+    protected static ?int $globalSearchSort = 120;
+
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()

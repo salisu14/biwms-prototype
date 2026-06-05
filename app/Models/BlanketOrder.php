@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SalesOrderStatus;
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,15 @@ use Illuminate\Support\Facades\DB;
 class BlanketOrder extends Model
 {
     use HasFactory, SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::creating(function (BlanketOrder $order): void {
+            if (empty($order->document_number)) {
+                $order->document_number = $order->generateDocumentNumber();
+            }
+        });
+    }
 
     protected $fillable = [
         'document_number',
@@ -261,6 +271,19 @@ class BlanketOrder extends Model
 
     public function generateDocumentNumber(): string
     {
+        $seriesService = app(NumberSeriesService::class);
+        $seriesCandidates = $this->order_type === 'Sales'
+            ? ['S-BLANKET', 'BLANKET_SALES_ORDER', 'SBO']
+            : ['P-BLANKET', 'BLANKET_PURCHASE_ORDER', 'PBO'];
+
+        foreach ($seriesCandidates as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
         $prefix = $this->order_type === 'Sales' ? 'SBO' : 'PBO';
         $year = date('Y');
         $sequence = static::whereYear('created_at', $year)

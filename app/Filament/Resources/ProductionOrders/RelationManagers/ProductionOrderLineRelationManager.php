@@ -53,20 +53,19 @@ class ProductionOrderLineRelationManager extends RelationManager
                             ->preload()
                             ->required()
                             ->live()
-                            ->afterStateUpdated(function ($state, Set $set) {
+                            ->afterStateHydrated(function ($state, Set $set, Get $get) {
+                                if (! $state || filled($get('unit_cost'))) {
+                                    return;
+                                }
+
+                                $this->fillItemDefaults((int) $state, $set, $get);
+                            })
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                 if (! $state) {
                                     return;
                                 }
 
-                                $item = Item::find($state);
-                                if ($item) {
-                                    $set('description', $item->description);
-                                    $set('unit_of_measure_code', $item->base_unit_of_measure);
-                                    $set('unit_cost', $item->unit_cost);
-                                    // Auto-link default BOM/Routing if they exist on the item model
-                                    $set('production_bom_id', $item->production_bom_id);
-                                    $set('routing_id', $item->routing_id);
-                                }
+                                $this->fillItemDefaults((int) $state, $set, $get);
                             }),
 
                         TextInput::make('description')
@@ -192,6 +191,7 @@ class ProductionOrderLineRelationManager extends RelationManager
             ->headerActions([
                 CreateAction::make()
                     ->mutateDataUsing(function (array $data): array {
+                        $data = $this->mergeItemDefaults($data);
                         $data['created_by'] = auth()->id();
 
                         return $data;
@@ -201,6 +201,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                 ActionGroup::make([
                     EditAction::make()
                         ->mutateDataUsing(function (array $data): array {
+                            $data = $this->mergeItemDefaults($data);
                             $data['last_modified_by'] = auth()->id();
 
                             return $data;
@@ -242,5 +243,63 @@ class ProductionOrderLineRelationManager extends RelationManager
                     DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    protected function fillItemDefaults(int $itemId, Set $set, Get $get): void
+    {
+        $item = Item::find($itemId);
+
+        if (! $item) {
+            return;
+        }
+
+        if (blank($get('description'))) {
+            $set('description', $item->description);
+        }
+
+        if (blank($get('unit_of_measure_code'))) {
+            $set('unit_of_measure_code', $item->base_unit_of_measure);
+        }
+
+        $set('unit_cost', (float) ($item->unit_cost ?? 0));
+
+        if (blank($get('production_bom_id')) && filled($item->production_bom_id)) {
+            $set('production_bom_id', $item->production_bom_id);
+        }
+
+        if (blank($get('routing_id')) && filled($item->routing_id)) {
+            $set('routing_id', $item->routing_id);
+        }
+
+        $quantity = (float) ($get('quantity') ?? 0);
+        $set('cost_amount', $quantity * (float) ($item->unit_cost ?? 0));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function mergeItemDefaults(array $data): array
+    {
+        $itemId = (int) ($data['item_id'] ?? 0);
+
+        if ($itemId <= 0) {
+            return $data;
+        }
+
+        $item = Item::find($itemId);
+
+        if (! $item) {
+            return $data;
+        }
+
+        $data['description'] = $data['description'] ?: $item->description;
+        $data['unit_of_measure_code'] = $data['unit_of_measure_code'] ?: $item->base_unit_of_measure;
+        $data['unit_cost'] = filled($data['unit_cost'] ?? null) ? $data['unit_cost'] : (float) ($item->unit_cost ?? 0);
+        $data['production_bom_id'] = $data['production_bom_id'] ?: $item->production_bom_id;
+        $data['routing_id'] = $data['routing_id'] ?: $item->routing_id;
+        $data['cost_amount'] = (float) ($data['quantity'] ?? 0) * (float) ($data['unit_cost'] ?? 0);
+
+        return $data;
     }
 }

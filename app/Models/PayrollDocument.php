@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Contracts\Approvable;
 use App\Enums\PayrollStatus;
+use App\Services\NumberSeriesService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +13,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PayrollDocument extends Model implements Approvable
 {
     use ApprovableTrait;
+
+    protected static function booted(): void
+    {
+        static::creating(function (PayrollDocument $document): void {
+            if (empty($document->document_number)) {
+                $document->document_number = self::generateDocumentNumber();
+            }
+        });
+    }
 
     protected $fillable = [
         'document_number',
@@ -73,5 +83,23 @@ class PayrollDocument extends Model implements Approvable
             'status' => PayrollStatus::APPROVED,
             'approved_at' => now(),
         ]);
+    }
+
+    public static function generateDocumentNumber(): string
+    {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['PAYROLL', 'PAYROLL_DOCUMENT', 'PRL'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
+        $periodKey = now()->format('Ym');
+        $sequence = static::whereYear('created_at', now()->year)->count() + 1;
+
+        return sprintf('PRL-%s-%04d', $periodKey, $sequence);
     }
 }

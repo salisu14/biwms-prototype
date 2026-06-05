@@ -26,8 +26,8 @@
                         <img src="{{ $company['logo_data_uri'] }}" alt="Company Logo" class="logo">
                     @endif
                     <strong>{{ $company['name'] }}</strong><br>
-                    @if(!empty($company['trading_name']))
-                        <em>{{ $company['trading_name'] }}</em><br>
+                    @if(!empty($company['legal_name']) && $company['legal_name'] !== $company['name'])
+                        <em>{{ $company['legal_name'] }}</em><br>
                     @endif
                     @if(!empty($company['address_lines']))
                         {{ implode(', ', $company['address_lines']) }}<br>

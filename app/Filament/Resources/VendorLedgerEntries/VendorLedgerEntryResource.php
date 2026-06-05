@@ -25,6 +25,8 @@ class VendorLedgerEntryResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'description';
 
+    protected static ?int $globalSearchSort = 180;
+
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->with(['vendor', 'currency']);

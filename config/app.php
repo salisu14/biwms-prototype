@@ -64,7 +64,7 @@ return [
     |
     */
 
-    'currency' => env('APP_CURRENCY', 'USD'),
+    'currency' => env('APP_CURRENCY', 'NGN'),
 
     /*
     |--------------------------------------------------------------------------

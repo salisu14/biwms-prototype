@@ -35,7 +35,7 @@ class CustomerPriceOverridesTable
 
                 TextColumn::make('item.unit_price')
                     ->label('Base Price')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->item?->currency_code ?? config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->item?->currency_code ?? config('app.default_currency', 'NGN')))
                     ->sortable()
                     ->color('gray')
 //                    ->strikeThrough(fn ($record) => $record->override_price != $record->item?->unit_price)
@@ -43,7 +43,7 @@ class CustomerPriceOverridesTable
 
                 TextColumn::make('override_price')
                     ->label('Override Price')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->item?->currency_code ?? config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->item?->currency_code ?? config('app.default_currency', 'NGN')))
                     ->sortable()
                     ->weight('bold')
                     ->color(function ($record) {

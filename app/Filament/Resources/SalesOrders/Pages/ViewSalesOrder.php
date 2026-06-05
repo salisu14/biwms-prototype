@@ -5,7 +5,9 @@ namespace App\Filament\Resources\SalesOrders\Pages;
 use App\Enums\SalesOrderStatus;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
+use App\Filament\Resources\SalesShipmentHeaders\SalesShipmentHeaderResource;
 use App\Models\SalesOrder;
+use App\Models\SalesShipmentHeader;
 use App\Services\Approval\ApprovalService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -116,6 +118,23 @@ class ViewSalesOrder extends ViewRecord
                     }
                 }),
 
+            Action::make('view_shipment')
+                ->label('View Shipment')
+                ->icon('heroicon-o-truck')
+                ->color('gray')
+                ->visible(fn (SalesOrder $record): bool => $this->getRelatedShipmentFor($record) !== null)
+                ->url(fn (SalesOrder $record): string => SalesShipmentHeaderResource::getUrl('view', [
+                    'record' => $this->getRelatedShipmentFor($record),
+                ])),
+
+            Action::make('print_waybill')
+                ->label('Print Waybill')
+                ->icon('heroicon-o-printer')
+                ->color('success')
+                ->visible(fn (SalesOrder $record): bool => $this->getRelatedShipmentFor($record) !== null)
+                ->url(fn (SalesOrder $record): string => route('waybill.print', $this->getRelatedShipmentFor($record)))
+                ->openUrlInNewTab(),
+
             Action::make('create_sales_invoice')
                 ->label('Create Sales Invoice')
                 ->icon('heroicon-o-document-check')
@@ -200,5 +219,18 @@ class ViewSalesOrder extends ViewRecord
                     return redirect(SalesOrderResource::getUrl('archived', ['tableSearch' => $record->order_number]));
                 }),
         ];
+    }
+
+    protected function getRelatedShipmentFor(SalesOrder $record): ?SalesShipmentHeader
+    {
+        if (blank($record->order_number)) {
+            return null;
+        }
+
+        return SalesShipmentHeader::query()
+            ->where('order_no', $record->order_number)
+            ->latest('posting_date')
+            ->latest('id')
+            ->first();
     }
 }

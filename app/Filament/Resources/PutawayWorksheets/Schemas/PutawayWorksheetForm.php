@@ -2,15 +2,16 @@
 
 namespace App\Filament\Resources\PutawayWorksheets\Schemas;
 
-use App\Models\PutawayWorksheet;
+use App\Filament\Traits\HasSystemGeneratedField;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class PutawayWorksheetForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -19,16 +20,11 @@ class PutawayWorksheetForm
                     ->description('Primary location and assignment details for this planning document.')
                     ->schema([
                         Grid::make(3)->schema([
-                            TextInput::make('worksheet_number')
-                                ->label('Worksheet No.')
-                                ->required()
-                                ->unique(ignoreRecord: true)
-                                // Lock the field if the record already exists in the database
-                                ->disabled(fn (?PutawayWorksheet $record) => $record !== null)
-                                // Ensure the value is still sent to the database during creation
-                                ->dehydrated()
-                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                ->helperText('The number cannot be changed once the PutawayWorksheet is created.'),
+                            static::makeSystemGeneratedTextInput(
+                                'worksheet_number',
+                                'Worksheet No.',
+                                'Generated automatically from the put-away worksheet number series and cannot be changed.'
+                            ),
 
                             Select::make('location_id')
                                 ->relationship('location', 'name')

@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Contracts\Approvable;
 use App\Enums\PurchaseLineType;
 use App\Enums\PurchaseQuoteStatus;
+use App\Services\NumberSeriesService;
 use App\Services\Purchase\PurchaseQuoteCalculationService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -405,10 +406,34 @@ class PurchaseQuote extends Model implements Approvable
         ]);
     }
 
-    protected static function booted()
+    protected static function booted(): void
     {
-        static::saved(function ($quote) {
+        static::creating(function (PurchaseQuote $quote): void {
+            if (empty($quote->document_no)) {
+                $quote->document_no = self::generateDocumentNumber();
+            }
+        });
+
+        static::saved(function (PurchaseQuote $quote): void {
             $quote->calculateTotals();
         });
+    }
+
+    public static function generateDocumentNumber(): string
+    {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['P-QUOTE', 'PURCHASE_QUOTE', 'PQ'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
+        $year = date('Y');
+        $sequence = static::whereYear('created_at', $year)->count() + 1;
+
+        return sprintf('PQ-%d-%06d', $year, $sequence);
     }
 }

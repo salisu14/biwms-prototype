@@ -68,7 +68,7 @@ class VendorInvoiceResource extends Resource
             return static::getModelLabel();
         }
 
-        $vendor = $record->vendor_name ?: ($record->vendor?->vendor_name ?? 'Unknown Vendor');
+        $vendor = $record->vendor?->vendor_name ?? 'Unknown Vendor';
 
         return "{$record->document_number} - {$vendor}";
     }
@@ -79,7 +79,6 @@ class VendorInvoiceResource extends Resource
             'document_number',
             'external_document_no',
             'vendor_invoice_no',
-            'vendor_name',
             'vendor.vendor_code',
             'vendor.vendor_name',
             'status',
@@ -91,7 +90,7 @@ class VendorInvoiceResource extends Resource
     public static function getGlobalSearchResultTitle(Model $record): string
     {
         /** @var VendorInvoice $record */
-        $vendor = $record->vendor_name ?: ($record->vendor?->vendor_name ?? 'Unknown Vendor');
+        $vendor = $record->vendor?->vendor_name ?? 'Unknown Vendor';
 
         return "{$record->document_number} - {$vendor}";
     }
@@ -101,8 +100,8 @@ class VendorInvoiceResource extends Resource
         /** @var VendorInvoice $record */
         return [
             'Vendor' => $record->vendor?->vendor_code
-                ? "{$record->vendor->vendor_code} - ".($record->vendor_name ?: ($record->vendor?->vendor_name ?? '—'))
-                : ($record->vendor_name ?: ($record->vendor?->vendor_name ?? '—')),
+                ? "{$record->vendor->vendor_code} - ".($record->vendor?->vendor_name ?? '—')
+                : ($record->vendor?->vendor_name ?? '—'),
             'Vendor Invoice' => $record->vendor_invoice_no ?: '—',
             'Status' => $record->status?->value ?? '—',
             'Posted' => $record->posted ? 'Yes' : 'No',

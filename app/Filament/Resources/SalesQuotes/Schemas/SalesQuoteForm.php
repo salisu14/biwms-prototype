@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\SalesQuotes\Schemas;
 
 use App\Enums\QuoteStatus;
-use App\Models\SalesQuote;
+use App\Filament\Traits\HasSystemGeneratedField;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -14,6 +14,8 @@ use Filament\Schemas\Schema;
 
 class SalesQuoteForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -21,19 +23,12 @@ class SalesQuoteForm
                 Section::make('General Information')
                     ->columns(2)
                     ->schema([
-                        TextInput::make('quote_no')
-                            ->label('Quote Number')
-                            ->required()
-                            ->unique(ignoreRecord: true)
-                            ->prefix('#')
-                            ->maxLength(10)
-                            ->placeholder('e.g. QTE-2023-001')
-                            // Lock the field if the record already exists in the database
-                            ->disabled(fn (?SalesQuote $record) => $record !== null)
-                            // Ensure the value is still sent to the database during creation
-                            ->dehydrated()
-                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                            ->helperText('The number cannot be changed once the Sales quote is created.'),
+                        static::makeSystemGeneratedTextInput(
+                            'quote_no',
+                            'Quote Number',
+                            'Generated automatically from the sales quote number series and cannot be changed.'
+                        )->prefix('#')
+                            ->maxLength(10),
 
                         Select::make('customer_id')
                             ->relationship('customer', 'name')

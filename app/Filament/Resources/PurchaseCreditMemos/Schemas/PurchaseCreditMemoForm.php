@@ -3,11 +3,11 @@
 namespace App\Filament\Resources\PurchaseCreditMemos\Schemas;
 
 use App\Enums\ApprovalStatus;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Item;
 use App\Models\PurchaseInvoice;
 use App\Models\ReasonCode;
 use App\Models\Vendor;
-use App\Services\NumberSeriesService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
@@ -22,6 +22,8 @@ use Filament\Schemas\Schema;
 
 class PurchaseCreditMemoForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -30,28 +32,12 @@ class PurchaseCreditMemoForm
                     ->schema([
                         Section::make('General Information')
                             ->schema([
-                                TextInput::make('document_number')
-                                    ->label('Document Number')
-                                    ->placeholder('Auto-generated from Number Series')
-                                    ->disabled()
-                                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                    ->helperText('Auto-generated from Number Series (P-CM, PURCHASE_CREDIT_MEMO, or PCM).')
-                                    ->formatStateUsing(function (?string $state) {
-                                        if (! empty($state)) {
-                                            return $state;
-                                        }
-
-                                        $service = app(NumberSeriesService::class);
-
-                                        foreach (['P-CM', 'PURCHASE_CREDIT_MEMO', 'PCM'] as $seriesCode) {
-                                            $nextNo = $service->tryGetNextNo($seriesCode);
-                                            if (! empty($nextNo)) {
-                                                return $nextNo;
-                                            }
-                                        }
-
-                                        return 'SETUP-NO-SERIES';
-                                    }),
+                                static::makeSystemGeneratedTextInput(
+                                    'document_number',
+                                    'Document Number',
+                                    'Auto-generated from Number Series (P-CM, PURCHASE_CREDIT_MEMO, or PCM).',
+                                    'Auto-generated from Number Series'
+                                )->formatStateUsing(fn (?string $state) => $state),
 
                                 Select::make('vendor_id')
                                     ->relationship('vendor', 'vendor_name')

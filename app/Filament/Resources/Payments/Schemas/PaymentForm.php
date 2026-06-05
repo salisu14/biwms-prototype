@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Payments\Schemas;
 
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\BankAccount;
 use App\Models\Currency;
 use App\Models\Customer;
@@ -19,6 +20,8 @@ use Filament\Schemas\Schema;
 
 class PaymentForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -29,12 +32,11 @@ class PaymentForm
                             ->icon('heroicon-m-document-text')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('payment_number')
-                                        ->label('Payment No.')
-                                        ->placeholder('Auto-generated on save')
-                                        ->readOnly()
-                                        ->dehydrated()
-                                        ->unique(ignoreRecord: true),
+                                    static::makeSystemGeneratedTextInput(
+                                        'payment_number',
+                                        'Payment No.',
+                                        'Generated automatically from the payment number series and cannot be changed.'
+                                    ),
                                     DatePicker::make('payment_date')
                                         ->default(now())
                                         ->required(),

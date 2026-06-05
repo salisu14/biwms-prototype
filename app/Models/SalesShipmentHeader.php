@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ShipmentStatus;
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class SalesShipmentHeader extends Model
 {
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::creating(function (SalesShipmentHeader $header): void {
+            if (empty($header->document_no)) {
+                $header->document_no = self::generateDocumentNumber();
+            }
+        });
+    }
 
     protected $table = 'sales_shipment_headers';
 
@@ -114,5 +124,23 @@ class SalesShipmentHeader extends Model
                 'unit_price' => $line->unit_price,
                 'line_discount_pct' => $line->line_discount_pct,
             ])->values()->toArray();
+    }
+
+    public static function generateDocumentNumber(): string
+    {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['S-SHIP', 'SALES_SHIPMENT', 'SSHIP'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
+        $year = date('Y');
+        $sequence = static::whereYear('created_at', $year)->count() + 1;
+
+        return sprintf('S-SHIP-%d-%06d', $year, $sequence);
     }
 }

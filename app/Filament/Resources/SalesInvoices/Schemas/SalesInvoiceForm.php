@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SalesInvoices\Schemas;
 
 use App\Enums\ApprovalStatus;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Customer;
 use App\Models\Item;
 use App\Models\SalesInvoice;
@@ -20,6 +21,8 @@ use Filament\Schemas\Schema;
 
 class SalesInvoiceForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -27,17 +30,11 @@ class SalesInvoiceForm
                 Section::make('Header Information')
                     ->columns(3)
                     ->schema([
-                        TextInput::make('invoice_number')
-                            ->label('Invoice Number')
-                            ->required()
-                            ->unique(ignoreRecord: true)
-                            ->maxLength(255)
-                            // Lock the field if the record already exists in the database
-                            ->disabled(fn (?SalesInvoice $record) => $record !== null)
-                            // Ensure the value is still sent to the database during creation
-                            ->dehydrated()
-                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                            ->helperText('The code cannot be changed once the Sales invoice is created.'),
+                        static::makeSystemGeneratedTextInput(
+                            'invoice_number',
+                            'Invoice Number',
+                            'Generated automatically from the sales invoice number series and cannot be changed.'
+                        )->maxLength(255),
 
                         Select::make('customer_id')
                             ->relationship(

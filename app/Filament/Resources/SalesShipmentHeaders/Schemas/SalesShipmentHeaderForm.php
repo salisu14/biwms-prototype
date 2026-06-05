@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\SalesShipmentHeaders\Schemas;
 
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Customer;
-use App\Models\SalesShipmentHeader;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -16,6 +16,8 @@ use Filament\Schemas\Schema;
 
 class SalesShipmentHeaderForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -25,16 +27,11 @@ class SalesShipmentHeaderForm
                         Tab::make('General')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('document_no')
-                                        ->label('Document No.')
-                                        ->required()
-                                        ->unique(ignoreRecord: true)
-                                        // Lock the field if the record already exists in the database
-                                        ->disabled(fn (?SalesShipmentHeader $record) => $record !== null)
-                                        // Ensure the value is still sent to the database during creation
-                                        ->dehydrated()
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                        ->helperText('The code cannot be changed once the Sales shipment is created.'),
+                                    static::makeSystemGeneratedTextInput(
+                                        'document_no',
+                                        'Document No.',
+                                        'Generated automatically from the sales shipment number series and cannot be changed.'
+                                    ),
 
                                     //                                        ->disabled(),
                                     // ... inside the General tab schema grid ...

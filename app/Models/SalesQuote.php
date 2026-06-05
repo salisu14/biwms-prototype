@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\QuoteStatus;
+use App\Services\NumberSeriesService;
 use App\Services\Sales\SalesQuoteService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,29 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SalesQuote extends Model
 {
+    protected static function booted(): void
+    {
+        static::creating(function (SalesQuote $quote): void {
+            if (empty($quote->quote_no)) {
+                $quote->quote_no = self::generateQuoteNumber();
+            }
+        });
+
+        static::updated(function (SalesQuote $quote): void {
+            $changes = $quote->getChanges();
+
+            unset($changes['updated_at']);
+
+            if (! empty($changes)) {
+                $quote->revisions()->create([
+                    'revision_number' => 'REV-'.strtoupper(uniqid()),
+                    'changes' => $changes,
+                    'description' => 'System captured changes.',
+                ]);
+            }
+        });
+    }
+
     protected $fillable = [
         'quote_no',
         'customer_id',
@@ -76,23 +100,21 @@ class SalesQuote extends Model
         return app(SalesQuoteService::class)->convertToOrder($this);
     }
 
-    protected static function booted()
+    public static function generateQuoteNumber(): string
     {
-        static::updated(function (SalesQuote $quote) {
-            // In the updated callback, getChanges() reflects the persisted delta.
-            $changes = $quote->getChanges();
+        $seriesService = app(NumberSeriesService::class);
 
-            // Remove timestamps from the log so it stays clean
-            unset($changes['updated_at']);
+        foreach (['S-QUOTE', 'SALES_QUOTE', 'SQ'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
 
-            if (! empty($changes)) {
-                $quote->revisions()->create([
-                    'revision_number' => 'REV-'.strtoupper(uniqid()),
-                    'changes' => $changes,
-                    'description' => 'System captured changes.',
-                    // 'version' and 'revision_date' are handled by Revision model boot
-                ]);
+            if (! empty($nextNumber)) {
+                return $nextNumber;
             }
-        });
+        }
+
+        $year = date('Y');
+        $sequence = static::whereYear('created_at', $year)->count() + 1;
+
+        return sprintf('SQ-%d-%06d', $year, $sequence);
     }
 }

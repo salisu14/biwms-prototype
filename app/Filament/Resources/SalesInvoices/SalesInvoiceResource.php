@@ -27,6 +27,8 @@ class SalesInvoiceResource extends Resource
 
     protected static ?string $recordTitleAttribute = null;
 
+    protected static ?int $globalSearchSort = -280;
+
     /**
      * Posted invoice history is intentionally restricted to admin/sales roles,
      * even if another role is accidentally granted generic sales invoice permissions.
@@ -124,6 +126,20 @@ class SalesInvoiceResource extends Resource
             'customer',
             'salesOrder',
         ]);
+    }
+
+    public static function modifyGlobalSearchQuery(Builder $query, string $search): void
+    {
+        $qualifiedInvoiceNumber = $query->qualifyColumn('invoice_number');
+
+        $query->orderByRaw(
+            "case
+                when lower({$qualifiedInvoiceNumber}::text) = lower(?) then 0
+                when lower({$qualifiedInvoiceNumber}::text) like lower(?) then 1
+                else 2
+            end",
+            [$search, "%{$search}%"],
+        )->orderByDesc($qualifiedInvoiceNumber);
     }
 
     public static function canEdit(Model $record): bool

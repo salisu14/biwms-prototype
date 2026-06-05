@@ -18,17 +18,29 @@
             overflow: hidden;
             box-shadow: 0 20px 25px -5px rgba(0,0,0,.1), 0 10px 10px -5px rgba(0,0,0,.04);
         }
+        .hub-header > * {
+            position: relative;
+            z-index: 1;
+        }
         .hub-header h2 {
             font-size: 2.25rem;
             font-weight: 800;
             letter-spacing: -0.025em;
             margin-bottom: 0.5rem;
+            line-height: 1.1;
+            text-shadow: 0 1px 1px rgba(15, 23, 42, 0.12);
+            text-rendering: geometricPrecision;
+            -webkit-font-smoothing: antialiased;
         }
         .hub-header p {
             font-size: 1.125rem;
-            opacity: 0.9;
+            opacity: 1;
             max-width: 36rem;
             line-height: 1.6;
+            color: rgba(255, 255, 255, 0.96);
+            text-shadow: 0 1px 1px rgba(15, 23, 42, 0.1);
+            text-rendering: geometricPrecision;
+            -webkit-font-smoothing: antialiased;
         }
         .hub-header::after {
             content: '';
@@ -37,9 +49,10 @@
             right: -2rem;
             width: 15rem;
             height: 15rem;
-            background: rgba(255,255,255,.1);
+            background: rgba(255,255,255,.08);
             border-radius: 50%;
-            filter: blur(40px);
+            filter: blur(56px);
+            z-index: 0;
         }
 
         .category-section {
@@ -87,6 +100,55 @@
             box-shadow: 0 12px 20px -5px rgba(0,0,0,.1);
             border-color: rgb(var(--primary-500));
         }
+        .hub-card-featured {
+            background: #ffffff;
+            border-color: #2563eb;
+            border-width: 1.5px;
+            box-shadow:
+                inset 0 0 0 1px rgba(147, 197, 253, 0.35),
+                0 10px 22px -18px rgba(37, 99, 235, 0.28);
+            position: relative;
+        }
+        .hub-card-featured::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 0.3rem;
+            background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 55%, #1e40af 100%);
+            border-radius: 1rem 1rem 0 0;
+        }
+        .hub-card-featured .counter {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border: 1px solid #93c5fd;
+        }
+        .hub-card-featured .card-body h3 {
+            color: #0f172a;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            text-shadow: none;
+        }
+        .hub-card-featured .card-body p {
+            color: #334155;
+            font-weight: 500;
+            text-shadow: none;
+            opacity: 1;
+        }
+        .dark .hub-card-featured {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.92) 0%, rgba(17, 24, 39, 0.95) 100%);
+            border-color: rgba(129, 140, 248, 0.45);
+            box-shadow: 0 18px 36px -20px rgba(129, 140, 248, 0.45);
+        }
+        .dark .hub-card-featured .counter {
+            background: rgba(129, 140, 248, 0.16);
+            color: #c7d2fe;
+        }
+        .dark .hub-card-featured .card-body h3 {
+            color: #eef2ff;
+        }
+        .dark .hub-card-featured .card-body p {
+            color: #cbd5e1;
+        }
 
         .card-top {
             display: flex;
@@ -117,12 +179,16 @@
             font-weight: 700;
             margin-bottom: 0.375rem;
             color: #111827;
+            text-rendering: geometricPrecision;
+            -webkit-font-smoothing: antialiased;
         }
         .dark .card-body h3 { color: white; }
         .card-body p {
             font-size: 0.8125rem;
             line-height: 1.4;
             color: #6b7280;
+            text-rendering: geometricPrecision;
+            -webkit-font-smoothing: antialiased;
         }
         .dark .card-body p { color: #9ca3af; }
 
@@ -169,7 +235,7 @@
                 <span>General Journal</span>
             </div>
             <div class="hub-grid">
-                <a href="{{ url('/' . $panelPath . '/general-journal-batches') }}" class="hub-card">
+                <a href="{{ url('/' . $panelPath . '/general-journal-batches') }}" class="hub-card hub-card-featured">
                     <div class="card-top">
                         <div class="card-icon"><x-heroicon-o-pencil-square style="width: 1rem; height: 1rem;" /></div>
                         <div class="counter">{{ $counts['gen_journal_batches'] }} Batches</div>

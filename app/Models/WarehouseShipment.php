@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +13,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class WarehouseShipment extends Model
 {
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::creating(function (WarehouseShipment $shipment): void {
+            if (empty($shipment->document_number)) {
+                $shipment->document_number = self::generateNumber();
+            }
+        });
+    }
 
     protected $fillable = [
         'document_number',
@@ -91,6 +101,24 @@ class WarehouseShipment extends Model
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
+    public static function generateNumber(): string
+    {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['W-SHIP', 'WAREHOUSE_SHIPMENT', 'WS'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
+        $year = date('Y');
+        $sequence = static::whereYear('created_at', $year)->count() + 1;
+
+        return sprintf('WS-%d-%06d', $year, $sequence);
     }
 
     // Scope

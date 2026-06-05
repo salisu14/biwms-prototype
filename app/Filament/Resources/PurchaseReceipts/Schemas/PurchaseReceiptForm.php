@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\PurchaseReceipts\Schemas;
 
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\PurchaseOrder;
-use App\Models\PurchaseReceipt;
 use App\Services\Purchase\PurchaseReceiptHeaderPrefillService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -21,6 +21,8 @@ use Filament\Schemas\Schema;
 
 class PurchaseReceiptForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -30,17 +32,11 @@ class PurchaseReceiptForm
                         Tab::make('General')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('document_number')
-                                        ->label('Receipt No.')
-                                        ->required()
-                                        ->unique(ignoreRecord: true)
-                                        ->maxLength(50)
-                                        // Lock the field if the record already exists in the database
-                                        ->disabled(fn (?PurchaseReceipt $record) => $record !== null)
-                                        // Ensure the value is still sent to the database during creation
-                                        ->dehydrated()
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                        ->helperText('The code cannot be changed once the Purchase receipt is created.'),
+                                    static::makeSystemGeneratedTextInput(
+                                        'document_number',
+                                        'Receipt No.',
+                                        'Generated automatically from the purchase receipt number series and cannot be changed.'
+                                    )->maxLength(50),
 
                                     Toggle::make('allow_header_override')
                                         ->label('Edit Auto-Filled Header')

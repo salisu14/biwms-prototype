@@ -4,7 +4,7 @@ namespace App\Filament\Resources\PurchaseOrders\Schemas;
 
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
-use App\Models\PurchaseOrder;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -18,6 +18,8 @@ use Filament\Schemas\Schema;
 
 class PurchaseOrderForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -35,13 +37,11 @@ class PurchaseOrderForm
                                 ->afterStateUpdated(fn ($state, callable $set) => $set('order_number_preview', PurchaseOrderType::from($state)?->seriesCode().'-AUTO')
                                 ),
 
-                            TextInput::make('order_number')
-                                ->label('Order Number')
-//                                ->required()
-                                ->unique(ignoreRecord: true)
-                                ->helperText('Leave blank to auto-generate based on Series.')
-                                ->disabled(fn (?PurchaseOrder $record) => $record !== null)
-                                ->dehydrated(),
+                            static::makeSystemGeneratedTextInput(
+                                'order_number',
+                                'Order Number',
+                                'Generated automatically from the purchase order number series and cannot be changed.'
+                            ),
 
                             Select::make('vendor_id')
                                 ->label('Vendor')

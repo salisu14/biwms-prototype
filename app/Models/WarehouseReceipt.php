@@ -5,12 +5,22 @@
 namespace App\Models;
 
 use App\Enums\WarehouseReceiptStatus;
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WarehouseReceipt extends Model
 {
+    protected static function booted(): void
+    {
+        static::creating(function (WarehouseReceipt $receipt): void {
+            if (empty($receipt->document_number)) {
+                $receipt->document_number = self::generateNumber();
+            }
+        });
+    }
+
     protected $fillable = [
         'document_number',
         'location_id',
@@ -85,6 +95,24 @@ class WarehouseReceipt extends Model
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
+    public static function generateNumber(): string
+    {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['W-REC', 'WAREHOUSE_RECEIPT', 'WR'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
+        $year = date('Y');
+        $sequence = static::whereYear('created_at', $year)->count() + 1;
+
+        return sprintf('WR-%d-%06d', $year, $sequence);
     }
 
     // Scope

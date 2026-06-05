@@ -27,6 +27,8 @@ class PurchaseOrderResource extends Resource
 
     protected static ?string $recordTitleAttribute = null;
 
+    protected static ?int $globalSearchSort = -295;
+
     public static function form(Schema $schema): Schema
     {
         return PurchaseOrderForm::configure($schema);
@@ -103,6 +105,20 @@ class PurchaseOrderResource extends Resource
     public static function getGlobalSearchEloquentQuery(): Builder
     {
         return parent::getGlobalSearchEloquentQuery()->with(['vendor', 'location']);
+    }
+
+    public static function modifyGlobalSearchQuery(Builder $query, string $search): void
+    {
+        $qualifiedOrderNumber = $query->qualifyColumn('order_number');
+
+        $query->orderByRaw(
+            "case
+                when lower({$qualifiedOrderNumber}::text) = lower(?) then 0
+                when lower({$qualifiedOrderNumber}::text) like lower(?) then 1
+                else 2
+            end",
+            [$search, "%{$search}%"],
+        )->orderByDesc($qualifiedOrderNumber);
     }
 
     public static function getPages(): array

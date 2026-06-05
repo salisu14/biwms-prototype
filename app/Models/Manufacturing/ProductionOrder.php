@@ -16,6 +16,7 @@ use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\WarehouseActivity;
 use App\Models\WarehouseRequest;
+use App\Services\Manufacturing\ProductionOrderService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -370,6 +371,10 @@ class ProductionOrder extends Model
     protected static function booted(): void
     {
         static::creating(function ($order) {
+            if (empty($order->document_number)) {
+                $order->document_number = app(ProductionOrderService::class)->generateDocumentNumber();
+            }
+
             $order->created_by = auth()->id();
         });
 

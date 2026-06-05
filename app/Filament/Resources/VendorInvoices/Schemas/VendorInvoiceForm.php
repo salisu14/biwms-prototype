@@ -2,12 +2,13 @@
 
 namespace App\Filament\Resources\VendorInvoices\Schemas;
 
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\VendorInvoice;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -17,6 +18,8 @@ use Filament\Schemas\Schema;
 
 class VendorInvoiceForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -29,14 +32,11 @@ class VendorInvoiceForm
                                 Section::make('Document Information')
                                     ->schema([
                                         Grid::make(3)->schema([
-                                            TextInput::make('document_number')
-                                                ->label('Invoice No.')
-                                                ->required()
-                                                ->unique(ignoreRecord: true)
-                                                ->default(fn () => \App\Models\VendorInvoice::generateDocumentNumber())
-                                                ->disabled(fn (?VendorInvoice $record) => $record?->posted)
-                                                ->dehydrated()
-                                                ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                                            static::makeSystemGeneratedTextInput(
+                                                'document_number',
+                                                'Invoice No.',
+                                                'Generated automatically from the vendor invoice number series and cannot be changed.'
+                                            ),
                                             Select::make('vendor_id')
                                                 ->label('Vendor')
                                                 ->relationship('vendor', 'vendor_name')
@@ -112,7 +112,7 @@ class VendorInvoiceForm
                                                 ->prefix('₦')
                                                 ->disabled()
                                                 ->dehydrated(),
-//                                                ->weight('bold'),
+                                            //                                                ->weight('bold'),
                                         ]),
                                         Grid::make(4)->schema([
                                             Select::make('currency_code')

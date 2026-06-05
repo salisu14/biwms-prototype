@@ -31,6 +31,8 @@ class ReleasedProductionOrderResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'document_number';
 
+    protected static ?int $globalSearchSort = -289;
+
     public static function form(Schema $schema): Schema
     {
         return ProductionOrderForm::configure($schema);

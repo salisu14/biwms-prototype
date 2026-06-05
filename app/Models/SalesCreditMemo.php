@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Contracts\Approvable;
 use App\Enums\ApprovalStatus;
+use App\Services\NumberSeriesService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,6 +14,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class SalesCreditMemo extends Model implements Approvable
 {
     use ApprovableTrait;
+
+    protected static function booted(): void
+    {
+        static::creating(function (SalesCreditMemo $memo): void {
+            if (empty($memo->memo_number)) {
+                $memo->memo_number = self::generateMemoNumber();
+            }
+        });
+    }
 
     protected $fillable = [
         'customer_id',
@@ -135,5 +145,22 @@ class SalesCreditMemo extends Model implements Approvable
             'approver_id' => auth()->id(),
         ]);
     }
-}
 
+    public static function generateMemoNumber(): string
+    {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['S-CM', 'SALES_CREDIT_MEMO', 'SCM'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
+        $year = date('Y');
+        $sequence = static::whereYear('created_at', $year)->count() + 1;
+
+        return sprintf('CM-%d-%06d', $year, $sequence);
+    }
+}

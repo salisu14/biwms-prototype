@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PayrollDocuments\Schemas;
 
 use App\Enums\PayrollStatus;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\PayCode;
@@ -21,17 +22,19 @@ use Filament\Schemas\Schema;
 
 class PayrollDocumentForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
             ->components([
                 Group::make([
                     Section::make('Document Info')->schema([
-                        TextInput::make('document_number')
-                            ->default(fn () => 'PRL-'.date('Ym').'-'.rand(1000, 9999))
-                            ->required()
-                            ->maxLength(20)
-                            ->unique(ignoreRecord: true),
+                        static::makeSystemGeneratedTextInput(
+                            'document_number',
+                            'Document Number',
+                            'Generated automatically when the payroll document is created and cannot be changed.'
+                        )->maxLength(20),
                         DatePicker::make('period_start')
                             ->required(),
                         DatePicker::make('period_end')

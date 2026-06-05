@@ -5,6 +5,7 @@
 namespace App\Models;
 
 use App\Enums\ApprovalStatus;
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PurchaseInvoice extends Model
 {
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::creating(function (PurchaseInvoice $invoice): void {
+            if (empty($invoice->document_number)) {
+                $invoice->document_number = self::generateNumber();
+            }
+        });
+    }
 
     protected $table = 'purchase_invoices';
 
@@ -280,6 +290,16 @@ class PurchaseInvoice extends Model
      */
     public static function generateNumber(): string
     {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['P-INV', 'PURCHASE_INVOICE', 'PI'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
         $prefix = 'PI'; // Purchase Invoice
         $year = date('Y');
         $count = self::whereYear('posted_at', $year)->count() + 1;

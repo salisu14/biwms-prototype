@@ -25,6 +25,8 @@ class CustomerLedgerEntryResource extends Resource
 
     protected static ?string $recordTitleAttribute = null;
 
+    protected static ?int $globalSearchSort = 180;
+
     public static function form(Schema $schema): Schema
     {
         return CustomerLedgerEntryForm::configure($schema);

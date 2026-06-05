@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\PurchaseQuotes\Schemas;
 
 use App\Enums\PurchaseQuoteStatus;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Currency;
 use App\Models\PaymentTerm;
 use App\Models\Vendor;
-use App\Services\NumberSeriesService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -21,6 +21,8 @@ use Filament\Schemas\Schema;
 
 class PurchaseQuoteForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -31,27 +33,11 @@ class PurchaseQuoteForm
                             ->icon('heroicon-m-document-text')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('document_no')
-                                        ->required()
-                                        ->unique(ignoreRecord: true)
-                                        ->helperText('Auto-generated from Number Series (P-QUOTE, PURCHASE_QUOTE, or PQ).')
-                                        ->default(function (?object $record): string {
-                                            if ($record?->document_no) {
-                                                return (string) $record->document_no;
-                                            }
-
-                                            $service = app(NumberSeriesService::class);
-                                            foreach (['P-QUOTE', 'PURCHASE_QUOTE', 'PQ'] as $seriesCode) {
-                                                $nextNo = $service->tryGetNextNo($seriesCode);
-                                                if (! empty($nextNo)) {
-                                                    return $nextNo;
-                                                }
-                                            }
-
-                                            return 'SETUP-NO-SERIES';
-                                        })
-                                        ->disabled(fn ($record) => $record !== null)
-                                        ->dehydrated(),
+                                    static::makeSystemGeneratedTextInput(
+                                        'document_no',
+                                        'Document No.',
+                                        'Generated automatically from the purchase quote number series and cannot be changed.'
+                                    ),
                                     Select::make('status')
                                         ->options(PurchaseQuoteStatus::class)
                                         ->default(PurchaseQuoteStatus::OPEN)

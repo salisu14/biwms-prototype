@@ -4,10 +4,9 @@ namespace App\Filament\Resources\PurchaseInvoices\Schemas;
 
 use App\Enums\ApprovalStatus;
 use App\Enums\PurchaseOrderStatus;
-use App\Models\PurchaseInvoice;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
-use App\Services\NumberSeriesService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -24,6 +23,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class PurchaseInvoiceForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -33,27 +34,11 @@ class PurchaseInvoiceForm
                         Tab::make('General')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('document_number')
-                                        ->label('Invoice Number')
-                                        ->required()
-                                        ->unique(ignoreRecord: true)
-                                        ->default(function () {
-                                            $service = app(NumberSeriesService::class);
-                                            foreach (['P-INV', 'PURCHASE_INVOICE', 'PI'] as $seriesCode) {
-                                                $nextNo = $service->tryGetNextNo($seriesCode);
-                                                if (! empty($nextNo)) {
-                                                    return $nextNo;
-                                                }
-                                            }
-
-                                            return 'SETUP-NO-SERIES';
-                                        })
-                                        // Lock the field if the record already exists in the database
-                                        ->disabled(fn (?PurchaseInvoice $record) => $record !== null)
-                                        // Ensure the value is still sent to the database during creation
-                                        ->dehydrated()
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                        ->helperText('The number cannot be changed once the Purchase invoice is created.'),
+                                    static::makeSystemGeneratedTextInput(
+                                        'document_number',
+                                        'Invoice Number',
+                                        'Generated automatically from the purchase invoice number series and cannot be changed.'
+                                    ),
 
                                     Select::make('vendor_id')
                                         ->relationship('vendor', 'vendor_name')

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Customers\Schemas;
 
+use App\Filament\Traits\HasSystemGeneratedField;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -12,6 +13,8 @@ use Filament\Schemas\Schema;
 
 class CustomerForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -20,11 +23,14 @@ class CustomerForm
                     ->schema([
                         Section::make('General Information')
                             ->schema([
-                                TextInput::make('customer_number')
-                                    ->label('Customer No.')
+                                static::makeSystemGeneratedTextInput(
+                                    'customer_number',
+                                    'Customer No.',
+                                    'Generated automatically from the customer number series and cannot be changed.',
+                                    'Auto-generated from Number Series (CUSTOMER)'
+                                )
                                     ->unique(ignoreRecord: true)
-                                    ->readOnlyOn('create')
-                                    ->placeholder('Auto-generated from Number Series (CUSTOMER)'),
+                                    ->maxLength(255),
 
                                 TextInput::make('name')
                                     ->required()

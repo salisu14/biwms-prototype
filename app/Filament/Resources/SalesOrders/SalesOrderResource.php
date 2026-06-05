@@ -26,6 +26,8 @@ class SalesOrderResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'order_number';
 
+    protected static ?int $globalSearchSort = -300;
+
     public static function form(Schema $schema): Schema
     {
         return SalesOrderForm::configure($schema);
@@ -102,6 +104,20 @@ class SalesOrderResource extends Resource
     public static function getGlobalSearchEloquentQuery(): Builder
     {
         return parent::getGlobalSearchEloquentQuery()->with(['customer', 'location']);
+    }
+
+    public static function modifyGlobalSearchQuery(Builder $query, string $search): void
+    {
+        $qualifiedOrderNumber = $query->qualifyColumn('order_number');
+
+        $query->orderByRaw(
+            "case
+                when lower({$qualifiedOrderNumber}::text) = lower(?) then 0
+                when lower({$qualifiedOrderNumber}::text) like lower(?) then 1
+                else 2
+            end",
+            [$search, "%{$search}%"],
+        )->orderByDesc($qualifiedOrderNumber);
     }
 
     public static function getPages(): array

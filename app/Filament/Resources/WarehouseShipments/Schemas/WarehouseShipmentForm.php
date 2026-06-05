@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\WarehouseShipments\Schemas;
 
-use App\Models\WarehouseShipment;
+use App\Filament\Traits\HasSystemGeneratedField;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -13,6 +13,8 @@ use Filament\Schemas\Schema;
 
 class WarehouseShipmentForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -20,16 +22,11 @@ class WarehouseShipmentForm
                 Grid::make(3)->schema([
                     Section::make('General Information')
                         ->schema([
-                            TextInput::make('document_number')
-                                ->label('Shipment No.')
-                                ->required()
-                                ->unique(ignoreRecord: true)
-                                // Lock the field if the record already exists in the database
-                                ->disabled(fn (?WarehouseShipment $record) => $record !== null)
-                                // Ensure the value is still sent to the database during creation
-                                ->dehydrated()
-                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                ->helperText('The code cannot be changed once the Warehouse shipment is created.'),
+                            static::makeSystemGeneratedTextInput(
+                                'document_number',
+                                'Shipment No.',
+                                'Generated automatically from the warehouse shipment number series and cannot be changed.'
+                            ),
 
                             Select::make('location_id')
                                 ->label('Shipping Location')

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +13,15 @@ use Illuminate\Support\Facades\DB;
 class PurchaseReceipt extends Model
 {
     use HasFactory, SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::creating(function (PurchaseReceipt $receipt): void {
+            if (empty($receipt->document_number)) {
+                $receipt->document_number = self::generateDocumentNumber();
+            }
+        });
+    }
 
     protected $fillable = [
         'document_number',
@@ -194,8 +204,18 @@ class PurchaseReceipt extends Model
         });
     }
 
-    public function generateDocumentNumber(): string
+    public static function generateDocumentNumber(): string
     {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['P-REC', 'PURCHASE_RECEIPT', 'PR'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
         $prefix = 'PR';
         $year = date('Y');
         $sequence = static::whereYear('created_at', $year)->count() + 1;

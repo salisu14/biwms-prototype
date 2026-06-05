@@ -27,6 +27,8 @@ class CustomerResource extends Resource
 
     protected static ?string $recordTitleAttribute = null;
 
+    protected static ?int $globalSearchSort = -260;
+
     public static function form(Schema $schema): Schema
     {
         return CustomerForm::configure($schema);
@@ -65,6 +67,8 @@ class CustomerResource extends Resource
             'name',
             'email',
             'phone',
+            'contact.email',
+            'contact.phone',
             'group.code',
             'group.name',
             'location.code',
@@ -84,7 +88,7 @@ class CustomerResource extends Resource
         return [
             'Customer' => "{$record->customer_number} - {$record->name}",
             'Email' => $record->email ?: '—',
-            'Phone' => $record->phone ?: '—',
+            'Phone' => $record->phone ?: ($record->contact?->phone ?: '—'),
             'Group' => $record->group
                 ? "{$record->group->code} - {$record->group->name}"
                 : '—',
@@ -97,9 +101,30 @@ class CustomerResource extends Resource
     public static function getGlobalSearchEloquentQuery(): Builder
     {
         return parent::getGlobalSearchEloquentQuery()->with([
+            'contact',
             'group',
             'location',
         ]);
+    }
+
+    public static function modifyGlobalSearchQuery(Builder $query, string $search): void
+    {
+        $qualifiedCustomerNumber = $query->qualifyColumn('customer_number');
+        $qualifiedEmail = $query->qualifyColumn('email');
+        $qualifiedName = $query->qualifyColumn('name');
+
+        $query->orderByRaw(
+            "case
+                when lower({$qualifiedCustomerNumber}::text) = lower(?) then 0
+                when lower({$qualifiedEmail}::text) = lower(?) then 1
+                when lower({$qualifiedName}::text) = lower(?) then 2
+                when lower({$qualifiedCustomerNumber}::text) like lower(?) then 3
+                when lower({$qualifiedEmail}::text) like lower(?) then 4
+                when lower({$qualifiedName}::text) like lower(?) then 5
+                else 6
+            end",
+            [$search, $search, $search, "%{$search}%", "%{$search}%", "%{$search}%"],
+        )->orderBy($qualifiedName);
     }
 
     public static function getPages(): array

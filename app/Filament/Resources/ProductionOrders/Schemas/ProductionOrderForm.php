@@ -4,11 +4,10 @@ namespace App\Filament\Resources\ProductionOrders\Schemas;
 
 use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Item;
 use App\Models\Manufacturing\ProductionBomVersion;
-use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\RoutingVersion;
-use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -22,6 +21,8 @@ use Filament\Schemas\Schema;
 
 class ProductionOrderForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -31,18 +32,12 @@ class ProductionOrderForm
                     ->icon('heroicon-m-document-text')
                     ->columns(3)
                     ->schema([
-                        TextInput::make('document_number')
-                            ->label('Order Number')
-                            ->required()
-                            ->unique(ignoreRecord: true)
-                            ->default(fn () => app(ProductionOrderService::class)->generateDocumentNumber())
-                            ->placeholder('Auto-generated')
-                            // Lock the field if the record already exists in the database
-                            ->disabled(fn (?ProductionOrder $record) => $record !== null)
-                            // Ensure the value is still sent to the database during creation
-                            ->dehydrated()
-                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                            ->helperText('The number cannot be changed once the Production order is created.'),
+                        static::makeSystemGeneratedTextInput(
+                            'document_number',
+                            'Order Number',
+                            'Generated automatically when the production order is created and cannot be changed.',
+                            'Auto-generated'
+                        ),
 
                         Select::make('status')
                             ->options(ProductionOrderStatus::class)

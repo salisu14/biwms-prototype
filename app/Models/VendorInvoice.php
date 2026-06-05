@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Manufacturing\CapExProject;
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,15 @@ use Illuminate\Support\Facades\DB;
 class VendorInvoice extends Model
 {
     use HasFactory, SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::creating(function (VendorInvoice $invoice): void {
+            if (empty($invoice->document_number)) {
+                $invoice->document_number = self::generateDocumentNumber();
+            }
+        });
+    }
 
     protected $fillable = [
         'document_number',
@@ -356,6 +366,16 @@ class VendorInvoice extends Model
      */
     public static function generateDocumentNumber(): string
     {
+        $seriesService = app(NumberSeriesService::class);
+
+        foreach (['V-INV', 'VENDOR_INVOICE', 'VI'] as $seriesCode) {
+            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
+
+            if (! empty($nextNumber)) {
+                return $nextNumber;
+            }
+        }
+
         $prefix = 'VI';
         $year = date('Y');
         $sequence = static::whereYear('created_at', $year)->count() + 1;

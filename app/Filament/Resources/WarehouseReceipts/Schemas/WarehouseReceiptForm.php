@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\WarehouseReceipts\Schemas;
 
 use App\Enums\WarehouseReceiptStatus;
-use App\Models\WarehouseReceipt;
+use App\Filament\Traits\HasSystemGeneratedField;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -14,6 +14,8 @@ use Filament\Schemas\Schema;
 
 class WarehouseReceiptForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -21,16 +23,11 @@ class WarehouseReceiptForm
                 Grid::make(3)->schema([
                     Section::make('General Information')
                         ->schema([
-                            TextInput::make('document_number')
-                                ->label('Receipt No.')
-                                ->required()
-                                ->unique(ignoreRecord: true)
-                                // Lock the field if the record already exists in the database
-                                ->disabled(fn (?WarehouseReceipt $record) => $record !== null)
-                                // Ensure the value is still sent to the database during creation
-                                ->dehydrated()
-                                ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                ->helperText('The code cannot be changed once the Warehouse receipt is created.'),
+                            static::makeSystemGeneratedTextInput(
+                                'document_number',
+                                'Receipt No.',
+                                'Generated automatically from the warehouse receipt number series and cannot be changed.'
+                            ),
 
                             Select::make('location_id')
                                 ->label('Receiving Location')

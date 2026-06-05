@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\BlanketPurchaseOrders\Schemas;
 
-use App\Models\BlanketOrder;
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -19,6 +19,8 @@ use Filament\Schemas\Schema;
 
 class BlanketPurchaseOrderForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -29,17 +31,11 @@ class BlanketPurchaseOrderForm
                             ->icon('heroicon-m-document-duplicate')
                             ->schema([
                                 Grid::make(3)->schema([
-                                    TextInput::make('document_number')
-                                        ->label('BO Number')
-                                        ->required()
-                                        ->unique(ignoreRecord: true)
-                                        ->maxLength(50)
-                                        // Lock the field if the record already exists in the database
-                                        ->disabled(fn (?BlanketOrder $record) => $record !== null)
-                                        // Ensure the value is still sent to the database during creation
-                                        ->dehydrated()
-                                        ->extraInputAttributes(['style' => 'text-transform: uppercase'])
-                                        ->helperText('The number cannot be changed once the Blanket PO is created.'),
+                                    static::makeSystemGeneratedTextInput(
+                                        'document_number',
+                                        'BO Number',
+                                        'Generated automatically when the blanket purchase order is created and cannot be changed.'
+                                    )->maxLength(50),
 
                                     TextInput::make('status')
                                         ->default('OPEN')

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ItemSkus\Schemas;
 
+use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Item;
 use App\Models\Location;
 use Filament\Forms\Components\DatePicker;
@@ -16,6 +17,8 @@ use Filament\Schemas\Schema;
 
 class ItemSkuForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -53,11 +56,12 @@ class ItemSkuForm
                             })
                             ->required(),
 
-                        TextInput::make('sku_code')
-                            ->label('SKU Code (Auto-Generated)')
-                            ->disabled()
-                            ->dehydrated(false)
-                            ->required(),
+                        static::makeSystemGeneratedTextInput(
+                            'sku_code',
+                            'SKU Code',
+                            'Built automatically from the selected item and location and cannot be changed.',
+                            'Auto-generated from Item and Location'
+                        ),
 
                         // ADDED: Barcode field
                         TextInput::make('barcode')

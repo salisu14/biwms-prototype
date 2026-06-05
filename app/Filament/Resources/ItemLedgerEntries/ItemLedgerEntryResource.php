@@ -24,6 +24,8 @@ class ItemLedgerEntryResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    protected static ?int $globalSearchSort = 200;
+
     public static function form(Schema $schema): Schema
     {
         return ItemLedgerEntryForm::configure($schema);

@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\SalesOrders\Schemas;
 
 use App\Enums\SalesOrderStatus;
+use App\Filament\Resources\SalesShipmentHeaders\SalesShipmentHeaderResource;
 use App\Models\SalesOrder;
+use App\Models\SalesShipmentHeader;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -34,6 +36,21 @@ class SalesOrderInfolist
                                     TextEntry::make('customer_address')->label('Billing Address')->markdown(),
                                     TextEntry::make('ship_to_name')->label('Shipping Recipient'),
                                     TextEntry::make('ship_to_address')->label('Shipping Address')->markdown(),
+                                    TextEntry::make('related_shipment_no')
+                                        ->label('Related Shipment No.')
+                                        ->state(function (SalesOrder $record): string {
+                                            return self::resolveRelatedShipment($record)?->document_no ?? '—';
+                                        })
+                                        ->url(function (SalesOrder $record): ?string {
+                                            $shipment = self::resolveRelatedShipment($record);
+
+                                            if (! $shipment) {
+                                                return null;
+                                            }
+
+                                            return SalesShipmentHeaderResource::getUrl('view', ['record' => $shipment]);
+                                        })
+                                        ->openUrlInNewTab(),
                                 ])->columns(2),
                         ])->columnSpan(2),
 
@@ -81,5 +98,18 @@ class SalesOrderInfolist
                         TextEntry::make('internal_comment')->label('Internal Staff Notes'),
                     ])->columns(2),
             ]);
+    }
+
+    protected static function resolveRelatedShipment(SalesOrder $record): ?SalesShipmentHeader
+    {
+        if (blank($record->order_number)) {
+            return null;
+        }
+
+        return SalesShipmentHeader::query()
+            ->where('order_no', $record->order_number)
+            ->latest('posting_date')
+            ->latest('id')
+            ->first();
     }
 }

@@ -136,10 +136,12 @@ class CompanyInformationService
     public function getReportHeader(): array
     {
         $company = $this->get();
+        $displayName = $company->trading_name ?: $company->company_name;
 
         return [
-            'name' => $company->company_name,
+            'name' => $displayName,
             'trading_name' => $company->trading_name,
+            'legal_name' => $company->company_name,
             'address_lines' => $company->getAddressLines(),
             'phone' => $company->phone_no,
             'email' => $company->email,
@@ -159,9 +161,10 @@ class CompanyInformationService
     public function getInvoiceFooter(): string
     {
         $company = $this->get();
+        $displayName = $company->trading_name ?: $company->company_name;
 
         $parts = array_filter([
-            $company->company_name,
+            $displayName,
             $company->phone_no ? "Tel: {$company->phone_no}" : null,
             $company->email,
             $company->tax_registration_no ? "Tax No: {$company->tax_registration_no}" : null,
