@@ -141,8 +141,27 @@ class GlEntry extends Model
                 $entry->user_id = $entry->user_id ?? Auth::id();
             }
 
+            // Remove the broken integer fallback
             if (! $entry->entry_number) {
-                $entry->entry_number = (static::max('entry_number') ?? 0) + 1;
+                throw new \RuntimeException('GL Entry must have an entry_number generated from Number Series.');
+            }
+        });
+
+        static::created(function (GlEntry $entry) {
+            // Find the associated Chart of Account
+            // Adjust 'chart_of_account_id' if your foreign key is named differently
+            $account = ChartOfAccount::find($entry->chart_of_account_id);
+
+            if ($account) {
+                // Recalculate the balance directly from the source of truth (GlEntries)
+                // This prevents drift if transactions ever fail halfway
+                $newBalance = GlEntry::where('chart_of_account_id', $account->id)
+                    ->selectRaw("SUM(debit_amount) - SUM(credit_amount) as balance")
+                    ->value('balance');
+
+                $account->update([
+                    'balance' => $newBalance ?? 0,
+                ]);
             }
         });
     }

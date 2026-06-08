@@ -15,7 +15,7 @@ class NumberSeriesLine extends Model
      * - no_of_digits: The length of the numeric part (e.g., 6 for 000001)
      */
     protected $fillable = [
-        'no_series_code',
+        'number_series_id',
         'starting_date',
         'starting_no',
         'ending_no',
@@ -46,7 +46,7 @@ class NumberSeriesLine extends Model
      */
     public function noSeries(): BelongsTo
     {
-        return $this->belongsTo(NumberSeries::class, 'no_series_code', 'code');
+        return $this->belongsTo(NumberSeries::class);
     }
 
     /**

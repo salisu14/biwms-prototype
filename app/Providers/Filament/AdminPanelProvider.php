@@ -152,6 +152,24 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/bank-accounts')
                                     ->isActiveWhen(fn () => request()->is('admin/bank-accounts*')),
 
+                                // Petty Cash
+                                NavigationItem::make('Petty Cash Funds')
+                                    ->icon('heroicon-o-currency-pound')
+                                    ->url('/admin/petty-cash-funds')
+                                    ->isActiveWhen(fn () => request()->is('admin/petty-cash-funds*')),
+
+                                // Petty Cash
+                                NavigationItem::make('Petty Cash Vouchers')
+                                    ->icon('heroicon-o-currency-euro')
+                                    ->url('/admin/petty-cash-vouchers')
+                                    ->isActiveWhen(fn () => request()->is('admin/petty-cash-vouchers*')),
+
+                                // Petty Cash Transactions
+                                NavigationItem::make('Petty Cash Transactions')
+                                    ->icon('heroicon-o-arrows-right-left')
+                                    ->url('/admin/petty-cash-transactions')
+                                    ->isActiveWhen(fn () => request()->is('admin/petty-cash-transactions*')),
+
                                 // Payments
                                 NavigationItem::make('Payments')
                                     ->icon('heroicon-o-credit-card')

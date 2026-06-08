@@ -63,6 +63,18 @@ class NumberSeriesSeeder extends Seeder
                 'year' => 2026,
                 'module' => 'purchase',
             ],
+            [
+                'code' => 'PC-VOUCHER',
+                'description' => 'Petty Cash Vouchers',
+                'prefix' => 'PCV',
+                'padding' => 6
+            ],
+            [
+                'code' => 'PC-TRANS',
+                'description' => 'Petty Cash Transactions',
+                'prefix' => 'PCT',
+                'padding'  => 6
+            ],
         ];
 
         foreach ($series as $s) {
