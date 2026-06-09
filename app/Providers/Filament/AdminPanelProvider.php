@@ -152,6 +152,12 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/bank-accounts')
                                     ->isActiveWhen(fn () => request()->is('admin/bank-accounts*')),
 
+                                // Bank Account Ledger Entries
+                                NavigationItem::make('Bank Account Ledger Entries')
+                                    ->icon('heroicon-o-banknotes')
+                                    ->url('/admin/bank-account-ledger-entries')
+                                    ->isActiveWhen(fn () => request()->is('admin/bank-account-ledger-entries*')),
+
                                 // Petty Cash
                                 NavigationItem::make('Petty Cash Funds')
                                     ->icon('heroicon-o-currency-pound')
