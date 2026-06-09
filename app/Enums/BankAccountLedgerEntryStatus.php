@@ -23,6 +23,17 @@ enum BankAccountLedgerEntryStatus: string
         };
     }
 
+    public function color(): string
+    {
+        return match ($this) {
+            self::OPEN => 'warning',      // Yellow/Amber
+            self::CLOSED => 'gray',       // Gray
+            self::RECONCILED => 'success', // Green
+            self::PENDING => 'info',      // Blue
+            self::VOID => 'danger',       // Red
+        };
+    }
+
     public function canReconcile(): bool
     {
         return $this === self::OPEN || $this === self::PENDING;
