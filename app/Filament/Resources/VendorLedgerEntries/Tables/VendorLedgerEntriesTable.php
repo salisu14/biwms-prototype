@@ -59,23 +59,23 @@ class VendorLedgerEntriesTable
 
                 TextColumn::make('debit_amount')
                     ->label('Debit')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'NGN')))
                     ->sortable()
                     ->alignEnd()
-                    ->color('danger')
-                    ->visible(fn ($record) => $record?->debit_amount > 0),
+                    ->color('danger'),
+//                    ->visible(fn ($record) => $record?->debit_amount > 0),
 
                 TextColumn::make('credit_amount')
                     ->label('Credit')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'NGN')))
                     ->sortable()
                     ->alignEnd()
-                    ->color('success')
-                    ->visible(fn ($record) => $record?->credit_amount > 0),
+                    ->color('success'),
+//                    ->visible(fn ($record) => $record?->credit_amount > 0),
 
                 TextColumn::make('remaining_amount')
                     ->label('Remaining')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'NGN')))
                     ->sortable()
                     ->alignEnd()
                     ->weight('bold')

@@ -37,14 +37,14 @@ class VendorLedgerEntryInfolist
                         TextEntry::make('debit_amount')
                             ->label('Debit')
                             ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->debit_amount, $record->currency_code ?? config('app.default_currency', 'USD')))
-                            ->color('danger')
-                            ->visible(fn ($record) => $record->debit_amount > 0),
+                            ->color('danger'),
+//                            ->visible(fn ($record) => $record->debit_amount > 0),
 
                         TextEntry::make('credit_amount')
                             ->label('Credit')
                             ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->credit_amount, $record->currency_code ?? config('app.default_currency', 'USD')))
-                            ->color('success')
-                            ->visible(fn ($record) => $record->credit_amount > 0),
+                            ->color('success'),
+//                            ->visible(fn ($record) => $record->credit_amount > 0),
 
                         TextEntry::make('remaining_amount')
                             ->label('Remaining')
