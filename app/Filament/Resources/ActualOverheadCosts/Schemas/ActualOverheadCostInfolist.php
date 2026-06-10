@@ -52,16 +52,16 @@ class ActualOverheadCostInfolist
                     ->schema([
                         TextEntry::make('amount')
                             ->label('Actual Total')
-                            ->money()
+                            ->money('NGN')
                             ->weight('bold'),
 
                         TextEntry::make('allocated_amount')
                             ->label('Already Allocated')
-                            ->money(),
+                            ->money('NGN'),
 
                         TextEntry::make('remaining_amount')
                             ->label('Remaining Balance')
-                            ->money()
+                            ->money('NGN')
                             ->color(fn ($state) => $state > 0 ? 'warning' : 'success'),
 
                         TextEntry::make('cost_type')

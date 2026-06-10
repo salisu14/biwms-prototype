@@ -6,6 +6,7 @@ use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
@@ -89,12 +90,12 @@ class RoutingRelationManager extends RelationManager
             ->headerActions([
                 //
             ])
-            ->actions([
+            ->recordActions([
                 Action::make('post_time')
                     ->label('Post Time')
                     ->icon('heroicon-o-clock')
                     ->color('success')
-                    ->form([
+                    ->schema([
                         TextInput::make('setup_time')
                             ->label('Setup Time')
                             ->numeric()
@@ -127,7 +128,7 @@ class RoutingRelationManager extends RelationManager
                         );
                     }),
             ])
-            ->bulkActions([
+            ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),

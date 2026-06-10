@@ -70,13 +70,13 @@ class CapExProjectForm
                             ->schema([
                                 TextInput::make('budget_amount')
                                     ->numeric()
-                                    ->prefix('$')
+                                    ->prefix('₦')
                                     ->required()
                                     ->default(0),
 
                                 TextInput::make('capitalization_threshold')
                                     ->numeric()
-                                    ->prefix('$')
+                                    ->prefix('₦')
                                     ->helperText('Minimum amount to trigger capitalization.')
                                     ->default(0),
 

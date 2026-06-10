@@ -102,7 +102,7 @@ class ProductionOrderLineRelationManager extends RelationManager
 
                         TextInput::make('unit_cost')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->live()
                             ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', $state * ($get('quantity') ?? 0))
                             ),
@@ -110,7 +110,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                         TextInput::make('cost_amount')
                             ->label('Total Cost')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->disabled()
                             ->dehydrated(),
                     ]),
@@ -177,7 +177,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                     ->badge(),
 
                 TextColumn::make('cost_amount')
-                    ->money('USD')
+                    ->money('NGN')
                     ->summarize(Sum::make()->label('Total Cost')),
             ])
             ->filters([

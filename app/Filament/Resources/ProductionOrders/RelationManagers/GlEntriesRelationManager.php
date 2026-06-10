@@ -43,14 +43,14 @@ class GlEntriesRelationManager extends RelationManager
                     ->searchable(),
                 TextColumn::make('debit_amount')
                     ->label('Debit')
-                    ->money('USD')
+                    ->money('NGN')
                     ->color('success')
-                    ->summarize(Sum::make()->money('USD')),
+                    ->summarize(Sum::make()->money('NGN')),
                 TextColumn::make('credit_amount')
                     ->label('Credit')
                     ->money('USD')
                     ->color('danger')
-                    ->summarize(Sum::make()->money('USD')),
+                    ->summarize(Sum::make()->money('NGN')),
                 TextColumn::make('transaction_number')
                     ->label('Txn')
                     ->sortable()

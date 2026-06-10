@@ -291,14 +291,14 @@ class ProductionOrderForm
 
                         TextInput::make('unit_cost')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->step(0.0001)
                             ->label('Standard Cost')
                             ->helperText('Expected unit cost for the finished item.'),
 
                         TextInput::make('cost_rollup')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->step(0.0001)
                             ->label('Rolled-up Cost')
                             ->disabled()

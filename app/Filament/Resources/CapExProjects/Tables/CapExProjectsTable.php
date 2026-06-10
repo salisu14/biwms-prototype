@@ -41,11 +41,11 @@ class CapExProjectsTable
                     }),
 
                 TextColumn::make('budget_amount')
-                    ->money()
+                    ->money('NGN')
                     ->sortable(),
 
                 TextColumn::make('actual_amount')
-                    ->money()
+                    ->money('NGN')
                     ->sortable()
                     ->color(fn ($record) => $record->actual_amount > $record->budget_amount ? 'danger' : 'success'),
 
