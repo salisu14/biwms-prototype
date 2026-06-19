@@ -176,7 +176,7 @@ class ProductionOrderInfolist
                             ->label('Method'),
 
                         TextEntry::make('unit_cost')
-                            ->money('USD'),
+                            ->money('NGN'),
 
                         TextEntry::make('inventoryPostingGroup.code')
                             ->label('Inv. Posting Group'),
@@ -186,7 +186,7 @@ class ProductionOrderInfolist
 
                         TextEntry::make('total_actual_cost')
                             ->label('Total Actual Cost')
-                            ->money('USD')
+                            ->money('NGN')
                             ->weight(FontWeight::Bold)
                             ->color('success'),
 
@@ -204,7 +204,7 @@ class ProductionOrderInfolist
 
                                 return (float) $record->total_actual_cost / $finishedGoodsProducedQty;
                             })
-                            ->money('USD')
+                            ->money('NGN')
                             ->weight(FontWeight::Bold)
                             ->color('info')
                             ->placeholder('N/A'),
@@ -241,7 +241,7 @@ class ProductionOrderInfolist
 
                                 return (float) $record->total_actual_cost / $producedBaseQty;
                             })
-                            ->money('USD')
+                            ->money('NGN')
                             ->weight(FontWeight::Bold)
                             ->color('success')
                             ->placeholder('N/A'),

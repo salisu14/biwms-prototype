@@ -73,7 +73,7 @@ class RoutingRelationManager extends RelationManager
                     ->numeric(2)
                     ->color('success'),
                 TextColumn::make('total_cost')
-                    ->money('USD')
+                    ->money('NGN')
                     ->label('Actual Cost'),
                 TextColumn::make('status')
                     ->badge()

@@ -340,14 +340,15 @@ class ProductionOrder extends Model
     }
 
     // ==================== CALCULATED ATTRIBUTES ====================
-
     public function getRemainingQuantityAttribute(): float
     {
-        $produced = $this->itemLedgerEntries()
-            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+        // Ensure produced_quantity is also pulling the base quantity
+        $producedBase = (float) $this->itemLedgerEntries()
+            ->where('entry_type', 'Output') // Use exact DB string
+            ->where('item_id', $this->item_id)
             ->sum('quantity');
 
-        return $this->quantity - $produced;
+        return (float) $this->quantity_base - $producedBase;
     }
 
     public function getIsCompletedAttribute(): bool

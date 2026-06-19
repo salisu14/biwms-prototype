@@ -80,7 +80,7 @@ class ProductionOrdersTable
                     ->date(),
 
                 TextColumn::make('total_actual_cost')
-                    ->money('USD')
+                    ->money('NGN')
                     ->label('Actual Cost'),
 
                 TextColumn::make('created_at')

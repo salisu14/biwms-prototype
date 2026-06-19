@@ -48,7 +48,7 @@ class GlEntriesRelationManager extends RelationManager
                     ->summarize(Sum::make()->money('NGN')),
                 TextColumn::make('credit_amount')
                     ->label('Credit')
-                    ->money('USD')
+                    ->money('NGN')
                     ->color('danger')
                     ->summarize(Sum::make()->money('NGN')),
                 TextColumn::make('transaction_number')

@@ -165,7 +165,8 @@ class ProductionOrderLineRelationManager extends RelationManager
 
                 TextColumn::make('quantity')
                     ->numeric(2)
-                    ->alignment(Alignment::End),
+                    ->alignment(Alignment::End)
+                    ->suffix(fn ($record): string => $record->unit_of_measure_code ? " {$record->unit_of_measure_code}" : ''),
 
                 TextColumn::make('due_date')
                     ->date()

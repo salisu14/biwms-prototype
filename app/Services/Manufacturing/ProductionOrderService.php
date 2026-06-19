@@ -47,6 +47,7 @@ class ProductionOrderService
 
     /**
      * Refresh production order (safe wrapper)
+     * @throws \Throwable
      */
     public function refresh(ProductionOrder $order, bool $lines = true, bool $routing = true, bool $components = true): ProductionOrder
     {
@@ -63,6 +64,7 @@ class ProductionOrderService
 
     /**
      * Release production order
+     * @throws \Throwable
      */
     public function release(ProductionOrder $order, int $userId): ProductionOrder
     {
@@ -82,6 +84,7 @@ class ProductionOrderService
 
     /**
      * Cancel production order
+     * @throws \Throwable
      */
     public function cancel(ProductionOrder $order, ?int $userId = null): void
     {
@@ -96,6 +99,7 @@ class ProductionOrderService
 
     /**
      * Reopen finished order
+     * @throws \Throwable
      */
     public function reopen(ProductionOrder $order): ProductionOrder
     {
@@ -116,6 +120,7 @@ class ProductionOrderService
 
     /**
      * Post consumption
+     * @throws \Throwable
      */
     public function postConsumption(
         ProductionOrder $order,
@@ -136,12 +141,18 @@ class ProductionOrderService
                     continue;
                 }
 
-                $qty = $line['quantity'];
-                $scrapQty = $line['scrap_quantity'] ?? 0;
+                $qty = (float) $line['quantity'];
+                $scrapQty = (float) ($line['scrap_quantity'] ?? 0);
 
                 if ($qty <= 0) {
                     throw new \Exception('Quantity must be positive');
                 }
+
+                // ✅ FIXED: Calculate Base Quantity based on component UoM ratio
+                $conversionFactor = ($component->expected_quantity_base > 0 && $component->expected_quantity > 0)
+                    ? (float) $component->expected_quantity_base / (float) $component->expected_quantity
+                    : 1.0;
+                $qtyBase = $qty * $conversionFactor;
 
                 $actualUnitCost = $this->costingService->getUnitCost(
                     $component->item,
@@ -153,7 +164,8 @@ class ProductionOrderService
                 ItemLedgerEntry::create([
                     'entry_type' => ItemLedgerEntryType::CONSUMPTION,
                     'item_id' => $component->item_id,
-                    'quantity' => -$qty,
+                    // ✅ FIXED: Always use negative BASE quantity for consumption
+                    'quantity' => -$qtyBase,
                     'remaining_quantity' => 0,
                     'open' => false,
                     'posting_date' => $postingDate,
@@ -162,35 +174,33 @@ class ProductionOrderService
                     'source_id' => $order->id,
                     'source_type' => ProductionOrder::class,
                     'location_id' => $component->location?->id,
-                    'location_code' => $component->location_code,
-                    'unit_cost' => $actualUnitCost,
-                    'cost_amount_actual' => $qty * $actualUnitCost,
+                    // ✅ FIXED: Removed 'unit_cost', use total actual cost instead
+                    'cost_amount_actual' => $qtyBase * $actualUnitCost,
                     'dimensions' => $order->dimension_set_id,
-                    'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
-                    'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
                     'general_product_posting_group_id' => $component->item->general_product_posting_group_id,
                     'inventory_posting_group_id' => $component->item->inventory_posting_group_id,
                     'entry_date' => now(),
                 ]);
 
-                $component->actual_quantity_consumed += $qty;
-                $component->actual_scrap_quantity += $scrapQty;
+                // ✅ FIXED: Track consumption in base quantities to prevent math errors
+                $component->actual_quantity_consumed = (float) $component->actual_quantity_consumed + $qtyBase;
+                $component->actual_scrap_quantity = (float) $component->actual_scrap_quantity + $scrapQty;
                 $component->remaining_quantity = max(
                     0,
-                    (float) $component->expected_quantity - (float) $component->actual_quantity_consumed
+                    (float) $component->expected_quantity_base - (float) $component->actual_quantity_consumed
                 );
                 $component->save();
 
                 // Update CapEx Project if linked
                 if ($order->capex_project_id && $order->capexProject) {
-                    $order->capexProject->increment('actual_amount', $qty * $actualUnitCost);
+                    $order->capexProject->increment('actual_amount', $qtyBase * $actualUnitCost);
                 }
 
                 // G/L Integration: Dr. WIP, Cr. Inventory
                 $this->createWipGlEntries(
                     $order,
                     $component->item,
-                    $qty * $actualUnitCost,
+                    $qtyBase * $actualUnitCost,
                     $postingDate,
                     "Consumption: {$component->item->description}"
                 );
@@ -200,6 +210,7 @@ class ProductionOrderService
 
     /**
      * Post output
+     * @throws \Throwable
      */
     public function postOutput(
         ProductionOrder $order,
@@ -212,14 +223,15 @@ class ProductionOrderService
             throw new \Exception('Output quantity must be positive');
         }
 
-        if ($quantity > $order->remaining_quantity) {
+        // Note: $quantity passed here MUST be in BASE units (handled by remaining_quantity accessor)
+        if ($quantity > (float) $order->remaining_quantity) {
             throw new \Exception('Cannot overproduce');
         }
 
         $postingDate = $postingDate ?? now();
 
         DB::transaction(function () use ($order, $quantity, $postingDate, $routingLineId) {
-            $expectedUnitCost = $order->cost_rollup ?? $order->unit_cost ?? 0;
+            $expectedUnitCost = (float) ($order->cost_rollup ?? $order->unit_cost ?? 0);
             $locationId = Location::query()
                 ->where('code', $order->location_code)
                 ->value('id');
@@ -227,6 +239,7 @@ class ProductionOrderService
             ItemLedgerEntry::create([
                 'entry_type' => ItemLedgerEntryType::OUTPUT,
                 'item_id' => $order->item_id,
+                // ✅ FIXED: Use BASE quantity for Output
                 'quantity' => $quantity,
                 'remaining_quantity' => $quantity,
                 'open' => true,
@@ -236,12 +249,10 @@ class ProductionOrderService
                 'source_id' => $order->id,
                 'source_type' => ProductionOrder::class,
                 'location_id' => $locationId,
-                'location_code' => $order->location_code,
-                'unit_cost' => $expectedUnitCost,
+                // ✅ FIXED: Removed 'unit_cost', use total expected/actual cost columns
                 'cost_amount_expected' => $quantity * $expectedUnitCost,
+                'cost_amount_actual' => $quantity * $expectedUnitCost, // Actuals updated at finish
                 'dimensions' => $order->dimension_set_id,
-                'shortcut_dimension_1_code' => $order->shortcut_dimension_1_code,
-                'shortcut_dimension_2_code' => $order->shortcut_dimension_2_code,
                 'general_product_posting_group_id' => $order->general_product_posting_group_id,
                 'inventory_posting_group_id' => $order->inventory_posting_group_id,
                 'entry_date' => now(),
@@ -250,7 +261,7 @@ class ProductionOrderService
             if ($routingLineId) {
                 $routingLine = $order->routingLines()->find($routingLineId);
                 if ($routingLine) {
-                    $routingLine->actual_output_quantity += $quantity;
+                    $routingLine->actual_output_quantity = (float) $routingLine->actual_output_quantity + $quantity;
                     $routingLine->save();
                 }
             }
@@ -274,6 +285,7 @@ class ProductionOrderService
 
     /**
      * Post capacity
+     * @throws \Throwable
      */
     public function postCapacity(
         ProductionOrder $order,
@@ -408,7 +420,8 @@ class ProductionOrderService
         }
 
         $plannedUnitCost = (float) ($order->cost_rollup ?: $order->unit_cost ?: 0);
-        $plannedOrderValue = abs((float) $order->quantity * $plannedUnitCost);
+        // ✅ FIXED: Use quantity_base instead of quantity
+        $plannedOrderValue = abs((float) $order->quantity_base * $plannedUnitCost);
 
         if ($plannedOrderValue <= 0) {
             return;
@@ -435,6 +448,7 @@ class ProductionOrderService
 
     /**
      * Finish production order
+     * @throws \Throwable
      */
     public function finish(ProductionOrder $order, int $userId, ?\DateTime $postingDate = null): ProductionOrder
     {
@@ -457,14 +471,15 @@ class ProductionOrderService
 
             $this->validateBeforeFinish($order);
 
-            $totalActualCost = $order->total_actual_cost;
-            $totalOutput = $order->itemLedgerEntries()
+            // ✅ FIXED: Cast to float to prevent math errors
+            $totalActualCost = (float) ($order->total_actual_cost ?? 0);
+            $totalOutput = (float) $order->itemLedgerEntries()
                 ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                 ->sum('quantity');
 
             // Determine the cost to record in Inventory
             $inventoryUnitCost = ($order->costing_method === 'STANDARD')
-                ? $order->unit_cost
+                ? (float) $order->unit_cost
                 : ($totalOutput > 0 ? $totalActualCost / $totalOutput : 0);
 
             // Update Output entries with the determined cost
@@ -474,9 +489,11 @@ class ProductionOrderService
 
             $totalInventoryCost = 0;
             foreach ($outputEntries as $entry) {
-                $actualCostForEntry = $entry->quantity * $inventoryUnitCost;
+                // ✅ FIXED: Explicitly cast to float
+                $actualCostForEntry = (float) $entry->quantity * (float) $inventoryUnitCost;
+
                 $entry->update([
-                    'unit_cost' => $inventoryUnitCost,
+                    // ✅ FIXED: Removed 'unit_cost' (column doesn't exist on Item Ledger)
                     'cost_amount_actual' => $actualCostForEntry,
                 ]);
                 $totalInventoryCost += $actualCostForEntry;
@@ -750,7 +767,8 @@ class ProductionOrderService
                     'quantity_per' => $effectiveQuantityPer,
                     'expected_quantity' => $expectedQty,
                     'expected_quantity_base' => $expectedQtyBase,
-                    'remaining_quantity' => $expectedQty,
+                    // ✅ FIXED: Track remaining in Base Quantity
+                    'remaining_quantity' => $expectedQtyBase,
                     'scrap_percent' => $lineScrapPercent,
                     'routing_link_code' => $bomLine->routing_link_code,
                     'flushing_method' => $bomLine->flushing_method ?? $order->flushing_method,
@@ -944,14 +962,16 @@ class ProductionOrderService
                 continue;
             }
 
-            $remainingQty = $component->expected_quantity - $component->actual_quantity_consumed;
-            if ($remainingQty <= 0) {
+            // ✅ FIXED: Compare base quantities
+            $remainingQtyBase = (float) $component->expected_quantity_base - (float) $component->actual_quantity_consumed;
+            if ($remainingQtyBase <= 0) {
                 continue;
             }
 
+            // Pass the base quantity to postConsumption (conversion factor will evaluate to 1.0)
             $this->postConsumption($order, [[
                 'component_id' => $component->id,
-                'quantity' => $remainingQty,
+                'quantity' => $remainingQtyBase,
                 'scrap_quantity' => 0,
             ]], $userId, $postingDate);
         }
@@ -964,9 +984,10 @@ class ProductionOrderService
                 continue;
             }
 
+            // ✅ FIXED: Flush the full expected base quantity
             $this->postConsumption($order, [[
                 'component_id' => $component->id,
-                'quantity' => $component->expected_quantity,
+                'quantity' => (float) $component->expected_quantity_base,
                 'scrap_quantity' => 0,
             ]], $userId, $order->starting_date_time);
         }
@@ -1034,7 +1055,7 @@ class ProductionOrderService
             throw new \Exception("{$incompleteOps} operations incomplete");
         }
 
-        if ($order->remaining_quantity > 0) {
+        if ((float) $order->remaining_quantity > 0) {
             throw new \Exception('Production not fully completed');
         }
     }
@@ -1046,8 +1067,9 @@ class ProductionOrderService
             return;
         }
 
+        // ✅ FIXED: Check unconsumed BASE quantities
         $remainingConsumption = (float) $order->components()
-            ->selectRaw('sum(coalesce(expected_quantity, 0) - coalesce(actual_quantity_consumed, 0)) as remaining')
+            ->selectRaw('sum(coalesce(expected_quantity_base, 0) - coalesce(actual_quantity_consumed, 0)) as remaining')
             ->value('remaining');
         $remainingConsumption = max(0.0, $remainingConsumption);
 
