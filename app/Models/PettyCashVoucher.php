@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Auth;
 
 class PettyCashVoucher extends Model
 {
@@ -97,5 +98,15 @@ class PettyCashVoucher extends Model
             PettyCashVoucherStatus::PENDING,
             PettyCashVoucherStatus::APPROVED,
         ]);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (PettyCashVoucher $voucher) {
+            // Automatically set the requested_by_id to the currently logged-in user
+            if (is_null($voucher->requested_by_id) && Auth::check()) {
+                $voucher->requested_by_id = Auth::id();
+            }
+        });
     }
 }

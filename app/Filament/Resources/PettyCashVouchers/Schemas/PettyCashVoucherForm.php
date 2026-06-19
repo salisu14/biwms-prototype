@@ -88,6 +88,11 @@ class PettyCashVoucherForm
                                     ->maxLength(1000)
                                     ->placeholder('Brief description of why this payment is needed')
                                     ->columnSpanFull(),
+
+                                Textarea::make('notes')
+                                    ->maxLength(1000)
+                                    ->placeholder('Additional information, receipt references, etc.')
+                                    ->columnSpanFull(),
                             ]),
                     ]),
 
