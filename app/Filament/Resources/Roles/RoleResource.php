@@ -6,6 +6,7 @@ use App\Filament\Resources\Roles\Pages\ManageRoles;
 use App\Filament\Resources\Roles\Pages\ViewRole;
 use App\Models\Role;
 use BackedEnum;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -80,11 +81,13 @@ class RoleResource extends Resource
             ->filters([
                 //
             ])
-            ->modifyQueryUsing(fn ($query) => $query->withCount('permissions'))
+            ->modifyQueryUsing(fn($query) => $query->withCount('permissions'))
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
-                DeleteAction::make(),
+                ActionGroup::make([
+                    ViewAction::make(),
+                    EditAction::make(),
+                    DeleteAction::make(),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
