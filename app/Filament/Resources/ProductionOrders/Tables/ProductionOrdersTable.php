@@ -8,6 +8,7 @@ use App\Filament\Resources\ProductionOrders\FinishedProductionOrderResource;
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
 use App\Filament\Resources\ProductionOrders\ReleasedProductionOrderResource;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -27,7 +28,7 @@ class ProductionOrdersTable
 
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn (ProductionOrderStatus $state): string => match ($state) {
+                    ->color(fn(ProductionOrderStatus $state): string => match ($state) {
                         ProductionOrderStatus::SIMULATED => 'gray',
                         ProductionOrderStatus::PLANNED => 'info',
                         ProductionOrderStatus::FIRM_PLANNED => 'warning',
@@ -41,26 +42,26 @@ class ProductionOrdersTable
 
                 TextColumn::make('quantity')
                     ->state(function ($record): float {
-                        $quantity = (float) ($record->quantity ?? 0);
-                        $quantityBase = (float) ($record->quantity_base ?? 0);
-                        $uomCode = (string) ($record->unit_of_measure_code ?? '');
+                        $quantity = (float)($record->quantity ?? 0);
+                        $quantityBase = (float)($record->quantity_base ?? 0);
+                        $uomCode = (string)($record->unit_of_measure_code ?? '');
 
-                        if (! $record->item_id || $uomCode === '') {
+                        if (!$record->item_id || $uomCode === '') {
                             return $quantity;
                         }
 
                         $item = $record->item;
-                        if (! $item) {
+                        if (!$item) {
                             return $quantity;
                         }
 
-                        $baseUom = (string) ($item->base_unit_of_measure ?? '');
+                        $baseUom = (string)($item->base_unit_of_measure ?? '');
                         if ($baseUom !== '' && strtoupper($uomCode) === strtoupper($baseUom)) {
                             return $quantity;
                         }
 
                         $assignment = $item->uoms()->where('uom_code', $uomCode)->first();
-                        $factor = (float) ($assignment?->pivot?->conversion_factor ?? 1);
+                        $factor = (float)($assignment?->pivot?->conversion_factor ?? 1);
                         if ($factor <= 0) {
                             return $quantity;
                         }
@@ -73,7 +74,7 @@ class ProductionOrdersTable
                         return $quantity;
                     })
                     ->numeric(decimalPlaces: 2)
-                    ->suffix(fn ($record): string => ' '.($record->unit_of_measure_code ?? 'PCS')),
+                    ->suffix(fn($record): string => ' ' . ($record->unit_of_measure_code ?? 'PCS')),
 
                 TextColumn::make('due_date')
                     ->date(),
@@ -91,32 +92,34 @@ class ProductionOrdersTable
                     ->options(ProductionOrderStatus::class),
             ])
             ->recordActions([
-                ProductionOrderActions::refresh(),
-                ProductionOrderActions::release(),
-                ProductionOrderActions::postOutput(),
-                ProductionOrderActions::finish(),
-                ProductionOrderActions::cancel(),
-                ProductionOrderActions::reopen(),
+                ActionGroup::make([
+                    ProductionOrderActions::refresh(),
+                    ProductionOrderActions::release(),
+                    ProductionOrderActions::postOutput(),
+                    ProductionOrderActions::finish(),
+                    ProductionOrderActions::cancel(),
+                    ProductionOrderActions::reopen(),
 
-                EditAction::make()
-                    ->visible(fn ($record) => $record->status->isEditable()),
+                    EditAction::make()
+                        ->visible(fn($record) => $record->status->isEditable()),
 
-                Action::make('view_entries')
-                    ->label('View Entries')
-                    ->icon('heroicon-m-document-text')
-                    ->url(function ($record): string {
-                        $resource = match ($record->status) {
-                            ProductionOrderStatus::RELEASED => ReleasedProductionOrderResource::class,
-                            ProductionOrderStatus::FINISHED => FinishedProductionOrderResource::class,
-                            default => ProductionOrderResource::class,
-                        };
+                    Action::make('view_entries')
+                        ->label('View Entries')
+                        ->icon('heroicon-m-document-text')
+                        ->url(function ($record): string {
+                            $resource = match ($record->status) {
+                                ProductionOrderStatus::RELEASED => ReleasedProductionOrderResource::class,
+                                ProductionOrderStatus::FINISHED => FinishedProductionOrderResource::class,
+                                default => ProductionOrderResource::class,
+                            };
 
-                        return $resource::getUrl('view', [
-                            'record' => $record,
-                            'relation' => 'glEntries',
-                        ]);
-                    })
-                    ->openUrlInNewTab(),
+                            return $resource::getUrl('view', [
+                                'record' => $record,
+                                'relation' => 'glEntries',
+                            ]);
+                        })
+                        ->openUrlInNewTab(),
+                ])
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
