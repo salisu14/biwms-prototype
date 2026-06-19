@@ -193,9 +193,7 @@ class GeneralPostingSetupSeeder extends Seeder
      */
     private function getProductPostingGroups(): array
     {
-        // ADDED 'EXPENSE' to the list of codes to fetch
-        // If ID 9 is actually 'DTA', 'ASSET', or 'SERVICES', add it here instead.
-        $codes = ['RAWMAT', 'WIP', 'FINISHED', 'CAPACITY', 'EXPENSE', 'PACKAGING', 'RAW', 'RETAIL'];
+        $codes = ['RAWMAT', 'WIP', 'FINISHED', 'CAPACITY', 'EXPENSE', 'PACKAGING', 'RETAIL'];
         $groups = [];
 
         foreach ($codes as $code) {

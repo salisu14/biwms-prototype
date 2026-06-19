@@ -35,7 +35,7 @@ class PostingService
      */
     public function createGlEntry(array $data): GlEntry
     {
-        $data['transaction_number'] = $this->transactionNumber;
+        $data['transaction_number'] = $data['transaction_number'] ?? $this->transactionNumber;
         $data['entry_number'] = $this->getNextEntryNumber();
 
         $debit = $data['debit_amount'] ?? 0;

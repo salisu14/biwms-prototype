@@ -31,6 +31,8 @@ class RolePermissionSetSeeder extends Seeder
             'finance-accountant' => [
                 'finance.payment.view_any', 'finance.payment.view', 'finance.payment.create', 'finance.payment.update',
                 'finance.payment.post', 'finance.payment.apply', 'finance.payment.reconcile',
+                'finance.petty_cash_voucher.view_any', 'finance.petty_cash_voucher.view', 'finance.petty_cash_voucher.create', 'finance.petty_cash_voucher.update',
+                'finance.petty_cash_voucher.approve', 'finance.petty_cash_voucher.post',
                 'finance.bank_account.view_any', 'finance.bank_account.view',
                 'finance.general_journal_batch.view_any', 'finance.general_journal_batch.view', 'finance.general_journal_batch.create', 'finance.general_journal_batch.update',
                 'finance.currency_adjustment_ledger.view_any', 'finance.currency_adjustment_ledger.view',
@@ -41,6 +43,8 @@ class RolePermissionSetSeeder extends Seeder
             'finance-manager' => [
                 'finance.payment.view_any', 'finance.payment.view', 'finance.payment.create', 'finance.payment.update', 'finance.payment.delete',
                 'finance.payment.post', 'finance.payment.apply', 'finance.payment.reconcile', 'finance.payment.void',
+                'finance.petty_cash_voucher.view_any', 'finance.petty_cash_voucher.view', 'finance.petty_cash_voucher.create', 'finance.petty_cash_voucher.update', 'finance.petty_cash_voucher.delete',
+                'finance.petty_cash_voucher.approve', 'finance.petty_cash_voucher.post', 'finance.petty_cash_voucher.cancel',
                 'finance.bank_account.view_any', 'finance.bank_account.view', 'finance.bank_account.create', 'finance.bank_account.update',
                 'finance.general_journal_batch.view_any', 'finance.general_journal_batch.view', 'finance.general_journal_batch.create', 'finance.general_journal_batch.update', 'finance.general_journal_batch.delete',
                 'finance.currency_adjustment_ledger.view_any', 'finance.currency_adjustment_ledger.view', 'finance.currency_adjustment_ledger.create', 'finance.currency_adjustment_ledger.update',

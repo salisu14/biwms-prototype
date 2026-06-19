@@ -12,18 +12,22 @@ use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\SalesOrder;
+use App\Models\User;
 use App\Models\VendorLedgerEntry;
+use App\Services\BankAccountLedgerService;
 use App\Services\CurrencyService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class PaymentService
 {
     public function __construct(
         protected PostingService $postingService,
+        protected BankAccountLedgerService $bankAccountLedgerService,
         protected CurrencyService $currencyService,
         protected PostingDateValidator $postingDateValidator
     ) {}
@@ -34,9 +38,26 @@ class PaymentService
     public function post(Payment $payment, int $userId): void
     {
         $this->postingDateValidator->validate($payment->posting_date ?? now());
+        Gate::forUser(User::query()->findOrFail($userId))->authorize('post', $payment);
 
         if ($payment->status !== 'PENDING') {
             throw new \Exception('Payment is not pending');
+        }
+
+        if ((float) $payment->payment_amount <= 0) {
+            throw new \Exception('Payment amount must be greater than zero.');
+        }
+
+        if (! $payment->bankAccount) {
+            throw new \Exception('A bank account is required before posting this payment.');
+        }
+
+        if ($payment->payment_direction === 'RECEIPT' && ! $payment->bankAccount->allow_receipts) {
+            throw new \Exception('The selected bank account is not enabled for receipts.');
+        }
+
+        if ($payment->payment_direction !== 'RECEIPT' && ! $payment->bankAccount->allow_payments) {
+            throw new \Exception('The selected bank account is not enabled for payments.');
         }
 
         DB::transaction(function () use ($payment, $userId) {
@@ -47,10 +68,13 @@ class PaymentService
                 $this->postVendorPayment($payment, $userId);
             }
 
-            // 2. Create G/L Entries via PostingService
+            // 2. Create Bank Ledger Entry
+            $this->postBankLedgerEntry($payment, $userId);
+
+            // 3. Create G/L Entries via PostingService
             $this->postGlEntries($payment);
 
-            // 3. Update status
+            // 4. Update status
             $payment->update([
                 'status' => 'POSTED',
                 'posted_by' => $userId,
@@ -469,6 +493,36 @@ class PaymentService
                 exchangeRate: $payment->currency_factor
             );
         }
+    }
+
+    protected function postBankLedgerEntry(Payment $payment, int $userId): void
+    {
+        $data = [
+            'amount' => (float) $payment->payment_amount,
+            'posting_date' => $payment->posting_date,
+            'document_date' => $payment->payment_date,
+            'document_no' => $payment->payment_number,
+            'external_document_no' => $payment->external_reference,
+            'description' => $payment->payment_direction === 'RECEIPT'
+                ? "Receipt from {$payment->party_name}"
+                : "Payment to {$payment->party_name}",
+            'currency_code' => $payment->currency_code,
+            'currency_factor' => $payment->currency_factor,
+            'source_type' => Payment::class,
+            'source_id' => $payment->id,
+            'source_no' => $payment->payment_number,
+            'user_id' => $userId,
+            'dimensions' => $payment->dimensions,
+            'post_gl' => false,
+        ];
+
+        if ($payment->payment_direction === 'RECEIPT') {
+            $this->bankAccountLedgerService->postDeposit($payment->bankAccount, $data);
+
+            return;
+        }
+
+        $this->bankAccountLedgerService->postPayment($payment->bankAccount, $data);
     }
 
     protected function findDocument(string $type, int $id): ?Model

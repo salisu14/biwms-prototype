@@ -94,14 +94,8 @@ class BankAccountLedgerEntry extends Model
     protected static function booted(): void
     {
         static::creating(function ($entry) {
-            // Auto-calculate debit/credit
-            if ($entry->entry_type->isDebit()) {
-                $entry->debit_amount = abs($entry->amount);
-                $entry->credit_amount = 0;
-            } elseif ($entry->entry_type->isCredit()) {
-                $entry->debit_amount = 0;
-                $entry->credit_amount = abs($entry->amount);
-            }
+            $entry->debit_amount = (float) $entry->amount > 0 ? abs((float) $entry->amount) : 0;
+            $entry->credit_amount = (float) $entry->amount < 0 ? abs((float) $entry->amount) : 0;
 
             // Calculate LCY amount if foreign currency
             if ($entry->currency_code && $entry->currency_factor) {

@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AccountCategory;
+use App\Enums\AccountStructuralType;
 use App\Models\ChartOfAccount;
 use App\Models\FAPostingGroup;
 use Illuminate\Database\Seeder;
@@ -13,6 +15,8 @@ class FAPostingGroupSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->ensureRequiredAccountsExist();
+
         $assetAccount = ChartOfAccount::where('account_number', '13000')->first()?->id;
         $bankAccount = ChartOfAccount::where('account_number', '10100')->first()?->id;
         $depExpenseAccount = ChartOfAccount::where('account_number', '60000')->first()?->id;
@@ -64,5 +68,18 @@ class FAPostingGroupSeeder extends Seeder
         foreach ($groups as $group) {
             FAPostingGroup::updateOrCreate(['code' => $group['code']], $group);
         }
+    }
+
+    private function ensureRequiredAccountsExist(): void
+    {
+        ChartOfAccount::firstOrCreate(
+            ['account_number' => '10100'],
+            [
+                'name' => 'Bank - Checking Accounts',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::LIQUID_ASSET,
+                'direct_posting' => true,
+            ]
+        );
     }
 }

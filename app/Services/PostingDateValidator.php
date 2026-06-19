@@ -6,6 +6,7 @@ use App\Models\AccountingPeriod;
 use App\Models\GeneralLedgerSetup;
 use Carbon\Carbon;
 use DateTimeInterface;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class PostingDateValidator
@@ -13,6 +14,10 @@ class PostingDateValidator
     public function validate(DateTimeInterface|string|null $postingDate): void
     {
         $date = Carbon::parse($postingDate ?? now())->startOfDay();
+
+        if (! Schema::hasTable('general_ledger_setups') || ! Schema::hasTable('accounting_periods')) {
+            return;
+        }
 
         $setup = GeneralLedgerSetup::instance();
 

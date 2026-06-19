@@ -67,13 +67,21 @@ class NumberSeriesSeeder extends Seeder
                 'code' => 'PC-VOUCHER',
                 'description' => 'Petty Cash Vouchers',
                 'prefix' => 'PCV',
-                'padding' => 6
+                'starting_number' => 1,
+                'ending_number' => 999999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'finance',
             ],
             [
                 'code' => 'PC-TRANS',
                 'description' => 'Petty Cash Transactions',
                 'prefix' => 'PCT',
-                'padding'  => 6
+                'starting_number' => 1,
+                'ending_number' => 999999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'finance',
             ],
         ];
 

@@ -15,6 +15,7 @@ use App\Services\Finance\GeneralLedgerService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class BankAccountLedgerService
 {
@@ -33,16 +34,17 @@ class BankAccountLedgerService
         ?VendorLedgerEntry $vendorEntry = null
     ): BankAccountLedgerEntry {
         return DB::transaction(function () use ($bankAccount, $data, $vendorEntry) {
-            // Get next entry number
-            $entryNo = $this->numberSeriesService->getNextNo('BANK-LEDGER');
+            $entryNo = $this->getNextLedgerEntryNumber($data['posting_date'] ?? now());
 
-            // Calculate running balance
             $lastBalance = $this->getLastBalance($bankAccount);
-            $amount = $data['amount'];
-            $newBalance = $lastBalance + $amount; // Amount is negative for payments
+            $amount = -abs((float) $data['amount']);
+            $newBalance = $lastBalance + $amount;
 
-            // Handle currency
-            $currencyCode = $data['currency_code'] ?? $bankAccount->currency_code;
+            if ($newBalance < 0 && ($data['allow_overdraft'] ?? false) !== true) {
+                throw new \InvalidArgumentException('Insufficient bank balance for this payment.');
+            }
+
+            $currencyCode = $data['currency_code'] ?? $bankAccount->currency?->code;
             $currencyFactor = 1;
 
             if ($currencyCode && $currencyCode !== $this->currencyService->getLCY()->code) {
@@ -50,11 +52,10 @@ class BankAccountLedgerService
                 $currencyFactor = $currency->getExchangeRate($data['posting_date'] ?? now());
             }
 
-            // Create bank ledger entry
             $entry = BankAccountLedgerEntry::create([
                 'entry_number' => $entryNo,
                 'bank_account_id' => $bankAccount->id,
-                'bank_account_no' => $bankAccount->account_no,
+                'bank_account_no' => $bankAccount->account_number,
                 'posting_date' => $data['posting_date'] ?? now(),
                 'document_date' => $data['document_date'] ?? now(),
                 'document_type' => 'payment',
@@ -69,32 +70,31 @@ class BankAccountLedgerService
                 'currency_code' => $currencyCode,
                 'currency_factor' => $currencyFactor,
                 'balance' => $newBalance,
+                'balance_lcy' => $newBalance * $currencyFactor,
                 'status' => BankAccountLedgerEntryStatus::OPEN,
                 'open' => true,
                 'vendor_ledger_entry_id' => $vendorEntry?->id,
                 'source_type' => $vendorEntry ? 'vendor' : ($data['source_type'] ?? null),
                 'source_id' => $vendorEntry?->vendor_id ?? $data['source_id'] ?? null,
-                'user_id' => Auth::id(),
+                'source_no' => $data['source_no'] ?? null,
+                'user_id' => $data['user_id'] ?? Auth::id() ?? 1,
                 'shortcut_dimension_1_code' => $data['dimension_1'] ?? null,
                 'shortcut_dimension_2_code' => $data['dimension_2'] ?? null,
                 'dimensions' => $data['dimensions'] ?? null,
             ]);
 
-            // Post to G/L (Cash Disbursement)
-            $glEntry = $this->postToGL($entry, $bankAccount);
+            if (($data['post_gl'] ?? true) === true) {
+                $glEntry = $this->postToGL($entry, $bankAccount);
+                $entry->update(['gl_entry_id' => $glEntry->id]);
+            }
 
-            // Update entry with G/L reference
-            $entry->update(['gl_entry_id' => $glEntry->id]);
-
-            // Update vendor ledger entry if applicable
             if ($vendorEntry) {
                 $this->applyToVendorLedger($entry, $vendorEntry);
             }
 
-            // Update bank account balance
             $bankAccount->update([
-                'balance' => $newBalance,
-                'balance_last_statement' => $newBalance,
+                'current_balance' => $newBalance,
+                'available_balance' => $newBalance,
             ]);
 
             return $entry->fresh();
@@ -109,33 +109,49 @@ class BankAccountLedgerService
         array $data
     ): BankAccountLedgerEntry {
         return DB::transaction(function () use ($bankAccount, $data) {
-            $entryNo = $this->numberSeriesService->getNextNo('BANK-LEDGER');
+            $entryNo = $this->getNextLedgerEntryNumber($data['posting_date'] ?? now());
             $lastBalance = $this->getLastBalance($bankAccount);
-            $amount = abs($data['amount']); // Ensure positive
+            $amount = abs((float) $data['amount']);
             $newBalance = $lastBalance + $amount;
+            $currencyCode = $data['currency_code'] ?? $bankAccount->currency?->code;
+            $currencyFactor = (float) ($data['currency_factor'] ?? 1);
 
             $entry = BankAccountLedgerEntry::create([
                 'entry_number' => $entryNo,
                 'bank_account_id' => $bankAccount->id,
-                'bank_account_no' => $bankAccount->account_no,
+                'bank_account_no' => $bankAccount->account_number,
                 'posting_date' => $data['posting_date'] ?? now(),
+                'document_date' => $data['document_date'] ?? now(),
                 'document_type' => 'deposit',
                 'document_no' => $data['document_no'] ?? $this->numberSeriesService->getNextNo('DEPOSIT'),
+                'external_document_no' => $data['external_document_no'] ?? null,
                 'description' => $data['description'],
                 'entry_type' => BankAccountLedgerEntryType::DEPOSIT,
                 'amount' => $amount,
+                'currency_code' => $currencyCode,
+                'currency_factor' => $currencyFactor,
                 'balance' => $newBalance,
+                'balance_lcy' => $newBalance * $currencyFactor,
                 'status' => BankAccountLedgerEntryStatus::OPEN,
                 'open' => true,
-                'user_id' => Auth::id(),
+                'source_type' => $data['source_type'] ?? null,
+                'source_id' => $data['source_id'] ?? null,
+                'source_no' => $data['source_no'] ?? null,
+                'user_id' => $data['user_id'] ?? Auth::id() ?? 1,
+                'shortcut_dimension_1_code' => $data['dimension_1'] ?? null,
+                'shortcut_dimension_2_code' => $data['dimension_2'] ?? null,
+                'dimensions' => $data['dimensions'] ?? null,
             ]);
 
-            // Post to G/L (Cash Receipt)
-            $glEntry = $this->postToGL($entry, $bankAccount);
-            $entry->update(['gl_entry_id' => $glEntry->id]);
+            if (($data['post_gl'] ?? true) === true) {
+                $glEntry = $this->postToGL($entry, $bankAccount);
+                $entry->update(['gl_entry_id' => $glEntry->id]);
+            }
 
-            // Update bank account
-            $bankAccount->increment('balance', $amount);
+            $bankAccount->update([
+                'current_balance' => $newBalance,
+                'available_balance' => $newBalance,
+            ]);
 
             return $entry->fresh();
         });
@@ -159,7 +175,7 @@ class BankAccountLedgerService
                 'amount' => -abs($amount),
                 'posting_date' => $postingDate,
                 'document_no' => $documentNo,
-                'description' => "Transfer to {$toBank->account_no}: ".($data['description'] ?? ''),
+                'description' => "Transfer to {$toBank->account_number}: ".($data['description'] ?? ''),
                 'entry_type' => BankAccountLedgerEntryType::TRANSFER,
             ]);
 
@@ -168,7 +184,7 @@ class BankAccountLedgerService
                 'amount' => abs($amount),
                 'posting_date' => $postingDate,
                 'document_no' => $documentNo,
-                'description' => "Transfer from {$fromBank->account_no}: ".($data['description'] ?? ''),
+                'description' => "Transfer from {$fromBank->account_number}: ".($data['description'] ?? ''),
             ]);
 
             // Link entries
@@ -222,8 +238,8 @@ class BankAccountLedgerService
                 $this->glService->reverseEntry($entry->glEntry, 'Void check '.$entry->check_no);
             }
 
-            // Update bank balance (add back the amount)
-            $entry->bankAccount->increment('balance', abs($entry->amount));
+            $entry->bankAccount->increment('current_balance', abs($entry->amount));
+            $entry->bankAccount->increment('available_balance', abs($entry->amount));
         });
     }
 
@@ -291,10 +307,10 @@ class BankAccountLedgerService
     // Private methods
     private function getLastBalance(BankAccount $bankAccount): float
     {
-        return BankAccountLedgerEntry::forBankAccount($bankAccount->id)
+        return (float) (BankAccountLedgerEntry::forBankAccount($bankAccount->id)
             ->orderByDesc('posting_date')
             ->orderByDesc('entry_number')
-            ->value('balance') ?? $bankAccount->balance ?? 0;
+            ->value('balance') ?? $bankAccount->current_balance ?? 0);
     }
 
     private function getNextCheckNo(BankAccount $bankAccount): string
@@ -305,20 +321,27 @@ class BankAccountLedgerService
             ->first();
 
         if (! $lastCheck) {
-            return $bankAccount->last_check_no ?? '1000';
+            return $bankAccount->next_check_number ?? '1000';
         }
 
         return (string) ((int) $lastCheck->check_no + 1);
+    }
+
+    private function getNextLedgerEntryNumber(\DateTimeInterface|string|null $postingDate = null): int
+    {
+        try {
+            return (int) $this->numberSeriesService->getNextNo('BANK-LEDGER', $postingDate instanceof \DateTimeInterface ? $postingDate : null);
+        } catch (Throwable) {
+            return ((int) (BankAccountLedgerEntry::query()->max('entry_number') ?? 0)) + 1;
+        }
     }
 
     private function postToGL(
         BankAccountLedgerEntry $entry,
         BankAccount $bankAccount
     ): GlEntry {
-        $isDebit = $entry->entry_type->isDebit();
-
-        // Bank account G/L account
         $glAccountId = $bankAccount->gl_account_id;
+        $amount = (float) $entry->amount;
 
         return $this->glService->postEntry([
             'account_id' => $glAccountId,
@@ -326,9 +349,9 @@ class BankAccountLedgerService
             'document_type' => $entry->document_type,
             'document_no' => $entry->document_no,
             'description' => $entry->description,
-            'amount' => $isDebit ? -$entry->amount : $entry->amount, // Bank is asset (debit = +)
-            'debit_amount' => $isDebit ? 0 : $entry->amount,
-            'credit_amount' => $isDebit ? abs($entry->amount) : 0,
+            'amount' => $amount,
+            'debit_amount' => $amount > 0 ? $amount : 0,
+            'credit_amount' => $amount < 0 ? abs($amount) : 0,
             'currency_code' => $entry->currency_code,
             'currency_factor' => $entry->currency_factor,
             'shortcut_dimension_1_code' => $entry->shortcut_dimension_1_code,

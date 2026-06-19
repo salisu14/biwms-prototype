@@ -2,7 +2,11 @@
 
 namespace Tests;
 
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 abstract class TestCase extends BaseTestCase
@@ -52,6 +56,14 @@ abstract class TestCase extends BaseTestCase
             return;
         }
 
+        if ($connection === 'pgsql') {
+            $schema = (string) config('database.connections.pgsql.search_path');
+
+            if (str_contains(strtolower($schema), 'test')) {
+                return;
+            }
+        }
+
         $databaseName = strtolower($database);
         $looksLikeTestDb = str_contains($databaseName, 'test');
 
@@ -61,5 +73,112 @@ abstract class TestCase extends BaseTestCase
                 'Use a dedicated testing database name or set ALLOW_NON_ISOLATED_TEST_DB=true explicitly.'
             );
         }
+    }
+
+    protected function beforeRefreshingDatabase()
+    {
+        $this->ensurePostgresTestingSchemaExists();
+    }
+
+    protected function setUpTraits()
+    {
+        $uses = $this->traitsUsedByTest ?? array_flip(class_uses_recursive(static::class));
+
+        if ((string) config('database.default') === 'pgsql' && isset($uses[RefreshDatabase::class])) {
+            unset($uses[RefreshDatabase::class]);
+
+            $this->traitsUsedByTest = $uses;
+
+            $setUp = parent::setUpTraits();
+
+            $this->refreshPostgresDatabaseForRefreshDatabaseTrait();
+
+            return [RefreshDatabase::class => true] + $setUp;
+        }
+
+        return parent::setUpTraits();
+    }
+
+    protected function migrateFreshUsing()
+    {
+        $parameters = [
+            '--drop-views' => false,
+            '--drop-types' => false,
+            '--seed' => false,
+        ];
+
+        if ((string) config('database.default') !== 'pgsql') {
+            return $parameters;
+        }
+
+        return array_merge($parameters, [
+            '--schema-path' => $this->testing_schema_dump_path(),
+            '--drop-types' => true,
+        ]);
+    }
+
+    private function testing_schema_dump_path(): string
+    {
+        $schema = (string) config('database.connections.pgsql.search_path');
+        $sourcePath = database_path('schema/pgsql-schema.sql');
+        $targetDirectory = storage_path('framework/testing');
+        $targetPath = $targetDirectory.'/pgsql-schema-'.$schema.'.sql';
+
+        if (! is_dir($targetDirectory)) {
+            mkdir($targetDirectory, 0755, true);
+        }
+
+        $source = file_get_contents($sourcePath);
+
+        if ($source === false) {
+            throw new RuntimeException("Unable to read schema dump at {$sourcePath}.");
+        }
+
+        $schemaDump = str_replace('public.', "{$schema}.", $source);
+        file_put_contents($targetPath, $schemaDump);
+
+        return $targetPath;
+    }
+
+    protected function refreshPostgresTestingDatabase(): void
+    {
+        if ((string) config('database.default') !== 'pgsql') {
+            $this->artisan('migrate:fresh');
+
+            return;
+        }
+
+        $this->ensurePostgresTestingSchemaExists();
+
+        $this->artisan('migrate:fresh', [
+            '--schema-path' => $this->testing_schema_dump_path(),
+            '--drop-types' => true,
+        ]);
+    }
+
+    private function refreshPostgresDatabaseForRefreshDatabaseTrait(): void
+    {
+        if (! RefreshDatabaseState::$migrated) {
+            $this->refreshPostgresTestingDatabase();
+
+            $this->app[Kernel::class]->setArtisan(null);
+
+            RefreshDatabaseState::$migrated = true;
+        }
+
+        if (method_exists($this, 'beginDatabaseTransaction')) {
+            $this->beginDatabaseTransaction();
+        }
+    }
+
+    private function ensurePostgresTestingSchemaExists(): void
+    {
+        if ((string) config('database.default') !== 'pgsql') {
+            return;
+        }
+
+        $schema = (string) config('database.connections.pgsql.search_path');
+
+        DB::statement(sprintf('CREATE SCHEMA IF NOT EXISTS "%s"', str_replace('"', '""', $schema)));
     }
 }
