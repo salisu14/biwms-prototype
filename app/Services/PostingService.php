@@ -19,6 +19,7 @@ use App\Models\SalesCreditMemo;
 use App\Models\SalesInvoice;
 use App\Models\VatPostingSetup;
 use App\Models\Vendor;
+use App\Services\Finance\GeneralLedgerService;
 use Illuminate\Support\Facades\DB;
 
 class PostingService
@@ -752,39 +753,42 @@ class PostingService
         return $entries;
     }
 
+    /**
+     * @deprecated Use GeneralLedgerService::post() for new posting code.
+     */
     public function post(array $lines, array $dimensions = [], $source = null)
     {
         return DB::transaction(function () use ($lines, $dimensions, $source) {
+            $this->validateBalanced($lines);
 
-            $entries = [];
+            $lastEntryNumber = GlEntry::query()->max('entry_number') ?? 0;
+            $documentNumber = collect($lines)->pluck('reference')->filter()->first();
 
-            foreach ($lines as $line) {
-                $entry = GlEntry::create([
-                    'account_id' => $line['account_id'],
-                    'debit' => $line['debit'] ?? 0,
-                    'credit' => $line['credit'] ?? 0,
+            app(GeneralLedgerService::class)->post(
+                collect($lines)
+                    ->map(fn (array $line): array => [
+                        'account_id' => $line['account_id'],
+                        'debit' => (float) ($line['debit'] ?? 0),
+                        'credit' => (float) ($line['credit'] ?? 0),
+                        'description' => $line['description'] ?? $line['reference'] ?? 'Legacy G/L posting',
+                        'dimensions' => $dimensions,
+                    ])
+                    ->all(),
+                [
                     'posting_date' => now(),
-                    'reference' => $line['reference'] ?? null,
-                    'source_type' => $source ? get_class($source) : null,
-                    'source_id' => $source?->id,
-                ]);
+                    'document_number' => $documentNumber,
+                    'description' => 'Legacy G/L posting',
+                    'dimensions' => $dimensions,
+                    'sourceable_type' => $source ? get_class($source) : null,
+                    'sourceable_id' => $source?->id,
+                ]
+            );
 
-                $entries[] = $entry;
-
-                // Attach dimensions
-                foreach ($dimensions as $dim) {
-                    $entry->dimensions()->attach([
-                        $dim['dimension_id'] => [
-                            'dimension_value_id' => $dim['dimension_value_id'],
-                        ],
-                    ]);
-                }
-            }
-
-            // Validate double entry
-            $this->validateBalanced($entries);
-
-            return $entries;
+            return GlEntry::query()
+                ->where('entry_number', '>', $lastEntryNumber)
+                ->orderBy('entry_number')
+                ->get()
+                ->all();
         });
     }
 
@@ -793,7 +797,7 @@ class PostingService
         $totalDebit = collect($entries)->sum('debit');
         $totalCredit = collect($entries)->sum('credit');
 
-        if ($totalDebit !== $totalCredit) {
+        if (round((float) $totalDebit, 2) !== round((float) $totalCredit, 2)) {
             throw new \Exception('Journal is not balanced');
         }
     }

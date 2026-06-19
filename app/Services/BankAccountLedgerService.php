@@ -9,13 +9,11 @@ use App\Enums\BankAccountLedgerEntryType;
 use App\Enums\CheckType;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
-use App\Models\GlEntry;
 use App\Models\VendorLedgerEntry;
 use App\Services\Finance\GeneralLedgerService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Throwable;
 
 class BankAccountLedgerService
 {
@@ -83,11 +81,6 @@ class BankAccountLedgerService
                 'dimensions' => $data['dimensions'] ?? null,
             ]);
 
-            if (($data['post_gl'] ?? true) === true) {
-                $glEntry = $this->postToGL($entry, $bankAccount);
-                $entry->update(['gl_entry_id' => $glEntry->id]);
-            }
-
             if ($vendorEntry) {
                 $this->applyToVendorLedger($entry, $vendorEntry);
             }
@@ -142,11 +135,6 @@ class BankAccountLedgerService
                 'shortcut_dimension_2_code' => $data['dimension_2'] ?? null,
                 'dimensions' => $data['dimensions'] ?? null,
             ]);
-
-            if (($data['post_gl'] ?? true) === true) {
-                $glEntry = $this->postToGL($entry, $bankAccount);
-                $entry->update(['gl_entry_id' => $glEntry->id]);
-            }
 
             $bankAccount->update([
                 'current_balance' => $newBalance,
@@ -330,33 +318,16 @@ class BankAccountLedgerService
     private function getNextLedgerEntryNumber(\DateTimeInterface|string|null $postingDate = null): int
     {
         try {
-            return (int) $this->numberSeriesService->getNextNo('BANK-LEDGER', $postingDate instanceof \DateTimeInterface ? $postingDate : null);
-        } catch (Throwable) {
-            return ((int) (BankAccountLedgerEntry::query()->max('entry_number') ?? 0)) + 1;
+            return (int) $this->numberSeriesService->getNextNo(
+                'BANK-LEDGER',
+                $postingDate instanceof \DateTimeInterface ? $postingDate : null
+            );
+        } catch (\Throwable $exception) {
+            throw new \RuntimeException(
+                'Missing or invalid BANK-LEDGER number series configuration.',
+                previous: $exception
+            );
         }
-    }
-
-    private function postToGL(
-        BankAccountLedgerEntry $entry,
-        BankAccount $bankAccount
-    ): GlEntry {
-        $glAccountId = $bankAccount->gl_account_id;
-        $amount = (float) $entry->amount;
-
-        return $this->glService->postEntry([
-            'account_id' => $glAccountId,
-            'posting_date' => $entry->posting_date,
-            'document_type' => $entry->document_type,
-            'document_no' => $entry->document_no,
-            'description' => $entry->description,
-            'amount' => $amount,
-            'debit_amount' => $amount > 0 ? $amount : 0,
-            'credit_amount' => $amount < 0 ? abs($amount) : 0,
-            'currency_code' => $entry->currency_code,
-            'currency_factor' => $entry->currency_factor,
-            'shortcut_dimension_1_code' => $entry->shortcut_dimension_1_code,
-            'shortcut_dimension_2_code' => $entry->shortcut_dimension_2_code,
-        ]);
     }
 
     private function applyToVendorLedger(

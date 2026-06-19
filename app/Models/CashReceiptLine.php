@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Finance\PaymentService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -112,74 +114,63 @@ class CashReceiptLine extends Model
     // --- Posting Action ---
 
     /**
-     * Apply this receipt to the customer ledger and post to G/L.
-     *
-     * Creates:
-     *   - CustomerLedgerEntry (Payment type, negative = reduces AR)
-     *   - CustLedgerEntryApplication (if applies_to_id is set)
-     *   - G/L entries: Dr Bank Account, Cr Accounts Receivable
+     * @deprecated Legacy UI entry point. Do not create financial side effects
+     * directly from journal-line models; route through PaymentService.
      *
      * @throws \Throwable
      */
     public function applyPayment(): void
     {
         DB::transaction(function () {
-            // 1. Create customer ledger payment entry
-            $custLedgerEntry = CustomerLedgerEntry::create([
-                'customer_id' => $this->customer_id,
-                'entry_type' => 'Payment',
-                'amount' => -$this->amount_received,
-                'remaining_amount' => -$this->amount_received,
-                'posting_date' => $this->journalLine->posting_date,
-                'document_no' => $this->journalLine->document_no,
-                'external_document_no' => $this->check_no,
+            $journalLine = $this->journalLine()->firstOrFail();
+            $customer = $this->customer()->firstOrFail();
+            $bankAccount = $this->bankAccount()->firstOrFail();
+            $userId = Auth::id() ?? (int) ($journalLine->created_by ?? 1);
+
+            $payment = Payment::query()->create([
+                'payment_number' => $journalLine->document_no,
+                'external_reference' => $this->check_no,
+                'payment_direction' => 'RECEIPT',
+                'party_type' => 'CUSTOMER',
+                'party_id' => $customer->id,
+                'party_name' => $customer->name,
+                'payment_method' => $this->normalizedPaymentMethod(),
+                'bank_account_id' => $bankAccount->id,
+                'currency_code' => $journalLine->currency_code,
+                'currency_factor' => $journalLine->currency_factor ?: 1,
+                'payment_amount' => (float) $this->amount_received,
+                'payment_amount_lcy' => (float) ($this->amount_received_lcy ?: $this->amount_received),
+                'applied_amount' => 0,
+                'unapplied_amount' => (float) $this->amount_received,
+                'payment_date' => $journalLine->document_date ?? $journalLine->posting_date,
+                'posting_date' => $journalLine->posting_date,
+                'created_by' => $userId,
             ]);
 
-            // 2. Apply to specific invoice when "Applies-to" is set
-            if ($this->applies_to_id) {
-                $invoiceEntry = CustomerLedgerEntry::findOrFail($this->applies_to_id);
-                $appliedAmount = min(abs($invoiceEntry->remaining_amount), $this->amount_received);
+            app(PaymentService::class)->post($payment, $userId);
 
-                CustLedgerEntryApplication::create([
-                    'customer_id' => $this->customer_id,
-                    'entry_type' => 'Application',
-                    'amount' => $appliedAmount,
-                    'applied_entry_id' => $invoiceEntry->id,
-                    'applying_entry_id' => $custLedgerEntry->id,
-                ]);
+            $this->update([
+                'remaining_amount' => $payment->fresh()->unapplied_amount,
+                'exported_to_payment_jnl' => true,
+            ]);
 
-                $invoiceEntry->decrement('remaining_amount', $appliedAmount);
-                $custLedgerEntry->increment('remaining_amount', $appliedAmount);
-                $this->update(['remaining_amount' => $this->amount_received - $appliedAmount]);
-            }
-
-            // 3. Post to G/L: Dr Bank Account, Cr Accounts Receivable
-            $this->postToGL();
+            $journalLine->update([
+                'status' => 'Posted',
+                'posted_at' => now(),
+                'posted_document_no' => $payment->payment_number,
+            ]);
         });
     }
 
-    protected function postToGL(): void
+    private function normalizedPaymentMethod(): string
     {
-        $customerPostingGroup = $this->customer->customerPostingGroup;
-        $date = $this->journalLine->posting_date;
-        $docNo = $this->journalLine->document_no;
-
-        // Debit Bank Account
-        GlEntry::create([
-            'account_no' => $this->bankAccount->gl_account_no,
-            'debit_amount' => $this->amount_received,
-            'credit_amount' => 0,
-            'posting_date' => $date,
-            'document_no' => $docNo,
-        ]);
-
-        // Credit Accounts Receivable
-        GlEntry::create([
-            'account_no' => $customerPostingGroup->receivables_account,
-            'debit_amount' => 0,
-            'credit_amount' => $this->amount_received,
-            'posting_date' => $date,
-            'document_no' => $docNo,
-        ]);
+        return match ($this->payment_method_code) {
+            'Cash' => 'CASH',
+            'Check' => 'CHECK',
+            'Bank Transfer' => 'BANK_TRANSFER',
+            'Credit Card' => 'CREDIT_CARD',
+            'Electronic' => 'ACH',
+            default => 'BANK_TRANSFER',
+        };
     }
 }

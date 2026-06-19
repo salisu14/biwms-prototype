@@ -7,6 +7,7 @@ use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GlEntry;
 use App\Models\Payment;
 use App\Models\PaymentApplication;
+use App\Models\Permission;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\User;
 use App\Models\Vendor;
@@ -20,6 +21,11 @@ uses(RefreshDatabase::class);
 test('it calculates and posts realized gain/loss during foreign currency application', function () {
     // 0. Setup User
     $user = User::factory()->create();
+    Permission::query()->firstOrCreate([
+        'name' => 'finance.payment.apply',
+        'guard_name' => 'web',
+    ]);
+    $user->givePermissionTo('finance.payment.apply');
     $this->actingAs($user);
 
     // 1. Setup Accounts

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Finance\PaymentService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -100,76 +102,63 @@ class PaymentJournalLine extends Model
     // --- Posting Action ---
 
     /**
-     * Apply this payment to the vendor ledger and post to G/L.
-     *
-     * Creates:
-     *   - VendorLedgerEntry (Payment type, positive = reduces AP liability)
-     *   - VendLedgerEntryApplication (if applies_to_id is set)
-     *   - G/L entries: Dr Accounts Payable, Cr Bank Account
+     * @deprecated Legacy UI entry point. Do not create financial side effects
+     * directly from journal-line models; route through PaymentService.
      *
      * @throws \Throwable
      */
     public function applyPayment(): void
     {
         DB::transaction(function () {
-            // 1. Create vendor ledger payment entry
-            $vendLedgerEntry = VendorLedgerEntry::create([
-                'vendor_id' => $this->vendor_id,
-                'entry_type' => 'Payment',
-                'amount' => $this->amount_paid,
-                'remaining_amount' => $this->amount_paid,
-                'posting_date' => $this->journalLine->posting_date,
-                'document_no' => $this->journalLine->document_no,
-                'external_document_no' => $this->check_no,
+            $journalLine = $this->journalLine()->firstOrFail();
+            $vendor = $this->vendor()->firstOrFail();
+            $bankAccount = $this->bankAccount()->firstOrFail();
+            $userId = Auth::id() ?? (int) ($journalLine->created_by ?? 1);
+
+            $payment = Payment::query()->create([
+                'payment_number' => $journalLine->document_no,
+                'external_reference' => $this->check_no,
+                'payment_direction' => 'DISBURSEMENT',
+                'party_type' => 'VENDOR',
+                'party_id' => $vendor->id,
+                'party_name' => $vendor->vendor_name,
+                'payment_method' => $this->normalizedPaymentMethod(),
+                'bank_account_id' => $bankAccount->id,
+                'currency_code' => $journalLine->currency_code,
+                'currency_factor' => $journalLine->currency_factor ?: 1,
+                'payment_amount' => (float) $this->amount_paid,
+                'payment_amount_lcy' => (float) ($this->amount_paid_lcy ?: $this->amount_paid),
+                'applied_amount' => 0,
+                'unapplied_amount' => (float) $this->amount_paid,
+                'payment_date' => $journalLine->document_date ?? $journalLine->posting_date,
+                'posting_date' => $journalLine->posting_date,
+                'created_by' => $userId,
             ]);
 
-            // 2. Apply to specific invoice when "Applies-to" is set
-            if ($this->applies_to_id) {
-                $invoiceEntry = VendorLedgerEntry::findOrFail($this->applies_to_id);
-                $appliedAmount = min(abs($invoiceEntry->remaining_amount), $this->amount_paid);
+            app(PaymentService::class)->post($payment, $userId);
 
-                VendLedgerEntryApplication::create([
-                    'vendor_id' => $this->vendor_id,
-                    'entry_type' => 'Application',
-                    'amount' => $appliedAmount,
-                    'applied_entry_id' => $invoiceEntry->id,
-                    'applying_entry_id' => $vendLedgerEntry->id,
-                ]);
+            $this->update([
+                'remaining_amount' => $payment->fresh()->unapplied_amount,
+                'payment_processed' => true,
+            ]);
 
-                $invoiceEntry->decrement('remaining_amount', $appliedAmount);
-                $vendLedgerEntry->decrement('remaining_amount', $appliedAmount);
-                $this->update(['remaining_amount' => $this->amount_paid - $appliedAmount]);
-            }
-
-            // 3. Post to G/L: Dr Accounts Payable, Cr Bank Account
-            $this->postToGL();
-
-            $this->update(['payment_processed' => true]);
+            $journalLine->update([
+                'status' => 'Posted',
+                'posted_at' => now(),
+                'posted_document_no' => $payment->payment_number,
+            ]);
         });
     }
 
-    protected function postToGL(): void
+    private function normalizedPaymentMethod(): string
     {
-        $vendorPostingGroup = $this->vendor->vendorPostingGroup;
-        $date = $this->journalLine->posting_date;
-        $docNo = $this->journalLine->document_no;
-
-        // Debit Accounts Payable
-        GlEntry::create([
-            'account_no' => $vendorPostingGroup->payables_account,
-            'debit_amount' => $this->amount_paid,
-            'credit_amount' => 0,
-            'posting_date' => $date,
-            'document_no' => $docNo,
-        ]);
-
-        // Credit Bank Account
-        GlEntry::create([
-            'account_no' => $this->bankAccount->gl_account_no,
-            'debit_amount' => 0,
-            'credit_amount' => $this->amount_paid,
-            'posting_date' => $date,
-            'document_no' => $docNo,
-        ]);
+        return match ($this->payment_method_code) {
+            'Cash' => 'CASH',
+            'Check' => 'CHECK',
+            'Bank Transfer' => 'BANK_TRANSFER',
+            'Credit Card' => 'CREDIT_CARD',
+            'Electronic' => 'ACH',
+            default => 'BANK_TRANSFER',
+        };
     }
 }

@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Models\Permission;
 use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedSalesCreditMemo;
+use App\Models\User;
 use App\Models\VendorLedgerEntry;
 use App\Services\Finance\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -12,6 +14,7 @@ uses(RefreshDatabase::class);
 
 it('applies a seeded customer receipt to a posted sales invoice', function (): void {
     $fixture = $this->createPostedReceivableApplicationFixture();
+    grantFixturePaymentApplyPermission($fixture['user']);
 
     $application = app(PaymentService::class)->applyToDocument(
         $fixture['payment'],
@@ -35,6 +38,7 @@ it('applies a seeded customer receipt to a posted sales invoice', function (): v
 
 it('applies a seeded vendor payment to a posted purchase invoice', function (): void {
     $fixture = $this->createPostedPayableApplicationFixture();
+    grantFixturePaymentApplyPermission($fixture['user']);
 
     $application = app(PaymentService::class)->applyToDocument(
         $fixture['payment'],
@@ -104,3 +108,13 @@ it('applies a posted purchase credit memo to an open purchase invoice ledger ent
         ->and((float) $invoiceLedgerEntry->remaining_amount)->toBe(50000.00)
         ->and($invoiceLedgerEntry->open)->toBeTrue();
 });
+
+function grantFixturePaymentApplyPermission(User $user): void
+{
+    Permission::query()->firstOrCreate([
+        'name' => 'finance.payment.apply',
+        'guard_name' => 'web',
+    ]);
+
+    $user->givePermissionTo('finance.payment.apply');
+}

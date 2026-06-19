@@ -267,25 +267,32 @@ class CurrencyAdjustmentService
             ? ChartOfAccount::where('account_type', 'income')->first() // Unrealized gain offset
             : ChartOfAccount::where('account_type', 'expense')->first(); // Unrealized loss offset
 
-        // Debit/Credit based on gain/loss
+        if (! $account || ! $offsetAccount) {
+            throw new \RuntimeException('Missing currency adjustment G/L account setup.');
+        }
+
         $amount = $adjustment->adjustment_amount;
 
-        $this->glService->postEntry([
-            'account_id' => $account->id,
+        $this->glService->post([
+            [
+                'account_id' => $account->id,
+                'debit' => $adjustment->isGain() ? $amount : 0,
+                'credit' => $adjustment->isGain() ? 0 : $amount,
+                'description' => $adjustment->description,
+            ],
+            [
+                'account_id' => $offsetAccount->id,
+                'debit' => $adjustment->isGain() ? 0 : $amount,
+                'credit' => $adjustment->isGain() ? $amount : 0,
+                'description' => $adjustment->description,
+            ],
+        ], [
             'posting_date' => $adjustment->posting_date,
             'document_type' => 'currency_adjustment',
-            'document_no' => $adjustment->document_no,
+            'document_number' => $adjustment->document_no,
             'description' => $adjustment->description,
-            'amount' => $adjustment->isGain() ? $amount : -$amount,
-        ]);
-
-        $this->glService->postEntry([
-            'account_id' => $offsetAccount->id,
-            'posting_date' => $adjustment->posting_date,
-            'document_type' => 'currency_adjustment',
-            'document_no' => $adjustment->document_no,
-            'description' => $adjustment->description,
-            'amount' => $adjustment->isGain() ? -$amount : $amount,
+            'sourceable_type' => CurrencyAdjustmentLedger::class,
+            'sourceable_id' => $adjustment->id,
         ]);
     }
 

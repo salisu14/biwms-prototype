@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Events\PaymentApplied;
 use App\Models\Currency;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Payment;
@@ -90,136 +91,146 @@ class PaymentService
     {
         $userId = $userId ?? auth()->id();
         $this->postingDateValidator->validate($payment->posting_date ?? now());
+        Gate::forUser(User::query()->findOrFail($userId))->authorize('apply', $payment);
 
-        if ($payment->status !== 'POSTED') {
-            throw new \Exception('Only posted payments can be applied to documents.');
-        }
+        $application = DB::transaction(function () use ($payment, $applicationData, $userId): PaymentApplication {
+            if ($payment->status !== 'POSTED') {
+                throw new \Exception('Only posted payments can be applied to documents.');
+            }
 
-        $document = $this->findDocument(
-            $applicationData['document_type'],
-            $applicationData['document_id']
-        );
+            $document = $this->findDocument(
+                $applicationData['document_type'],
+                $applicationData['document_id']
+            );
 
-        if (! $document) {
-            throw new \Exception('Document not found');
-        }
+            if (! $document) {
+                throw new \Exception('Document not found');
+            }
 
-        // Validate party
-        $documentPartyId = $document->customer_id ?? $document->vendor_id;
-        if ($documentPartyId !== $payment->party_id) {
-            throw new \Exception('Document does not belong to this party');
-        }
+            // Validate party
+            $documentPartyId = $document->customer_id ?? $document->vendor_id;
+            if ($documentPartyId !== $payment->party_id) {
+                throw new \Exception('Document does not belong to this party');
+            }
 
-        $expectedDocumentType = $payment->party_type === 'CUSTOMER' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE';
-        if (($applicationData['document_type'] ?? null) !== $expectedDocumentType) {
-            throw new \Exception('Document type does not match payment party type.');
-        }
+            $expectedDocumentType = $payment->party_type === 'CUSTOMER' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE';
+            if (($applicationData['document_type'] ?? null) !== $expectedDocumentType) {
+                throw new \Exception('Document type does not match payment party type.');
+            }
 
-        $precision = $this->resolvePrecision($payment->currency ?? null, $payment->currency_code);
-        $tolerance = $this->resolveTolerance($precision);
+            $precision = $this->resolvePrecision($payment->currency ?? null, $payment->currency_code);
+            $tolerance = $this->resolveTolerance($precision);
 
-        $amountToApply = min(
-            (float) ($applicationData['amount'] ?? $document->remaining_amount),
-            (float) $payment->unapplied_amount,
-            (float) $document->remaining_amount
-        );
-        $amountToApply = $this->roundMoney($amountToApply, $precision);
+            $requestedAmount = (float) ($applicationData['amount'] ?? $document->remaining_amount);
+            if ($requestedAmount <= 0) {
+                throw new \Exception('No amount to apply');
+            }
 
-        if ($amountToApply <= 0) {
-            throw new \Exception('No amount to apply');
-        }
+            if ($requestedAmount - (float) $payment->unapplied_amount > $tolerance) {
+                throw new \Exception('Payment does not have enough unapplied amount.');
+            }
 
-        // --- Multi-Currency & Gain/Loss Logic (Business Central Style) ---
+            $amountToApply = min(
+                $requestedAmount,
+                (float) $payment->unapplied_amount,
+                (float) $document->remaining_amount
+            );
+            $amountToApply = $this->roundMoney($amountToApply, $precision);
 
-        $paymentCurrency = $payment->currency;
-        $docCurrencyCode = $document->currency_code;
+            if ($amountToApply <= 0) {
+                throw new \Exception('No amount to apply');
+            }
 
-        // Convert applied amount to LCY using both rates
-        $ratePayment = $payment->currency_factor ?? 1.0;
-        $rateDocument = $document->currency_factor ?? 1.0;
+            // --- Multi-Currency & Gain/Loss Logic (Business Central Style) ---
 
-        $appliedLCYPayment = $amountToApply * $ratePayment;
-        $appliedLCYDocument = $amountToApply * $rateDocument;
+            // Convert applied amount to LCY using both rates
+            $ratePayment = $payment->currency_factor ?? 1.0;
+            $rateDocument = $document->currency_factor ?? 1.0;
 
-        // Gain/Loss is the difference in LCY value of the same FCY amount
-        // If I pay a $100 invoice that was booked at 1.4, but I pay it at 1.5
-        // Invoice LCY = 140, Payment LCY = 150 -> Loss of 10 (for buyer) or Gain (for receiver)
-        // Actually, BC logic: Realized Gain/Loss = LCY(Payment) - LCY(Invoice)
-        $gainLossAmount = $appliedLCYPayment - $appliedLCYDocument;
+            $appliedLCYPayment = $amountToApply * $ratePayment;
+            $appliedLCYDocument = $amountToApply * $rateDocument;
 
-        // Create application record
-        $remainingBefore = $this->roundMoney((float) $document->remaining_amount, $precision);
-        $discountApplied = $this->roundMoney((float) ($applicationData['discount'] ?? 0), $precision);
-        $writeOffAmount = $this->roundMoney((float) ($applicationData['write_off'] ?? 0), $precision);
-        $documentRemainingAfter = $this->roundMoney($remainingBefore - $amountToApply - $discountApplied - $writeOffAmount, $precision);
-        if (abs($documentRemainingAfter) <= $tolerance) {
-            $documentRemainingAfter = 0.0;
-        }
+            // Realized gain/loss is the LCY value difference for the same FCY amount.
+            $gainLossAmount = $appliedLCYPayment - $appliedLCYDocument;
 
-        $application = PaymentApplication::create([
-            'payment_id' => $payment->id,
-            'document_type' => $applicationData['document_type'],
-            'document_id' => $document->id,
-            'document_number' => $document->document_number,
-            'document_original_amount' => $document->grand_total,
-            'document_remaining_before' => $remainingBefore,
-            'amount_applied' => $amountToApply,
-            'amount_applied_lcy' => $appliedLCYPayment,
-            'gain_loss_amount' => $gainLossAmount,
-            'discount_applied' => $discountApplied,
-            'write_off_amount' => $writeOffAmount,
-            'document_remaining_after' => $documentRemainingAfter,
-            'full_payment' => $documentRemainingAfter <= $tolerance,
-            'currency_id' => $payment->currency_id,
-            'applied_by' => $userId,
-            'applied_at' => now(),
-        ]);
+            // Create application record
+            $remainingBefore = $this->roundMoney((float) $document->remaining_amount, $precision);
+            $discountApplied = $this->roundMoney((float) ($applicationData['discount'] ?? 0), $precision);
+            $writeOffAmount = $this->roundMoney((float) ($applicationData['write_off'] ?? 0), $precision);
+            $documentRemainingAfter = $this->roundMoney($remainingBefore - $amountToApply - $discountApplied - $writeOffAmount, $precision);
+            if (abs($documentRemainingAfter) <= $tolerance) {
+                $documentRemainingAfter = 0.0;
+            }
 
-        // Post Realized Gain/Loss if applicable
-        if (abs($gainLossAmount) > 0.001) {
-            $this->postingService->postRealizedGainLoss($application);
-        }
+            $application = PaymentApplication::create([
+                'payment_id' => $payment->id,
+                'document_type' => $applicationData['document_type'],
+                'document_id' => $document->id,
+                'document_number' => $document->document_number,
+                'document_original_amount' => $document->grand_total,
+                'document_remaining_before' => $remainingBefore,
+                'amount_applied' => $amountToApply,
+                'amount_applied_lcy' => $appliedLCYPayment,
+                'gain_loss_amount' => $gainLossAmount,
+                'discount_applied' => $discountApplied,
+                'write_off_amount' => $writeOffAmount,
+                'document_remaining_after' => $documentRemainingAfter,
+                'full_payment' => $documentRemainingAfter <= $tolerance,
+                'currency_id' => $payment->currency_id,
+                'applied_by' => $userId,
+                'applied_at' => now(),
+            ]);
 
-        // Update document balances through Payment flow only.
-        $documentSettleAmount = $this->roundMoney($amountToApply + $discountApplied + $writeOffAmount, $precision);
-        $newAmountPaid = $this->roundMoney((float) ($document->amount_paid ?? 0) + $documentSettleAmount, $precision);
-        $newRemaining = $this->roundMoney((float) ($document->grand_total ?? 0) - $newAmountPaid, $precision);
-        if (abs($newRemaining) <= $tolerance) {
-            $newRemaining = 0.0;
-        }
-        $isPaidInFull = $newRemaining <= $tolerance;
+            // Post Realized Gain/Loss if applicable
+            if (abs($gainLossAmount) > 0.001) {
+                $this->postingService->postRealizedGainLoss($application);
+            }
 
-        $document->update([
-            'amount_paid' => $newAmountPaid,
-            'remaining_amount' => max(0, $newRemaining),
-            'paid_in_full' => $isPaidInFull,
-            'paid_in_full_date' => $isPaidInFull ? now() : null,
-        ]);
+            // Update document balances through Payment flow only.
+            $documentSettleAmount = $this->roundMoney($amountToApply + $discountApplied + $writeOffAmount, $precision);
+            $newAmountPaid = $this->roundMoney((float) ($document->amount_paid ?? 0) + $documentSettleAmount, $precision);
+            $newRemaining = $this->roundMoney((float) ($document->grand_total ?? 0) - $newAmountPaid, $precision);
+            if (abs($newRemaining) <= $tolerance) {
+                $newRemaining = 0.0;
+            }
+            $isPaidInFull = $newRemaining <= $tolerance;
 
-        if ($document instanceof PostedSalesInvoice) {
-            $this->syncCustomerInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
-        }
+            $document->update([
+                'amount_paid' => $newAmountPaid,
+                'remaining_amount' => max(0, $newRemaining),
+                'paid_in_full' => $isPaidInFull,
+                'paid_in_full_date' => $isPaidInFull ? now() : null,
+            ]);
 
-        if ($document instanceof PostedSalesInvoice && ! empty($document->order_id)) {
-            SalesOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
-        }
+            if ($document instanceof PostedSalesInvoice) {
+                $this->syncCustomerInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
+            }
 
-        if ($document instanceof PostedPurchaseInvoice && ! empty($document->order_id)) {
-            PurchaseOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
-        }
+            if ($document instanceof PostedSalesInvoice && ! empty($document->order_id)) {
+                SalesOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
+            }
 
-        // Update payment totals
-        $payment->applied_amount = $this->roundMoney((float) $payment->applied_amount + $amountToApply, $precision);
-        $payment->unapplied_amount = $this->roundMoney((float) $payment->payment_amount - (float) $payment->applied_amount, $precision);
-        if (abs((float) $payment->unapplied_amount) <= $tolerance) {
-            $payment->unapplied_amount = 0;
-        }
-        $payment->discount_taken = $this->roundMoney((float) $payment->discount_taken + $discountApplied, $precision);
-        $payment->save();
+            if ($document instanceof PostedPurchaseInvoice && ! empty($document->order_id)) {
+                PurchaseOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
+            }
 
-        if ($payment->party_type === 'CUSTOMER') {
-            $this->syncCustomerPaymentLedgerFromPayment($payment, $tolerance);
-        }
+            // Update payment totals
+            $payment->applied_amount = $this->roundMoney((float) $payment->applied_amount + $amountToApply, $precision);
+            $payment->unapplied_amount = $this->roundMoney((float) $payment->payment_amount - (float) $payment->applied_amount, $precision);
+            if (abs((float) $payment->unapplied_amount) <= $tolerance) {
+                $payment->unapplied_amount = 0;
+            }
+            $payment->discount_taken = $this->roundMoney((float) $payment->discount_taken + $discountApplied, $precision);
+            $payment->save();
+
+            if ($payment->party_type === 'CUSTOMER') {
+                $this->syncCustomerPaymentLedgerFromPayment($payment, $tolerance);
+            }
+
+            return $application;
+        });
+
+        PaymentApplied::dispatch($application);
 
         return $application;
     }
