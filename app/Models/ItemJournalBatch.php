@@ -72,7 +72,7 @@ class ItemJournalBatch extends Model
      */
     public function lines(): HasMany
     {
-        return $this->hasMany(ItemJournalLine::class, 'journal_batch_id');
+        return $this->hasMany(ItemJournalLine::class, 'batch_id');
     }
 
     // --- Scopes ---

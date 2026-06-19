@@ -313,6 +313,13 @@ class ProductionOrderForm
                             ->label('Gen. Product Posting Group')
                             ->relationship('generalProductPostingGroup', 'code')
                             ->required(),
+
+                        Select::make('general_business_posting_group_id')
+                            ->label('Gen. Business Posting Group')
+                            ->relationship('generalBusinessPostingGroup', 'code')
+                            ->required()
+                            ->searchable()
+                            ->preload(),
                     ]),
 
                 Section::make('Dimensions & Planning')

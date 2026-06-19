@@ -5,6 +5,7 @@ namespace App\Models\Manufacturing;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
+use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
@@ -251,6 +252,11 @@ class ProductionOrder extends Model
     public function generalProductPostingGroup(): BelongsTo
     {
         return $this->belongsTo(GeneralProductPostingGroup::class, 'general_product_posting_group_id');
+    }
+
+    public function generalBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralBusinessPostingGroup::class, 'general_business_posting_group_id');
     }
 
     public function capacityLedgerEntries(): HasMany

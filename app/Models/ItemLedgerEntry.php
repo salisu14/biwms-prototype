@@ -42,7 +42,6 @@ class ItemLedgerEntry extends Model
         'source_type',
         'source_id',
         'document_number',
-        'unit_of_measure_code',
     ];
 
     protected $casts = [
@@ -159,9 +158,14 @@ class ItemLedgerEntry extends Model
 
     protected static function booted(): void
     {
-        static::creating(function ($entry) {
+        static::creating(function (ItemLedgerEntry $entry) {
             if (! $entry->entry_number) {
                 $entry->entry_number = (static::max('entry_number') ?? 0) + 1;
+            }
+
+            // Future Safety Net placeholder
+            if ($entry->item && $entry->quantity) {
+                // Validation logic here later if needed
             }
         });
 
