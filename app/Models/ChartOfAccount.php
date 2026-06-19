@@ -14,6 +14,14 @@ class ChartOfAccount extends Model
 {
     use HasFactory;
 
+    protected $attributes = [
+        'structural_type' => 'posting',
+        'account_category' => 'asset',
+        'income_balance' => 0,
+        'direct_posting' => true,
+        'blocked' => false,
+    ];
+
     protected $table = 'chart_of_accounts';
 
     protected $fillable = [
@@ -134,7 +142,7 @@ class ChartOfAccount extends Model
 
     public function formattedName(): string
     {
-        return str_repeat('  ', $this->indentation ?? 0) . $this->name;
+        return str_repeat('  ', $this->indentation ?? 0).$this->name;
     }
 
     /**
@@ -142,7 +150,7 @@ class ChartOfAccount extends Model
      */
     public function allowsDirectPosting(): bool
     {
-        return $this->isPostingAccount() && $this->direct_posting && !$this->blocked;
+        return $this->isPostingAccount() && $this->direct_posting && ! $this->blocked;
     }
 
     protected static function booted(): void

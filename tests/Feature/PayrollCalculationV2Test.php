@@ -1,22 +1,19 @@
 <?php
 
-use App\Models\PayrollDocument;
-use App\Models\Employee;
-use App\Models\PayCode;
-use App\Models\EmployeePayCode;
-use App\Models\PayrollPeriod;
-use App\Models\TaxTable;
-use App\Models\TaxBracket;
-use App\Models\SocialSecurityTier;
-use App\Models\ChartOfAccount;
-use App\Services\PayrollCalculationService;
-use App\Services\TaxCalculationService;
-use App\Enums\PayrollStatus;
-use App\Enums\PayrollPeriodStatus;
-use App\Enums\PayCodeType;
-use App\Enums\CalculationMethod;
 use App\Enums\AccountCategory;
 use App\Enums\AccountStructuralType;
+use App\Enums\CalculationMethod;
+use App\Enums\PayCodeType;
+use App\Enums\PayrollPeriodStatus;
+use App\Enums\PayrollStatus;
+use App\Models\ChartOfAccount;
+use App\Models\Employee;
+use App\Models\EmployeePayCode;
+use App\Models\PayCode;
+use App\Models\PayrollDocument;
+use App\Models\PayrollPeriod;
+use App\Models\PayrollPostingGroup;
+use App\Services\PayrollCalculationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -24,7 +21,7 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     // Seed basic setup
     Artisan::call('db:seed', ['--class' => 'PayrollSetupV2Seeder']);
-    
+
     // Create a GL Account for testing
     $account = ChartOfAccount::create([
         'account_number' => '6100',
@@ -32,6 +29,7 @@ beforeEach(function () {
         'account_category' => AccountCategory::OPERATING_EXPENSE,
         'structural_type' => AccountStructuralType::POSTING,
     ]);
+    $this->payrollAccount = $account;
 
     // Create a BASE PayCode
     PayCode::create([
@@ -45,23 +43,23 @@ beforeEach(function () {
 
     // Ensure statutory codes exist
     PayCode::firstOrCreate(['code' => 'PAYE'], [
-        'name' => 'PAYE', 
-        'type' => PayCodeType::DEDUCTION, 
-        'is_statutory' => true, 
+        'name' => 'PAYE',
+        'type' => PayCodeType::DEDUCTION,
+        'is_statutory' => true,
         'gl_account_id' => $account->id,
         'calculation_method' => CalculationMethod::FIXED_AMOUNT,
     ]);
     PayCode::firstOrCreate(['code' => 'NSSF'], [
-        'name' => 'NSSF', 
-        'type' => PayCodeType::DEDUCTION, 
-        'is_statutory' => true, 
+        'name' => 'NSSF',
+        'type' => PayCodeType::DEDUCTION,
+        'is_statutory' => true,
         'gl_account_id' => $account->id,
         'calculation_method' => CalculationMethod::FIXED_AMOUNT,
     ]);
     PayCode::firstOrCreate(['code' => 'NHIF'], [
-        'name' => 'NHIF', 
-        'type' => PayCodeType::DEDUCTION, 
-        'is_statutory' => true, 
+        'name' => 'NHIF',
+        'type' => PayCodeType::DEDUCTION,
+        'is_statutory' => true,
         'gl_account_id' => $account->id,
         'calculation_method' => CalculationMethod::FIXED_AMOUNT,
     ]);
@@ -69,10 +67,20 @@ beforeEach(function () {
 
 it('calculates payroll correctly using advanced tax service', function () {
     // 1. Setup Employee with 50,000 salary
+    $postingGroup = PayrollPostingGroup::create([
+        'code' => 'TEST',
+        'description' => 'Test Payroll Posting Group',
+        'salaries_account_id' => $this->payrollAccount->id,
+        'social_security_account_id' => $this->payrollAccount->id,
+        'tax_payable_account_id' => $this->payrollAccount->id,
+        'net_pay_account_id' => $this->payrollAccount->id,
+    ]);
+
     $employee = Employee::factory()->create([
         'is_active' => true,
+        'payroll_posting_group_id' => $postingGroup->id,
     ]);
-    
+
     $employee->compensations()->create([
         'base_salary' => 50000,
         'effective_date' => now()->subMonth(),
@@ -109,25 +117,25 @@ it('calculates payroll correctly using advanced tax service', function () {
 
     // 4. Verification
     $document->refresh();
-    
+
     expect($document->status)->toBe(PayrollStatus::CALCULATED);
     expect($document->lines)->not->toBeEmpty();
-    
+
     // Check Earnings line
     $baseLine = $document->lines()->where('pay_code_id', $basePayCode->id)->first();
-    expect((float)$baseLine->amount)->toBe(50000.0);
+    expect((float) $baseLine->amount)->toBe(50000.0);
 
     // Check for NSSF (6% of 50k but usually capped or tiered)
-    // In our seeder/service: 
+    // In our seeder/service:
     // Tier 1: 6% of 7000 = 420
     // Tier 2: 6% of (36000-7000) = 1740
     // Total = 2160 (Our new service should handle this tiering better)
-    $nssfLine = $document->lines()->whereHas('payCode', fn($q) => $q->where('code', 'NSSF'))->first();
-    expect((float)$nssfLine->amount)->toBe(2160.0);
+    $nssfLine = $document->lines()->whereHas('payCode', fn ($q) => $q->where('code', 'NSSF'))->first();
+    expect((float) $nssfLine->amount)->toBe(2160.0);
 
     // Check for NHIF (2.75% of 50k = 1375)
-    $nhifLine = $document->lines()->whereHas('payCode', fn($q) => $q->where('code', 'NHIF'))->first();
-    expect((float)$nhifLine->amount)->toBe(1375.0);
+    $nhifLine = $document->lines()->whereHas('payCode', fn ($q) => $q->where('code', 'NHIF'))->first();
+    expect((float) $nhifLine->amount)->toBe(1375.0);
 
     // Check for PAYE (Progressive KE Tax)
     // Net Taxable = 50000 - 2160 = 47840
@@ -136,6 +144,6 @@ it('calculates payroll correctly using advanced tax service', function () {
     // 24000-32333 @ 25% = 2083.25
     // 32333-47840 @ 30% = (47840 - 32333) * 0.3 = 4652.1
     // Total = 9135.35 - Relief 2400 = 6735.35
-    $payeLine = $document->lines()->whereHas('payCode', fn($q) => $q->where('code', 'PAYE'))->first();
-    expect((float)$payeLine->amount)->toBe(6735.35);
+    $payeLine = $document->lines()->whereHas('payCode', fn ($q) => $q->where('code', 'PAYE'))->first();
+    expect((float) $payeLine->amount)->toBe(6735.35);
 });

@@ -20,6 +20,10 @@ class Item extends Model
 {
     use HasFactory;
 
+    protected $attributes = [
+        'item_type' => 'RAW_MATERIAL',
+    ];
+
     protected $fillable = [
         'item_code',
         'description',
@@ -239,7 +243,8 @@ class Item extends Model
 
     public function isInventoryItem(): bool
     {
-        return $this->item_type === ItemType::INVENTORY;
+        return $this->item_type instanceof ItemType
+            && in_array($this->item_type->value, ItemType::inventoryTypes(), true);
     }
 
     public function isServiceItem(): bool

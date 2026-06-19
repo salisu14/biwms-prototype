@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\ItemType;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
 use App\Models\Item;
@@ -22,6 +23,7 @@ class ItemFactory extends Factory
         return [
             'item_code' => $this->faker->unique()->bothify('ITEM-####'),
             'description' => $this->faker->words(3, true),
+            'item_type' => ItemType::RAW_MATERIAL,
             'unit_cost' => 10,
             'general_product_posting_group_id' => $this->generalProductPostingGroupId(),
             'inventory_posting_group_id' => $this->inventoryPostingGroupId(),

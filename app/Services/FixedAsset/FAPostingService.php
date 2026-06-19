@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Services\FixedAsset;
 
 use App\Enums\FAPostingType;
-use App\Models\FixedAsset;
 use App\Models\FALedgerEntry;
+use App\Models\FixedAsset;
 use App\Models\GlEntry;
 use Illuminate\Support\Facades\Auth;
 
@@ -82,15 +82,18 @@ class FAPostingService
         ?string $documentNo
     ): void {
         $accounts = $this->resolveAccounts($asset, $postingType);
+        $nextEntryNumber = $this->nextGlEntryNumber();
+        $transactionNumber = (int) (GlEntry::query()->max('transaction_number') ?? 0) + 1;
 
         // Debit entry
         GlEntry::create([
+            'entry_number' => $nextEntryNumber++,
             'chart_of_account_id' => $accounts['debit'],
             'posting_date' => $date,
-            'document_type' => 'FA ' . $postingType->name,
-            'document_number' => $documentNo ?? 'FA-' . time(),
+            'document_type' => 'FA '.$postingType->name,
+            'document_number' => $documentNo ?? 'FA-'.time(),
             'document_date' => $date,
-            'transaction_number' => time(),
+            'transaction_number' => $transactionNumber,
             'debit_amount' => $amount > 0 ? $amount : 0,
             'credit_amount' => $amount < 0 ? abs($amount) : 0,
             'amount' => $amount,
@@ -101,26 +104,32 @@ class FAPostingService
 
         // Credit entry
         GlEntry::create([
+            'entry_number' => $nextEntryNumber,
             'chart_of_account_id' => $accounts['credit'],
             'posting_date' => $date,
-            'document_type' => 'FA ' . $postingType->name,
-            'document_number' => $documentNo ?? 'FA-' . time(),
+            'document_type' => 'FA '.$postingType->name,
+            'document_number' => $documentNo ?? 'FA-'.time(),
             'document_date' => $date,
-            'transaction_number' => time(),
+            'transaction_number' => $transactionNumber,
             'debit_amount' => $amount < 0 ? abs($amount) : 0,
             'credit_amount' => $amount > 0 ? $amount : 0,
             'amount' => $amount,
             'amount_lcy' => $amount,
-            'description' => $description . ' (Offset)',
+            'description' => $description.' (Offset)',
             'user_id' => Auth::id() ?? $asset->created_by ?? 1,
         ]);
+    }
+
+    private function nextGlEntryNumber(): int
+    {
+        return (int) (GlEntry::query()->max('entry_number') ?? 0) + 1;
     }
 
     private function resolveAccounts(FixedAsset $asset, FAPostingType $postingType): array
     {
         $group = $asset->postingGroup;
 
-        return match($postingType) {
+        return match ($postingType) {
             FAPostingType::ACQUISITION => [
                 'debit' => $group->acquisition_cost_account_id,
                 'credit' => $group->payable_account_id ?? 1, // AP or Cash

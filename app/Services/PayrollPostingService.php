@@ -27,6 +27,7 @@ class PayrollPostingService
             $documentNumber = $document->document_number;
             $postingDate = $document->period_end;
             $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
+            $entryNumber = (GlEntry::max('entry_number') ?? 0) + 1;
 
             $employeesInDocument = $document->lines()
                 ->with('employee.bankAccounts')
@@ -70,8 +71,8 @@ class PayrollPostingService
                 if ($payCode->type === PayCodeType::EARNING) {
                     // Dr Salaries/Wages (Expense), Cr Net Pay (Liability)
                     $expenseAccount = $payCodeAccountId ?? $postingGroup->salaries_account_id;
-                    $this->createGlEntry($expenseAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->createGlEntry($netPayAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($entryNumber++, $expenseAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($entryNumber++, $netPayAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
                 } elseif ($payCode->type === PayCodeType::DEDUCTION) {
                     // Dr Net Pay (Liability), Cr Tax/Deduction Liability
                     $liabilityAccount = $payCodeAccountId;
@@ -89,15 +90,15 @@ class PayrollPostingService
                         throw new Exception("Missing liability account for deduction: {$payCode->name}");
                     }
 
-                    $this->createGlEntry($netPayAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->createGlEntry($liabilityAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($entryNumber++, $netPayAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($entryNumber++, $liabilityAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
                 } elseif ($payCode->type === PayCodeType::BENEFIT) {
                     // Employer Cost: Dr Expense, Cr Liability
                     $expenseAccount = $payCodeAccountId ?? $postingGroup->salaries_account_id;
                     $liabilityAccount = $postingGroup->social_security_account_id;
 
-                    $this->createGlEntry($expenseAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->createGlEntry($liabilityAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($entryNumber++, $expenseAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
+                    $this->createGlEntry($entryNumber++, $liabilityAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
                 }
             }
 
@@ -106,12 +107,13 @@ class PayrollPostingService
         });
     }
 
-    private function createGlEntry(int $accountId, float $amount, $postingDate, string $docNo, string $desc, int $transactionNumber, Employee $employee): void
+    private function createGlEntry(int $entryNumber, int $accountId, float $amount, $postingDate, string $docNo, string $desc, int $transactionNumber, Employee $employee): void
     {
         $debit = $amount > 0 ? $amount : 0;
         $credit = $amount < 0 ? abs($amount) : 0;
 
         GlEntry::create([
+            'entry_number' => $entryNumber,
             'chart_of_account_id' => $accountId,
             'transaction_number' => $transactionNumber,
             'source_type' => SourceType::EMPLOYEE,

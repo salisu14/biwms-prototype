@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasColumn('petty_cash_funds', 'chart_of_account_id')) {
+            return;
+        }
+
         Schema::table('petty_cash_funds', function (Blueprint $table) {
             // Add the column (nullable so existing records don't fail)
             $table->foreignId('chart_of_account_id')
@@ -26,6 +30,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (! Schema::hasColumn('petty_cash_funds', 'chart_of_account_id')) {
+            return;
+        }
+
         Schema::table('petty_cash_funds', function (Blueprint $table) {
             // Must drop the foreign key first, then the column
             $table->dropForeign(['chart_of_account_id']);

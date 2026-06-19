@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Customer\CustomerSubledgerSummaryService;
 use App\Services\Finance\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Tests\CreatesFinancialDocumentFixtures;
 
 uses(RefreshDatabase::class, CreatesFinancialDocumentFixtures::class);
@@ -119,6 +120,9 @@ it('posts customer receipts as open credit ledger entries until they are applied
     $this->ensureOpenAccountingPeriod(now());
 
     $customer = Customer::factory()->create();
+    $user = User::factory()->create();
+    grantCustomerSubledgerPaymentPostingPermission($user);
+
     $bankAccount = BankAccount::factory()->receiptOnly()->create();
 
     $payment = Payment::factory()->customerReceipt()->create([
@@ -131,7 +135,7 @@ it('posts customer receipts as open credit ledger entries until they are applied
         'unapplied_amount' => 450,
     ]);
 
-    app(PaymentService::class)->post($payment, 1);
+    app(PaymentService::class)->post($payment, $user->id);
 
     $ledgerEntry = CustomerLedgerEntry::query()
         ->where('document_type', 'PAYMENT')
@@ -143,3 +147,13 @@ it('posts customer receipts as open credit ledger entries until they are applied
         ->and($ledgerEntry->open)->toBeTrue()
         ->and((float) $customer->fresh()->open_balance)->toBe(-450.0);
 });
+
+function grantCustomerSubledgerPaymentPostingPermission(User $user): void
+{
+    Permission::query()->firstOrCreate([
+        'name' => 'finance.payment.post',
+        'guard_name' => 'web',
+    ]);
+
+    $user->givePermissionTo('finance.payment.post');
+}

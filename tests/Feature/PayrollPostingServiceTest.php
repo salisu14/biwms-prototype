@@ -1,16 +1,17 @@
 <?php
 
+use App\Enums\AccountCategory;
 use App\Enums\CalculationMethod;
 use App\Enums\PayCodeType;
 use App\Enums\PayrollStatus;
-use App\Enums\AccountCategory;
 use App\Models\ChartOfAccount;
 use App\Models\Employee;
-use App\Models\PayrollPostingGroup;
+use App\Models\EmployeeBankAccount;
 use App\Models\GlEntry;
 use App\Models\PayCode;
 use App\Models\PayrollDocument;
 use App\Models\PayrollLine;
+use App\Models\PayrollPostingGroup;
 use App\Models\User;
 use App\Services\PayrollPostingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,6 +37,15 @@ test('posting payroll calculates balanced gl entries for earning and deduction',
         'net_pay_account_id' => $salaryPayableAccount->id,
     ]);
     $employee = Employee::factory()->create(['payroll_posting_group_id' => $postingGroup->id]);
+    EmployeeBankAccount::create([
+        'employee_id' => $employee->id,
+        'bank_code' => 'TESTBANK',
+        'bank_name' => 'Test Bank',
+        'account_number' => '1234567890',
+        'account_name' => "{$employee->first_name} {$employee->last_name}",
+        'is_primary' => true,
+        'payment_method' => 'Bank Transfer',
+    ]);
 
     // Setup PayCodes
     $salaryCode = PayCode::create([

@@ -39,6 +39,8 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
      */
     protected ?int $currentTransactionNumber = null;
 
+    protected ?int $nextEntryNumber = null;
+
     protected function getTransactionNumber(): int
     {
         if ($this->currentTransactionNumber === null) {
@@ -46,6 +48,15 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
         }
 
         return $this->currentTransactionNumber;
+    }
+
+    protected function getEntryNumber(): int
+    {
+        if ($this->nextEntryNumber === null) {
+            $this->nextEntryNumber = (GlEntry::max('entry_number') ?? 0) + 1;
+        }
+
+        return $this->nextEntryNumber++;
     }
 
     public function post(object $batch): PostingResult
@@ -58,6 +69,7 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
         return DB::transaction(function () use ($batch) {
             $this->postedEntries = [];
             $this->currentTransactionNumber = null;
+            $this->nextEntryNumber = null;
 
             foreach ($batch->lines as $line) {
                 $this->postLine($line);
@@ -77,6 +89,9 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
         $data['entry_timestamp'] = now();
         if (! isset($data['transaction_number'])) {
             $data['transaction_number'] = $this->getTransactionNumber();
+        }
+        if (! isset($data['entry_number'])) {
+            $data['entry_number'] = $this->getEntryNumber();
         }
 
         // Map common aliases to ensure strict schema adherence

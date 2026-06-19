@@ -7,7 +7,7 @@ use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GlEntry;
 use App\Models\Payment;
 use App\Models\PaymentApplication;
-use App\Models\PurchaseInvoice;
+use App\Models\PostedPurchaseInvoice;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
@@ -29,13 +29,30 @@ test('it calculates and posts realized gain/loss during foreign currency applica
     $bankGlAccount = ChartOfAccount::create(['account_number' => '1100', 'name' => 'Bank', 'type' => 'ASSET']);
 
     // 2. Setup Currencies
-    $lcy = Currency::factory()->create(['code' => 'NGN', 'is_lcy' => true]);
-    $fcy = Currency::factory()->create([
-        'code' => 'USD',
-        'is_lcy' => false,
-        'realized_gains_account_id' => $gainAccount->id,
-        'realized_losses_account_id' => $lossAccount->id,
-    ]);
+    $lcy = Currency::query()->updateOrCreate(
+        ['code' => 'NGN'],
+        [
+            'description' => 'Nigerian Naira',
+            'symbol' => '₦',
+            'decimal_places' => 2,
+            'is_active' => true,
+            'is_lcy' => true,
+            'exchange_rate' => 1,
+        ]
+    );
+    $fcy = Currency::query()->updateOrCreate(
+        ['code' => 'USD'],
+        [
+            'description' => 'US Dollar',
+            'symbol' => '$',
+            'decimal_places' => 2,
+            'is_active' => true,
+            'is_lcy' => false,
+            'exchange_rate' => 1300,
+            'realized_gains_account_id' => $gainAccount->id,
+            'realized_losses_account_id' => $lossAccount->id,
+        ]
+    );
 
     // 3. Setup Vendor
     $gbpg = GeneralBusinessPostingGroup::create([
@@ -56,7 +73,7 @@ test('it calculates and posts realized gain/loss during foreign currency applica
 
     // 4. Create a Posted Purchase Invoice
     // 100 USD @ 1200 = 120,000 NGN
-    $invoice = PurchaseInvoice::create([
+    $invoice = PostedPurchaseInvoice::create([
         'document_number' => 'INV-001',
         'vendor_id' => $vendor->id,
         'vendor_name' => $vendor->vendor_name,

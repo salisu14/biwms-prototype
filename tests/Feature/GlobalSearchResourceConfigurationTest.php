@@ -398,15 +398,15 @@ it('exposes richer search titles details and attributes for key records', functi
         ->and(VendorResource::getGlobalSearchResultTitle($vendor))->toBe($vendor->vendor_code.' - Supply House')
         ->and(VendorResource::getGloballySearchableAttributes())->toContain('vendor_code', 'vendorPostingGroup.code')
         ->and(SalesInvoiceResource::getGlobalSearchResultDetails($salesInvoice))->toMatchArray([
-            'Customer' => 'Acme Retail',
+            'Customer' => 'CUST-1000 - Acme Retail',
             'Sales Order' => 'SO-2026-000002',
             'Status' => 'posted',
             'Total' => '250,000.00 NGN',
         ])
         ->and(SalesInvoiceResource::getGloballySearchableAttributes())->toContain('salesOrder.order_number')
-        ->and(SalesOrderResource::getGlobalSearchResultTitle($salesOrder))->toBe('SO-2026-000002')
+        ->and(SalesOrderResource::getGlobalSearchResultTitle($salesOrder))->toBe('SO-2026-000002 - Acme Retail')
         ->and(SalesOrderResource::getGlobalSearchResultDetails($salesOrder))->toMatchArray([
-            'Customer' => 'Acme Retail',
+            'Customer' => 'CUST-1000 - Acme Retail',
             'External Doc' => '—',
             'Status' => 'DRAFT',
             'Total' => '0.00 NGN',
@@ -436,34 +436,34 @@ it('exposes richer search titles details and attributes for key records', functi
             'Amount' => '85,000.00 NGN',
         ])
         ->and(PaymentResource::getGloballySearchableAttributes())->toContain('external_reference', 'bankAccount.account_name')
-        ->and(PurchaseOrderResource::getGlobalSearchResultTitle($purchaseOrder))->toBe('PO-2026-000002')
+        ->and(PurchaseOrderResource::getGlobalSearchResultTitle($purchaseOrder))->toBe('PO-2026-000002 - Supply House')
         ->and(PurchaseOrderResource::getGlobalSearchResultDetails($purchaseOrder))->toMatchArray([
             'Vendor' => 'Supply House',
             'Status' => 'APPROVED',
             'Order Type' => 'purchase_order',
-            'Total' => '300,000.00 NGN',
+            'Total' => "NGN\u{00A0}300,000.00",
         ])
-        ->and(PurchaseInvoiceResource::getGlobalSearchResultTitle($purchaseInvoice))->toBe('PI-2026-000002')
+        ->and(PurchaseInvoiceResource::getGlobalSearchResultTitle($purchaseInvoice))->toBe('PI-2026-000002 - Supply House')
         ->and(PurchaseInvoiceResource::getGlobalSearchResultDetails($purchaseInvoice))->toMatchArray([
-            'Vendor' => 'Supply House',
+            'Vendor' => $vendor->vendor_code.' - Supply House',
             'Purchase Order' => 'PO-2026-000002',
             'Status' => 'posted',
-            'Total' => '300,000.00 NGN',
+            'Total' => "NGN\u{00A0}300,000.00",
         ])
         ->and(PurchaseInvoiceResource::getGloballySearchableAttributes())->toContain('order_number', 'vendor.vendor_code')
-        ->and(PostedPurchaseCreditMemoResource::getGlobalSearchResultTitle($postedPurchaseCreditMemo))->toBe('PCM-2026-000002')
+        ->and(PostedPurchaseCreditMemoResource::getGlobalSearchResultTitle($postedPurchaseCreditMemo))->toBe('PCM-2026-000002 - Supply House')
         ->and(PostedPurchaseCreditMemoResource::getGlobalSearchResultDetails($postedPurchaseCreditMemo))->toMatchArray([
             'Vendor' => 'Supply House',
             'Corrects Invoice' => 'PI-2026-000002',
             'Posted' => 'Yes',
-            'Total' => '55,000.00 NGN',
+            'Total' => "NGN\u{00A0}55,000.00",
         ])
-        ->and(PurchaseReceiptResource::getGlobalSearchResultTitle($purchaseReceipt))->toBe('PR-2026-000002')
+        ->and(PurchaseReceiptResource::getGlobalSearchResultTitle($purchaseReceipt))->toBe('PR-2026-000002 - Supply House')
         ->and(PurchaseReceiptResource::getGlobalSearchResultDetails($purchaseReceipt))->toMatchArray([
             'Vendor' => 'Supply House',
             'Purchase Order' => 'PO-2026-000002',
-            'Status' => 'POSTED',
-            'Location' => 'Purchasing Store',
+            'Status' => 'Open',
+            'Location' => 'PURCH - Purchasing Store',
         ])
         ->and(ExpenseTransactionResource::getGlobalSearchResultTitle($expenseTransaction))->toBe('EXPT-00002')
         ->and(ExpenseTransactionResource::getGlobalSearchResultDetails($expenseTransaction))->toMatchArray([
@@ -518,7 +518,7 @@ it('exposes richer search titles details and attributes for key records', functi
         ->and(DepartmentResource::getGlobalSearchResultDetails($department))->toMatchArray([
             'Type' => 'human_resources',
             'Status' => 'active',
-            'Manager' => 'Ada Lovace',
+            'Manager' => 'EMP-1000 - Ada Lovace',
             'Location' => 'HQ',
         ])
         ->and(DepartmentResource::getGloballySearchableAttributes())->toContain('department_code', 'manager.first_name')
