@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ChartOfAccounts\Tables;
 use App\Enums\AccountCategory;
 use App\Enums\AccountStructuralType;
 use App\Enums\IncomeBalanceType;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -79,8 +80,10 @@ class ChartOfAccountsTable
                     ->label('Blocked Status'),
             ])
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
+                ActionGroup::make([
+                    ViewAction::make(),
+                    EditAction::make(),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
