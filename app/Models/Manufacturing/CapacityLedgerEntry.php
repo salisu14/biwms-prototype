@@ -60,4 +60,14 @@ class CapacityLedgerEntry extends Model
     {
         return $this->belongsTo(ProductionOrderRoutingLine::class, 'routing_line_id');
     }
+
+    public function workCenter(): BelongsTo
+    {
+        return $this->belongsTo(WorkCenter::class, 'work_center_id');
+    }
+
+    public function machineCenter(): BelongsTo
+    {
+        return $this->belongsTo(MachineCenter::class, 'machine_center_id');
+    }
 }

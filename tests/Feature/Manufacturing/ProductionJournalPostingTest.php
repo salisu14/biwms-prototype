@@ -12,6 +12,7 @@ use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
+use App\Models\GlEntry;
 use App\Models\InventoryPostingGroup;
 use App\Models\InventoryPostingSetup;
 use App\Models\Item;
@@ -587,4 +588,269 @@ it('updates output value entry costs and marks the order posted when finishing',
             ->where('entry_type', ItemLedgerEntryType::OUTPUT)
             ->where('document_number', 'PO-FINISH-001')
             ->count())->toBe(1);
+});
+
+it('reconciles consumption capacity wip value entries and finish gl for an order uom production order', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $inventoryAccount = ChartOfAccount::create([
+        'account_number' => '1200-REC',
+        'name' => 'Inventory Reconciliation',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $wipAccount = ChartOfAccount::create([
+        'account_number' => '1210-REC',
+        'name' => 'WIP Reconciliation',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $directAppliedAccount = ChartOfAccount::create([
+        'account_number' => '5100-REC',
+        'name' => 'Direct Applied Reconciliation',
+        'account_category' => 'direct_expense',
+        'account_type' => AccountType::EXPENSE,
+        'income_balance' => IncomeBalanceType::INCOME_STATEMENT,
+    ]);
+    $overheadAppliedAccount = ChartOfAccount::create([
+        'account_number' => '5200-REC',
+        'name' => 'Overhead Applied Reconciliation',
+        'account_category' => 'direct_expense',
+        'account_type' => AccountType::EXPENSE,
+        'income_balance' => IncomeBalanceType::INCOME_STATEMENT,
+    ]);
+
+    $businessGroup = GeneralBusinessPostingGroup::create([
+        'code' => 'MAN-REC',
+        'description' => 'Manufacturing Reconciliation',
+    ]);
+    $productGroup = GeneralProductPostingGroup::create([
+        'code' => 'FG-REC',
+        'description' => 'Finished Reconciliation',
+    ]);
+    $inventoryGroup = InventoryPostingGroup::create([
+        'code' => 'FG-REC',
+        'description' => 'Finished Reconciliation',
+    ]);
+    $location = Location::factory()->create(['code' => 'MAIN']);
+
+    InventoryPostingSetup::create([
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'location_id' => $location->id,
+        'inventory_account_id' => $inventoryAccount->id,
+        'wip_account_id' => $wipAccount->id,
+    ]);
+    GeneralPostingSetup::create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_adj_account_id' => $directAppliedAccount->id,
+        'direct_cost_applied_account_id' => $directAppliedAccount->id,
+        'overhead_applied_account_id' => $overheadAppliedAccount->id,
+    ]);
+
+    $baseUom = UnitOfMeasure::query()->create([
+        'uom_code' => 'PCS',
+        'description' => 'Pieces',
+        'is_base_uom' => true,
+    ]);
+    $orderUom = UnitOfMeasure::query()->create([
+        'uom_code' => 'CT',
+        'description' => 'Carton',
+        'is_base_uom' => false,
+    ]);
+
+    $finishedGood = Item::factory()->create([
+        'item_code' => 'FG-REC',
+        'description' => 'Finished Reconciliation Good',
+        'unit_cost' => 0,
+        'base_uom_id' => $baseUom->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+    $rawMaterial = Item::factory()->create([
+        'item_code' => 'RM-REC',
+        'description' => 'Raw Reconciliation Material',
+        'unit_cost' => 4.5,
+        'base_uom_id' => $baseUom->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+
+    DB::table('item_uom_assignments')->insert([
+        [
+            'item_id' => $finishedGood->id,
+            'uom_id' => $baseUom->id,
+            'uom_type' => 'BASE',
+            'conversion_factor' => 1,
+            'is_default' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'item_id' => $finishedGood->id,
+            'uom_id' => $orderUom->id,
+            'uom_type' => 'MANUFACTURING',
+            'conversion_factor' => 288,
+            'is_default' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $workCenter = WorkCenter::factory()->create([
+        'code' => 'WC-REC',
+        'direct_unit_cost' => 25,
+        'indirect_cost_percent' => 20,
+        'overhead_rate' => 0,
+    ]);
+
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-REC-001',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $finishedGood->id,
+        'description' => 'Reconciliation order',
+        'quantity' => 1,
+        'quantity_base' => 288,
+        'unit_of_measure_code' => 'CT',
+        'starting_date_time' => now(),
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+    ]);
+
+    $component = $order->components()->create([
+        'line_number' => 10000,
+        'item_id' => $rawMaterial->id,
+        'description' => 'Raw material',
+        'unit_of_measure_code' => 'PCS',
+        'quantity_per' => 288,
+        'expected_quantity' => 288,
+        'expected_quantity_base' => 288,
+        'remaining_quantity' => 288,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+    ]);
+    $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $finishedGood->id,
+        'description' => 'Finished output',
+        'quantity' => 1,
+        'quantity_base' => 288,
+        'unit_of_measure_code' => 'CT',
+        'location_code' => $location->code,
+    ]);
+    $routingLine = $order->routingLines()->create([
+        'line_number' => 10000,
+        'operation_no' => '10',
+        'description' => 'Assembly',
+        'work_center_id' => $workCenter->id,
+        'setup_time' => 0,
+        'run_time' => 10,
+        'setup_time_unit' => 'MIN',
+        'run_time_unit' => 'MIN',
+        'status' => 'PLANNED',
+    ]);
+
+    app(ProductionOrderService::class)->postConsumption($order->fresh(), [[
+        'component_id' => $component->id,
+        'quantity' => 288,
+    ]], $user->id);
+
+    $component->refresh();
+    $consumptionEntry = ItemLedgerEntry::query()
+        ->where('entry_type', ItemLedgerEntryType::CONSUMPTION)
+        ->where('document_number', 'PO-REC-001')
+        ->firstOrFail();
+    $consumptionValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $consumptionEntry->entry_number)
+        ->firstOrFail();
+
+    expect((float) $consumptionEntry->quantity)->toBe(-288.0)
+        ->and((float) $consumptionEntry->cost_amount_actual)->toBe(1296.0)
+        ->and((float) $consumptionValueEntry->quantity)->toBe(-288.0)
+        ->and((float) $consumptionValueEntry->cost_amount_actual)->toBe(1296.0)
+        ->and((float) $consumptionValueEntry->unit_cost)->toBe(-4.5)
+        ->and($consumptionValueEntry->production_order_no)->toBe('PO-REC-001')
+        ->and($consumptionValueEntry->production_order_component_line_no)->toBe('10000')
+        ->and($consumptionValueEntry->item_no)->toBe('RM-REC')
+        ->and($consumptionValueEntry->location_code)->toBe('MAIN')
+        ->and((float) $component->actual_quantity_consumed)->toBe(288.0)
+        ->and((float) $component->remaining_quantity)->toBe(0.0);
+
+    expect(fn () => app(ProductionOrderService::class)->postConsumption($order->fresh(), [[
+        'component_id' => $component->id,
+        'quantity' => 1,
+    ]], $user->id))->toThrow(Exception::class, 'Cannot consume more than the remaining component quantity');
+
+    app(ProductionOrderService::class)->postCapacity($order->fresh(), $routingLine->id, 0, 10, 250, $user->id);
+
+    $capacityEntry = CapacityLedgerEntry::query()
+        ->where('production_order_id', $order->id)
+        ->firstOrFail();
+    $capacityValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_type', 8)
+        ->where('source_no', (string) $capacityEntry->id)
+        ->firstOrFail();
+
+    expect((float) $capacityEntry->direct_cost)->toBe(250.0)
+        ->and((float) $capacityEntry->overhead_cost)->toBe(50.0)
+        ->and((float) $capacityEntry->total_cost)->toBe(300.0)
+        ->and((float) $capacityValueEntry->cost_amount_actual)->toBe(300.0)
+        ->and((float) $capacityValueEntry->direct_cost_amount)->toBe(250.0)
+        ->and((float) $capacityValueEntry->overhead_amount)->toBe(50.0)
+        ->and($capacityValueEntry->production_order_no)->toBe('PO-REC-001')
+        ->and($capacityValueEntry->production_order_line_no)->toBe('10000')
+        ->and($capacityValueEntry->capacity_type)->toBe('WORK_CENTER')
+        ->and($capacityValueEntry->capacity_no)->toBe('WC-REC');
+
+    expect(fn () => app(ProductionOrderService::class)->postCapacity($order->fresh(), $routingLine->id, 0, 1, 25, $user->id))
+        ->toThrow(Exception::class, 'Cannot post more capacity than the remaining operation time');
+
+    app(ProductionOrderService::class)->finish($order->fresh(), $user->id);
+
+    $order->refresh();
+    $outputEntry = ItemLedgerEntry::query()
+        ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+        ->where('document_number', 'PO-REC-001')
+        ->firstOrFail();
+    $outputValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outputEntry->entry_number)
+        ->firstOrFail();
+
+    expect($order->status)->toBe(ProductionOrderStatus::FINISHED)
+        ->and($order->posted)->toBeTrue()
+        ->and((float) $outputEntry->quantity)->toBe(288.0)
+        ->and((float) $outputEntry->cost_amount_actual)->toBe(1596.0)
+        ->and((float) $outputValueEntry->cost_amount_actual)->toBe(1596.0)
+        ->and((float) $outputValueEntry->unit_cost)->toBe(5.5417);
+
+    $documentGlEntries = GlEntry::query()
+        ->where('document_number', 'PO-REC-001')
+        ->get();
+    $wipNetAmount = (float) GlEntry::query()
+        ->where('document_number', 'PO-REC-001')
+        ->where('chart_of_account_id', $wipAccount->id)
+        ->selectRaw('coalesce(sum(debit_amount) - sum(credit_amount), 0) as net_amount')
+        ->value('net_amount');
+
+    expect((float) $documentGlEntries->sum('debit_amount'))->toBe(3192.0)
+        ->and((float) $documentGlEntries->sum('credit_amount'))->toBe(3192.0)
+        ->and($wipNetAmount)->toBe(0.0)
+        ->and((float) $documentGlEntries->where('chart_of_account_id', $wipAccount->id)->sum('debit_amount'))->toBe(1596.0)
+        ->and((float) $documentGlEntries->where('chart_of_account_id', $wipAccount->id)->sum('credit_amount'))->toBe(1596.0)
+        ->and((float) $documentGlEntries->where('chart_of_account_id', $inventoryAccount->id)->sum('debit_amount'))->toBe(1596.0)
+        ->and((float) $documentGlEntries->where('chart_of_account_id', $inventoryAccount->id)->sum('credit_amount'))->toBe(1296.0)
+        ->and((float) $documentGlEntries->where('chart_of_account_id', $directAppliedAccount->id)->sum('credit_amount'))->toBe(250.0)
+        ->and((float) $documentGlEntries->where('chart_of_account_id', $overheadAppliedAccount->id)->sum('credit_amount'))->toBe(50.0);
+
+    expect(fn () => app(ProductionOrderService::class)->finish($order->fresh(), $user->id))
+        ->toThrow(Exception::class, 'Production order is already finished');
 });

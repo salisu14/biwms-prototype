@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\DB;
 
 class ProductionPerformanceReportService
 {
-
     public function query(): Builder
     {
         $capacitySums = DB::table('capacity_ledger_entries')
@@ -43,15 +42,7 @@ class ProductionPerformanceReportService
             else 'none'
         end";
 
-        // ✅ FIXED MATH: If the Order UoM (Carton) is different from Base UoM (PCS),
-        // we must DIVIDE the standard cost to get the cost PER PIECE.
-        // Example: 850 NGN per CT / 288 PCS = 2.95 NGN per PCS
-        $standardUnitCostSql = "case
-            when production_orders.quantity_base > 0
-                 and production_orders.quantity_base != production_orders.quantity
-            then {$baseStandardUnitCostSql} / nullif(production_orders.quantity_base, 0)
-            else {$baseStandardUnitCostSql}
-        end";
+        $standardUnitCostSql = $baseStandardUnitCostSql;
 
         $standardTotalCostSql = "({$standardUnitCostSql} * {$producedQuantitySql})";
         $varianceAmountSql = "({$actualTotalCostSql} - {$standardTotalCostSql})";
@@ -62,6 +53,7 @@ class ProductionPerformanceReportService
             ->where('status', ProductionOrderStatus::FINISHED)
             ->with('item.baseUom')
             ->leftJoin('items as report_items', 'report_items.id', '=', 'production_orders.item_id')
+            ->leftJoin('unit_of_measures as base_uoms', 'base_uoms.id', '=', 'report_items.base_uom_id')
             ->leftJoinSub($capacitySums, 'capacity_sums', function ($join): void {
                 $join->on('production_orders.id', '=', 'capacity_sums.production_order_id');
             })
@@ -72,6 +64,7 @@ class ProductionPerformanceReportService
                 $join->on('production_orders.id', '=', 'output_sums.source_id');
             })
             ->select('production_orders.*')
+            ->selectRaw("coalesce(base_uoms.uom_code, production_orders.unit_of_measure_code, 'PCS') as base_unit_of_measure")
             ->selectRaw("{$producedQuantitySql} as produced_qty_sql")
             ->selectRaw("{$standardCostSourceSql} as standard_cost_source_sql")
             ->selectRaw("{$standardUnitCostSql} as standard_unit_cost_sql")

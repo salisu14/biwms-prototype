@@ -592,18 +592,6 @@ class PostingService
                 ->first();
         }
 
-        if (! $setup && $vendor->general_business_posting_group_id) {
-            $setup = GeneralPostingSetup::query()
-                ->where('general_business_posting_group_id', $vendor->general_business_posting_group_id)
-                ->where('blocked', false)
-                ->where(function ($query) {
-                    $query->whereNotNull('purchase_account_id')
-                        ->orWhereNotNull('inventory_account_id');
-                })
-                ->orderByRaw('CASE WHEN purchase_account_id IS NULL THEN 1 ELSE 0 END, id ASC')
-                ->first();
-        }
-
         if (! $setup) {
             $vendorRef = $vendor->vendor_code ?: $vendor->vendor_name ?: (string) $vendor->id;
             throw new \Exception("Posting setup missing for vendor {$vendorRef} and item {$item->item_code}");
@@ -802,6 +790,13 @@ class PostingService
         }
     }
 
+    private function quantityBaseForLine(float $quantity, ?string $unitOfMeasureCode, Item $item): float
+    {
+        $conversionFactor = $item->getConversionFactorForUom($unitOfMeasureCode ?: $item->base_unit_of_measure);
+
+        return $quantity * ($conversionFactor > 0 ? $conversionFactor : 1.0);
+    }
+
     /**
      * @throws \Throwable
      */
@@ -829,44 +824,23 @@ class PostingService
                 }
 
                 $productGroupId = $item->general_product_posting_group_id;
-                $inventoryGroupId = $item->inventory_posting_group_id;
                 $itemDisplayName = trim((string) ($item->item_code.' '.$item->description));
                 if ($itemDisplayName === '') {
                     $itemDisplayName = "ID {$item->id}";
                 }
 
-                // Fetch posting setup for this customer × item group
                 $postingSetup = GeneralPostingSetup::where([
                     'general_business_posting_group_id' => $customerGroupId,
                     'general_product_posting_group_id' => $productGroupId,
+                    'blocked' => false,
                 ])->first();
 
-                // Fallback: some masters are keyed by inventory group; try that when needed.
-                if (! $postingSetup && $inventoryGroupId && $inventoryGroupId !== $productGroupId) {
-                    $postingSetup = GeneralPostingSetup::where([
-                        'general_business_posting_group_id' => $customerGroupId,
-                        'general_product_posting_group_id' => $inventoryGroupId,
-                    ])->first();
-                }
-
-                // Final fallback: use any active setup for this business group that has sales account configured.
-                if (! $postingSetup) {
-                    $postingSetup = GeneralPostingSetup::query()
-                        ->where('general_business_posting_group_id', $customerGroupId)
-                        ->where('blocked', false)
-                        ->whereNotNull('sales_account_id')
-                        ->orderByRaw('CASE WHEN cogs_account_id IS NULL THEN 1 ELSE 0 END')
-                        ->orderBy('id')
-                        ->first();
-                }
-
-                // In PostingService.php around line 515-520, replace:
                 if (! $postingSetup) {
                     throw new \Exception(
                         "No posting setup found for customer '{$customer->name}' (Group: {$customerGroupId}) ".
-                        "and item '{$itemDisplayName}' (General Product Group: {$productGroupId}, Inventory Group: {$inventoryGroupId}). ".
+                        "and item '{$itemDisplayName}' (General Product Group: {$productGroupId}). ".
                         "Please configure General Posting Setup for Business Group ID {$customerGroupId} ".
-                        'with one of those Product Group IDs.'
+                        "and Product Group ID {$productGroupId}."
                     );
                 }
 
@@ -892,7 +866,8 @@ class PostingService
                 $lineVat = $vatCalc['vat_amount'];
                 $lineTotalWithVat = $vatCalc['total_amount'];
 
-                $lineCost = $line->quantity * ($item->unit_cost ?? 0);
+                $quantityBase = $this->quantityBaseForLine((float) $line->quantity, $line->unit_of_measure ?? null, $item);
+                $lineCost = $quantityBase * ($item->unit_cost ?? 0);
 
                 // 1. Accounts Receivable (Debit)
                 $entries[] = $this->createGlEntry([
@@ -980,14 +955,26 @@ class PostingService
 
             foreach ($memo->lines as $line) {
                 $item = Item::find($line->item_id);
+                if (! $item) {
+                    throw new \Exception("Item with ID {$line->item_id} not found.");
+                }
+
                 $setup = $memo->vendor->getPostingSetupFor($item);
+                if (! $setup) {
+                    $vendorRef = $memo->vendor->vendor_code ?: $memo->vendor->vendor_name ?: (string) $memo->vendor->id;
+                    throw new \Exception("Posting setup missing for vendor {$vendorRef} and item {$item->item_code}");
+                }
+
+                $payablesAccount = $memo->vendor->getPayablesAccount();
+                if (! $payablesAccount) {
+                    throw new \Exception("Payables account missing for vendor {$memo->vendor->vendor_name}.");
+                }
 
                 $lineAmount = $line->quantity * $line->unit_cost;
-                // Note: We use unit_cost for both inventory and expense reversal in purchase context
 
                 // 1. A/P Reduction (Debit)
                 $entries[] = $this->createGlEntry([
-                    'chart_of_account_id' => $memo->vendor->getPayablesAccount()->id,
+                    'chart_of_account_id' => $payablesAccount->id,
                     'debit_amount' => $lineAmount,
                     'credit_amount' => 0,
                     'document_type' => 'PURCHASE_CREDIT_MEMO',
@@ -997,9 +984,14 @@ class PostingService
                 ]);
 
                 if ($item->isInventoryItem()) {
+                    $inventoryAccount = $item->getInventoryAccount();
+                    if (! $inventoryAccount) {
+                        throw new \Exception("Inventory account missing for item {$item->item_code}");
+                    }
+
                     // 2. Inventory Reduction (Credit)
                     $entries[] = $this->createGlEntry([
-                        'chart_of_account_id' => $item->getInventoryAccount()->id,
+                        'chart_of_account_id' => $inventoryAccount->id,
                         'debit_amount' => 0,
                         'credit_amount' => $lineAmount,
                         'document_type' => 'PURCHASE_CREDIT_MEMO',
@@ -1008,9 +1000,14 @@ class PostingService
                         'description' => "Inventory return: {$item->description}",
                     ]);
                 } else {
+                    $purchaseAccount = $setup->getPurchaseAccount();
+                    if (! $purchaseAccount) {
+                        throw new \Exception("Purchase account missing in posting setup for item {$item->item_code}");
+                    }
+
                     // 2. Expense/Purchase Reversal (Credit)
                     $entries[] = $this->createGlEntry([
-                        'chart_of_account_id' => $setup->getPurchaseAccount()->id,
+                        'chart_of_account_id' => $purchaseAccount->id,
                         'debit_amount' => 0,
                         'credit_amount' => $lineAmount,
                         'document_type' => 'PURCHASE_CREDIT_MEMO',
@@ -1039,14 +1036,32 @@ class PostingService
             foreach ($memo->items as $line) {
 
                 $item = Item::find($line->item_id);
-                $setup = $memo->customer->getPostingSetupFor($item);
+                if (! $item) {
+                    throw new \Exception("Item with ID {$line->item_id} not found.");
+                }
 
-                $lineAmount = $line->quantity * $line->price;
-                $lineCost = $line->quantity * ($item->unit_cost ?? 0);
+                $setup = $memo->customer->getPostingSetupFor($item);
+                if (! $setup) {
+                    throw new \Exception("Posting setup missing for customer {$memo->customer->name} and item {$item->item_code}");
+                }
+
+                $salesAccount = $setup->getSalesAccount();
+                if (! $salesAccount) {
+                    throw new \Exception("Sales credit memo account missing for item {$item->item_code}");
+                }
+
+                $receivablesAccount = $memo->customer->getReceivablesAccount();
+                if (! $receivablesAccount) {
+                    throw new \Exception("Receivables account missing for customer {$memo->customer->name}.");
+                }
+
+                $lineAmount = (float) ($line->amount ?? ((float) $line->quantity * (float) $line->unit_price));
+                $quantityBase = $this->quantityBaseForLine((float) $line->quantity, $line->unit_of_measure_code ?? null, $item);
+                $lineCost = $quantityBase * ($item->unit_cost ?? 0);
 
                 // 1. Revenue Reversal (Debit)
                 $entries[] = $this->createGlEntry([
-                    'chart_of_account_id' => $setup->getSalesAccount()->id,
+                    'chart_of_account_id' => $salesAccount->id,
                     'debit_amount' => $lineAmount,
                     'credit_amount' => 0,
                     'document_type' => 'SALES_CREDIT_MEMO',
@@ -1057,7 +1072,7 @@ class PostingService
 
                 // 2. A/R Reduction (Credit)
                 $entries[] = $this->createGlEntry([
-                    'chart_of_account_id' => $memo->customer->getReceivablesAccount()->id,
+                    'chart_of_account_id' => $receivablesAccount->id,
                     'debit_amount' => 0,
                     'credit_amount' => $lineAmount,
                     'document_type' => 'SALES_CREDIT_MEMO',
@@ -1067,10 +1082,16 @@ class PostingService
                 ]);
 
                 if ($item->isInventoryItem()) {
+                    $inventoryAccount = $item->getInventoryAccount();
+                    $cogsAccount = $setup->getCogsAccount();
+
+                    if (! $inventoryAccount || ! $cogsAccount) {
+                        throw new \Exception("Missing inventory or COGS account for item {$item->item_code}");
+                    }
 
                     // 3. Inventory Increase (Debit)
                     $entries[] = $this->createGlEntry([
-                        'chart_of_account_id' => $item->getInventoryAccount()->id,
+                        'chart_of_account_id' => $inventoryAccount->id,
                         'debit_amount' => $lineCost,
                         'credit_amount' => 0,
                         'document_type' => 'SALES_CREDIT_MEMO',
@@ -1081,7 +1102,7 @@ class PostingService
 
                     // 4. Reverse COGS (Credit)
                     $entries[] = $this->createGlEntry([
-                        'chart_of_account_id' => $setup->getCogsAccount()->id,
+                        'chart_of_account_id' => $cogsAccount->id,
                         'debit_amount' => 0,
                         'credit_amount' => $lineCost,
                         'document_type' => 'SALES_CREDIT_MEMO',

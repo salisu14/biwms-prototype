@@ -153,9 +153,9 @@ class Customer extends Model
     }
 
     // Get A/R account
-    public function getReceivablesAccount(): ChartOfAccount
+    public function getReceivablesAccount(): ?ChartOfAccount
     {
-        return $this->customerPostingGroup->receivablesAccount;
+        return $this->customerPostingGroup?->receivablesAccount;
     }
 
     // Check if fully blocked

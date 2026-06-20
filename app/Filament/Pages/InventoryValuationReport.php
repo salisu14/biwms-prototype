@@ -2,9 +2,9 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Currency;
 use App\Models\Item;
 use App\Models\Location;
-use App\Models\Currency;
 use App\Services\InventoryReportService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -193,39 +193,25 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                     ->columns([
                         TextColumn::make('closing_qty')
                             ->label('Qty')
-                            // ✅ CRITICAL FIX: Subtract outflows instead of adding them!
-                            ->getStateUsing(fn ($record) =>
-                                $record->opening_qty
-                                + $record->purchase_in_qty
-                                - $record->purchase_out_qty
-                                + $record->pos_adj_qty
-                                - $record->neg_adj_qty
-                                + $record->production_output_qty
-                                - $record->production_consumption_qty
-                                + $record->assembly_output_qty
-                                - $record->assembly_consumption_qty
-                                - $record->sale_out_qty
-                                + $record->sale_in_qty
-                                + $record->transfer_qty // Assuming net transfer in
+                            ->getStateUsing(fn ($record) => $record->opening_qty
+                                + $record->purchase_in_qty + $record->purchase_out_qty
+                                + $record->pos_adj_qty + $record->neg_adj_qty
+                                + $record->production_output_qty + $record->production_consumption_qty
+                                + $record->assembly_output_qty + $record->assembly_consumption_qty
+                                + $record->sale_out_qty + $record->sale_in_qty
+                                + $record->transfer_qty
                             )
                             ->numeric(2)
                             ->alignRight(),
                         TextColumn::make('closing_value')
                             ->label('Value')
-                            // ✅ CRITICAL FIX: Subtract outflows instead of adding them!
-                            ->getStateUsing(fn ($record) =>
-                                $record->opening_value
-                                + $record->purchase_in_value
-                                - $record->purchase_out_value
-                                + $record->pos_adj_value
-                                - $record->neg_adj_value
-                                + $record->production_output_value
-                                - $record->production_consumption_value
-                                + $record->assembly_output_value
-                                - $record->assembly_consumption_value
-                                - $record->sale_out_value
-                                + $record->sale_in_value
-                                + $record->transfer_value // Assuming net transfer in
+                            ->getStateUsing(fn ($record) => $record->opening_value
+                                + $record->purchase_in_value + $record->purchase_out_value
+                                + $record->pos_adj_value + $record->neg_adj_value
+                                + $record->production_output_value + $record->production_consumption_value
+                                + $record->assembly_output_value + $record->assembly_consumption_value
+                                + $record->sale_out_value + $record->sale_in_value
+                                + $record->transfer_value
                             )
                             ->money($currency)
                             ->alignRight(),

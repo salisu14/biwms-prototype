@@ -3,12 +3,18 @@
 namespace App\Services\Purchase;
 
 use App\Enums\ApprovalStatus;
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\PurchaseOrderStatus;
+use App\Models\Item;
+use App\Models\ItemLedgerEntry;
 use App\Models\NumberSeries;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedPurchaseInvoiceLine;
 use App\Models\PurchaseInvoice;
+use App\Models\PurchaseInvoiceLine;
 use App\Models\PurchaseOrder;
+use App\Models\ValueEntry;
+use App\Models\VendorLedgerEntry;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
@@ -156,6 +162,16 @@ class PurchaseInvoiceService
             }
 
             foreach ($invoice->lines as $line) {
+                if (! $line->item) {
+                    throw new \RuntimeException("Item is missing for purchase invoice line {$line->id}.");
+                }
+
+                $itemLedgerEntry = $this->createItemLedgerEntryForLine($invoice, $line);
+
+                if ($itemLedgerEntry) {
+                    $line->forceFill(['item_ledger_entry_id' => $itemLedgerEntry->id])->save();
+                }
+
                 app(PostingService::class)->postPurchaseLine(
                     vendor: $invoice->vendor,
                     item: $line->item,
@@ -198,9 +214,9 @@ class PurchaseInvoiceService
                     'grand_total' => $invoice->grand_total,
                     'currency_code' => $invoice->currency_code,
                     'currency_factor' => $invoice->currency_factor,
-                    'amount_paid' => $invoice->amount_paid,
+                    'amount_paid' => $invoice->amount_paid ?? 0,
                     'remaining_amount' => $invoice->remaining_amount,
-                    'paid_in_full' => $invoice->paid_in_full,
+                    'paid_in_full' => $invoice->paid_in_full ?? false,
                     'paid_in_full_date' => $invoice->paid_in_full_date,
                     'posted_by' => Auth::id(),
                     'posted_at' => now(),
@@ -257,12 +273,104 @@ class PurchaseInvoiceService
                 'posted_by' => Auth::id(),
             ]);
 
+            $invoice->refresh();
+
+            $ledgerEntryExists = VendorLedgerEntry::query()
+                ->where('document_type', 'PURCHASE_INVOICE')
+                ->where('document_number', $invoice->document_number)
+                ->where('vendor_id', $invoice->vendor_id)
+                ->exists();
+
+            if (! $ledgerEntryExists) {
+                VendorLedgerEntry::createFromInvoice($invoice);
+            }
+
             if ($invoice->purchaseOrder) {
                 $invoice->purchaseOrder->refreshLifecycleStatus();
             }
 
             return $posted;
         });
+    }
+
+    private function createItemLedgerEntryForLine(PurchaseInvoice $invoice, PurchaseInvoiceLine $line): ?ItemLedgerEntry
+    {
+        $item = $line->item;
+
+        if (! $item || ! $item->isInventoryItem()) {
+            return null;
+        }
+
+        $quantityBase = $this->quantityBase($line, $item);
+
+        if ($quantityBase <= 0) {
+            throw new \RuntimeException("Quantity must be greater than zero for item {$item->item_code}");
+        }
+
+        $lineTotal = (float) $line->line_total;
+        $locationId = $invoice->location_id ?? $item->location_id;
+
+        if (! $locationId) {
+            throw new \RuntimeException("Location is missing for item {$item->item_code} on purchase invoice {$invoice->document_number}.");
+        }
+
+        $entry = ItemLedgerEntry::query()->create([
+            'entry_type' => ItemLedgerEntryType::PURCHASE,
+            'document_type' => 'PURCHASE_INVOICE',
+            'document_line_number' => $line->line_number ?? $line->id,
+            'item_id' => $item->id,
+            'location_id' => $locationId,
+            'quantity' => $quantityBase,
+            'remaining_quantity' => $quantityBase,
+            'open' => true,
+            'posting_date' => $invoice->posting_date,
+            'entry_date' => now(),
+            'document_number' => $invoice->document_number,
+            'source_id' => $invoice->id,
+            'source_type' => PurchaseInvoice::class,
+            'cost_amount_actual' => $lineTotal,
+            'cost_amount_expected' => 0,
+            'purchase_amount_actual' => $lineTotal,
+            'general_business_posting_group_id' => $invoice->general_business_posting_group_id,
+            'general_product_posting_group_id' => $item->general_product_posting_group_id,
+            'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        ]);
+
+        $this->assertValueEntryCreated($entry);
+
+        $item->increment('inventory', $quantityBase);
+
+        return $entry;
+    }
+
+    private function quantityBase(PurchaseInvoiceLine $line, Item $item): float
+    {
+        $quantityBase = (float) ($line->quantity_base ?? 0);
+
+        if ($quantityBase > 0) {
+            return $quantityBase;
+        }
+
+        $conversionFactor = (float) ($line->qty_per_unit_of_measure ?: 0);
+
+        if ($conversionFactor <= 0) {
+            $conversionFactor = $item->getConversionFactorForUom($line->unit_of_measure_code ?: $item->base_unit_of_measure);
+        }
+
+        return (float) $line->quantity * ($conversionFactor > 0 ? $conversionFactor : 1.0);
+    }
+
+    private function assertValueEntryCreated(ItemLedgerEntry $entry): void
+    {
+        $exists = ValueEntry::query()
+            ->where('item_ledger_entry_no', $entry->entry_number)
+            ->where('document_no', $entry->document_number)
+            ->where('document_line_no', $entry->document_line_number)
+            ->exists();
+
+        if (! $exists) {
+            throw new \RuntimeException("Value Entry was not created for item ledger entry {$entry->entry_number}.");
+        }
     }
 
     private function generateNumber(): string

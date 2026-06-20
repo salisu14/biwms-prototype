@@ -47,7 +47,7 @@ class ProductionPerformanceReport extends Page implements HasTable
                     ->searchable(),
 
                 TextColumn::make('produced_qty_sql')
-                    ->label('Produced Qty')
+                    ->label('Produced Qty (Base)')
                     ->numeric(2)
                     ->suffix(fn ($record): string => ' '.($record->base_unit_of_measure ?? 'PCS')),
 
@@ -70,6 +70,11 @@ class ProductionPerformanceReport extends Page implements HasTable
                 TextColumn::make('standard_unit_cost_sql')
                     ->label('Standard Unit Cost')
                     ->money($currency),
+
+                TextColumn::make('standard_total_cost_sql')
+                    ->label('Standard Total Cost')
+                    ->money($currency)
+                    ->summarize(Sum::make()->money($currency)),
 
                 TextColumn::make('actual_total_cost_sql')
                     ->label('Total Actual Cost')

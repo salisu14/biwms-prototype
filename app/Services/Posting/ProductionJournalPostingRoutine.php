@@ -14,6 +14,7 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ProductionJournalLine;
 use App\Services\Inventory\CostingService;
+use App\Services\Inventory\ValueEntryService;
 
 class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
 {
@@ -136,6 +137,8 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
             'total_cost' => $directCost + $overheadCost,
             'unit_cost' => $line->output_quantity > 0 ? ($directCost + $overheadCost) / $line->output_quantity : 0,
         ]);
+
+        app(ValueEntryService::class)->ensureForCapacityLedgerEntry($capacityEntry, $line->created_by);
 
         // Post to WIP (debit) vs. Direct Cost Account (credit)
         $this->postCapacityToWIP($line, $directCost, $overheadCost);

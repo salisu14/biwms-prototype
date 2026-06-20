@@ -159,6 +159,14 @@ class ProductionOrderService
                     ? (float) $component->expected_quantity_base / (float) $component->expected_quantity
                     : 1.0;
                 $qtyBase = $qty * $conversionFactor;
+                $remainingQuantityBase = max(
+                    0.0,
+                    (float) $component->expected_quantity_base - (float) $component->actual_quantity_consumed
+                );
+
+                if ($qtyBase > $remainingQuantityBase + 0.0001) {
+                    throw new \Exception('Cannot consume more than the remaining component quantity');
+                }
 
                 $actualUnitCost = $this->costingService->getUnitCost(
                     $component->item,
@@ -309,7 +317,14 @@ class ProductionOrderService
             return;
         }
 
-        DB::transaction(function () use ($order, $routingLineId, $routingLine, $setupTime, $runTime, &$cost) {
+        DB::transaction(function () use ($order, $routingLineId, $routingLine, $setupTime, $runTime, $userId, &$cost) {
+            $remainingSetupTime = max(0.0, (float) $routingLine->setup_time - (float) $routingLine->actual_setup_time);
+            $remainingRunTime = max(0.0, (float) $routingLine->run_time - (float) $routingLine->actual_run_time);
+
+            if ($setupTime > $remainingSetupTime + 0.0001 || $runTime > $remainingRunTime + 0.0001) {
+                throw new \Exception('Cannot post more capacity than the remaining operation time');
+            }
+
             $workCenter = $routingLine->workCenter;
             $machineCenter = $routingLine->machineCenter;
             $center = $this->resolveCapacityCostCenter($routingLine);
@@ -360,7 +375,7 @@ class ProductionOrderService
                 timeUnit: (string) ($routingLine->run_time_unit ?? $routingLine->setup_time_unit ?? '')
             );
 
-            CapacityLedgerEntry::create([
+            $capacityLedgerEntry = CapacityLedgerEntry::create([
                 'production_order_id' => $order->id,
                 'routing_line_id' => $routingLineId,
                 'work_center_id' => $routingLine->work_center_id,
@@ -377,6 +392,8 @@ class ProductionOrderService
                 'total_cost' => $totalCost,
                 'document_number' => $order->document_number,
             ]);
+
+            app(ValueEntryService::class)->ensureForCapacityLedgerEntry($capacityLedgerEntry, $userId);
 
             // Keep operation progress/status in sync regardless of caller (UI, API, jobs).
             $routingLine->actual_setup_time = (float) $routingLine->actual_setup_time + (float) $setupTime;
@@ -1008,9 +1025,14 @@ class ProductionOrderService
             }
 
             // ✅ FIXED: Flush the full expected base quantity
+            $remainingQtyBase = (float) $component->expected_quantity_base - (float) $component->actual_quantity_consumed;
+            if ($remainingQtyBase <= 0) {
+                continue;
+            }
+
             $this->postConsumption($order, [[
                 'component_id' => $component->id,
-                'quantity' => (float) $component->expected_quantity_base,
+                'quantity' => $remainingQtyBase,
                 'scrap_quantity' => 0,
             ]], $userId, $order->starting_date_time);
         }

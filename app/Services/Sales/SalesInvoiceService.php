@@ -4,11 +4,16 @@ namespace App\Services\Sales;
 
 use App\Data\Sales\SalesInvoiceData;
 use App\Enums\ApprovalStatus;
+use App\Enums\ItemLedgerEntryType;
 use App\Models\CustomerLedgerEntry;
+use App\Models\Item;
+use App\Models\ItemLedgerEntry;
 use App\Models\PostedSalesInvoice;
 use App\Models\PostedSalesInvoiceLine;
 use App\Models\SalesInvoice;
+use App\Models\SalesInvoiceLine;
 use App\Models\SalesOrder;
+use App\Models\ValueEntry;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
@@ -153,23 +158,18 @@ class SalesInvoiceService
                 throw new \Exception('No lines to post');
             }
 
-            // 🔥 1. Inventory reduction
+            $itemLedgerEntryIds = [];
+
             foreach ($invoice->lines as $line) {
+                $itemLedgerEntry = $this->createItemLedgerEntryForLine($invoice, $line);
 
-                if ($line->item && $line->item->isInventoryItem()) {
-
-                    if ($line->item->inventory < $line->quantity) {
-                        throw new \Exception("Insufficient stock for item: {$line->item->name}");
-                    }
-
-                    $line->item->decrement('inventory', $line->quantity);
+                if ($itemLedgerEntry) {
+                    $itemLedgerEntryIds[$line->id] = $itemLedgerEntry->id;
                 }
             }
 
-            // 🔥 2. Financial posting (GL entries)
             app(PostingService::class)->postSalesInvoice($invoice);
 
-            // 🔥 2.5 Create posted sales invoice document + lines snapshot
             $postedInvoice = PostedSalesInvoice::query()->firstOrCreate(
                 ['document_number' => $invoice->invoice_number],
                 [
@@ -222,6 +222,8 @@ class SalesInvoiceService
 
                 $item = $line->item;
                 $quantity = (float) $line->quantity;
+                $conversionFactor = $item ? $this->conversionFactor($item, $line->unit_of_measure) : 1.0;
+                $quantityBase = $item ? $this->quantityBase($line, $item) : $quantity;
                 $unitPrice = (float) $line->unit_price;
                 $lineSubTotal = $quantity * $unitPrice;
                 $discountAmount = (float) ($line->discount_amount ?? 0);
@@ -229,7 +231,7 @@ class SalesInvoiceService
                 $vatAmount = (float) ($line->vat_amount ?? 0);
                 $amountIncludingVat = $lineAmount + $vatAmount;
                 $unitCost = (float) ($item?->unit_cost ?? 0);
-                $costAmount = $quantity * $unitCost;
+                $costAmount = $quantityBase * $unitCost;
 
                 PostedSalesInvoiceLine::query()->create([
                     'posted_sales_invoice_id' => $postedInvoice->id,
@@ -247,8 +249,8 @@ class SalesInvoiceService
                     'inventory_account_id' => null,
                     'quantity' => $quantity,
                     'unit_of_measure_code' => $line->unit_of_measure ?: ($item?->base_unit_of_measure ?? 'PCS'),
-                    'qty_per_unit_of_measure' => 1,
-                    'quantity_base' => $quantity,
+                    'qty_per_unit_of_measure' => $conversionFactor,
+                    'quantity_base' => $quantityBase,
                     'unit_price' => $unitPrice,
                     'unit_cost' => $unitCost,
                     'unit_cost_lcy' => $unitCost,
@@ -265,7 +267,7 @@ class SalesInvoiceService
                     'lot_number' => null,
                     'serial_number' => null,
                     'expiration_date' => null,
-                    'item_ledger_entry_id' => null,
+                    'item_ledger_entry_id' => $itemLedgerEntryIds[$line->id] ?? null,
                     'shipment_id' => null,
                     'dimensions' => null,
                     'line_number' => $lineNumber,
@@ -288,7 +290,6 @@ class SalesInvoiceService
                 'remaining_amount' => $grandTotal,
             ]);
 
-            // Ensure customer subledger receives invoice debit entry for AR tracking.
             $invoiceLedgerExists = CustomerLedgerEntry::query()
                 ->where('document_type', 'SALES_INVOICE')
                 ->where('document_number', $postedInvoice->document_number)
@@ -299,13 +300,90 @@ class SalesInvoiceService
                 CustomerLedgerEntry::createFromInvoice($postedInvoice);
             }
 
-            // 🔥 3. Mark as posted (ENUM SAFE)
             $invoice->update([
                 'status' => ApprovalStatus::POSTED,
                 'posted_at' => now(),
                 'posted_by' => Auth::id(),
             ]);
         });
+    }
+
+    private function createItemLedgerEntryForLine(SalesInvoice $invoice, SalesInvoiceLine $line): ?ItemLedgerEntry
+    {
+        $item = $line->item;
+
+        if (! $item || ! $item->isInventoryItem()) {
+            return null;
+        }
+
+        $quantityBase = $this->quantityBase($line, $item);
+
+        if ($quantityBase <= 0) {
+            throw new \Exception("Quantity must be greater than zero for item {$item->item_code}");
+        }
+
+        if ((float) $item->ledger_on_hand < $quantityBase) {
+            throw new \Exception("Insufficient stock for item: {$item->description}");
+        }
+
+        $costAmount = $quantityBase * (float) ($item->unit_cost ?? 0);
+        $locationId = $line->location_id ?? $item->location_id ?? $invoice->customer?->location_id;
+
+        if (! $locationId) {
+            throw new \Exception("Location is missing for item {$item->item_code} on sales invoice {$invoice->invoice_number}.");
+        }
+
+        $entry = ItemLedgerEntry::query()->create([
+            'entry_type' => ItemLedgerEntryType::SALE,
+            'document_type' => 'SALES_INVOICE',
+            'document_line_number' => $line->id,
+            'item_id' => $item->id,
+            'location_id' => $locationId,
+            'quantity' => -$quantityBase,
+            'remaining_quantity' => 0,
+            'open' => false,
+            'posting_date' => $invoice->invoice_date ?? now()->toDateString(),
+            'entry_date' => now(),
+            'document_number' => $invoice->invoice_number,
+            'source_id' => $invoice->id,
+            'source_type' => SalesInvoice::class,
+            'cost_amount_actual' => $costAmount,
+            'cost_amount_expected' => 0,
+            'general_business_posting_group_id' => $invoice->customer?->general_business_posting_group_id,
+            'general_product_posting_group_id' => $item->general_product_posting_group_id,
+            'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        ]);
+
+        $this->assertValueEntryCreated($entry);
+
+        $item->decrement('inventory', $quantityBase);
+
+        return $entry;
+    }
+
+    private function quantityBase(SalesInvoiceLine $line, Item $item): float
+    {
+        return (float) $line->quantity * $this->conversionFactor($item, $line->unit_of_measure);
+    }
+
+    private function conversionFactor(Item $item, ?string $unitOfMeasureCode): float
+    {
+        $conversionFactor = $item->getConversionFactorForUom($unitOfMeasureCode ?: $item->base_unit_of_measure);
+
+        return $conversionFactor > 0 ? $conversionFactor : 1.0;
+    }
+
+    private function assertValueEntryCreated(ItemLedgerEntry $entry): void
+    {
+        $exists = ValueEntry::query()
+            ->where('item_ledger_entry_no', $entry->entry_number)
+            ->where('document_no', $entry->document_number)
+            ->where('document_line_no', $entry->document_line_number)
+            ->exists();
+
+        if (! $exists) {
+            throw new \RuntimeException("Value Entry was not created for item ledger entry {$entry->entry_number}.");
+        }
     }
 
     private function generateNumber(): string
