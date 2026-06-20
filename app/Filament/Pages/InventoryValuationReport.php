@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Item;
 use App\Models\Location;
+use App\Models\Currency;
 use App\Services\InventoryReportService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -63,6 +64,12 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
 
     public function table(Table $table): Table
     {
+        // ✅ FIX: Dynamic currency instead of hardcoded "NGN"
+        $currency = config('app.currency', 'NGN');
+        if (\Illuminate\Support\Facades\Schema::hasTable('currencies')) {
+            $currency = Currency::query()->where('is_lcy', true)->value('code') ?? $currency;
+        }
+
         $service = app(InventoryReportService::class);
         $state = $this->form->getState();
         $start = Carbon::parse($state['startDate'] ?? $this->formData['startDate'] ?? now()->startOfMonth()->toDateString());
@@ -90,7 +97,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('opening_value')
                             ->label('Value')
-                            ->money("NGN")
+                            ->money($currency)
                             ->alignRight(),
                     ]),
 
@@ -103,7 +110,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('purchase_in_value')
                             ->label('Value')
-                            ->money('NGN')
+                            ->money($currency)
                             ->alignRight(),
                     ]),
 
@@ -116,7 +123,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('pos_adj_value')
                             ->label('Value')
-                            ->money('NGN')
+                            ->money($currency)
                             ->alignRight(),
                     ]),
 
@@ -128,7 +135,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('production_output_value')
                             ->label('Value')
-                            ->money('NGN')
+                            ->money($currency)
                             ->alignRight(),
                     ]),
 
@@ -140,7 +147,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('production_consumption_value')
                             ->label('Value')
-                            ->money('NGN')
+                            ->money($currency)
                             ->alignRight(),
                     ]),
 
@@ -152,7 +159,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('assembly_output_value')
                             ->label('Value')
-                            ->money('NGN')
+                            ->money($currency)
                             ->alignRight(),
                     ]),
 
@@ -164,7 +171,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('assembly_consumption_value')
                             ->label('Value')
-                            ->money('NGN')
+                            ->money($currency)
                             ->alignRight(),
                     ]),
 
@@ -177,7 +184,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                         TextColumn::make('sale_out_value')
                             ->label('Value')
-                            ->money("NGN")
+                            ->money($currency)
                             ->alignRight(),
                     ]),
 
@@ -186,27 +193,41 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                     ->columns([
                         TextColumn::make('closing_qty')
                             ->label('Qty')
-                            ->getStateUsing(fn ($record) => $record->opening_qty +
-                                $record->purchase_in_qty + $record->purchase_out_qty +
-                                $record->pos_adj_qty + $record->neg_adj_qty +
-                                $record->production_output_qty + $record->production_consumption_qty +
-                                $record->assembly_output_qty + $record->assembly_consumption_qty +
-                                $record->sale_out_qty + $record->sale_in_qty +
-                                $record->transfer_qty
+                            // ✅ CRITICAL FIX: Subtract outflows instead of adding them!
+                            ->getStateUsing(fn ($record) =>
+                                $record->opening_qty
+                                + $record->purchase_in_qty
+                                - $record->purchase_out_qty
+                                + $record->pos_adj_qty
+                                - $record->neg_adj_qty
+                                + $record->production_output_qty
+                                - $record->production_consumption_qty
+                                + $record->assembly_output_qty
+                                - $record->assembly_consumption_qty
+                                - $record->sale_out_qty
+                                + $record->sale_in_qty
+                                + $record->transfer_qty // Assuming net transfer in
                             )
                             ->numeric(2)
                             ->alignRight(),
                         TextColumn::make('closing_value')
                             ->label('Value')
-                            ->getStateUsing(fn ($record) => $record->opening_value +
-                                $record->purchase_in_value + $record->purchase_out_value +
-                                $record->pos_adj_value + $record->neg_adj_value +
-                                $record->production_output_value + $record->production_consumption_value +
-                                $record->assembly_output_value + $record->assembly_consumption_value +
-                                $record->sale_out_value + $record->sale_in_value +
-                                $record->transfer_value
+                            // ✅ CRITICAL FIX: Subtract outflows instead of adding them!
+                            ->getStateUsing(fn ($record) =>
+                                $record->opening_value
+                                + $record->purchase_in_value
+                                - $record->purchase_out_value
+                                + $record->pos_adj_value
+                                - $record->neg_adj_value
+                                + $record->production_output_value
+                                - $record->production_consumption_value
+                                + $record->assembly_output_value
+                                - $record->assembly_consumption_value
+                                - $record->sale_out_value
+                                + $record->sale_in_value
+                                + $record->transfer_value // Assuming net transfer in
                             )
-                            ->money('NGN')
+                            ->money($currency)
                             ->alignRight(),
                     ]),
             ])
@@ -215,7 +236,6 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
 
     public function generateReport(): void
     {
-        // Ensure we capture the current form state so table() can use it immediately.
         $this->formData = $this->form->getState();
     }
 
