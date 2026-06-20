@@ -56,7 +56,7 @@ class MachineCentersTable
 
                 // Financials and timings moved to infoList/hidden by default for a cleaner UI
                 TextColumn::make('direct_unit_cost')
-                    ->money()
+                    ->money('NGN')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 

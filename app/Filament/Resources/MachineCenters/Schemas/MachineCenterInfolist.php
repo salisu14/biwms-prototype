@@ -67,10 +67,10 @@ class MachineCenterInfolist
                         Grid::make(3)
                             ->schema([
                                 TextEntry::make('direct_unit_cost')
-                                    ->money()
+                                    ->money('NGN')
                                     ->color('success'),
                                 TextEntry::make('overhead_rate')
-                                    ->money(),
+                                    ->money('NGN'),
                                 TextEntry::make('indirect_cost_percent')
                                     ->numeric()
                                     ->suffix('%'),
