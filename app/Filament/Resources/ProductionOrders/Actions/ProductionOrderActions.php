@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ProductionOrders\Actions;
 
 use App\Enums\ProductionOrderStatus;
+use App\Models\Manufacturing\ProductionOrder;
 use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -55,12 +56,25 @@ class ProductionOrderActions
                 TextInput::make('quantity')
                     ->numeric()
                     ->required()
-                    ->default(fn ($record) => $record->remaining_quantity)
-                    ->helperText('Quantity to post to inventory'),
+                    ->default(fn (ProductionOrder $record): float => self::postOutputDefaultQuantity($record))
+                    ->helperText(fn (ProductionOrder $record): string => self::postOutputHelperText($record))
+                    ->rules([
+                        fn (ProductionOrder $record) => function (string $attribute, $value, \Closure $fail) use ($record): void {
+                            $quantityInOrderUom = (float) $value;
+                            $quantityBase = self::convertOrderUomToBase($record, $quantityInOrderUom);
+
+                            if ($quantityBase > (float) $record->remaining_quantity) {
+                                $fail('Cannot post more than the remaining production output.');
+                            }
+                        },
+                    ]),
             ])
             ->action(function ($record, array $data) {
                 try {
-                    app(ProductionOrderService::class)->postOutput($record, $data['quantity'], auth()->id());
+                    $quantityInOrderUom = (float) $data['quantity'];
+                    $quantityBase = self::convertOrderUomToBase($record, $quantityInOrderUom);
+
+                    app(ProductionOrderService::class)->postOutput($record, $quantityBase, auth()->id());
                     Notification::make()->title('Output successfully posted')->success()->send();
                 } catch (\Exception $e) {
                     self::error($e);
@@ -133,5 +147,32 @@ class ProductionOrderActions
             ->body($e->getMessage())
             ->danger()
             ->send();
+    }
+
+    public static function postOutputDefaultQuantity(ProductionOrder $record): float
+    {
+        return $record->remainingQuantityInOrderUom();
+    }
+
+    public static function postOutputHelperText(ProductionOrder $record): string
+    {
+        $remainingQuantityBase = (float) $record->remaining_quantity;
+
+        return sprintf(
+            'Quantity to post in %s. Base equivalent: %s %s.',
+            $record->orderUomCode(),
+            self::formatQuantity($remainingQuantityBase),
+            $record->baseUomCode(),
+        );
+    }
+
+    public static function convertOrderUomToBase(ProductionOrder $record, float $quantityInOrderUom): float
+    {
+        return $record->convertOrderUomQuantityToBase($quantityInOrderUom);
+    }
+
+    private static function formatQuantity(float $quantity): string
+    {
+        return rtrim(rtrim(number_format($quantity, 4, '.', ''), '0'), '.');
     }
 }

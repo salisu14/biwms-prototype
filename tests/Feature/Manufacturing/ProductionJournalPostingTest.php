@@ -6,6 +6,7 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\JournalBatchStatus;
 use App\Enums\ProductionJournalEntryType;
 use App\Enums\ProductionOrderStatus;
+use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
 use App\Models\CapacityLedgerEntry;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
@@ -22,9 +23,13 @@ use App\Models\NumberSeries;
 use App\Models\ProductionJournalBatch;
 use App\Models\ProductionJournalLine;
 use App\Models\ProductionJournalTemplate;
+use App\Models\UnitOfMeasure;
 use App\Models\User;
+use App\Models\ValueEntry;
+use App\Services\Manufacturing\ProductionOrderService;
 use App\Services\Posting\ProductionJournalPostingRoutine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -285,4 +290,301 @@ test('production journal posting routine validates and posts consumption, capaci
     // Check Batch status is posted
     $batch->refresh();
     expect($batch->status->value)->toBe('posted');
+});
+
+it('posts production output entered in order uom as base quantity', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $location = Location::factory()->create(['code' => 'MAIN']);
+    $baseUom = UnitOfMeasure::query()->create([
+        'uom_code' => 'PCS',
+        'description' => 'Pieces',
+        'is_base_uom' => true,
+    ]);
+    $orderUom = UnitOfMeasure::query()->create([
+        'uom_code' => 'CT',
+        'description' => 'Carton',
+        'is_base_uom' => false,
+    ]);
+
+    $finishedGood = Item::factory()->create([
+        'item_code' => 'FG-CT',
+        'description' => 'Carton Finished Good',
+        'unit_cost' => 3,
+        'base_uom_id' => $baseUom->id,
+    ]);
+
+    DB::table('item_uom_assignments')->insert([
+        [
+            'item_id' => $finishedGood->id,
+            'uom_id' => $baseUom->id,
+            'uom_type' => 'BASE',
+            'conversion_factor' => 1,
+            'is_default' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'item_id' => $finishedGood->id,
+            'uom_id' => $orderUom->id,
+            'uom_type' => 'MANUFACTURING',
+            'conversion_factor' => 288,
+            'is_default' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-UOM-001',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $finishedGood->id,
+        'description' => 'One carton output',
+        'quantity' => 1,
+        'quantity_base' => 288,
+        'unit_of_measure_code' => 'CT',
+        'starting_date_time' => now(),
+        'general_product_posting_group_id' => $finishedGood->general_product_posting_group_id,
+        'inventory_posting_group_id' => $finishedGood->inventory_posting_group_id,
+        'cost_rollup' => 3,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+    ]);
+
+    $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $finishedGood->id,
+        'description' => 'Carton output line',
+        'quantity' => 1,
+        'quantity_base' => 288,
+        'unit_of_measure_code' => 'CT',
+        'location_code' => $location->code,
+    ]);
+
+    expect($order->quantityInOrderUom())->toBe(1.0)
+        ->and($order->orderUomCode())->toBe('CT')
+        ->and(ProductionOrderActions::postOutputDefaultQuantity($order))->toBe(1.0)
+        ->and(ProductionOrderActions::postOutputHelperText($order))->toBe('Quantity to post in CT. Base equivalent: 288 PCS.');
+
+    $quantityInOrderUom = 1.0;
+    $quantityBase = ProductionOrderActions::convertOrderUomToBase($order, $quantityInOrderUom);
+
+    expect($quantityBase)->toBe(288.0);
+
+    app(ProductionOrderService::class)->postOutput($order, $quantityBase, $user->id);
+
+    $outputEntry = ItemLedgerEntry::query()
+        ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+        ->where('document_number', 'PO-UOM-001')
+        ->first();
+
+    expect($outputEntry)->not->toBeNull()
+        ->and((float) $outputEntry->quantity)->toBe(288.0)
+        ->and((float) $outputEntry->cost_amount_actual)->toBe(864.0);
+
+    $valueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outputEntry->entry_number)
+        ->where('document_no', 'PO-UOM-001')
+        ->first();
+
+    expect($valueEntry)->not->toBeNull()
+        ->and((float) $valueEntry->quantity)->toBe(288.0)
+        ->and((float) $valueEntry->cost_amount_actual)->toBe((float) $outputEntry->cost_amount_actual)
+        ->and((float) $valueEntry->unit_cost)->toBe(3.0)
+        ->and($valueEntry->item_ledger_entry_no)->toBe($outputEntry->entry_number)
+        ->and($valueEntry->production_order_no)->toBe('PO-UOM-001')
+        ->and($valueEntry->production_order_line_no)->toBe('10000')
+        ->and($valueEntry->prod_order_line_item_no)->toBe('FG-CT')
+        ->and($valueEntry->document_no)->toBe('PO-UOM-001')
+        ->and($valueEntry->document_line_no)->toBe(10000)
+        ->and($valueEntry->item_no)->toBe('FG-CT')
+        ->and($valueEntry->location_code)->toBe('MAIN')
+        ->and($valueEntry->itemLedgerEntry->is($outputEntry))->toBeTrue()
+        ->and($valueEntry->productionOrder->is($order))->toBeTrue();
+
+    $overproductionQuantityBase = ProductionOrderActions::convertOrderUomToBase($order->fresh(), 1.0);
+
+    expect(fn () => app(ProductionOrderService::class)->postOutput($order->fresh(), $overproductionQuantityBase, $user->id))
+        ->toThrow(Exception::class, 'Cannot overproduce');
+});
+
+it('updates output value entry costs and marks the order posted when finishing', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $inventoryAccount = ChartOfAccount::create([
+        'account_number' => '1200-FINISH',
+        'name' => 'Finished Goods Inventory',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $wipAccount = ChartOfAccount::create([
+        'account_number' => '1210-FINISH',
+        'name' => 'WIP Inventory',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $genProdGroup = GeneralProductPostingGroup::create([
+        'code' => 'FINISH',
+        'description' => 'Finished Goods',
+    ]);
+    $invGroup = InventoryPostingGroup::create([
+        'code' => 'FINISH',
+        'description' => 'Finished Goods',
+    ]);
+    $location = Location::factory()->create(['code' => 'MAIN']);
+
+    InventoryPostingSetup::create([
+        'inventory_posting_group_id' => $invGroup->id,
+        'location_id' => $location->id,
+        'inventory_account_id' => $inventoryAccount->id,
+        'wip_account_id' => $wipAccount->id,
+    ]);
+
+    $baseUom = UnitOfMeasure::query()->create([
+        'uom_code' => 'PCS',
+        'description' => 'Pieces',
+        'is_base_uom' => true,
+    ]);
+    $orderUom = UnitOfMeasure::query()->create([
+        'uom_code' => 'CT',
+        'description' => 'Carton',
+        'is_base_uom' => false,
+    ]);
+
+    $finishedGood = Item::factory()->create([
+        'item_code' => 'FG-FINISH',
+        'description' => 'Finished Cost Good',
+        'unit_cost' => 0,
+        'base_uom_id' => $baseUom->id,
+        'general_product_posting_group_id' => $genProdGroup->id,
+        'inventory_posting_group_id' => $invGroup->id,
+    ]);
+    $rawMaterial = Item::factory()->create([
+        'item_code' => 'RM-FINISH',
+        'description' => 'Raw Finish Material',
+        'unit_cost' => 4.5,
+        'base_uom_id' => $baseUom->id,
+        'general_product_posting_group_id' => $genProdGroup->id,
+        'inventory_posting_group_id' => $invGroup->id,
+    ]);
+
+    DB::table('item_uom_assignments')->insert([
+        [
+            'item_id' => $finishedGood->id,
+            'uom_id' => $baseUom->id,
+            'uom_type' => 'BASE',
+            'conversion_factor' => 1,
+            'is_default' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'item_id' => $finishedGood->id,
+            'uom_id' => $orderUom->id,
+            'uom_type' => 'MANUFACTURING',
+            'conversion_factor' => 288,
+            'is_default' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-FINISH-001',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $finishedGood->id,
+        'description' => 'Finish with actual cost',
+        'quantity' => 1,
+        'quantity_base' => 288,
+        'unit_of_measure_code' => 'CT',
+        'starting_date_time' => now(),
+        'general_product_posting_group_id' => $genProdGroup->id,
+        'inventory_posting_group_id' => $invGroup->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+    ]);
+
+    $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $finishedGood->id,
+        'description' => 'Carton output line',
+        'quantity' => 1,
+        'quantity_base' => 288,
+        'unit_of_measure_code' => 'CT',
+        'location_code' => $location->code,
+    ]);
+
+    app(ProductionOrderService::class)->postOutput($order, 288.0, $user->id);
+
+    $outputEntry = ItemLedgerEntry::query()
+        ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+        ->where('document_number', 'PO-FINISH-001')
+        ->firstOrFail();
+    $outputValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outputEntry->entry_number)
+        ->firstOrFail();
+
+    expect((float) $outputValueEntry->cost_amount_actual)->toBe(0.0);
+
+    ItemLedgerEntry::create([
+        'entry_type' => ItemLedgerEntryType::CONSUMPTION,
+        'item_id' => $rawMaterial->id,
+        'quantity' => -288,
+        'remaining_quantity' => 0,
+        'open' => false,
+        'posting_date' => now(),
+        'document_number' => $order->document_number,
+        'document_line_number' => 20000,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+        'location_id' => $location->id,
+        'cost_amount_actual' => 1296,
+        'dimensions' => $order->dimension_set_id,
+        'general_product_posting_group_id' => $rawMaterial->general_product_posting_group_id,
+        'inventory_posting_group_id' => $rawMaterial->inventory_posting_group_id,
+        'entry_date' => now(),
+    ]);
+
+    app(ProductionOrderService::class)->finish($order->fresh(), $user->id);
+
+    $order->refresh();
+    $outputEntry->refresh();
+    $outputValueEntry->refresh();
+
+    expect($order->status)->toBe(ProductionOrderStatus::FINISHED)
+        ->and($order->posted)->toBeTrue()
+        ->and($order->posted_at)->not->toBeNull()
+        ->and($order->posted_by)->toBe($user->id)
+        ->and((float) $outputEntry->quantity)->toBe(288.0)
+        ->and((float) $outputEntry->cost_amount_actual)->toBe(1296.0)
+        ->and((float) $outputValueEntry->quantity)->toBe(288.0)
+        ->and((float) $outputValueEntry->cost_amount_actual)->toBe(1296.0)
+        ->and((float) $outputValueEntry->unit_cost)->toBe(4.5)
+        ->and($outputValueEntry->production_order_no)->toBe('PO-FINISH-001')
+        ->and($outputValueEntry->production_order_line_no)->toBe('10000')
+        ->and($outputValueEntry->document_no)->toBe('PO-FINISH-001')
+        ->and($outputValueEntry->document_line_no)->toBe(10000)
+        ->and($outputValueEntry->item_no)->toBe('FG-FINISH')
+        ->and($outputValueEntry->location_code)->toBe('MAIN')
+        ->and(ValueEntry::query()->where('item_ledger_entry_no', $outputEntry->entry_number)->count())->toBe(1)
+        ->and(ItemLedgerEntry::query()
+            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+            ->where('document_number', 'PO-FINISH-001')
+            ->count())->toBe(1);
+
+    expect(fn () => app(ProductionOrderService::class)->finish($order->fresh(), $user->id))
+        ->toThrow(Exception::class, 'Production order is already finished');
+
+    expect(ValueEntry::query()->where('item_ledger_entry_no', $outputEntry->entry_number)->count())->toBe(1)
+        ->and(ItemLedgerEntry::query()
+            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+            ->where('document_number', 'PO-FINISH-001')
+            ->count())->toBe(1);
 });

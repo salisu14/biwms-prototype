@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductionOrders\RelationManagers;
 
+use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
 use App\Models\Item;
 use App\Services\Manufacturing\ProductionOrderService;
 use Filament\Actions\Action;
@@ -218,11 +219,27 @@ class ProductionOrderLineRelationManager extends RelationManager
                             TextInput::make('quantity')
                                 ->numeric()
                                 ->required()
-                                ->default(fn ($record) => $record->quantity - ($record->produced_quantity ?? 0)),
+                                ->default(fn ($record): float => ProductionOrderActions::postOutputDefaultQuantity($record->productionOrder))
+                                ->helperText(fn ($record): string => ProductionOrderActions::postOutputHelperText($record->productionOrder))
+                                ->rules([
+                                    fn ($record) => function (string $attribute, $value, \Closure $fail) use ($record): void {
+                                        $productionOrder = $record->productionOrder;
+                                        $quantityInOrderUom = (float) $value;
+                                        $quantityBase = ProductionOrderActions::convertOrderUomToBase($productionOrder, $quantityInOrderUom);
+
+                                        if ($quantityBase > (float) $productionOrder->remaining_quantity) {
+                                            $fail('Cannot post more than the remaining production output.');
+                                        }
+                                    },
+                                ]),
                         ])
                         ->action(function ($record, array $data) {
                             try {
-                                app(ProductionOrderService::class)->postOutput($record->productionOrder, $data['quantity'], auth()->id());
+                                $productionOrder = $record->productionOrder;
+                                $quantityInOrderUom = (float) $data['quantity'];
+                                $quantityBase = ProductionOrderActions::convertOrderUomToBase($productionOrder, $quantityInOrderUom);
+
+                                app(ProductionOrderService::class)->postOutput($productionOrder, $quantityBase, auth()->id());
                                 Notification::make()
                                     ->title('Output successfully posted')
                                     ->success()

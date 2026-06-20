@@ -208,7 +208,7 @@ class ValueEntry extends Model
 
     public function itemLedgerEntry(): BelongsTo
     {
-        return $this->belongsTo(ItemLedgerEntry::class, 'item_ledger_entry_no');
+        return $this->belongsTo(ItemLedgerEntry::class, 'item_ledger_entry_no', 'entry_number');
     }
 
     public function item(): BelongsTo
@@ -223,7 +223,7 @@ class ValueEntry extends Model
 
     public function productionOrder(): BelongsTo
     {
-        return $this->belongsTo(ProductionOrder::class, 'production_order_no', 'no');
+        return $this->belongsTo(ProductionOrder::class, 'production_order_no', 'document_number');
     }
 
     public function capacityLedgerEntry(): BelongsTo

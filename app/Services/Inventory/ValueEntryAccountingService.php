@@ -16,6 +16,7 @@ class ValueEntryAccountingService
     {
         $item = $valueEntry->item;
         $location = $valueEntry->location_code;
+        $itemLedgerEntryType = $this->normalizedItemLedgerEntryType($valueEntry);
 
         $setup = InventoryPostingSetup::query()
             ->where('location_code', $location)
@@ -26,7 +27,7 @@ class ValueEntryAccountingService
             return null;
         }
 
-        return match ($valueEntry->item_ledger_entry_type) {
+        return match ($itemLedgerEntryType) {
             'PURCHASE' => $setup->inventory_account,
             'SALE' => $setup->cogs_account,
             'POSITIVE_ADJUSTMENT', 'NEGATIVE_ADJUSTMENT' => $setup->inventory_adj_account,
@@ -41,7 +42,7 @@ class ValueEntryAccountingService
 
     public function determineBalancingAccount(ValueEntry $valueEntry): ?string
     {
-        return match ($valueEntry->item_ledger_entry_type) {
+        return match ($this->normalizedItemLedgerEntryType($valueEntry)) {
             'PURCHASE' => $valueEntry->vendor?->payables_account,
             'SALE' => $this->getSalesAccount($valueEntry),
             'CONSUMPTION' => $this->getAppliedAccount($valueEntry),
@@ -61,8 +62,9 @@ class ValueEntryAccountingService
         $debitAccount = $this->determineGLAccount($valueEntry);
         $creditAccount = $this->determineBalancingAccount($valueEntry);
         $amount = abs((float) $valueEntry->cost_amount_actual);
+        $itemLedgerEntryType = $this->normalizedItemLedgerEntryType($valueEntry);
 
-        $isDebit = in_array($valueEntry->item_ledger_entry_type, [
+        $isDebit = in_array($itemLedgerEntryType, [
             'PURCHASE', 'POSITIVE_ADJUSTMENT', 'CONSUMPTION',
             'CAPACITY', 'OVERHEAD', 'TRANSFER_IN',
         ], true);
@@ -198,12 +200,35 @@ class ValueEntryAccountingService
 
     private function getGLDescription(ValueEntry $valueEntry): string
     {
-        return match ($valueEntry->item_ledger_entry_type) {
+        $itemLedgerEntryType = $this->normalizedItemLedgerEntryType($valueEntry);
+
+        return match ($itemLedgerEntryType) {
             'CONSUMPTION' => "Consumption: {$valueEntry->item_no} -> PO {$valueEntry->production_order_no}",
             'OUTPUT' => "Output: PO {$valueEntry->production_order_no} -> {$valueEntry->item_no}",
             'CAPACITY' => "Capacity: {$valueEntry->capacity_type} {$valueEntry->capacity_no} -> PO {$valueEntry->production_order_no}",
             'OVERHEAD' => "Overhead: Applied to PO {$valueEntry->production_order_no}",
-            default => "{$valueEntry->item_ledger_entry_type}: {$valueEntry->item_no}",
+            default => "{$itemLedgerEntryType}: {$valueEntry->item_no}",
+        };
+    }
+
+    private function normalizedItemLedgerEntryType(ValueEntry $valueEntry): string
+    {
+        $type = strtoupper((string) $valueEntry->item_ledger_entry_type);
+
+        return match ($type) {
+            '1' => 'PURCHASE',
+            '2' => 'SALE',
+            '3' => 'POSITIVE_ADJUSTMENT',
+            '4' => 'NEGATIVE_ADJUSTMENT',
+            '5' => 'TRANSFER',
+            '6' => 'CONSUMPTION',
+            '7' => 'OUTPUT',
+            '8' => 'CAPACITY',
+            '9' => 'ASSEMBLY',
+            '10' => 'OVERHEAD',
+            'POSITIVE ADJMT.', 'POSITIVE ADJUSTMENT' => 'POSITIVE_ADJUSTMENT',
+            'NEGATIVE ADJMT.', 'NEGATIVE ADJUSTMENT' => 'NEGATIVE_ADJUSTMENT',
+            default => $type,
         };
     }
 }

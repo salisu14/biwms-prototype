@@ -351,6 +351,43 @@ class ProductionOrder extends Model
         return (float) $this->quantity_base - $producedBase;
     }
 
+    public function orderUomCode(): string
+    {
+        return (string) ($this->unit_of_measure_code ?: $this->item?->baseUom?->uom_code ?: 'PCS');
+    }
+
+    public function baseUomCode(): string
+    {
+        return (string) ($this->item?->baseUom?->uom_code ?: $this->unit_of_measure_code ?: 'PCS');
+    }
+
+    public function orderUomConversionFactor(): float
+    {
+        $conversionFactor = (float) ($this->item?->getConversionFactorForUom($this->orderUomCode()) ?? 1.0);
+
+        return $conversionFactor > 0 ? $conversionFactor : 1.0;
+    }
+
+    public function convertBaseQuantityToOrderUom(float $quantityBase): float
+    {
+        return $quantityBase / $this->orderUomConversionFactor();
+    }
+
+    public function convertOrderUomQuantityToBase(float $quantityInOrderUom): float
+    {
+        return $quantityInOrderUom * $this->orderUomConversionFactor();
+    }
+
+    public function quantityInOrderUom(): float
+    {
+        return $this->convertBaseQuantityToOrderUom((float) $this->quantity_base);
+    }
+
+    public function remainingQuantityInOrderUom(): float
+    {
+        return $this->convertBaseQuantityToOrderUom((float) $this->remaining_quantity);
+    }
+
     public function getIsCompletedAttribute(): bool
     {
         return $this->remaining_quantity <= 0;

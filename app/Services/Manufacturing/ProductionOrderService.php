@@ -21,6 +21,7 @@ use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderRoutingLine;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Services\Inventory\CostingService;
+use App\Services\Inventory\ValueEntryService;
 use App\Services\Posting\InventoryPostingResolverService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PickWorksheetService;
@@ -47,6 +48,7 @@ class ProductionOrderService
 
     /**
      * Refresh production order (safe wrapper)
+     *
      * @throws \Throwable
      */
     public function refresh(ProductionOrder $order, bool $lines = true, bool $routing = true, bool $components = true): ProductionOrder
@@ -64,6 +66,7 @@ class ProductionOrderService
 
     /**
      * Release production order
+     *
      * @throws \Throwable
      */
     public function release(ProductionOrder $order, int $userId): ProductionOrder
@@ -84,6 +87,7 @@ class ProductionOrderService
 
     /**
      * Cancel production order
+     *
      * @throws \Throwable
      */
     public function cancel(ProductionOrder $order, ?int $userId = null): void
@@ -99,6 +103,7 @@ class ProductionOrderService
 
     /**
      * Reopen finished order
+     *
      * @throws \Throwable
      */
     public function reopen(ProductionOrder $order): ProductionOrder
@@ -120,6 +125,7 @@ class ProductionOrderService
 
     /**
      * Post consumption
+     *
      * @throws \Throwable
      */
     public function postConsumption(
@@ -210,27 +216,28 @@ class ProductionOrderService
 
     /**
      * Post output
+     *
      * @throws \Throwable
      */
     public function postOutput(
         ProductionOrder $order,
-        float $quantity,
+        float $quantityBase,
         int $userId,
         ?\DateTime $postingDate = null,
         ?int $routingLineId = null
     ): void {
-        if ($quantity <= 0) {
+        if ($quantityBase <= 0) {
             throw new \Exception('Output quantity must be positive');
         }
 
-        // Note: $quantity passed here MUST be in BASE units (handled by remaining_quantity accessor)
-        if ($quantity > (float) $order->remaining_quantity) {
+        // Note: $quantityBase passed here MUST be in BASE units.
+        if ($quantityBase > (float) $order->remaining_quantity) {
             throw new \Exception('Cannot overproduce');
         }
 
         $postingDate = $postingDate ?? now();
 
-        DB::transaction(function () use ($order, $quantity, $postingDate, $routingLineId) {
+        DB::transaction(function () use ($order, $quantityBase, $postingDate, $routingLineId) {
             $expectedUnitCost = (float) ($order->cost_rollup ?? $order->unit_cost ?? 0);
             $locationId = Location::query()
                 ->where('code', $order->location_code)
@@ -240,8 +247,8 @@ class ProductionOrderService
                 'entry_type' => ItemLedgerEntryType::OUTPUT,
                 'item_id' => $order->item_id,
                 // ✅ FIXED: Use BASE quantity for Output
-                'quantity' => $quantity,
-                'remaining_quantity' => $quantity,
+                'quantity' => $quantityBase,
+                'remaining_quantity' => $quantityBase,
                 'open' => true,
                 'posting_date' => $postingDate,
                 'document_number' => $order->document_number,
@@ -250,8 +257,8 @@ class ProductionOrderService
                 'source_type' => ProductionOrder::class,
                 'location_id' => $locationId,
                 // ✅ FIXED: Removed 'unit_cost', use total expected/actual cost columns
-                'cost_amount_expected' => $quantity * $expectedUnitCost,
-                'cost_amount_actual' => $quantity * $expectedUnitCost, // Actuals updated at finish
+                'cost_amount_expected' => $quantityBase * $expectedUnitCost,
+                'cost_amount_actual' => $quantityBase * $expectedUnitCost, // Actuals updated at finish
                 'dimensions' => $order->dimension_set_id,
                 'general_product_posting_group_id' => $order->general_product_posting_group_id,
                 'inventory_posting_group_id' => $order->inventory_posting_group_id,
@@ -261,7 +268,7 @@ class ProductionOrderService
             if ($routingLineId) {
                 $routingLine = $order->routingLines()->find($routingLineId);
                 if ($routingLine) {
-                    $routingLine->actual_output_quantity = (float) $routingLine->actual_output_quantity + $quantity;
+                    $routingLine->actual_output_quantity = (float) $routingLine->actual_output_quantity + $quantityBase;
                     $routingLine->save();
                 }
             }
@@ -270,7 +277,7 @@ class ProductionOrderService
             $orderLines = $order->lines()->where('item_id', $order->item_id)->get();
             foreach ($orderLines as $orderLine) {
                 try {
-                    $this->putAwayService->createPutAwayFromProductionOutput($orderLine, $quantity);
+                    $this->putAwayService->createPutAwayFromProductionOutput($orderLine, $quantityBase);
                 } catch (\RuntimeException $exception) {
                     Log::warning('Put-away generation skipped during production output posting', [
                         'production_order_id' => $order->id,
@@ -285,6 +292,7 @@ class ProductionOrderService
 
     /**
      * Post capacity
+     *
      * @throws \Throwable
      */
     public function postCapacity(
@@ -448,20 +456,26 @@ class ProductionOrderService
 
     /**
      * Finish production order
+     *
      * @throws \Throwable
      */
     public function finish(ProductionOrder $order, int $userId, ?\DateTime $postingDate = null): ProductionOrder
     {
         $postingDate = $postingDate ?? now();
+        $order = $order->fresh();
+
+        if ($order->status === ProductionOrderStatus::FINISHED || $order->posted) {
+            throw new \Exception('Production order is already finished');
+        }
 
         DB::transaction(function () use ($order, $userId, $postingDate) {
             if ($order->flushing_method === 'BACKWARD') {
                 $this->backwardFlushComponents($order, $postingDate, $userId);
             }
 
-            $remainingOutputQuantity = (float) $order->fresh()->remaining_quantity;
-            if ($remainingOutputQuantity > 0) {
-                $this->postOutput($order->fresh(), $remainingOutputQuantity, $userId, $postingDate);
+            $remainingOutputQuantityBase = (float) $order->fresh()->remaining_quantity;
+            if ($remainingOutputQuantityBase > 0) {
+                $this->postOutput($order->fresh(), $remainingOutputQuantityBase, $userId, $postingDate);
                 $order = $order->fresh();
             }
 
@@ -496,6 +510,9 @@ class ProductionOrderService
                     // ✅ FIXED: Removed 'unit_cost' (column doesn't exist on Item Ledger)
                     'cost_amount_actual' => $actualCostForEntry,
                 ]);
+
+                app(ValueEntryService::class)->ensureForItemLedgerEntry($entry->fresh());
+
                 $totalInventoryCost += $actualCostForEntry;
             }
 
@@ -522,6 +539,12 @@ class ProductionOrderService
             }
 
             $this->changeStatus($order, ProductionOrderStatus::FINISHED, $userId);
+
+            $order->forceFill([
+                'posted' => true,
+                'posted_at' => now(),
+                'posted_by' => $userId,
+            ])->save();
         });
 
         return $order->fresh();

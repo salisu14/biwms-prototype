@@ -28,7 +28,7 @@ class ProductionOrdersTable
 
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn(ProductionOrderStatus $state): string => match ($state) {
+                    ->color(fn (ProductionOrderStatus $state): string => match ($state) {
                         ProductionOrderStatus::SIMULATED => 'gray',
                         ProductionOrderStatus::PLANNED => 'info',
                         ProductionOrderStatus::FIRM_PLANNED => 'warning',
@@ -41,40 +41,9 @@ class ProductionOrdersTable
                     ->searchable(),
 
                 TextColumn::make('quantity')
-                    ->state(function ($record): float {
-                        $quantity = (float)($record->quantity ?? 0);
-                        $quantityBase = (float)($record->quantity_base ?? 0);
-                        $uomCode = (string)($record->unit_of_measure_code ?? '');
-
-                        if (!$record->item_id || $uomCode === '') {
-                            return $quantity;
-                        }
-
-                        $item = $record->item;
-                        if (!$item) {
-                            return $quantity;
-                        }
-
-                        $baseUom = (string)($item->base_unit_of_measure ?? '');
-                        if ($baseUom !== '' && strtoupper($uomCode) === strtoupper($baseUom)) {
-                            return $quantity;
-                        }
-
-                        $assignment = $item->uoms()->where('uom_code', $uomCode)->first();
-                        $factor = (float)($assignment?->pivot?->conversion_factor ?? 1);
-                        if ($factor <= 0) {
-                            return $quantity;
-                        }
-
-                        // If quantity looks stored in base (same as quantity_base), convert for display.
-                        if ($quantityBase > 0 && abs($quantity - $quantityBase) < 0.0001) {
-                            return $quantity / $factor;
-                        }
-
-                        return $quantity;
-                    })
+                    ->state(fn ($record): float => $record->quantityInOrderUom())
                     ->numeric(decimalPlaces: 2)
-                    ->suffix(fn($record): string => ' ' . ($record->unit_of_measure_code ?? 'PCS')),
+                    ->suffix(fn ($record): string => ' '.$record->orderUomCode()),
 
                 TextColumn::make('due_date')
                     ->date(),
@@ -101,7 +70,7 @@ class ProductionOrdersTable
                     ProductionOrderActions::reopen(),
 
                     EditAction::make()
-                        ->visible(fn($record) => $record->status->isEditable()),
+                        ->visible(fn ($record) => $record->status->isEditable()),
 
                     Action::make('view_entries')
                         ->label('View Entries')
@@ -119,7 +88,7 @@ class ProductionOrdersTable
                             ]);
                         })
                         ->openUrlInNewTab(),
-                ])
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
