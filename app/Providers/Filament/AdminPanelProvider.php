@@ -348,6 +348,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/yield-report')
                                     ->isActiveWhen(fn () => request()->is('admin/yield-report*')),
 
+                                NavigationItem::make('Item Ledger Entries')
+                                    ->icon('heroicon-o-book-open')
+                                    ->url(ItemLedgerSummary::getUrl())
+                                    ->isActiveWhen(fn () => request()->is('admin/item-ledger-entries*') || request()->is('admin/item-ledger-summary*')),
+
                                 NavigationItem::make('Journals')
                                     ->icon('heroicon-o-book-open')
                                     ->url(GeneralJournals::getUrl())

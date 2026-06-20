@@ -44,6 +44,22 @@ class ItemUomAssignment extends Pivot
                 );
             }
         });
+
+        static::saved(function (self $assignment) {
+            if ($assignment->uom_type === 'BASE') {
+                // Keep items.base_uom_id in sync with the BASE assignment
+                Item::where('id', $assignment->item_id)
+                    ->update(['base_uom_id' => $assignment->uom_id]);
+            }
+        });
+
+        static::deleted(function (self $assignment) {
+            if ($assignment->uom_type === 'BASE') {
+                // Clear or recalculate if the BASE assignment is removed
+                Item::where('id', $assignment->item_id)
+                    ->update(['base_uom_id' => null]);
+            }
+        });
     }
 
     public function item(): BelongsTo
