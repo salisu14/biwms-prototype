@@ -231,7 +231,7 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
                             ->alignRight(),
                     ]),
             ])
-            ->paginated([50, 100, 200, 'all']);
+            ->paginated([5, 10, 25, 50, 'all']);
     }
 
     public function generateReport(): void
