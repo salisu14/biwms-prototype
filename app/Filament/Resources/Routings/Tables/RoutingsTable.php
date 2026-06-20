@@ -29,7 +29,8 @@ class RoutingsTable
                     ->searchable()
                     ->limit(50),
 
-                BadgeColumn::make('type')
+                TextColumn::make('type')
+                    ->badge()
                     ->label('Type')
                     ->color(fn (string $state): string => match ($state) {
                         'SERIAL' => 'primary',
@@ -37,7 +38,8 @@ class RoutingsTable
                         default => 'gray',
                     }),
 
-                BadgeColumn::make('status')
+                TextColumn::make('status')
+                    ->badge()
                     ->label('Status')
                     ->color(fn (string $state): string => match ($state) {
                         'DRAFT' => 'gray',
@@ -47,7 +49,13 @@ class RoutingsTable
                     }),
 
                 TextColumn::make('item.item_code')
-                    ->label('Item')
+                    ->label('Item Code')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('item.description')
+                    ->label('Item Name')
                     ->searchable()
                     ->sortable()
                     ->toggleable(),

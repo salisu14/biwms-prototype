@@ -38,6 +38,12 @@ class ProductionBomsTable
                     ->label('Item #')
                     ->sortable(),
 
+                TextColumn::make('item.description')
+                    ->label('Item Name')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
                 TextColumn::make('version')
                     ->label('Ver.')
                     ->alignCenter(),
