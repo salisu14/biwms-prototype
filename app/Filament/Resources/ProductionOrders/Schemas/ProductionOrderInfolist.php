@@ -192,17 +192,35 @@ class ProductionOrderInfolist
 
                         TextEntry::make('actual_cost_per_unit')
                             ->label('Actual Cost / Unit (FG)')
+                            ->suffix(fn ($record): string => ' / '.($record->unit_of_measure_code ?? 'Unit'))
                             ->state(function ($record): ?float {
-                                $finishedGoodsProducedQty = (float) $record->itemLedgerEntries()
+                                // 1. Get actual produced qty in BASE UoM from ledger
+                                $producedBaseQty = (float) $record->itemLedgerEntries()
                                     ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                                     ->where('item_id', $record->item_id)
                                     ->sum('quantity');
 
-                                if ($finishedGoodsProducedQty <= 0) {
+                                if ($producedBaseQty <= 0) {
                                     return null;
                                 }
 
-                                return (float) $record->total_actual_cost / $finishedGoodsProducedQty;
+                                // 2. Convert to ORDER UoM
+                                $uomCode = (string) ($record->unit_of_measure_code ?? '');
+                                $item = $record->item;
+
+                                if ($item && $uomCode !== '') {
+                                    $baseUom = (string) ($item->base_unit_of_measure ?? '');
+                                    if ($baseUom !== '' && strtoupper($uomCode) !== strtoupper($baseUom)) {
+                                        $assignment = $item->uoms()->where('uom_code', $uomCode)->first();
+                                        $factor = (float) ($assignment?->pivot?->conversion_factor ?? 1);
+                                        if ($factor > 0) {
+                                            $producedBaseQty = $producedBaseQty / $factor;
+                                        }
+                                    }
+                                }
+
+                                // 3. Now $producedBaseQty is actually the produced qty in ORDER UoM
+                                return (float) $record->total_actual_cost / $producedBaseQty;
                             })
                             ->money('NGN')
                             ->weight(FontWeight::Bold)
@@ -212,28 +230,11 @@ class ProductionOrderInfolist
                         TextEntry::make('actual_cost_per_piece')
                             ->label('Actual Cost / Piece')
                             ->state(function ($record): ?float {
-                                $finishedGoodsProducedQty = (float) $record->itemLedgerEntries()
+                                // Always divide by actual base-qty from ledger — no planned values
+                                $producedBaseQty = (float) $record->itemLedgerEntries()
                                     ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                                     ->where('item_id', $record->item_id)
                                     ->sum('quantity');
-
-                                if ($finishedGoodsProducedQty <= 0) {
-                                    return null;
-                                }
-
-                                $producedBaseQty = (float) ($record->quantity_base ?? 0);
-
-                                // Fallback for pack-style orders where quantity_base remains 1
-                                // but the exploded components reflect per-piece quantity.
-                                if ($producedBaseQty <= $finishedGoodsProducedQty) {
-                                    $componentPieceQty = (float) $record->components()
-                                        ->where('unit_of_measure_code', $record->unit_of_measure_code)
-                                        ->max('expected_quantity');
-
-                                    if ($componentPieceQty > $finishedGoodsProducedQty) {
-                                        $producedBaseQty = $componentPieceQty;
-                                    }
-                                }
 
                                 if ($producedBaseQty <= 0) {
                                     return null;
