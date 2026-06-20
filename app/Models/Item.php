@@ -308,18 +308,25 @@ class Item extends Model
 
     public function getLedgerOnHandAttribute(): float
     {
-        $ledgerOnHand = (float) $this->ledgerEntries()
-            ->where('open', true)
-            ->sum('remaining_quantity');
+        $movementQty = (float) $this->ledgerEntries()->sum('quantity');
 
-        if ($ledgerOnHand > 0) {
-            return $ledgerOnHand;
-        }
-
-        // Backward-compatible fallback for environments that still keep
-        // opening stock only on the item card (without open ledger layers).
-        return (float) ($this->inventory ?? 0);
+        return (float) ($this->inventory ?? 0) + $movementQty;
     }
+
+//    public function getLedgerOnHandAttribute(): float
+//    {
+//        $ledgerOnHand = (float) $this->ledgerEntries()
+//            ->where('open', true)
+//            ->sum('remaining_quantity');
+//
+//        if ($ledgerOnHand > 0) {
+//            return $ledgerOnHand;
+//        }
+//
+//        // Backward-compatible fallback for environments that still keep
+//        // opening stock only on the item card (without open ledger layers).
+//        return (float) ($this->inventory ?? 0);
+//    }
 
     public function getBaseUnitOfMeasureAttribute(): string
     {
@@ -386,10 +393,23 @@ class Item extends Model
 
     public function quantityAtLocation(int $locationId): float
     {
-        return (float) $this->ledgerEntries()
+        $movementQty = (float) $this->ledgerEntries()
             ->where('location_id', $locationId)
             ->sum('quantity');
+
+        $openingQty = (int) $this->location_id === $locationId
+            ? (float) ($this->inventory ?? 0)
+            : 0.0;
+
+        return $openingQty + $movementQty;
     }
+
+//    public function quantityAtLocation(int $locationId): float
+//    {
+//        return (float) $this->ledgerEntries()
+//            ->where('location_id', $locationId)
+//            ->sum('quantity');
+//    }
 
     /**
      * Vendor relations
