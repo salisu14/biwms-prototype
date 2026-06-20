@@ -970,12 +970,14 @@ class PostingService
                     throw new \Exception("Payables account missing for vendor {$memo->vendor->vendor_name}.");
                 }
 
-                $lineAmount = $line->quantity * $line->unit_cost;
+                $lineAmount = (float) $line->quantity * (float) $line->unit_cost;
+                $taxAmount = (float) ($line->tax_amount ?? 0);
+                $lineAmountIncludingTax = $lineAmount + $taxAmount;
 
                 // 1. A/P Reduction (Debit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $payablesAccount->id,
-                    'debit_amount' => $lineAmount,
+                    'debit_amount' => $lineAmountIncludingTax,
                     'credit_amount' => 0,
                     'document_type' => 'PURCHASE_CREDIT_MEMO',
                     'document_number' => $memo->document_number,
@@ -1015,6 +1017,23 @@ class PostingService
                         'posting_date' => $memo->posting_date ?? now(),
                         'description' => "Purchase reversal: {$item->description}",
                     ]);
+                }
+
+                if ($taxAmount > 0) {
+                    $vatService = app(VatService::class);
+                    $vatSetup = $vatService->resolveSetup($memo->vendor->vat_business_posting_group_id, $item->vat_product_posting_group_id);
+
+                    if ($vatSetup?->purchase_vat_account_id) {
+                        $entries[] = $this->createGlEntry([
+                            'chart_of_account_id' => $vatSetup->purchase_vat_account_id,
+                            'debit_amount' => 0,
+                            'credit_amount' => $taxAmount,
+                            'document_type' => 'PURCHASE_CREDIT_MEMO',
+                            'document_number' => $memo->document_number,
+                            'posting_date' => $memo->posting_date ?? now(),
+                            'description' => "VAT Input reversal: {$item->description}",
+                        ]);
+                    }
                 }
             }
 
@@ -1056,6 +1075,8 @@ class PostingService
                 }
 
                 $lineAmount = (float) ($line->amount ?? ((float) $line->quantity * (float) $line->unit_price));
+                $vatAmount = (float) ($line->vat_amount ?? 0);
+                $lineAmountIncludingVat = (float) ($line->amount_including_vat ?? ($lineAmount + $vatAmount));
                 $quantityBase = $this->quantityBaseForLine((float) $line->quantity, $line->unit_of_measure_code ?? null, $item);
                 $lineCost = $quantityBase * ($item->unit_cost ?? 0);
 
@@ -1074,12 +1095,29 @@ class PostingService
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $receivablesAccount->id,
                     'debit_amount' => 0,
-                    'credit_amount' => $lineAmount,
+                    'credit_amount' => $lineAmountIncludingVat,
                     'document_type' => 'SALES_CREDIT_MEMO',
                     'document_number' => $memo->memo_number,
                     'posting_date' => $memo->effective_date,
                     'description' => 'Reduce receivable',
                 ]);
+
+                if ($vatAmount > 0) {
+                    $vatService = app(VatService::class);
+                    $vatSetup = $vatService->resolveSetup($memo->customer->vat_business_posting_group_id, $item->vat_product_posting_group_id);
+
+                    if ($vatSetup?->sales_vat_account_id) {
+                        $entries[] = $this->createGlEntry([
+                            'chart_of_account_id' => $vatSetup->sales_vat_account_id,
+                            'debit_amount' => $vatAmount,
+                            'credit_amount' => 0,
+                            'document_type' => 'SALES_CREDIT_MEMO',
+                            'document_number' => $memo->memo_number,
+                            'posting_date' => $memo->effective_date,
+                            'description' => "VAT Output reversal: {$item->description}",
+                        ]);
+                    }
+                }
 
                 if ($item->isInventoryItem()) {
                     $inventoryAccount = $item->getInventoryAccount();

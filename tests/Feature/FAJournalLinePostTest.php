@@ -1,18 +1,21 @@
 <?php
 
-use App\Enums\FAPostingType;
-use App\Models\ChartOfAccount;
 use App\Enums\AccountStructuralType;
-use App\Models\DepreciationBook;
-use App\Enums\DepreciationMethod;
 use App\Enums\DepreciationCalculationMethod;
-use App\Models\FALedgerEntry;
+use App\Enums\DepreciationMethod;
+use App\Enums\FAPostingType;
+use App\Enums\FixedAssetType;
+use App\Models\AccountingPeriod;
+use App\Models\ChartOfAccount;
+use App\Models\DepreciationBook;
 use App\Models\FAJournalBatch;
 use App\Models\FAJournalLine;
+use App\Models\FALedgerEntry;
 use App\Models\FAPostingGroup;
 use App\Models\FixedAsset;
-use App\Enums\FixedAssetType;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GlEntry;
+use App\Models\Permission;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -21,6 +24,20 @@ uses(RefreshDatabase::class);
 it('posts a fa journal line and creates fa ledger + gl entries and updates the asset', function () {
     // Create a user
     $user = User::factory()->create();
+    Permission::query()->firstOrCreate(['name' => 'fixed_asset.depreciate', 'guard_name' => 'web']);
+    $user->givePermissionTo('fixed_asset.depreciate');
+    $this->actingAs($user);
+    GeneralLedgerSetup::query()->firstOrCreate(['company_name' => 'Default Company'], [
+        'allow_posting_from' => now()->startOfYear()->toDateString(),
+        'allow_posting_to' => now()->endOfYear()->toDateString(),
+    ]);
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => now()->startOfYear()->toDateString(),
+        'end_date' => now()->endOfYear()->toDateString(),
+    ], [
+        'name' => 'Current Year',
+        'is_closed' => false,
+    ]);
 
     // Create COA accounts for posting group
     $acq = ChartOfAccount::factory()->create(['name' => 'FA Acquisition', 'structural_type' => AccountStructuralType::POSTING]);
@@ -64,7 +81,7 @@ it('posts a fa journal line and creates fa ledger + gl entries and updates the a
 
     // Create a batch
     // Create required number series and template for batch
-    $numberSeries = \DB::table('number_series')->insertGetId([
+    $numberSeries = DB::table('number_series')->insertGetId([
         'code' => 'FAJ',
         'description' => 'FA Journal series',
         'prefix' => 'FA',
@@ -77,7 +94,7 @@ it('posts a fa journal line and creates fa ledger + gl entries and updates the a
         'updated_at' => now(),
     ]);
 
-    $templateId = \DB::table('fa_journal_templates')->insertGetId([
+    $templateId = DB::table('fa_journal_templates')->insertGetId([
         'name' => 'FA-DEPR-TEST',
         'description' => 'Template for test',
         'template_type' => 'depreciation',
@@ -115,18 +132,14 @@ it('posts a fa journal line and creates fa ledger + gl entries and updates the a
     expect((float) $asset->acquisition_cost)->toBe(0.0);
     expect((float) $asset->accumulated_depreciation)->toBe(0.0);
 
+    $beforeGlCount = GlEntry::count();
+
     // Post the line
     $line->post();
 
     // Assert FA ledger entry created by posting the line
     $faLedger = FALedgerEntry::where('fixed_asset_id', $asset->id)->where('amount', $amount)->first();
     expect($faLedger)->not->toBeNull();
-
-    // The FA journal line posting path may delegate some denormalized updates.
-    // Use the posting service to also create GL entries and update asset (deterministic)
-    $postingService = app(\App\Services\FixedAsset\FAPostingService::class);
-    $beforeGlCount = GlEntry::count();
-    $postingService->postEntry($asset, \App\Enums\FAPostingType::DEPRECIATION, (float) $amount, 'Service post for assert', 'SRV-1', now()->toDateTime());
 
     $assetFresh = $asset->fresh();
     expect((float) $assetFresh->accumulated_depreciation)->toBeGreaterThan(0);

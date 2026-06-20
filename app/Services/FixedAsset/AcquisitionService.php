@@ -95,7 +95,8 @@ class AcquisitionService
             'fa_posting_group_id' => $data['fa_posting_group_id'],
             'depreciation_book_id' => $data['depreciation_book_id'],
             'acquisition_date' => $data['acquisition_date'],
-            'acquisition_cost' => $data['acquisition_cost'],
+            'acquisition_cost' => 0,
+            'book_value' => 0,
             'depreciation_starting_date' => $data['depreciation_starting_date'] ?? $data['acquisition_date'],
             'depreciation_method' => $data['depreciation_method'],
             'useful_life_years' => $data['useful_life_years'],
@@ -119,6 +120,7 @@ class AcquisitionService
             additionalData: [
                 'document_type' => $data['document_type'] ?? 'Purchase Invoice',
                 'book_value_after' => (float) $data['acquisition_cost'],
+                'offset_account_id' => $data['offset_account_id'] ?? null,
             ]
         );
     }

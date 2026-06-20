@@ -17,12 +17,17 @@ use App\Models\InventoryPostingSetup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\ItemUomAssignment;
+use App\Models\Permission;
+use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
+use App\Models\SalesCreditMemo;
 use App\Models\SalesInvoice;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Services\Sales\SalesCreditMemoService;
 use App\Services\Sales\SalesInvoiceService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -118,6 +123,94 @@ test('sales invoice posting rejects missing exact posting setup and rolls back l
         ->and(ItemLedgerEntry::query()->where('document_number', 'SI-MISSING-SETUP')->exists())->toBeFalse()
         ->and(ValueEntry::query()->where('document_no', 'SI-MISSING-SETUP')->exists())->toBeFalse()
         ->and(GlEntry::query()->where('document_number', 'SI-MISSING-SETUP')->exists())->toBeFalse();
+});
+
+test('sales credit memo reverses inventory, value, customer, and gl entries using base quantity', function () {
+    $fixture = salesPostingFixture();
+    grantSalesCreditMemoPostPermission($fixture['user']);
+    $this->actingAs($fixture['user']);
+
+    $creditMemo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-TRACE-001',
+        'customer_id' => $fixture['customer']->id,
+        'sales_invoice_id' => $fixture['user']->id,
+        'total_amount' => 1000,
+        'status' => ApprovalStatus::APPROVED,
+        'reason' => 'Return',
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+    ]);
+
+    $creditMemo->items()->create([
+        'item_id' => $fixture['item']->id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'CT',
+        'unit_price' => 1000,
+    ]);
+
+    app(SalesCreditMemoService::class)->post($creditMemo);
+
+    $itemLedgerEntry = ItemLedgerEntry::query()
+        ->where('document_type', 'SALES_CREDIT_MEMO')
+        ->where('document_number', 'SCM-TRACE-001')
+        ->firstOrFail();
+
+    expect($creditMemo->fresh()->status)->toBe(ApprovalStatus::POSTED)
+        ->and((float) $itemLedgerEntry->quantity)->toBe(288.0)
+        ->and($itemLedgerEntry->entry_type)->toBe(ItemLedgerEntryType::SALE)
+        ->and((float) $fixture['item']->fresh()->inventory)->toBe(576.0);
+
+    expect(ValueEntry::query()
+        ->where('item_ledger_entry_no', $itemLedgerEntry->entry_number)
+        ->where('document_no', 'SCM-TRACE-001')
+        ->where('quantity', 288)
+        ->exists())->toBeTrue();
+
+    expect(PostedSalesCreditMemo::query()->where('document_number', 'SCM-TRACE-001')->exists())->toBeTrue()
+        ->and(CustomerLedgerEntry::query()->where('document_type', 'SALES_CREDIT_MEMO')->where('document_number', 'SCM-TRACE-001')->exists())->toBeTrue();
+
+    $glEntries = GlEntry::query()->where('document_number', 'SCM-TRACE-001')->get();
+    expect(round((float) $glEntries->sum('debit_amount'), 2))
+        ->toBe(round((float) $glEntries->sum('credit_amount'), 2));
+
+    expect(fn () => app(SalesCreditMemoService::class)->post($creditMemo->fresh()))
+        ->toThrow(Exception::class, 'Sales credit memo is already posted.');
+});
+
+test('sales credit memo posting requires permission and rolls back on missing setup', function () {
+    $fixture = salesPostingFixture(createGeneralPostingSetup: false);
+    $this->actingAs($fixture['user']);
+
+    $creditMemo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-MISSING-SETUP',
+        'customer_id' => $fixture['customer']->id,
+        'sales_invoice_id' => $fixture['user']->id,
+        'total_amount' => 1000,
+        'status' => ApprovalStatus::APPROVED,
+        'reason' => 'Return',
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+    ]);
+
+    $creditMemo->items()->create([
+        'item_id' => $fixture['item']->id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'CT',
+        'unit_price' => 1000,
+    ]);
+
+    expect(fn () => app(SalesCreditMemoService::class)->post($creditMemo))
+        ->toThrow(AuthorizationException::class);
+
+    grantSalesCreditMemoPostPermission($fixture['user']);
+
+    expect(fn () => app(SalesCreditMemoService::class)->post($creditMemo->fresh()))
+        ->toThrow(Exception::class, 'Posting setup missing');
+
+    expect($creditMemo->fresh()->status)->toBe(ApprovalStatus::APPROVED)
+        ->and(ItemLedgerEntry::query()->where('document_number', 'SCM-MISSING-SETUP')->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', 'SCM-MISSING-SETUP')->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', 'SCM-MISSING-SETUP')->exists())->toBeFalse();
 });
 
 /**
@@ -223,4 +316,14 @@ function postingTestAccount(
         'direct_posting' => true,
         'blocked' => false,
     ]);
+}
+
+function grantSalesCreditMemoPostPermission(User $user): void
+{
+    Permission::query()->firstOrCreate([
+        'name' => 'sales.credit_memo.post',
+        'guard_name' => 'web',
+    ]);
+
+    $user->givePermissionTo('sales.credit_memo.post');
 }

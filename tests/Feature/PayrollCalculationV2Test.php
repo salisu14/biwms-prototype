@@ -13,6 +13,8 @@ use App\Models\PayCode;
 use App\Models\PayrollDocument;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPostingGroup;
+use App\Models\Permission;
+use App\Models\User;
 use App\Services\PayrollCalculationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -21,6 +23,11 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     // Seed basic setup
     Artisan::call('db:seed', ['--class' => 'PayrollSetupV2Seeder']);
+
+    $user = User::factory()->create();
+    Permission::query()->firstOrCreate(['name' => 'payroll.calculate', 'guard_name' => 'web']);
+    $user->givePermissionTo('payroll.calculate');
+    $this->actingAs($user);
 
     // Create a GL Account for testing
     $account = ChartOfAccount::create([

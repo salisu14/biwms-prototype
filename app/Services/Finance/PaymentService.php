@@ -3,6 +3,7 @@
 namespace App\Services\Finance;
 
 use App\Events\PaymentApplied;
+use App\Events\PaymentUnapplied;
 use App\Models\Currency;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Payment;
@@ -263,6 +264,14 @@ class PaymentService
      */
     public function unapply(PaymentApplication $application, int $userId): void
     {
+        $payment = $application->payment;
+        $this->postingDateValidator->validate($payment->posting_date ?? now());
+        Gate::forUser(User::query()->findOrFail($userId))->authorize('unapply', $payment);
+
+        if ($application->reversed) {
+            throw new \Exception('Payment application is already reversed.');
+        }
+
         DB::transaction(function () use ($application, $userId) {
             $payment = $application->payment;
 
@@ -312,6 +321,8 @@ class PaymentService
                 $this->postingService->reverseRealizedGainLoss($application);
             }
         });
+
+        PaymentUnapplied::dispatch($application->fresh());
     }
 
     private function resolvePrecision(?Currency $currency, ?string $currencyCode): int

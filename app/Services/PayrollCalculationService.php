@@ -14,6 +14,7 @@ use App\Models\PayrollLine;
 use App\Models\TaxTable;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class PayrollCalculationService
 {
@@ -26,8 +27,14 @@ class PayrollCalculationService
      */
     public function calculate(PayrollDocument $document): void
     {
+        Gate::authorize('calculate', $document);
+
         if ($document->status === PayrollStatus::POSTED) {
             throw new Exception('Cannot recalculate a posted document.');
+        }
+
+        if (! $document->payroll_period_id || ! $document->period) {
+            throw new Exception('Payroll document must be linked to a payroll period before calculation.');
         }
 
         DB::transaction(function () use ($document) {
@@ -45,8 +52,12 @@ class PayrollCalculationService
 
             // 2. Fetch employees to calculate for this document
             $employees = Employee::query()
+                ->with(['compensations', 'payrollPostingGroup'])
                 ->where('is_active', true)
                 ->whereNotNull('payroll_posting_group_id')
+                ->whereHas('compensations', function ($query) use ($document) {
+                    $query->where('effective_date', '<=', $document->period_end);
+                })
                 ->when($selectedEmployeeIds->isNotEmpty(), fn ($query) => $query->whereIn('id', $selectedEmployeeIds))
                 ->get();
 
@@ -69,6 +80,10 @@ class PayrollCalculationService
 
     private function calculateEmployee(PayrollDocument $document, Employee $employee): void
     {
+        if (! $employee->is_active || ! $employee->payroll_posting_group_id || $employee->getCurrentBaseSalary() <= 0) {
+            throw new Exception("Employee {$employee->employee_number} is not eligible for payroll calculation.");
+        }
+
         $taxableEarnings = 0;
         $totalEarnings = 0;
         $totalDeductions = 0;

@@ -107,7 +107,7 @@ class SalesCreditMemo extends Model implements Approvable
     public function refreshTotal(): void
     {
         $this->update([
-            'total_amount' => $this->items()->sum('total'),
+            'total_amount' => $this->items()->sum('amount_including_vat'),
         ]);
     }
 

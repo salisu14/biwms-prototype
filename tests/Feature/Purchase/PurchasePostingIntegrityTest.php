@@ -15,7 +15,10 @@ use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\ItemUomAssignment;
 use App\Models\Location;
+use App\Models\Permission;
+use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedPurchaseInvoice;
+use App\Models\PurchaseCreditMemo;
 use App\Models\PurchaseInvoice;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
@@ -24,6 +27,8 @@ use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
 use App\Services\Purchase\PurchaseInvoiceService;
+use App\Services\Purchases\PurchaseCreditMemoService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -176,6 +181,113 @@ test('purchase invoice posting rejects missing exact posting setup and rolls bac
         ->and(VendorLedgerEntry::query()->where('document_number', 'PI-MISSING-SETUP')->exists())->toBeFalse();
 });
 
+test('purchase credit memo reverses inventory, value, vendor, and gl entries using base quantity', function () {
+    $fixture = purchasePostingFixture();
+    grantPurchaseCreditMemoPostPermission($fixture['user']);
+    $this->actingAs($fixture['user']);
+    $fixture['item']->forceFill(['inventory' => 288])->save();
+
+    $memo = PurchaseCreditMemo::query()->create([
+        'document_number' => 'PCM-TRACE-001',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'status' => ApprovalStatus::APPROVED,
+        'currency_code' => 'NGN',
+        'description' => 'Return to vendor',
+    ]);
+
+    $memo->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'unit_cost' => 1000,
+        'tax_percent' => 0,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'unit_of_measure_code' => 'CT',
+    ]);
+
+    $postedMemo = app(PurchaseCreditMemoService::class)->post($memo);
+
+    $itemLedgerEntry = ItemLedgerEntry::query()
+        ->where('document_type', 'PURCHASE_CREDIT_MEMO')
+        ->where('document_number', 'PCM-TRACE-001')
+        ->firstOrFail();
+
+    expect($postedMemo)->toBeInstanceOf(PostedPurchaseCreditMemo::class)
+        ->and($memo->fresh()->status)->toBe(ApprovalStatus::POSTED)
+        ->and((float) $itemLedgerEntry->quantity)->toBe(-288.0)
+        ->and($itemLedgerEntry->entry_type)->toBe(ItemLedgerEntryType::PURCHASE)
+        ->and((float) $fixture['item']->fresh()->inventory)->toBe(0.0);
+
+    expect(ValueEntry::query()
+        ->where('item_ledger_entry_no', $itemLedgerEntry->entry_number)
+        ->where('document_no', 'PCM-TRACE-001')
+        ->where('quantity', -288)
+        ->exists())->toBeTrue();
+
+    expect(VendorLedgerEntry::query()
+        ->where('document_type', 'PURCHASE_CREDIT_MEMO')
+        ->where('document_number', 'PCM-TRACE-001')
+        ->where('vendor_id', $fixture['vendor']->id)
+        ->exists())->toBeTrue();
+
+    $glEntries = GlEntry::query()->where('document_number', 'PCM-TRACE-001')->get();
+    expect(round((float) $glEntries->sum('debit_amount'), 2))
+        ->toBe(round((float) $glEntries->sum('credit_amount'), 2));
+
+    expect(fn () => app(PurchaseCreditMemoService::class)->post($memo->fresh()))
+        ->toThrow(Exception::class, 'Purchase credit memo is already posted.');
+});
+
+test('purchase credit memo posting requires permission and rolls back on missing setup', function () {
+    $fixture = purchasePostingFixture(createGeneralPostingSetup: false);
+    $this->actingAs($fixture['user']);
+    $fixture['item']->forceFill(['inventory' => 288])->save();
+
+    $memo = PurchaseCreditMemo::query()->create([
+        'document_number' => 'PCM-MISSING-SETUP',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'status' => ApprovalStatus::APPROVED,
+        'currency_code' => 'NGN',
+        'description' => 'Return to vendor',
+    ]);
+
+    $memo->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'unit_cost' => 1000,
+        'tax_percent' => 0,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'unit_of_measure_code' => 'CT',
+    ]);
+
+    expect(fn () => app(PurchaseCreditMemoService::class)->post($memo))
+        ->toThrow(AuthorizationException::class);
+
+    grantPurchaseCreditMemoPostPermission($fixture['user']);
+
+    expect(fn () => app(PurchaseCreditMemoService::class)->post($memo->fresh()))
+        ->toThrow(Exception::class, 'Posting setup missing');
+
+    expect($memo->fresh()->status)->toBe(ApprovalStatus::APPROVED)
+        ->and(ItemLedgerEntry::query()->where('document_number', 'PCM-MISSING-SETUP')->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', 'PCM-MISSING-SETUP')->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', 'PCM-MISSING-SETUP')->exists())->toBeFalse()
+        ->and(VendorLedgerEntry::query()->where('document_number', 'PCM-MISSING-SETUP')->exists())->toBeFalse();
+});
+
 /**
  * @return array{user: User, vendor: Vendor, item: Item, location: Location}
  */
@@ -279,4 +391,14 @@ function purchasePostingTestAccount(
         'direct_posting' => true,
         'blocked' => false,
     ]);
+}
+
+function grantPurchaseCreditMemoPostPermission(User $user): void
+{
+    Permission::query()->firstOrCreate([
+        'name' => 'purchase.credit_memo.post',
+        'guard_name' => 'web',
+    ]);
+
+    $user->givePermissionTo('purchase.credit_memo.post');
 }

@@ -4,14 +4,17 @@ use App\Enums\AccountCategory;
 use App\Enums\CalculationMethod;
 use App\Enums\PayCodeType;
 use App\Enums\PayrollStatus;
+use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\Employee;
 use App\Models\EmployeeBankAccount;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GlEntry;
 use App\Models\PayCode;
 use App\Models\PayrollDocument;
 use App\Models\PayrollLine;
 use App\Models\PayrollPostingGroup;
+use App\Models\Permission;
 use App\Models\User;
 use App\Services\PayrollPostingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -20,7 +23,21 @@ uses(RefreshDatabase::class);
 
 test('posting payroll calculates balanced gl entries for earning and deduction', function () {
     // Setup Admin
-    User::factory()->create();
+    $user = User::factory()->create();
+    Permission::query()->firstOrCreate(['name' => 'payroll.post', 'guard_name' => 'web']);
+    $user->givePermissionTo('payroll.post');
+    $this->actingAs($user);
+    GeneralLedgerSetup::query()->firstOrCreate(['company_name' => 'Default Company'], [
+        'allow_posting_from' => '2026-01-01',
+        'allow_posting_to' => '2026-12-31',
+    ]);
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
 
     // Setup Accounting
     $salaryExpenseAccount = ChartOfAccount::factory()->create(['account_category' => AccountCategory::OPERATING_EXPENSE]);
@@ -69,7 +86,7 @@ test('posting payroll calculates balanced gl entries for earning and deduction',
         'document_number' => 'PRL-001',
         'period_start' => '2026-04-01',
         'period_end' => '2026-04-30',
-        'status' => PayrollStatus::OPEN,
+        'status' => PayrollStatus::CALCULATED,
     ]);
 
     PayrollLine::create([
@@ -87,7 +104,7 @@ test('posting payroll calculates balanced gl entries for earning and deduction',
     ]);
 
     // Action
-    $service = new PayrollPostingService;
+    $service = app(PayrollPostingService::class);
     $service->post($doc);
 
     // Assert Status is Posted

@@ -541,7 +541,11 @@ class VendorLedgerEntry extends Model
             'currency_factor' => $creditMemo->currency_factor,
             'general_business_posting_group_id' => $creditMemo->general_business_posting_group_id,
             'vendor_posting_group_id' => $creditMemo->vendor_posting_group_id,
-            'gl_entry_id' => $creditMemo->glEntries()->first()?->id,
+            'gl_entry_id' => GlEntry::query()
+                ->where('document_type', 'PURCHASE_CREDIT_MEMO')
+                ->where('document_number', $creditMemo->document_number)
+                ->orderBy('id')
+                ->value('id'),
             'source_id' => $creditMemo->id,
             'source_type' => PostedPurchaseCreditMemo::class,
             'created_by' => $creditMemo->posted_by,

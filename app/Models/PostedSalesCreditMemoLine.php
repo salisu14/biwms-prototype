@@ -22,6 +22,7 @@ class PostedSalesCreditMemoLine extends Model
         'item_id',
         'item_code',
         'item_description',
+        'posting_date',
         'variant_code',
         'general_product_posting_group_id',
         'inventory_posting_group_id',

@@ -1,6 +1,7 @@
 <?php
 
 use App\Events\PaymentApplied;
+use App\Events\PaymentUnapplied;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\CashReceiptLine;
@@ -313,6 +314,45 @@ it('applies payment for authorized users and dispatches an audit event', functio
     Event::assertDispatched(PaymentApplied::class, fn (PaymentApplied $event): bool => $event->application->is($application));
 });
 
+it('unapplies payment without changing bank ledger or bank balance and blocks duplicate unapply', function () {
+    $user = User::factory()->create();
+    grantPaymentApplyPermission($user);
+    grantPaymentUnapplyPermission($user);
+
+    $customer = Customer::factory()->create();
+    $bankAccount = BankAccount::factory()->receiptOnly()->create([
+        'current_balance' => 500,
+        'available_balance' => 500,
+    ]);
+    $payment = postedCustomerPayment($customer, $user, 100);
+    $payment->forceFill(['bank_account_id' => $bankAccount->id])->save();
+    $invoice = postedSalesInvoice($customer, $user, 100);
+
+    $application = app(PaymentService::class)->applyToDocument($payment, [
+        'document_type' => 'SALES_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 100,
+    ], $user->id);
+
+    Event::fake([PaymentUnapplied::class]);
+
+    $bankLedgerCount = BankAccountLedgerEntry::query()->count();
+    $bankBalance = (float) $bankAccount->fresh()->current_balance;
+
+    app(PaymentService::class)->unapply($application, $user->id);
+
+    expect($application->fresh()->reversed)->toBeTrue()
+        ->and((float) $invoice->fresh()->remaining_amount)->toBe(100.0)
+        ->and((float) $payment->fresh()->unapplied_amount)->toBe(100.0)
+        ->and(BankAccountLedgerEntry::query()->count())->toBe($bankLedgerCount)
+        ->and((float) $bankAccount->fresh()->current_balance)->toBe($bankBalance);
+
+    Event::assertDispatched(PaymentUnapplied::class, fn (PaymentUnapplied $event): bool => $event->application->is($application->fresh()));
+
+    expect(fn () => app(PaymentService::class)->unapply($application->fresh(), $user->id))
+        ->toThrow(Exception::class, 'Payment application is already reversed.');
+});
+
 it('keeps payment application transactional when validation fails', function () {
     Event::fake([PaymentApplied::class]);
 
@@ -428,6 +468,16 @@ function grantPaymentApplyPermission(User $user): void
     ]);
 
     $user->givePermissionTo('finance.payment.apply');
+}
+
+function grantPaymentUnapplyPermission(User $user): void
+{
+    Permission::query()->firstOrCreate([
+        'name' => 'finance.payment.unapply',
+        'guard_name' => 'web',
+    ]);
+
+    $user->givePermissionTo('finance.payment.unapply');
 }
 
 function ensureBankLedgerNumberSeries(): void

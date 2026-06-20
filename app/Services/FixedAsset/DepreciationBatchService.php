@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\FixedAsset;
 
+use App\Enums\FAPostingType;
 use App\Models\FAJournalBatch;
 use App\Models\FAJournalLine;
+use App\Models\FAJournalTemplate;
 use App\Models\FixedAsset;
 use Carbon\Carbon;
 
@@ -23,8 +25,8 @@ class DepreciationBatchService
     ): FAJournalBatch {
         $batch = FAJournalBatch::create([
             'template_id' => $templateId ?? $this->getDefaultDepreciationTemplate(),
-            'name' => 'DEPR-' . $postingDate->format('Y-m'),
-            'description' => 'Monthly depreciation run ' . $postingDate->format('F Y'),
+            'name' => 'DEPR-'.$postingDate->format('Y-m'),
+            'description' => 'Monthly depreciation run '.$postingDate->format('F Y'),
             'posting_date' => $postingDate,
             'calculate_depreciation' => true,
             'status' => 'open',
@@ -33,7 +35,7 @@ class DepreciationBatchService
         // Get assets to depreciate
         $assets = FixedAsset::where('status', 'active')
             ->where('blocked', false)
-            ->when($assetFilter, fn($q) => $q->whereIn('id', $assetFilter))
+            ->when($assetFilter, fn ($q) => $q->whereIn('id', $assetFilter))
             ->get();
 
         $lineNo = 10000;
@@ -45,7 +47,9 @@ class DepreciationBatchService
                 $postingDate
             );
 
-            if ($amount <= 0) continue;
+            if ($amount <= 0) {
+                continue;
+            }
 
             FAJournalLine::create([
                 'batch_id' => $batch->id,
@@ -53,8 +57,8 @@ class DepreciationBatchService
                 'fixed_asset_id' => $asset->id,
                 'fa_no' => $asset->fa_no,
                 'posting_date' => $postingDate,
-                'fa_posting_type' => \App\Enums\FAPostingType::DEPRECIATION,
-                'description' => "Depreciation {$asset->fa_no} for " . $postingDate->format('F Y'),
+                'fa_posting_type' => FAPostingType::DEPRECIATION,
+                'description' => "Depreciation {$asset->fa_no} for ".$postingDate->format('F Y'),
                 'calculated_amount' => $amount,
                 'amount' => $amount,
                 'calculate_depreciation' => false, // Already calculated
@@ -86,9 +90,6 @@ class DepreciationBatchService
                 );
 
                 $line->update(['line_status' => 'posted']);
-
-                // Update asset accumulated depreciation
-                $line->fixedAsset->increment('accumulated_depreciation', $line->amount);
             }
         }
 
@@ -97,6 +98,6 @@ class DepreciationBatchService
 
     private function getDefaultDepreciationTemplate(): int
     {
-        return \App\Models\FAJournalTemplate::where('template_type', 'depreciation')->first()?->id ?? 1;
+        return FAJournalTemplate::where('template_type', 'depreciation')->first()?->id ?? 1;
     }
 }

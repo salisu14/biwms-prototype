@@ -35,6 +35,16 @@ class PaymentPolicy extends AbstractPermissionPolicy
         ]);
     }
 
+    public function unapply(User $user, Payment $payment): bool
+    {
+        return $this->canAny($user, [
+            'finance.payment.unapply',
+            'finance.payment.apply',
+            'unapply:payment',
+            'payment_unapply',
+        ]);
+    }
+
     public function reconcile(User $user, Payment $payment): bool
     {
         return $this->canAny($user, [
