@@ -2,17 +2,37 @@
 
 namespace App\Providers;
 
+use App\Events\FixedAssetPosted;
+use App\Events\PaymentApplied;
+use App\Events\PaymentUnapplied;
+use App\Events\PayrollPosted;
+use App\Events\PayrollSalaryPaid;
+use App\Events\ProductionOrderStatusChanged;
+use App\Listeners\RecordAuditTrailForDomainEvent;
+use App\Models\AccountingPeriod;
 use App\Models\ActualOverheadCost;
 use App\Models\AttendanceLedgerEntry;
+use App\Models\AuditTrail;
 use App\Models\BankAccount;
 use App\Models\BlanketOrder;
+use App\Models\ChartOfAccount;
 use App\Models\CurrencyAdjustmentLedger;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
+use App\Models\CustomerPostingGroup;
 use App\Models\Employee;
+use App\Models\EmployeePostingGroup;
+use App\Models\FAPostingGroup;
 use App\Models\FixedAsset;
+use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralJournalBatch;
+use App\Models\GeneralLedgerSetup;
+use App\Models\GeneralPostingSetup;
+use App\Models\GeneralPostingSetupLine;
+use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
+use App\Models\InventoryPostingGroup;
+use App\Models\InventoryPostingSetup;
 use App\Models\Item;
 use App\Models\MaintenanceContract;
 use App\Models\MaintenanceContractSchedule;
@@ -25,12 +45,14 @@ use App\Models\Manufacturing\Routing;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Models\Manufacturing\WorkCenter;
 use App\Models\Manufacturing\WorkCenterGroup;
+use App\Models\NumberSeries;
 use App\Models\OverheadCostCategory;
 use App\Models\PayCode;
 use App\Models\Payment;
 use App\Models\PayrollDocument;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPostingGroup;
+use App\Models\PettyCashFund;
 use App\Models\PettyCashVoucher;
 use App\Models\PurchaseCreditMemo;
 use App\Models\PurchaseInvoice;
@@ -43,15 +65,21 @@ use App\Models\SalesInvoice;
 use App\Models\SalesOrder;
 use App\Models\SalesQuote;
 use App\Models\User;
+use App\Models\VatBusinessPostingGroup;
+use App\Models\VatPostingSetup;
+use App\Models\VatProductPostingGroup;
 use App\Models\Vendor;
+use App\Models\VendorPostingGroup;
 use App\Models\WarehouseActivity;
 use App\Models\WarehousePutaway;
 use App\Models\WarehouseReceipt;
 use App\Models\WarehouseShipment;
 use App\Observers\GlEntryObserver;
 use App\Observers\SalesCreditMemoLineObserver;
+use App\Observers\SensitiveSetupAuditObserver;
 use App\Policies\ActualOverheadCostPolicy;
 use App\Policies\AttendanceLedgerEntryPolicy;
+use App\Policies\AuditTrailPolicy;
 use App\Policies\BankAccountPolicy;
 use App\Policies\BlanketOrderPolicy;
 use App\Policies\CapExProjectPolicy;
@@ -94,8 +122,13 @@ use App\Policies\WarehouseShipmentPolicy;
 use App\Policies\WorkCenterGroupPolicy;
 use App\Policies\WorkCenterPolicy;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Spatie\Permission\Events\PermissionAttachedEvent;
+use Spatie\Permission\Events\PermissionDetachedEvent;
+use Spatie\Permission\Events\RoleAttachedEvent;
+use Spatie\Permission\Events\RoleDetachedEvent;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -120,6 +153,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(SalesInvoice::class, SalesInvoicePolicy::class);
         Gate::policy(SalesCreditMemo::class, SalesCreditMemoPolicy::class);
         Gate::policy(Customer::class, CustomerPolicy::class);
+        Gate::policy(AuditTrail::class, AuditTrailPolicy::class);
         Gate::policy(Item::class, ItemPolicy::class);
         Gate::policy(Payment::class, PaymentPolicy::class);
         Gate::policy(PettyCashVoucher::class, PettyCashVoucherPolicy::class);
@@ -166,5 +200,52 @@ class AppServiceProvider extends ServiceProvider
 
         SalesCreditMemoLine::observe(SalesCreditMemoLineObserver::class);
         GlEntry::observe(GlEntryObserver::class);
+
+        $this->registerAuditTrailListeners();
+        $this->registerSensitiveSetupObservers();
+    }
+
+    private function registerAuditTrailListeners(): void
+    {
+        Event::listen(PaymentApplied::class, [RecordAuditTrailForDomainEvent::class, 'handlePaymentApplied']);
+        Event::listen(PaymentUnapplied::class, [RecordAuditTrailForDomainEvent::class, 'handlePaymentUnapplied']);
+        Event::listen(PayrollPosted::class, [RecordAuditTrailForDomainEvent::class, 'handlePayrollPosted']);
+        Event::listen(PayrollSalaryPaid::class, [RecordAuditTrailForDomainEvent::class, 'handlePayrollSalaryPaid']);
+        Event::listen(FixedAssetPosted::class, [RecordAuditTrailForDomainEvent::class, 'handleFixedAssetPosted']);
+        Event::listen(ProductionOrderStatusChanged::class, [RecordAuditTrailForDomainEvent::class, 'handleProductionOrderStatusChanged']);
+        Event::listen(PermissionAttachedEvent::class, [RecordAuditTrailForDomainEvent::class, 'handlePermissionAttached']);
+        Event::listen(PermissionDetachedEvent::class, [RecordAuditTrailForDomainEvent::class, 'handlePermissionDetached']);
+        Event::listen(RoleAttachedEvent::class, [RecordAuditTrailForDomainEvent::class, 'handleRoleAttached']);
+        Event::listen(RoleDetachedEvent::class, [RecordAuditTrailForDomainEvent::class, 'handleRoleDetached']);
+    }
+
+    private function registerSensitiveSetupObservers(): void
+    {
+        foreach ([
+            AccountingPeriod::class,
+            BankAccount::class,
+            ChartOfAccount::class,
+            CustomerPostingGroup::class,
+            EmployeePostingGroup::class,
+            FAPostingGroup::class,
+            GeneralBusinessPostingGroup::class,
+            GeneralLedgerSetup::class,
+            GeneralPostingSetup::class,
+            GeneralPostingSetupLine::class,
+            GeneralProductPostingGroup::class,
+            InventoryPostingGroup::class,
+            InventoryPostingSetup::class,
+            NumberSeries::class,
+            PayrollPostingGroup::class,
+            PettyCashFund::class,
+            VatBusinessPostingGroup::class,
+            VatPostingSetup::class,
+            VatProductPostingGroup::class,
+            VendorPostingGroup::class,
+        ] as $setupModel) {
+            if (class_exists($setupModel)) {
+                $setupModel::observe(SensitiveSetupAuditObserver::class);
+            }
+        }
     }
 }
