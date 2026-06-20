@@ -1,8 +1,7 @@
 <?php
 
-namespace App\Filament\Resources;
+namespace App\Filament\Resources\SalespersonPurchasers;
 
-use App\Filament\Resources\SalespersonPurchasers\Pages;
 use App\Filament\Resources\SalespersonPurchasers\Schemas\SalespersonPurchaserForm;
 use App\Filament\Resources\SalespersonPurchasers\Tables\SalespersonPurchasersTable;
 use App\Models\SalespersonPurchaser;

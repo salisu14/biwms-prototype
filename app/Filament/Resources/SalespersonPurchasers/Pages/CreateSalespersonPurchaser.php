@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\SalespersonPurchasers\Pages;
 
-use App\Filament\Resources\SalespersonPurchaserResource;
+use App\Filament\Resources\SalespersonPurchasers\SalespersonPurchaserResource;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateSalespersonPurchaser extends CreateRecord
