@@ -22,10 +22,25 @@ class Payment extends Model
                 return;
             }
 
-            try {
-                $payment->payment_number = app(NumberSeriesService::class)->getNextNo('PAYMENT');
-            } catch (\Throwable) {
-                $payment->payment_number = self::generateNumber((string) ($payment->payment_direction ?: 'DISBURSEMENT'));
+            $payment->payment_number = app(NumberSeriesService::class)->getNextNoFromSeries(
+                ['PAYMENT'],
+                $payment->posting_date,
+                'Payment'
+            );
+        });
+
+        static::saving(function (Payment $payment): void {
+            if (blank($payment->external_reference)) {
+                return;
+            }
+
+            $duplicateExists = self::query()
+                ->where('external_reference', $payment->external_reference)
+                ->when($payment->exists, fn ($query) => $query->whereKeyNot($payment->getKey()))
+                ->exists();
+
+            if ($duplicateExists) {
+                throw new \RuntimeException("Duplicate payment external reference: {$payment->external_reference}");
             }
         });
 
@@ -255,12 +270,6 @@ class Payment extends Model
      */
     public static function generateNumber(string $direction): string
     {
-        $prefix = $direction === 'RECEIPT' ? 'REC' : 'DIS';
-        $year = date('Y');
-        $count = self::where('payment_direction', $direction)
-            ->whereYear('created_at', $year)
-            ->count() + 1;
-
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(['PAYMENT'], null, "Payment {$direction}");
     }
 }

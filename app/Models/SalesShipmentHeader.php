@@ -128,19 +128,10 @@ class SalesShipmentHeader extends Model
 
     public static function generateDocumentNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['S-SHIP', 'SALES_SHIPMENT', 'SSHIP'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
-
-        return sprintf('S-SHIP-%d-%06d', $year, $sequence);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['S-SHIP', 'SALES_SHIPMENT', 'SSHIP'],
+            null,
+            'Sales Shipment'
+        );
     }
 }

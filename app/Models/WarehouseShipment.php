@@ -105,20 +105,11 @@ class WarehouseShipment extends Model
 
     public static function generateNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['W-SHIP', 'WAREHOUSE_SHIPMENT', 'WS'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
-
-        return sprintf('WS-%d-%06d', $year, $sequence);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['W-SHIP', 'WAREHOUSE_SHIPMENT', 'WS'],
+            null,
+            'Warehouse Shipment'
+        );
     }
 
     // Scope

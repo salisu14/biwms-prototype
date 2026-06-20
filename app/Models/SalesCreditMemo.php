@@ -148,19 +148,10 @@ class SalesCreditMemo extends Model implements Approvable
 
     public static function generateMemoNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['S-CM', 'SALES_CREDIT_MEMO', 'SCM'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
-
-        return sprintf('CM-%d-%06d', $year, $sequence);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['S-CM', 'SALES_CREDIT_MEMO', 'SCM'],
+            null,
+            'Sales Credit Memo'
+        );
     }
 }

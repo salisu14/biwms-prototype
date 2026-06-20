@@ -11,7 +11,6 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use RuntimeException;
-use Throwable;
 
 class PettyCashPostingService
 {
@@ -160,17 +159,7 @@ class PettyCashPostingService
 
     private function nextNumber(string $seriesCode, string $fallbackPrefix): string
     {
-        try {
-            $nextNumber = $this->numberSeriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        } catch (Throwable) {
-            //
-        }
-
-        return $fallbackPrefix.'-'.str_pad((string) random_int(1, 999999), 6, '0', STR_PAD_LEFT);
+        return $this->numberSeriesService->getNextNoFromSeries([$seriesCode], null, $fallbackPrefix);
     }
 
     private function nextGlEntryNumber(): int

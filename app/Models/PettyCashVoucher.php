@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PettyCashVoucherStatus;
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -102,7 +103,15 @@ class PettyCashVoucher extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (PettyCashVoucher $voucher) {
+        static::creating(function (PettyCashVoucher $voucher): void {
+            if (empty($voucher->voucher_number)) {
+                $voucher->voucher_number = app(NumberSeriesService::class)->getNextNoFromSeries(
+                    ['PC-VOUCHER'],
+                    $voucher->date,
+                    'Petty Cash Voucher'
+                );
+            }
+
             // Automatically set the requested_by_id to the currently logged-in user
             if (is_null($voucher->requested_by_id) && Auth::check()) {
                 $voucher->requested_by_id = Auth::id();

@@ -388,17 +388,10 @@ class SalesInvoiceService
 
     private function generateNumber(): string
     {
-        $seriesCandidates = ['S-INV', 'SALES_INVOICE', 'SI'];
-
-        foreach ($seriesCandidates as $seriesCode) {
-            $nextNo = $this->numberSeriesService->tryGetNextNo($seriesCode);
-            if ($nextNo !== null && $nextNo !== '') {
-                return $nextNo;
-            }
-        }
-
-        throw new \RuntimeException(
-            'No Sales Invoice number series is configured. Please set up one of: S-INV, SALES_INVOICE, or SI.'
+        return $this->numberSeriesService->getNextNoFromSeries(
+            ['S-INV', 'SALES_INVOICE', 'SI'],
+            null,
+            'Sales Invoice'
         );
     }
 }

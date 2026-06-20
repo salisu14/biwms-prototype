@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Enums\ContactRole;
 use App\Models\Contact;
 use App\Models\Customer;
-use App\Models\NumberSeries;
 use App\Models\Vendor;
 use Illuminate\Support\Facades\DB;
 
@@ -18,8 +17,7 @@ class ContactService
     {
         return DB::transaction(function () use ($contact, $data) {
             // 1. Generate Customer Number
-            $series = NumberSeries::where('code', 'CUSTOMER')->first();
-            $customerNumber = $series ? $series->generateNumber() : 'CUS-'.str_pad($contact->id, 5, '0', STR_PAD_LEFT);
+            $customerNumber = app(NumberSeriesService::class)->getNextNoFromSeries(['CUSTOMER'], null, 'Customer');
 
             // 2. Create Customer
             $customer = Customer::create([
@@ -49,8 +47,7 @@ class ContactService
     {
         return DB::transaction(function () use ($contact, $data) {
             // 1. Generate Vendor Code
-            $series = NumberSeries::where('code', 'VENDOR')->first();
-            $vendorCode = $series ? $series->generateNumber() : 'VEN-'.str_pad($contact->id, 5, '0', STR_PAD_LEFT);
+            $vendorCode = app(NumberSeriesService::class)->getNextNoFromSeries(['VENDOR'], null, 'Vendor');
 
             // 2. Create Vendor
             $vendor = Vendor::create([

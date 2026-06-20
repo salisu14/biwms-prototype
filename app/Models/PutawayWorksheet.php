@@ -45,19 +45,10 @@ class PutawayWorksheet extends Model
 
     public static function generateWorksheetNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['PUTAWAY', 'WH-PUTAWAY'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
-
-        return sprintf('PUT-%d-%06d', $year, $sequence);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['PUTAWAY', 'WH-PUTAWAY'],
+            null,
+            'Put-away Worksheet'
+        );
     }
 }

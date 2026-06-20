@@ -11,7 +11,6 @@ use App\Models\PurchaseQuoteLine;
 use App\Models\Vendor;
 use App\Services\NumberSeriesService;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 
 class PurchaseQuoteService
 {
@@ -227,15 +226,10 @@ class PurchaseQuoteService
 
     private function nextQuoteNumber(): string
     {
-        foreach (['P-QUOTE', 'PURCHASE_QUOTE', 'PQ'] as $seriesCode) {
-            $nextNo = $this->numberSeriesService->tryGetNextNo($seriesCode);
-            if (! empty($nextNo)) {
-                return $nextNo;
-            }
-        }
-
-        throw new RuntimeException(
-            'No Purchase Quote number series is configured. Please set up one of: P-QUOTE, PURCHASE_QUOTE, or PQ.'
+        return $this->numberSeriesService->getNextNoFromSeries(
+            ['P-QUOTE', 'PURCHASE_QUOTE', 'PQ'],
+            null,
+            'Purchase Quote'
         );
     }
 }

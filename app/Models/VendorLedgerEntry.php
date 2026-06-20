@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -633,13 +634,7 @@ class VendorLedgerEntry extends Model
      */
     protected static function generatePaymentNumber(): string
     {
-        $prefix = 'PAY';
-        $year = date('Y');
-        $count = self::whereYear('created_at', $year)
-            ->whereIn('document_type', ['PAYMENT', 'BANK_TRANSFER'])
-            ->count() + 1;
-
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(['PAYMENT'], null, 'Vendor Payment');
     }
 
     // ==================== REPORTING METHODS ====================

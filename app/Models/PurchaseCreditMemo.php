@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use RuntimeException;
 
 class PurchaseCreditMemo extends Model implements Approvable
 {
@@ -89,40 +88,10 @@ class PurchaseCreditMemo extends Model implements Approvable
 
     public static function generateNumber(): string
     {
-        $postingDate = now();
-        $service = app(NumberSeriesService::class);
-
-        $seriesCandidates = ['P-CM', 'PURCHASE_CREDIT_MEMO', 'PCM'];
-
-        foreach ($seriesCandidates as $seriesCode) {
-            $number = $service->tryGetNextNo($seriesCode, $postingDate);
-            if ($number) {
-                return $number;
-            }
-        }
-
-        $legacySeries = NumberSeries::query()
-            ->whereIn('code', $seriesCandidates)
-            ->where('is_active', true)
-            ->orderByRaw(
-                "CASE code
-                    WHEN 'P-CM' THEN 1
-                    WHEN 'PURCHASE_CREDIT_MEMO' THEN 2
-                    WHEN 'PCM' THEN 3
-                    ELSE 99
-                END"
-            )
-            ->first();
-
-        if ($legacySeries) {
-            $legacyNo = $legacySeries->generateNumber();
-            if (! empty($legacyNo)) {
-                return $legacyNo;
-            }
-        }
-
-        throw new RuntimeException(
-            'No Purchase Credit Memo number series is configured. Please set up one of: P-CM, PURCHASE_CREDIT_MEMO, or PCM.'
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['P-CM', 'PURCHASE_CREDIT_MEMO', 'PCM'],
+            null,
+            'Purchase Credit Memo'
         );
     }
 

@@ -49,6 +49,11 @@ class NumberSeriesLine extends Model
         return $this->belongsTo(NumberSeries::class);
     }
 
+    public function series(): BelongsTo
+    {
+        return $this->belongsTo(NumberSeries::class, 'number_series_id');
+    }
+
     /**
      * Generate the Next Formatted Number
      * * This logic is now much simpler because we use the prefix/suffix columns

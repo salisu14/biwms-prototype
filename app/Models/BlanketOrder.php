@@ -271,26 +271,11 @@ class BlanketOrder extends Model
 
     public function generateDocumentNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
         $seriesCandidates = $this->order_type === 'Sales'
             ? ['S-BLANKET', 'BLANKET_SALES_ORDER', 'SBO']
             : ['P-BLANKET', 'BLANKET_PURCHASE_ORDER', 'PBO'];
 
-        foreach ($seriesCandidates as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $prefix = $this->order_type === 'Sales' ? 'SBO' : 'PBO';
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)
-            ->where('order_type', $this->order_type)
-            ->count() + 1;
-
-        return "{$prefix}-{$year}-".str_pad($sequence, 6, '0', STR_PAD_LEFT);
+        return app(NumberSeriesService::class)->getNextNoFromSeries($seriesCandidates, null, 'Blanket Order');
     }
 
     public function createPurchaseOrder(): PurchaseOrder

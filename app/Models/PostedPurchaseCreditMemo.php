@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -313,10 +314,10 @@ class PostedPurchaseCreditMemo extends Model
      */
     public static function generateDocumentNumber(): string
     {
-        $prefix = 'PCM';
-        $year = date('Y');
-        $count = self::whereYear('created_at', $year)->count() + 1;
-
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['P-CM', 'PURCHASE_CREDIT_MEMO', 'PCM'],
+            null,
+            'Posted Purchase Credit Memo'
+        );
     }
 }

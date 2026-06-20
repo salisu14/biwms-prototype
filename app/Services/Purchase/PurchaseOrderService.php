@@ -13,11 +13,11 @@ use App\Data\Purchase\UpdatePurchaseOrderData;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
 use App\Models\Item;
-use App\Models\NumberSeries;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
 use App\Models\WarehouseReceipt;
+use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PutAwayWorksheetService;
 use Exception;
@@ -29,7 +29,8 @@ class PurchaseOrderService
         protected PostingService $postingService,
         protected PutAwayWorksheetService $putAwayService,
         protected PurchaseInvoiceService $purchaseInvoiceService,
-        protected PurchasePriceCalculationService $purchasePriceCalculationService
+        protected PurchasePriceCalculationService $purchasePriceCalculationService,
+        protected NumberSeriesService $numberSeriesService
     ) {}
 
     /**
@@ -414,21 +415,10 @@ class PurchaseOrderService
 
     public static function generateOrderNumber(PurchaseOrderType $orderType): ?string
     {
-        $series = NumberSeries::where('code', $orderType->seriesCode())
-            ->where('is_active', true)
-            ->first();
-
-        if (! $series) {
-            $year = date('Y');
-            $count = PurchaseOrder::whereYear('created_at', $year)
-                ->where('order_type', $orderType)
-                ->count() + 1;
-
-            return sprintf('%d-%s-%05d', $year, $orderType->code(), $count);
-        }
-
-        $series->checkYearReset();
-
-        return $series->generateNumber();
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            [$orderType->seriesCode()],
+            null,
+            'Purchase Order'
+        );
     }
 }

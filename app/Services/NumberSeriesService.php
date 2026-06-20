@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
+use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -29,7 +30,7 @@ class NumberSeriesService
      */
     public function getNextNo(
         string $seriesCode,
-        ?\DateTimeInterface $postingDate = null,
+        ?DateTimeInterface $postingDate = null,
         bool $modifySeries = true
     ): string {
         $postingDate = $postingDate ?? now();
@@ -44,6 +45,10 @@ class NumberSeriesService
                 throw new \RuntimeException("Number Series {$seriesCode} does not exist");
             }
 
+            if (! $series->is_active) {
+                throw new \RuntimeException("Number Series {$seriesCode} is inactive");
+            }
+
             // Check date validity (BC: CheckValidDate)
             $this->validateDateInRange($series, $postingDate);
 
@@ -53,6 +58,8 @@ class NumberSeriesService
             if (! $line) {
                 throw new \RuntimeException("No open Number Series Line exists for date {$postingDate->format('Y-m-d')}");
             }
+
+            $this->validateLineHasNextNumber($seriesCode, $line);
 
             // Generate next number
             $nextNo = $this->formatNumber($line);
@@ -76,13 +83,35 @@ class NumberSeriesService
      */
     public function tryGetNextNo(
         string $seriesCode,
-        ?\DateTimeInterface $postingDate = null
+        ?DateTimeInterface $postingDate = null
     ): ?string {
         try {
             return $this->getNextNo($seriesCode, $postingDate);
         } catch (\Exception $e) {
             return null;
         }
+    }
+
+    /**
+     * @param  array<int, string>  $seriesCodes
+     */
+    public function getNextNoFromSeries(array $seriesCodes, ?DateTimeInterface $postingDate = null, ?string $description = null): string
+    {
+        $errors = [];
+
+        foreach ($seriesCodes as $seriesCode) {
+            try {
+                return $this->getNextNo($seriesCode, $postingDate);
+            } catch (\RuntimeException $exception) {
+                $errors[$seriesCode] = $exception->getMessage();
+            }
+        }
+
+        $label = $description ? "{$description} " : '';
+
+        throw new \RuntimeException(
+            "Missing Number Series: {$label}".implode(', ', $seriesCodes).'. '.implode(' ', $errors)
+        );
     }
 
     /**
@@ -162,7 +191,7 @@ class NumberSeriesService
         return $numbers;
     }
 
-    private function getSeriesLine(NumberSeries $series, \DateTimeInterface $date): ?NumberSeriesLine
+    private function getSeriesLine(NumberSeries $series, DateTimeInterface $date): ?NumberSeriesLine
     {
         return NumberSeriesLine::where('number_series_id', $series->id)
             ->where('starting_date', '<=', $date)
@@ -172,6 +201,7 @@ class NumberSeriesService
             })
             ->where('blocked', false)
             ->orderBy('starting_date', 'desc')
+            ->lockForUpdate()
             ->first();
     }
 
@@ -219,13 +249,23 @@ class NumberSeriesService
         return $line->starting_no ? (int) $line->starting_no : 1;
     }
 
-    private function validateDateInRange(NumberSeries $series, \DateTimeInterface $date): void
+    private function validateDateInRange(NumberSeries $series, DateTimeInterface $date): void
     {
         if ($series->starting_date && $date < $series->starting_date) {
             throw new \RuntimeException('Posting date before series starting date');
         }
         if ($series->ending_date && $date > $series->ending_date) {
             throw new \RuntimeException('Posting date after series ending date');
+        }
+    }
+
+    private function validateLineHasNextNumber(string $seriesCode, NumberSeriesLine $line): void
+    {
+        $current = $line->last_no_used ?? $this->getStartingNumber($line);
+        $next = $current + ($line->increment_by ?? 1);
+
+        if ($line->ending_no !== null && (int) $line->ending_no > 0 && $next > (int) $line->ending_no) {
+            throw new \RuntimeException("Number Series {$seriesCode} is exhausted");
         }
     }
 

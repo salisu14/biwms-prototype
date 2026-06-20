@@ -290,21 +290,11 @@ class PurchaseInvoice extends Model
      */
     public static function generateNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['P-INV', 'PURCHASE_INVOICE', 'PI'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $prefix = 'PI'; // Purchase Invoice
-        $year = date('Y');
-        $count = self::whereYear('posted_at', $year)->count() + 1;
-
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['P-INV', 'PURCHASE_INVOICE', 'PI'],
+            null,
+            'Purchase Invoice'
+        );
     }
 
     public function isPosted(): bool

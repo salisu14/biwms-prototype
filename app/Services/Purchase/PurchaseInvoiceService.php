@@ -7,7 +7,6 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\PurchaseOrderStatus;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
-use App\Models\NumberSeries;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedPurchaseInvoiceLine;
 use App\Models\PurchaseInvoice;
@@ -375,35 +374,10 @@ class PurchaseInvoiceService
 
     private function generateNumber(): string
     {
-        $seriesCandidates = ['P-INV', 'PURCHASE_INVOICE', 'PI'];
-
-        foreach ($seriesCandidates as $seriesCode) {
-            $nextNo = $this->numberSeriesService->tryGetNextNo($seriesCode);
-            if ($nextNo !== null && $nextNo !== '') {
-                return $nextNo;
-            }
-        }
-
-        $legacySeries = NumberSeries::query()
-            ->whereIn('code', $seriesCandidates)
-            ->where('is_active', true)
-            ->orderByRaw(
-                "CASE code
-                    WHEN 'P-INV' THEN 1
-                    WHEN 'PURCHASE_INVOICE' THEN 2
-                    WHEN 'PI' THEN 3
-                    ELSE 99
-                END"
-            )
-            ->first();
-
-        if ($legacySeries) {
-            $fallbackNo = $legacySeries->generateNumber();
-            if (! empty($fallbackNo)) {
-                return $fallbackNo;
-            }
-        }
-
-        return PurchaseInvoice::generateNumber();
+        return $this->numberSeriesService->getNextNoFromSeries(
+            ['P-INV', 'PURCHASE_INVOICE', 'PI'],
+            null,
+            'Purchase Invoice'
+        );
     }
 }

@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -414,11 +415,11 @@ class PostedSalesCreditMemo extends Model
      */
     public static function generateNumber(): string
     {
-        $prefix = 'SCM';
-        $year = date('Y');
-        $count = self::whereYear('posted_at', $year)->count() + 1;
-
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['S-CM', 'SALES_CREDIT_MEMO', 'SCM'],
+            null,
+            'Posted Sales Credit Memo'
+        );
     }
 
     /**

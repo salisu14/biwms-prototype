@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\PettyCashVouchers\Schemas;
 
+use App\Enums\AccountCategory;
 use App\Enums\PettyCashVoucherStatus;
+use App\Models\ChartOfAccount;
 use App\Models\PettyCashFund;
 use App\Services\NumberSeriesService;
 use Filament\Forms\Components\DatePicker;
@@ -30,8 +32,7 @@ class PettyCashVoucherForm
                                     ->label('Voucher No.')
                                     ->required()
                                     ->unique(ignoreRecord: true)
-                                    // FIX: Use tryGetNextNo() to prevent crashes if series is not configured
-                                    ->default(fn () => app(NumberSeriesService::class)->tryGetNextNo('PC-VOUCHER') ?? 'TEMP-' . str_pad(random_int(1, 9999), 4, '0', STR_PAD_LEFT))
+                                    ->default(fn () => app(NumberSeriesService::class)->getNextNoFromSeries(['PC-VOUCHER'], null, 'Petty Cash Voucher'))
                                     ->disabled()
                                     ->dehydrated(),
 
@@ -51,7 +52,9 @@ class PettyCashVoucherForm
                                 TextInput::make('fund_balance')
                                     ->label('Fund Balance')
                                     ->numeric()
-                                    ->prefix(fn (Get $get) => match ($get('currency') ?? 'NGN') { 'USD' => '$', 'EUR' => '€', 'GBP' => '£', default => '₦' })
+                                    ->prefix(fn (Get $get) => match ($get('currency') ?? 'NGN') {
+                                        'USD' => '$', 'EUR' => '€', 'GBP' => '£', default => '₦'
+                                    })
                                     ->disabled()
                                     ->dehydrated()
                                     ->helperText('Current available balance in the selected fund.'),
@@ -118,30 +121,29 @@ class PettyCashVoucherForm
                                             ->where('blocked', false)
                                             ->where('direct_posting', true) // Best practice: only allow accounts that accept direct posting
                                             ->whereIn('account_category', [
-                                                \App\Enums\AccountCategory::DIRECT_EXPENSE,
-                                                \App\Enums\AccountCategory::INDIRECT_EXPENSE,
-                                                \App\Enums\AccountCategory::OPERATING_EXPENSE,
-                                                \App\Enums\AccountCategory::OTHER_INCOME_EXPENSE,
-                                                \App\Enums\AccountCategory::COGS,
+                                                AccountCategory::DIRECT_EXPENSE,
+                                                AccountCategory::INDIRECT_EXPENSE,
+                                                AccountCategory::OPERATING_EXPENSE,
+                                                AccountCategory::OTHER_INCOME_EXPENSE,
+                                                AccountCategory::COGS,
                                             ])
                                     )
                                     ->searchable()
                                     ->getOptionLabelFromRecordUsing(
-                                    // Display format: "6100 — Office Supplies"
-                                        fn (\App\Models\ChartOfAccount $record) => "{$record->account_number} — {$record->name}"
+                                        // Display format: "6100 — Office Supplies"
+                                        fn (ChartOfAccount $record) => "{$record->account_number} — {$record->name}"
                                     )
                                     ->getSearchResultsUsing(
-                                        fn (string $search) => \App\Models\ChartOfAccount::where('blocked', false)
+                                        fn (string $search) => ChartOfAccount::where('blocked', false)
                                             ->where('direct_posting', true)
                                             ->whereIn('account_category', [
-                                                \App\Enums\AccountCategory::DIRECT_EXPENSE,
-                                                \App\Enums\AccountCategory::INDIRECT_EXPENSE,
-                                                \App\Enums\AccountCategory::OPERATING_EXPENSE,
-                                                \App\Enums\AccountCategory::OTHER_INCOME_EXPENSE,
-                                                \App\Enums\AccountCategory::COGS,
+                                                AccountCategory::DIRECT_EXPENSE,
+                                                AccountCategory::INDIRECT_EXPENSE,
+                                                AccountCategory::OPERATING_EXPENSE,
+                                                AccountCategory::OTHER_INCOME_EXPENSE,
+                                                AccountCategory::COGS,
                                             ])
-                                            ->where(fn ($q) =>
-                                            $q->where('account_number', 'like', "%{$search}%")
+                                            ->where(fn ($q) => $q->where('account_number', 'like', "%{$search}%")
                                                 ->orWhere('name', 'like', "%{$search}%")
                                                 ->orWhere('search_name', 'like', "%{$search}%")
                                             )
@@ -160,7 +162,9 @@ class PettyCashVoucherForm
                                 TextInput::make('amount')
                                     ->required()
                                     ->numeric()
-                                    ->prefix(fn (Get $get) => match ($get('../../../currency') ?? 'NGN') { 'USD' => '$', 'EUR' => '€', 'GBP' => '£', default => '₦' })
+                                    ->prefix(fn (Get $get) => match ($get('../../../currency') ?? 'NGN') {
+                                        'USD' => '$', 'EUR' => '€', 'GBP' => '£', default => '₦'
+                                    })
                                     ->minValue(0)
                                     ->step(0.01)
                                     ->live()
@@ -209,7 +213,9 @@ class PettyCashVoucherForm
                                 TextInput::make('total_amount')
                                     ->label('Total Amount')
                                     ->numeric()
-                                    ->prefix(fn (Get $get) => match ($get('currency') ?? 'NGN') { 'USD' => '$', 'EUR' => '€', 'GBP' => '£', default => '₦' })
+                                    ->prefix(fn (Get $get) => match ($get('currency') ?? 'NGN') {
+                                        'USD' => '$', 'EUR' => '€', 'GBP' => '£', default => '₦'
+                                    })
                                     ->disabled()
                                     ->dehydrated(),
                             ]),

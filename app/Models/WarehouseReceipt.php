@@ -99,20 +99,11 @@ class WarehouseReceipt extends Model
 
     public static function generateNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['W-REC', 'WAREHOUSE_RECEIPT', 'WR'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
-
-        return sprintf('WR-%d-%06d', $year, $sequence);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['W-REC', 'WAREHOUSE_RECEIPT', 'WR'],
+            null,
+            'Warehouse Receipt'
+        );
     }
 
     // Scope

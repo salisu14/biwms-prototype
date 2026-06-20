@@ -198,15 +198,10 @@ class PutAwayWorksheetService
             'WH-PUTAWAY',
         ]);
 
-        foreach (array_unique($candidateSeriesCodes) as $seriesCode) {
-            $documentNo = $this->numberSeriesService->tryGetNextNo($seriesCode);
-            if ($documentNo !== null) {
-                return $documentNo;
-            }
-        }
-
-        throw new \RuntimeException(
-            'No usable Put-away number series found. Configure Warehouse Setup Internal Put-away Nos. or create number series PUTAWAY.'
+        return $this->numberSeriesService->getNextNoFromSeries(
+            array_values(array_unique($candidateSeriesCodes)),
+            null,
+            'Put-away Worksheet'
         );
     }
 }

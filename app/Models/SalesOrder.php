@@ -10,6 +10,7 @@ use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
 use App\Services\DimensionManagementService;
+use App\Services\NumberSeriesService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
 use App\Traits\Approvable as ApprovableTrait;
@@ -359,19 +360,14 @@ class SalesOrder extends Model implements Approvable
 
     public static function generateOrderNumber(SalesOrderType $orderType): string
     {
-        $prefix = match ($orderType) {
-            SalesOrderType::ReturnOrder => 'RO',
-            SalesOrderType::Replacement => 'RP',
-            SalesOrderType::Contract => 'CT',
-            default => 'SO',
+        $seriesCodes = match ($orderType) {
+            SalesOrderType::ReturnOrder => ['S-RET', 'SALES_RETURN_ORDER', 'SRO'],
+            SalesOrderType::Replacement => ['S-REPL', 'SALES_REPLACEMENT', 'SRP'],
+            SalesOrderType::Contract => ['S-CONTRACT', 'SALES_CONTRACT', 'SCT'],
+            default => ['S-ORD', 'SALES_ORDER', 'SO'],
         };
 
-        $year = date('Y');
-        $count = self::whereYear('created_at', $year)
-            ->where('order_type', $orderType)
-            ->count() + 1;
-
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return app(NumberSeriesService::class)->getNextNoFromSeries($seriesCodes, null, 'Sales Order');
     }
 
     /*
@@ -656,7 +652,11 @@ class SalesOrder extends Model implements Approvable
                 ]);
             }
 
-            $invoiceNo = 'PSI-'.now()->format('Y').'-'.str_pad((string) ((int) PostedSalesInvoice::query()->whereYear('posted_at', now()->year)->count() + 1), 6, '0', STR_PAD_LEFT);
+            $invoiceNo = app(NumberSeriesService::class)->getNextNoFromSeries(
+                ['S-INV', 'SALES_INVOICE', 'SI'],
+                null,
+                'Posted Sales Invoice'
+            );
 
             $postedInvoice = PostedSalesInvoice::query()->create([
                 'document_number' => $invoiceNo,

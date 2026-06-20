@@ -102,19 +102,10 @@ class SalesQuote extends Model
 
     public static function generateQuoteNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['S-QUOTE', 'SALES_QUOTE', 'SQ'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
-
-        return sprintf('SQ-%d-%06d', $year, $sequence);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['S-QUOTE', 'SALES_QUOTE', 'SQ'],
+            null,
+            'Sales Quote'
+        );
     }
 }

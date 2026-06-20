@@ -4,6 +4,8 @@ use App\Enums\PettyCashTransactionType;
 use App\Enums\PettyCashVoucherStatus;
 use App\Models\ChartOfAccount;
 use App\Models\GlEntry;
+use App\Models\NumberSeries;
+use App\Models\NumberSeriesLine;
 use App\Models\Permission;
 use App\Models\PettyCashFund;
 use App\Models\PettyCashTransaction;
@@ -15,6 +17,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 
 beforeEach(function () {
     $this->refreshPostgresTestingDatabase();
+    ensurePettyCashPostingNumberSeries();
 });
 
 it('posts an approved petty cash voucher to petty cash ledger and general ledger', function () {
@@ -183,4 +186,37 @@ function grantPettyCashPostingPermission(User $user): void
     ]);
 
     $user->givePermissionTo('finance.petty_cash_voucher.post');
+}
+
+function ensurePettyCashPostingNumberSeries(): void
+{
+    $series = NumberSeries::query()->updateOrCreate(
+        ['code' => 'PC-TRANS'],
+        [
+            'description' => 'Petty Cash Transactions',
+            'prefix' => '',
+            'starting_number' => 1,
+            'ending_number' => null,
+            'current_number' => 0,
+            'year' => 2026,
+            'is_active' => true,
+            'allow_manual' => false,
+            'module' => 'finance',
+        ]
+    );
+
+    $series->lines()->delete();
+
+    NumberSeriesLine::query()->create([
+        'number_series_id' => $series->id,
+        'starting_date' => '2026-01-01',
+        'starting_no' => 0,
+        'ending_no' => null,
+        'increment_by' => 1,
+        'last_no_used' => 0,
+        'no_of_digits' => 6,
+        'prefix' => '',
+        'suffix' => '',
+        'blocked' => false,
+    ]);
 }

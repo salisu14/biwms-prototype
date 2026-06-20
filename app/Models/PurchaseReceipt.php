@@ -206,21 +206,11 @@ class PurchaseReceipt extends Model
 
     public static function generateDocumentNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['P-REC', 'PURCHASE_RECEIPT', 'PR'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $prefix = 'PR';
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
-
-        return "{$prefix}-{$year}-".str_pad($sequence, 6, '0', STR_PAD_LEFT);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['P-REC', 'PURCHASE_RECEIPT', 'PR'],
+            null,
+            'Purchase Receipt'
+        );
     }
 
     public function isFullyInvoiced(): bool

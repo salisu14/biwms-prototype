@@ -366,20 +366,10 @@ class VendorInvoice extends Model
      */
     public static function generateDocumentNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['V-INV', 'VENDOR_INVOICE', 'VI'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $prefix = 'VI';
-        $year = date('Y');
-        $sequence = static::whereYear('created_at', $year)->count() + 1;
-
-        return "{$prefix}-{$year}-".str_pad($sequence, 6, '0', STR_PAD_LEFT);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['V-INV', 'VENDOR_INVOICE', 'VI'],
+            null,
+            'Vendor Invoice'
+        );
     }
 }

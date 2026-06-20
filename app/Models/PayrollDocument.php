@@ -87,19 +87,10 @@ class PayrollDocument extends Model implements Approvable
 
     public static function generateDocumentNumber(): string
     {
-        $seriesService = app(NumberSeriesService::class);
-
-        foreach (['PAYROLL', 'PAYROLL_DOCUMENT', 'PRL'] as $seriesCode) {
-            $nextNumber = $seriesService->tryGetNextNo($seriesCode);
-
-            if (! empty($nextNumber)) {
-                return $nextNumber;
-            }
-        }
-
-        $periodKey = now()->format('Ym');
-        $sequence = static::whereYear('created_at', now()->year)->count() + 1;
-
-        return sprintf('PRL-%s-%04d', $periodKey, $sequence);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['PAYROLL', 'PAYROLL_DOCUMENT', 'PRL'],
+            null,
+            'Payroll Document'
+        );
     }
 }

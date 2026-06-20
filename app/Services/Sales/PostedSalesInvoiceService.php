@@ -5,6 +5,7 @@ namespace App\Services\Sales;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesCreditMemoLine;
 use App\Models\PostedSalesInvoice;
+use App\Services\NumberSeriesService;
 use DateTime;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -85,10 +86,10 @@ class PostedSalesInvoiceService
      */
     public function generateNumber(): string
     {
-        $prefix = 'SI';
-        $year = date('Y');
-        $count = PostedSalesInvoice::whereYear('posted_at', $year)->count() + 1;
-
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['S-INV', 'SALES_INVOICE', 'SI'],
+            null,
+            'Posted Sales Invoice'
+        );
     }
 }

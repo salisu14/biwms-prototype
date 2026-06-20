@@ -22,6 +22,7 @@ use App\Models\Manufacturing\ProductionOrderRoutingLine;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Services\Inventory\CostingService;
 use App\Services\Inventory\ValueEntryService;
+use App\Services\NumberSeriesService;
 use App\Services\Posting\InventoryPostingResolverService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PickWorksheetService;
@@ -1463,11 +1464,11 @@ class ProductionOrderService
      */
     public function generateDocumentNumber(): string
     {
-        $prefix = 'PROD';
-        $year = date('Y');
-        $count = ProductionOrder::whereYear('created_at', $year)->count() + 1;
-
-        return sprintf('%s-%d-%06d', $prefix, $year, $count);
+        return app(NumberSeriesService::class)->getNextNoFromSeries(
+            ['PROD-ORDER', 'PRODUCTION_ORDER', 'PROD'],
+            null,
+            'Production Order'
+        );
     }
 
     protected function convertBomQuantityToItemBase(float $quantity, ProductionBomLine|ProductionBomVersionLine $bomLine): float
