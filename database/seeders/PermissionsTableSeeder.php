@@ -14,6 +14,8 @@ class PermissionsTableSeeder extends Seeder
 
         $legacyPermissions = [
             'user_management_access',
+            'user.manage',
+            'role_permission.manage',
             'admin_dashboard_access',
             'notification_access',
             'customer_access', 'customer_show', 'customer_create', 'customer_edit', 'customer_delete',
@@ -35,6 +37,7 @@ class PermissionsTableSeeder extends Seeder
             'sales.order.view_any', 'sales.order.view', 'sales.order.create', 'sales.order.update', 'sales.order.delete',
             'sales.order.approve', 'sales.order.post',
             'sales.invoice.view_any', 'sales.invoice.view', 'sales.invoice.create', 'sales.invoice.update', 'sales.invoice.delete', 'sales.invoice.post',
+            'sales.credit_memo.post',
 
             // Finance
             'finance.payment.view_any', 'finance.payment.view', 'finance.payment.create', 'finance.payment.update', 'finance.payment.delete',
@@ -45,6 +48,14 @@ class PermissionsTableSeeder extends Seeder
             'finance.general_journal_batch.view_any', 'finance.general_journal_batch.view', 'finance.general_journal_batch.create', 'finance.general_journal_batch.update', 'finance.general_journal_batch.delete',
             'finance.currency_adjustment_ledger.view_any', 'finance.currency_adjustment_ledger.view', 'finance.currency_adjustment_ledger.create', 'finance.currency_adjustment_ledger.update', 'finance.currency_adjustment_ledger.delete',
             'finance.customer_ledger_entry.view_any', 'finance.customer_ledger_entry.view', 'finance.customer_ledger_entry.create', 'finance.customer_ledger_entry.update', 'finance.customer_ledger_entry.delete',
+            'chart_of_account.manage',
+            'posting_setup.manage',
+            'number_series.manage',
+            'audit_trail.view_any',
+            'audit_trail.view',
+            'finance.report.view',
+            'fixed_asset.view_any', 'fixed_asset.view', 'fixed_asset.create', 'fixed_asset.update', 'fixed_asset.delete',
+            'fixed_asset.acquire', 'fixed_asset.depreciate', 'fixed_asset.dispose',
 
             // Warehouse
             'warehouse.receipt.view_any', 'warehouse.receipt.view', 'warehouse.receipt.create', 'warehouse.receipt.update', 'warehouse.receipt.delete',
@@ -54,6 +65,7 @@ class PermissionsTableSeeder extends Seeder
 
             // Factory
             'factory.production_order.view_any', 'factory.production_order.view', 'factory.production_order.create', 'factory.production_order.update', 'factory.production_order.delete',
+            'factory.production_order.post_output', 'factory.production_order.finish', 'factory.production_order.post',
             'factory.production_bom.view_any', 'factory.production_bom.view', 'factory.production_bom.create', 'factory.production_bom.update', 'factory.production_bom.delete',
             'factory.production_bom_version.view_any', 'factory.production_bom_version.view', 'factory.production_bom_version.create', 'factory.production_bom_version.update', 'factory.production_bom_version.delete',
             'factory.routing.view_any', 'factory.routing.view', 'factory.routing.create', 'factory.routing.update', 'factory.routing.delete',
@@ -63,6 +75,7 @@ class PermissionsTableSeeder extends Seeder
             'factory.work_center_group.view_any', 'factory.work_center_group.view', 'factory.work_center_group.create', 'factory.work_center_group.update', 'factory.work_center_group.delete',
             'factory.overhead_cost_category.view_any', 'factory.overhead_cost_category.view', 'factory.overhead_cost_category.create', 'factory.overhead_cost_category.update', 'factory.overhead_cost_category.delete',
             'factory.actual_overhead_cost.view_any', 'factory.actual_overhead_cost.view', 'factory.actual_overhead_cost.create', 'factory.actual_overhead_cost.update', 'factory.actual_overhead_cost.delete',
+            'factory.report.view',
 
             // HR
             'hr.employee.view_any', 'hr.employee.view', 'hr.employee.create', 'hr.employee.update', 'hr.employee.delete',
@@ -70,6 +83,7 @@ class PermissionsTableSeeder extends Seeder
             'hr.attendance.approve', 'hr.attendance.reject', 'hr.attendance.clock',
             'hr.payroll_period.view_any', 'hr.payroll_period.view', 'hr.payroll_period.create', 'hr.payroll_period.update', 'hr.payroll_period.delete',
             'hr.payroll_document.view_any', 'hr.payroll_document.view', 'hr.payroll_document.create', 'hr.payroll_document.update', 'hr.payroll_document.delete',
+            'hr.payroll_document.calculate', 'hr.payroll_document.post', 'hr.payroll_document.pay',
             'hr.payroll_posting_group.view_any', 'hr.payroll_posting_group.view', 'hr.payroll_posting_group.create', 'hr.payroll_posting_group.update', 'hr.payroll_posting_group.delete',
             'hr.pay_code.view_any', 'hr.pay_code.view', 'hr.pay_code.create', 'hr.pay_code.update', 'hr.pay_code.delete',
 

@@ -27,6 +27,11 @@ class WipValuationReport extends Page implements HasTable
 
     protected static ?string $title = 'WIP Valuation Report';
 
+    public static function canAccess(): bool
+    {
+        return auth()->check() && (auth()->user()?->can('factory.report.view') ?? false);
+    }
+
     public function table(Table $table): Table
     {
         $currency = config('app.currency', 'USD');

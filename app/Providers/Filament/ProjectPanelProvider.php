@@ -64,6 +64,7 @@ class ProjectPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                'super_admin_2fa',
                 'project',
             ]);
     }

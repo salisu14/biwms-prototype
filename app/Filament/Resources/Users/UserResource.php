@@ -39,6 +39,31 @@ class UserResource extends Resource
         ];
     }
 
+    public static function canAccess(): bool
+    {
+        return auth()->check() && auth()->user()->can('user.manage');
+    }
+
+    public static function canViewAny(): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return static::canAccess() && ! $record->hasRole('super_admin');
+    }
+
     public static function getGloballySearchableAttributes(): array
     {
         return [

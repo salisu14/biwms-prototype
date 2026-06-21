@@ -7,10 +7,16 @@ use App\Http\Middleware\EnsureProcurementRole;
 use App\Http\Middleware\EnsureProjectRole;
 use App\Http\Middleware\EnsureSalesRole;
 use App\Http\Middleware\EnsureServiceRole;
+use App\Http\Middleware\EnsureSuperAdminTwoFactorIsVerified;
 use App\Http\Middleware\EnsureWarehouseRole;
+use App\Services\AuditTrailService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -27,9 +33,31 @@ return Application::configure(basePath: dirname(__DIR__))
             'procurement' => EnsureProcurementRole::class,
             'sales' => EnsureSalesRole::class,
             'service' => EnsureServiceRole::class,
+            'super_admin_2fa' => EnsureSuperAdminTwoFactorIsVerified::class,
             'warehouse' => EnsureWarehouseRole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (Throwable $exception, Request $request) {
+            $statusCode = $exception instanceof AuthorizationException
+                ? 403
+                : ($exception instanceof HttpExceptionInterface ? $exception->getStatusCode() : null);
+
+            if ($statusCode !== 403 || ! $request->is('admin*', 'finance*', 'factory*', 'hr*', 'sales*', 'warehouse*', 'procurement*', 'project*', 'service*')) {
+                return null;
+            }
+
+            app(AuditTrailService::class)->recordGeneric(
+                eventType: 'security',
+                action: 'restricted_url_attempt',
+                userId: Auth::id(),
+                description: 'Restricted Filament URL access attempt',
+                metadata: [
+                    'path' => $request->path(),
+                    'method' => $request->method(),
+                ],
+            );
+
+            return response('Not Found', 404);
+        });
     })->create();

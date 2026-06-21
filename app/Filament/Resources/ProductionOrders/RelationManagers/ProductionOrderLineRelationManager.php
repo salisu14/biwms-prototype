@@ -214,7 +214,7 @@ class ProductionOrderLineRelationManager extends RelationManager
                         ->label('Post Output')
                         ->icon('heroicon-m-archive-box')
                         ->color('success')
-                        ->visible(fn ($record) => (float) ($record->productionOrder?->remaining_quantity ?? 0) > 0)
+                        ->visible(fn ($record) => (auth()->user()?->can('postOutput', $record->productionOrder) ?? false) && (float) ($record->productionOrder?->remaining_quantity ?? 0) > 0)
                         ->schema([
                             TextInput::make('quantity')
                                 ->numeric()

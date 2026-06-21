@@ -21,6 +21,7 @@ use App\Models\Manufacturing\ProductionBom;
 use App\Models\Manufacturing\ProductionBomLine;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\WorkCenter;
+use App\Models\Permission;
 use App\Models\User;
 use App\Models\WarehouseActivity;
 use App\Models\WarehouseRequest;
@@ -467,6 +468,7 @@ test('production order refresh fails when consumption has already been posted', 
 
 test('nested bom production order releases and finishes successfully with valid posting setup', function () {
     $user = User::factory()->create();
+    grantManufacturingCoreFinishPermissions($user);
     $this->actingAs($user);
 
     $businessGroup = GeneralBusinessPostingGroup::create([
@@ -628,6 +630,7 @@ test('nested bom production order releases and finishes successfully with valid 
 
 test('finish blocks manual flush orders with unconsumed components', function () {
     $user = User::factory()->create();
+    grantManufacturingCoreFinishPermissions($user);
     $this->actingAs($user);
 
     $group = GeneralProductPostingGroup::create([
@@ -690,6 +693,21 @@ test('finish blocks manual flush orders with unconsumed components', function ()
 
     $service->finish($order, $user->id);
 });
+
+function grantManufacturingCoreFinishPermissions(User $user): void
+{
+    foreach (['factory.production_order.post_output', 'factory.production_order.finish'] as $permission) {
+        Permission::query()->firstOrCreate([
+            'name' => $permission,
+            'guard_name' => 'web',
+        ]);
+    }
+
+    $user->givePermissionTo([
+        'factory.production_order.post_output',
+        'factory.production_order.finish',
+    ]);
+}
 
 test('post capacity blocks unrealistic derived costs from center rates and time units', function () {
     $user = User::factory()->create();

@@ -33,6 +33,11 @@ class ProfitAndLossReport extends Page implements HasForms
 
     public ?array $reportData = null;
 
+    public static function canAccess(): bool
+    {
+        return auth()->check() && (auth()->user()?->can('finance.report.view') ?? false);
+    }
+
     public function mount(): void
     {
         $this->form->fill([

@@ -52,6 +52,7 @@ use App\Models\Payment;
 use App\Models\PayrollDocument;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPostingGroup;
+use App\Models\Permission;
 use App\Models\PettyCashFund;
 use App\Models\PettyCashVoucher;
 use App\Models\PurchaseCreditMemo;
@@ -59,6 +60,7 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseQuote;
 use App\Models\PurchaseReceipt;
+use App\Models\Role;
 use App\Models\SalesCreditMemo;
 use App\Models\SalesCreditMemoLine;
 use App\Models\SalesInvoice;
@@ -236,8 +238,10 @@ class AppServiceProvider extends ServiceProvider
             InventoryPostingGroup::class,
             InventoryPostingSetup::class,
             NumberSeries::class,
+            Permission::class,
             PayrollPostingGroup::class,
             PettyCashFund::class,
+            Role::class,
             VatBusinessPostingGroup::class,
             VatPostingSetup::class,
             VatProductPostingGroup::class,

@@ -21,6 +21,7 @@ use App\Models\Location;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\WorkCenter;
 use App\Models\NumberSeries;
+use App\Models\Permission;
 use App\Models\ProductionJournalBatch;
 use App\Models\ProductionJournalLine;
 use App\Models\ProductionJournalTemplate;
@@ -36,6 +37,7 @@ uses(RefreshDatabase::class);
 
 test('production journal posting routine validates and posts consumption, capacity, output, and scrap correctly', function () {
     $user = User::factory()->create();
+    grantProductionPostingPermissions($user);
     $this->actingAs($user);
 
     // 1. Setup Financial & Posting Groups
@@ -295,6 +297,7 @@ test('production journal posting routine validates and posts consumption, capaci
 
 it('posts production output entered in order uom as base quantity', function () {
     $user = User::factory()->create();
+    grantProductionPostingPermissions($user);
     $this->actingAs($user);
 
     $location = Location::factory()->create(['code' => 'MAIN']);
@@ -412,6 +415,7 @@ it('posts production output entered in order uom as base quantity', function () 
 
 it('updates output value entry costs and marks the order posted when finishing', function () {
     $user = User::factory()->create();
+    grantProductionPostingPermissions($user);
     $this->actingAs($user);
 
     $inventoryAccount = ChartOfAccount::create([
@@ -592,6 +596,7 @@ it('updates output value entry costs and marks the order posted when finishing',
 
 it('reconciles consumption capacity wip value entries and finish gl for an order uom production order', function () {
     $user = User::factory()->create();
+    grantProductionPostingPermissions($user);
     $this->actingAs($user);
 
     $inventoryAccount = ChartOfAccount::create([
@@ -854,3 +859,18 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
     expect(fn () => app(ProductionOrderService::class)->finish($order->fresh(), $user->id))
         ->toThrow(Exception::class, 'Production order is already finished');
 });
+
+function grantProductionPostingPermissions(User $user): void
+{
+    foreach (['factory.production_order.post_output', 'factory.production_order.finish'] as $permission) {
+        Permission::query()->firstOrCreate([
+            'name' => $permission,
+            'guard_name' => 'web',
+        ]);
+    }
+
+    $user->givePermissionTo([
+        'factory.production_order.post_output',
+        'factory.production_order.finish',
+    ]);
+}

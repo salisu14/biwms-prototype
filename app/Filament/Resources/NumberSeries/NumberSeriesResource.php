@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class NumberSeriesResource extends Resource
 {
@@ -37,6 +38,31 @@ class NumberSeriesResource extends Resource
     public static function table(Table $table): Table
     {
         return NumberSeriesTable::configure($table);
+    }
+
+    public static function canAccess(): bool
+    {
+        return auth()->check() && (auth()->user()?->can('number_series.manage') ?? false);
+    }
+
+    public static function canViewAny(): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return static::canAccess();
     }
 
     public static function getRelations(): array

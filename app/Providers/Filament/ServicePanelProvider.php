@@ -62,6 +62,7 @@ class ServicePanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                'super_admin_2fa',
                 'service',
             ]);
     }

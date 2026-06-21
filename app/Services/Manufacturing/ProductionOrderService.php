@@ -20,6 +20,7 @@ use App\Models\Manufacturing\ProductionBomVersionLine;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderRoutingLine;
 use App\Models\Manufacturing\RoutingVersion;
+use App\Models\User;
 use App\Services\Inventory\CostingService;
 use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
@@ -29,6 +30,7 @@ use App\Services\Warehouse\PickWorksheetService;
 use App\Services\Warehouse\PutAwayWorksheetService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
 class ProductionOrderService
@@ -235,6 +237,8 @@ class ProductionOrderService
         ?\DateTime $postingDate = null,
         ?int $routingLineId = null
     ): void {
+        Gate::forUser(User::query()->findOrFail($userId))->authorize('postOutput', $order);
+
         if ($quantityBase <= 0) {
             throw new \Exception('Output quantity must be positive');
         }
@@ -479,6 +483,8 @@ class ProductionOrderService
      */
     public function finish(ProductionOrder $order, int $userId, ?\DateTime $postingDate = null): ProductionOrder
     {
+        Gate::forUser(User::query()->findOrFail($userId))->authorize('finish', $order);
+
         $postingDate = $postingDate ?? now();
         $order = $order->fresh();
 

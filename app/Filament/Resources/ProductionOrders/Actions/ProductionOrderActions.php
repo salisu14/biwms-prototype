@@ -51,7 +51,7 @@ class ProductionOrderActions
             ->label('Post Output')
             ->icon('heroicon-m-archive-box')
             ->color('info')
-            ->visible(fn ($record) => $record->status === ProductionOrderStatus::RELEASED && (float) $record->remaining_quantity > 0)
+            ->visible(fn ($record) => (auth()->user()?->can('postOutput', $record) ?? false) && $record->status === ProductionOrderStatus::RELEASED && (float) $record->remaining_quantity > 0)
             ->schema([
                 TextInput::make('quantity')
                     ->numeric()
@@ -89,7 +89,7 @@ class ProductionOrderActions
             ->icon('heroicon-m-check-circle')
             ->color('success')
             ->requiresConfirmation()
-            ->visible(fn ($record) => $record->status === ProductionOrderStatus::RELEASED)
+            ->visible(fn ($record) => (auth()->user()?->can('finish', $record) ?? false) && $record->status === ProductionOrderStatus::RELEASED)
             ->action(function ($record) {
                 try {
                     app(ProductionOrderService::class)->finish($record, auth()->id());

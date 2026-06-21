@@ -68,7 +68,7 @@ class PayrollDocumentsTable
                     ->label('Calculate')
                     ->icon('heroicon-o-cpu-chip')
                     ->color('info')
-                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::OPEN)
+                    ->visible(fn (PayrollDocument $record) => (auth()->user()?->can('calculate', $record) ?? false) && $record->status === PayrollStatus::OPEN)
                     ->action(function (PayrollDocument $record) {
                         try {
                             app(PayrollCalculationService::class)->calculate($record);
@@ -87,7 +87,7 @@ class PayrollDocumentsTable
                     ->icon('heroicon-o-paper-airplane')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::APPROVED)
+                    ->visible(fn (PayrollDocument $record) => (auth()->user()?->can('post', $record) ?? false) && $record->status === PayrollStatus::APPROVED)
                     ->action(function (PayrollDocument $record) {
                         try {
                             app(PayrollPostingService::class)->post($record);
@@ -100,7 +100,7 @@ class PayrollDocumentsTable
                     ->label('Bank File')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->color('gray')
-                    ->visible(fn (PayrollDocument $record) => $record->status === PayrollStatus::POSTED)
+                    ->visible(fn (PayrollDocument $record) => (auth()->user()?->can('pay', $record) ?? false) && $record->status === PayrollStatus::POSTED)
                     ->action(function (PayrollDocument $record) {
                         $csv = app(PayrollPaymentService::class)->generateBankFile($record);
                         $filename = "bank_payment_{$record->document_number}.csv";

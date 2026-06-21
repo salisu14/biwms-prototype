@@ -14,6 +14,7 @@ use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Permission;
 use App\Models\User;
 use App\Services\Manufacturing\ProductionOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,6 +23,7 @@ uses(RefreshDatabase::class);
 
 test('finishing a released production order auto-posts output for remaining quantity', function () {
     $user = User::factory()->create();
+    grantAutoOutputFinishPermissions($user);
     $this->actingAs($user);
 
     $generalBusinessPostingGroup = GeneralBusinessPostingGroup::create([
@@ -142,3 +144,18 @@ test('finishing a released production order auto-posts output for remaining quan
     expect($productionOrder->fresh()->status)->toBe(ProductionOrderStatus::FINISHED);
     expect((float) $productionOrder->fresh()->remaining_quantity)->toBe(0.0);
 });
+
+function grantAutoOutputFinishPermissions(User $user): void
+{
+    foreach (['factory.production_order.post_output', 'factory.production_order.finish'] as $permission) {
+        Permission::query()->firstOrCreate([
+            'name' => $permission,
+            'guard_name' => 'web',
+        ]);
+    }
+
+    $user->givePermissionTo([
+        'factory.production_order.post_output',
+        'factory.production_order.finish',
+    ]);
+}

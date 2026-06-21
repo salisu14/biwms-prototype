@@ -75,6 +75,7 @@ class ProcurementPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                'super_admin_2fa',
                 'procurement',
             ]);
     }

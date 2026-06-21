@@ -113,12 +113,14 @@ class AdminPanelProvider extends PanelProvider
                                 // Chart of Accounts
                                 NavigationItem::make('Chart of Accounts')
                                     ->icon('heroicon-o-list-bullet')
+                                    ->visible(fn () => auth()->user()?->can('chart_of_account.manage') ?? false)
                                     ->url('/admin/chart-of-accounts')
                                     ->isActiveWhen(fn () => request()->is('admin/chart-of-accounts*')),
 
                                 // Account Schedules
                                 NavigationItem::make('Account Schedules')
                                     ->icon('heroicon-o-calendar-date-range')
+                                    ->visible(fn () => auth()->user()?->can('chart_of_account.manage') ?? false)
                                     ->url('/admin/account-schedules')
                                     ->isActiveWhen(fn () => request()->is('admin/account-schedules*')),
 
@@ -143,18 +145,21 @@ class AdminPanelProvider extends PanelProvider
                                 // Posting Setups & Posting Groups
                                 NavigationItem::make('Posting Groups')
                                     ->icon('heroicon-o-squares-2x2')
+                                    ->visible(fn () => auth()->user()?->can('posting_setup.manage') ?? false)
                                     ->url('/admin/posting-groups')
                                     ->isActiveWhen(fn () => request()->is('admin/posting-groups*')),
 
                                 // Bank Accounts
                                 NavigationItem::make('Bank Accounts')
                                     ->icon('heroicon-o-banknotes')
+                                    ->visible(fn () => auth()->user()?->can('finance.bank_account.view_any') ?? false)
                                     ->url('/admin/bank-accounts')
                                     ->isActiveWhen(fn () => request()->is('admin/bank-accounts*')),
 
                                 // Bank Account Ledger Entries
                                 NavigationItem::make('Bank Account Ledger Entries')
                                     ->icon('heroicon-o-banknotes')
+                                    ->visible(fn () => auth()->user()?->can('finance.bank_account.view_any') ?? false)
                                     ->url('/admin/bank-account-ledger-entries')
                                     ->isActiveWhen(fn () => request()->is('admin/bank-account-ledger-entries*')),
 
@@ -167,6 +172,7 @@ class AdminPanelProvider extends PanelProvider
                                 // Petty Cash
                                 NavigationItem::make('Petty Cash Vouchers')
                                     ->icon('heroicon-o-currency-euro')
+                                    ->visible(fn () => auth()->user()?->can('finance.petty_cash_voucher.view_any') ?? false)
                                     ->url('/admin/petty-cash-vouchers')
                                     ->isActiveWhen(fn () => request()->is('admin/petty-cash-vouchers*')),
 
@@ -179,6 +185,7 @@ class AdminPanelProvider extends PanelProvider
                                 // Payments
                                 NavigationItem::make('Payments')
                                     ->icon('heroicon-o-credit-card')
+                                    ->visible(fn () => auth()->user()?->can('finance.payment.view_any') ?? false)
                                     ->url('/admin/payments')
                                     ->isActiveWhen(fn () => request()->is('admin/payments*')),
 
@@ -271,6 +278,7 @@ class AdminPanelProvider extends PanelProvider
 
                                 NavigationItem::make('Fixed Assets')
                                     ->icon('heroicon-o-cube')
+                                    ->visible(fn () => auth()->user()?->can('fixed_asset.view_any') ?? false)
                                     ->url('/admin/fixed-assets')
                                     ->isActiveWhen(fn () => request()->is('admin/fixed-assets*')),
 
@@ -305,6 +313,7 @@ class AdminPanelProvider extends PanelProvider
                                 // Number Series
                                 NavigationItem::make('Number Series')
                                     ->icon('heroicon-o-hashtag')
+                                    ->visible(fn () => auth()->user()?->can('number_series.manage') ?? false)
                                     ->url('/admin/number-series')
                                     ->isActiveWhen(fn () => request()->is('admin/number-series*')),
 
@@ -816,11 +825,13 @@ class AdminPanelProvider extends PanelProvider
                                     // Users & Permissions
                                     NavigationItem::make('Users')
                                         ->icon('heroicon-o-users')
+                                        ->visible(fn () => auth()->user()?->can('user.manage') ?? false)
                                         ->url('/admin/users')
                                         ->isActiveWhen(fn () => request()->is('admin/users*')),
 
                                     NavigationItem::make('Roles & Permissions')
                                         ->icon('heroicon-o-shield-check')
+                                        ->visible(fn () => auth()->user()?->can('role_permission.manage') ?? false)
                                         ->url('/admin/roles')
                                         ->isActiveWhen(fn () => request()->is('admin/roles*')),
                                 ])
@@ -844,6 +855,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                'super_admin_2fa',
             ]);
     }
 }

@@ -98,6 +98,7 @@ class FinancePanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                'super_admin_2fa',
                 'finance',
             ]);
     }
