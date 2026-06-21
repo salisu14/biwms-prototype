@@ -253,7 +253,6 @@ class RoleResource extends Resource
      * Create a grid of permission badges for the infolist.
      *
      * @param  array<int, string>  $permissionNames
-     * @return Grid
      */
     protected static function permissionBadgeGrid(array $permissionNames): Grid
     {
@@ -273,7 +272,7 @@ class RoleResource extends Resource
     }
 
     /**
-     * @return array<string, array<int, string>>
+     * @return array<int, string>
      */
     public static function permissionOptions(): array
     {
@@ -281,13 +280,9 @@ class RoleResource extends Resource
             ->where('guard_name', 'web')
             ->orderBy('name')
             ->get(['id', 'name'])
-            ->groupBy(fn (Permission $permission): string => static::permissionGroupFor($permission->name))
-            ->map(fn ($permissions) => $permissions
-                ->mapWithKeys(fn (Permission $permission): array => [
-                    $permission->id => static::permissionLabelFor($permission),
-                ])
-                ->all())
-            ->sortKeys()
+            ->mapWithKeys(fn (Permission $permission): array => [
+                $permission->id => static::permissionLabelFor($permission->name),
+            ])
             ->all();
     }
 

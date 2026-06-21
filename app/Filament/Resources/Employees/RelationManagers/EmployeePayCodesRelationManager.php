@@ -24,6 +24,10 @@ class EmployeePayCodesRelationManager extends RelationManager
 
     protected static ?string $relatedResource = EmployeeResource::class;
 
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    protected static ?string $title = 'Pay Codes';
+
     protected static ?string $recordTitleAttribute = 'id';
 
     public function form(Schema $schema): Schema
@@ -40,7 +44,9 @@ class EmployeePayCodesRelationManager extends RelationManager
                         ->required()
                         ->reactive()
                         ->afterStateUpdated(function ($state, callable $set) {
-                            if (!$state) return;
+                            if (! $state) {
+                                return;
+                            }
                             $payCode = PayCode::find($state);
                             if ($payCode) {
                                 // Automatically pull defaults from the master Pay Code
@@ -109,8 +115,13 @@ class EmployeePayCodesRelationManager extends RelationManager
                     ->badge()
                     ->state(function ($record) {
                         $now = now();
-                        if ($record->end_date && $now->greaterThan($record->end_date)) return 'Expired';
-                        if ($now->lessThan($record->effective_date)) return 'Scheduled';
+                        if ($record->end_date && $now->greaterThan($record->end_date)) {
+                            return 'Expired';
+                        }
+                        if ($now->lessThan($record->effective_date)) {
+                            return 'Scheduled';
+                        }
+
                         return 'Active';
                     })
                     ->color(fn ($state) => match ($state) {

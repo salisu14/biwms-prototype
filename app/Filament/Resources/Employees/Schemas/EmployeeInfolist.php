@@ -40,32 +40,35 @@ class EmployeeInfolist
 
                     Section::make('Organization')
                         ->schema([
-                            TextEntry::make('department_link')
-                                ->label('Department')
-                                ->state(function (Employee $record): string {
-                                    $department = $record->department;
+                            // Wrapped in a 3-column grid to align horizontally and reduce height
+                            Grid::make(3)->schema([
+                                TextEntry::make('department_link')
+                                    ->label('Department')
+                                    ->state(function (Employee $record): string {
+                                        $department = $record->department;
 
-                                    if (! $department) {
-                                        return 'Unassigned';
-                                    }
+                                        if (! $department) {
+                                            return 'Unassigned';
+                                        }
 
-                                    return "{$department->department_code} - {$department->name}";
-                                })
-                                ->url(fn (Employee $record): ?string => $record->department
-                                    ? DepartmentResource::getUrl('view', ['record' => $record->department])
-                                    : null),
-                            TextEntry::make('business_code')
-                                ->label('Business')
-                                ->placeholder('—'),
-                            TextEntry::make('factory_code')
-                                ->label('Factory')
-                                ->placeholder('—'),
-                            TextEntry::make('employeePostingGroup.code')
-                                ->label('Employee Posting Group')
-                                ->placeholder('—'),
-                            TextEntry::make('payrollPostingGroup.code')
-                                ->label('Payroll Posting Group')
-                                ->placeholder('—'),
+                                        return "{$department->department_code} - {$department->name}";
+                                    })
+                                    ->url(fn (Employee $record): ?string => $record->department
+                                        ? DepartmentResource::getUrl('view', ['record' => $record->department])
+                                        : null),
+                                TextEntry::make('business_code')
+                                    ->label('Business')
+                                    ->placeholder('—'),
+                                TextEntry::make('factory_code')
+                                    ->label('Factory')
+                                    ->placeholder('—'),
+                                TextEntry::make('employeePostingGroup.code')
+                                    ->label('Employee Posting Group')
+                                    ->placeholder('—'),
+                                TextEntry::make('payrollPostingGroup.code')
+                                    ->label('Payroll Posting Group')
+                                    ->placeholder('—'),
+                            ]),
                         ]),
 
                     Section::make('Contact & Access')
@@ -92,8 +95,11 @@ class EmployeeInfolist
 
                     Section::make('Record Details')
                         ->schema([
-                            TextEntry::make('created_at')->dateTime()->label('Created'),
-                            TextEntry::make('updated_at')->dateTime()->label('Updated'),
+                            // Wrapped in a 2-column grid to sit side-by-side
+                            Grid::make(2)->schema([
+                                TextEntry::make('created_at')->dateTime()->label('Created'),
+                                TextEntry::make('updated_at')->dateTime()->label('Updated'),
+                            ]),
                         ]),
                 ]),
             ]);

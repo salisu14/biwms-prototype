@@ -38,6 +38,11 @@ class User extends Authenticatable implements FilamentUser
         ];
     }
 
+    public function isEmployeeActive(): bool
+    {
+        return $this->employee?->is_active === true;
+    }
+
     public function hasConfirmedTwoFactorAuthentication(): bool
     {
         return filled($this->two_factor_secret) && $this->two_factor_confirmed_at !== null;
@@ -50,6 +55,10 @@ class User extends Authenticatable implements FilamentUser
         }
 
         if (! $this->roles()->exists()) {
+            return false;
+        }
+
+        if ($this->employee && ! $this->isEmployeeActive()) {
             return false;
         }
 
@@ -75,7 +84,7 @@ class User extends Authenticatable implements FilamentUser
      */
     public function documents(): HasMany
     {
-        return $this->hasMany(DocumentHeader::class, 'created_by', 'user_id');
+        return $this->hasMany(DocumentHeader::class, 'created_by', 'id');
     }
 
     /**
@@ -83,7 +92,7 @@ class User extends Authenticatable implements FilamentUser
      */
     public function ledgerEntries(): HasMany
     {
-        return $this->hasMany(ItemLedger::class, 'created_by', 'user_id');
+        return $this->hasMany(ItemLedger::class, 'created_by', 'id');
     }
 
     /**

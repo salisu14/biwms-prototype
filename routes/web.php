@@ -22,14 +22,17 @@ Route::get('/', function () {
 });
 
 Route::middleware(['web', 'auth'])->group(function (): void {
-    Route::get('/super-admin/two-factor/setup', [SuperAdminTwoFactorSetupController::class, 'create'])
+    Route::get('/admin/two-factor/setup', [SuperAdminTwoFactorSetupController::class, 'create'])
         ->name('super-admin-2fa.setup.create');
-    Route::post('/super-admin/two-factor/setup', [SuperAdminTwoFactorSetupController::class, 'store'])
+    Route::post('/admin/two-factor/setup', [SuperAdminTwoFactorSetupController::class, 'store'])
         ->name('super-admin-2fa.setup.store');
-    Route::get('/super-admin/two-factor/challenge', [SuperAdminTwoFactorChallengeController::class, 'create'])
+    Route::get('/admin/two-factor/challenge', [SuperAdminTwoFactorChallengeController::class, 'create'])
         ->name('super-admin-2fa.challenge.create');
-    Route::post('/super-admin/two-factor/challenge', [SuperAdminTwoFactorChallengeController::class, 'store'])
+    Route::post('/admin/two-factor/challenge', [SuperAdminTwoFactorChallengeController::class, 'store'])
         ->name('super-admin-2fa.challenge.store');
+
+    Route::redirect('/super-admin/two-factor/setup', '/admin/two-factor/setup');
+    Route::redirect('/super-admin/two-factor/challenge', '/admin/two-factor/challenge');
 });
 
 Route::get('/admin/sales-shipments/{shipment}/waybill', [WaybillController::class, 'print'])

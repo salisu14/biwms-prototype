@@ -5,15 +5,18 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Services\AuditTrailService;
 use App\Services\Auth\SuperAdminTwoFactorService;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class SuperAdminTwoFactorChallengeController extends Controller
 {
-    public function create(): Response
+    public function create(): View
     {
-        return response($this->formHtml('Super Admin 2FA Challenge', route('super-admin-2fa.challenge.store'), 'Enter an authenticator code or a recovery code.'));
+        return view('auth.two-factor.challenge', [
+            'action' => route('super-admin-2fa.challenge.store'),
+        ]);
     }
 
     public function store(
@@ -40,7 +43,10 @@ class SuperAdminTwoFactorChallengeController extends Controller
                 description: 'Super Admin 2FA challenge failed',
             );
 
-            return response($this->formHtml('Super Admin 2FA Challenge', route('super-admin-2fa.challenge.store'), 'The code was not valid.'), 422);
+            return response()->view('auth.two-factor.challenge', [
+                'action' => route('super-admin-2fa.challenge.store'),
+                'errorMessage' => 'The code was not valid.',
+            ], 422);
         }
 
         $request->session()->put('super_admin_2fa_passed_at', now()->timestamp);
@@ -53,23 +59,6 @@ class SuperAdminTwoFactorChallengeController extends Controller
             description: 'Super Admin 2FA challenge completed',
         );
 
-        return redirect('/admin');
-    }
-
-    private function formHtml(string $title, string $action, string $body): string
-    {
-        $csrf = csrf_field();
-
-        return <<<HTML
-            <!doctype html>
-            <title>{$title}</title>
-            <h1>{$title}</h1>
-            <p>{$body}</p>
-            <form method="POST" action="{$action}">
-                {$csrf}
-                <label>Code <input name="code" autocomplete="one-time-code" required></label>
-                <button type="submit">Verify</button>
-            </form>
-            HTML;
+        return redirect()->intended('/admin');
     }
 }

@@ -72,6 +72,11 @@ class Employee extends Model
         });
     }
 
+    public function hasUserAccount(): bool
+    {
+        return $this->user()->exists();
+    }
+
     /**
      * The posting group assigned to this employee.
      */

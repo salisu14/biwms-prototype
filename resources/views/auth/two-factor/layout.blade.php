@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ $title ?? 'Two-Factor Authentication' }} - {{ config('app.name', 'BIWMS') }}</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --ink: #111827;
+            --muted: #4b5563;
+            --line: #d1d5db;
+            --danger-bg: #fef2f2;
+            --danger-line: #fecaca;
+            --danger-ink: #991b1b;
+            --primary: #92400e;
+            --primary-hover: #78350f;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        .card {
+            width: min(100%, 520px);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--card);
+            padding: 28px;
+            box-shadow: 0 20px 40px rgb(17 24 39 / 10%);
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 24px;
+            line-height: 1.2;
+        }
+
+        p {
+            margin: 0 0 18px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 650;
+        }
+
+        input {
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 10px 12px;
+            font: inherit;
+        }
+
+        button,
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 42px;
+            border: 0;
+            border-radius: 6px;
+            padding: 10px 16px;
+            background: var(--primary);
+            color: white;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        button:hover,
+        .button:hover {
+            background: var(--primary-hover);
+        }
+
+        .secret,
+        code {
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: #f9fafb;
+            color: #111827;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        .secret {
+            padding: 12px;
+            margin-bottom: 18px;
+            overflow-wrap: anywhere;
+            font-size: 15px;
+        }
+
+        code {
+            padding: 3px 6px;
+        }
+
+        .error {
+            border: 1px solid var(--danger-line);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 18px;
+            background: var(--danger-bg);
+            color: var(--danger-ink);
+        }
+
+        .codes {
+            display: grid;
+            gap: 8px;
+            margin: 0 0 22px;
+            padding-left: 20px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-top: 18px;
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        {{ $slot }}
+    </main>
+</body>
+</html>

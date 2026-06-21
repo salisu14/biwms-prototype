@@ -22,7 +22,7 @@ class EnsureSuperAdminTwoFactorIsVerified
             return $next($request);
         }
 
-        if ($request->routeIs('super-admin-2fa.*')) {
+        if ($request->routeIs('super-admin-2fa.*') || $request->is('admin/two-factor/*', 'super-admin/two-factor/*')) {
             return $next($request);
         }
 
@@ -35,6 +35,8 @@ class EnsureSuperAdminTwoFactorIsVerified
                 description: 'Super Admin login requires 2FA setup',
             );
 
+            $request->session()->put('url.intended', $request->fullUrl());
+
             return redirect()->route('super-admin-2fa.setup.create');
         }
 
@@ -46,6 +48,8 @@ class EnsureSuperAdminTwoFactorIsVerified
                 userId: $user->id,
                 description: 'Super Admin login requires 2FA challenge',
             );
+
+            $request->session()->put('url.intended', $request->fullUrl());
 
             return redirect()->route('super-admin-2fa.challenge.create');
         }

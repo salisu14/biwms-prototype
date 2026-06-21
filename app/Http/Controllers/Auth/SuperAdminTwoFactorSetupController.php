@@ -5,12 +5,13 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Services\AuditTrailService;
 use App\Services\Auth\SuperAdminTwoFactorService;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class SuperAdminTwoFactorSetupController extends Controller
 {
-    public function create(Request $request, SuperAdminTwoFactorService $twoFactorService): Response
+    public function create(Request $request, SuperAdminTwoFactorService $twoFactorService): View
     {
         $secret = $request->session()->get('super_admin_2fa_setup_secret');
 
@@ -19,19 +20,17 @@ class SuperAdminTwoFactorSetupController extends Controller
             $request->session()->put('super_admin_2fa_setup_secret', $secret);
         }
 
-        return response($this->formHtml(
-            title: 'Set up Super Admin 2FA',
-            action: route('super-admin-2fa.setup.store'),
-            body: 'Add this TOTP secret to your authenticator app, then enter the current code.',
-            secret: $secret,
-        ));
+        return view('auth.two-factor.setup', [
+            'action' => route('super-admin-2fa.setup.store'),
+            'secret' => $secret,
+        ]);
     }
 
     public function store(
         Request $request,
         SuperAdminTwoFactorService $twoFactorService,
         AuditTrailService $auditTrailService
-    ): Response {
+    ): View|Response {
         $request->validate(['code' => ['required', 'string']]);
 
         $user = $request->user();
@@ -48,12 +47,11 @@ class SuperAdminTwoFactorSetupController extends Controller
                 description: 'Super Admin 2FA setup failed',
             );
 
-            return response($this->formHtml(
-                title: 'Set up Super Admin 2FA',
-                action: route('super-admin-2fa.setup.store'),
-                body: 'The code was not valid. Try the current authenticator code.',
-                secret: $secret,
-            ), 422);
+            return response()->view('auth.two-factor.setup', [
+                'action' => route('super-admin-2fa.setup.store'),
+                'secret' => $secret,
+                'errorMessage' => 'The code was not valid. Try the current authenticator code.',
+            ], 422);
         }
 
         $plainRecoveryCodes = $twoFactorService->generateRecoveryCodes();
@@ -76,43 +74,9 @@ class SuperAdminTwoFactorSetupController extends Controller
             metadata: ['recovery_code_count' => count($plainRecoveryCodes)],
         );
 
-        return response($this->recoveryCodesHtml($plainRecoveryCodes));
-    }
-
-    /**
-     * @param  array<int, string>  $codes
-     */
-    private function recoveryCodesHtml(array $codes): string
-    {
-        $items = collect($codes)
-            ->map(fn (string $code): string => '<li><code>'.e($code).'</code></li>')
-            ->implode('');
-
-        return <<<HTML
-            <!doctype html>
-            <title>Recovery Codes</title>
-            <h1>Recovery Codes</h1>
-            <p>Store these recovery codes securely. They will not be shown again.</p>
-            <ol>{$items}</ol>
-            <a href="/admin">Continue</a>
-            HTML;
-    }
-
-    private function formHtml(string $title, string $action, string $body, string $secret): string
-    {
-        $csrf = csrf_field();
-
-        return <<<HTML
-            <!doctype html>
-            <title>{$title}</title>
-            <h1>{$title}</h1>
-            <p>{$body}</p>
-            <p><strong>TOTP Secret:</strong> <code>{$secret}</code></p>
-            <form method="POST" action="{$action}">
-                {$csrf}
-                <label>Authenticator code <input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
-                <button type="submit">Verify</button>
-            </form>
-            HTML;
+        return view('auth.two-factor.recovery-codes', [
+            'codes' => $plainRecoveryCodes,
+            'continueUrl' => $request->session()->pull('url.intended', '/admin'),
+        ]);
     }
 }

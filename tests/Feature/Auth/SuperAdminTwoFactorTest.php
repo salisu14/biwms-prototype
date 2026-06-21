@@ -23,6 +23,7 @@ it('requires Super Admin to set up two factor authentication before panel access
         ->get('/admin')
         ->assertRedirect(route('super-admin-2fa.setup.create'));
 
+    expect(route('super-admin-2fa.setup.create', absolute: false))->toBe('/admin/two-factor/setup');
     expect(AuditTrail::query()->where('action', 'super_admin_2fa_setup_required')->exists())->toBeTrue();
 });
 
@@ -32,7 +33,7 @@ it('enables Super Admin TOTP with hashed recovery codes and audits the event', f
     $service = app(SuperAdminTwoFactorService::class);
 
     $this->actingAs($superAdmin)
-        ->get(route('super-admin-2fa.setup.create'))
+        ->get('/admin/two-factor/setup')
         ->assertSuccessful()
         ->assertSee('TOTP Secret');
 
@@ -64,14 +65,27 @@ it('requires and accepts a successful Super Admin two factor challenge', functio
     ])->save();
 
     $this->actingAs($superAdmin)
-        ->get('/admin')
+        ->get('/admin/roles')
         ->assertRedirect(route('super-admin-2fa.challenge.create'));
 
     $this->post(route('super-admin-2fa.challenge.store'), ['code' => $service->currentCode($secret)])
-        ->assertRedirect('/admin');
+        ->assertRedirect('/admin/roles');
 
     expect(session()->has('super_admin_2fa_passed_at'))->toBeTrue()
         ->and(AuditTrail::query()->where('action', 'super_admin_2fa_challenge_passed')->exists())->toBeTrue();
+});
+
+it('redirects legacy Super Admin 2FA URLs to the active admin panel paths', function (): void {
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+
+    $this->actingAs($superAdmin)
+        ->get('/super-admin/two-factor/setup')
+        ->assertRedirect('/admin/two-factor/setup');
+
+    $this->actingAs($superAdmin)
+        ->get('/super-admin/two-factor/challenge')
+        ->assertRedirect('/admin/two-factor/challenge');
 });
 
 it('accepts recovery codes once without logging plaintext values', function (): void {
