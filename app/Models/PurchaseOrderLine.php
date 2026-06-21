@@ -1,41 +1,47 @@
 <?php
-// app/Models/PurchaseOrderLine.php
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Attributes\Fillable;
+use App\Enums\PurchaseLineType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable([
-    'purchase_order_id',
-    'line_number',
-    'item_id',
-    'item_code',
-    'description',
-    'quantity',
-    'unit_of_measure',
-    'unit_cost',
-    'line_total',
-    'vat_code',
-    'vat_percentage',
-    'vat_amount',
-    'total_amount',
-    'received_quantity',
-    'returned_quantity',
-    'invoiced_quantity',
-    'expected_delivery_date',
-    'comment'
-])]
 class PurchaseOrderLine extends Model
 {
     use HasFactory;
 
-    protected $primaryKey = 'id';
     protected $table = 'purchase_order_lines';
 
+    protected $fillable = [
+        'purchase_order_id',
+        'line_number',
+        'item_id',
+        'item_code',
+        'description',
+        'variant_code',
+        'quantity',
+        'unit_of_measure',
+        'unit_cost',
+        'line_total',
+        'vat_code',
+        'vat_percentage',
+        'vat_amount',
+        'total_amount',
+        'received_quantity',
+        'returned_quantity',
+        'invoiced_quantity',
+        'expected_delivery_date',
+        'comment',
+        'general_product_posting_group_id',
+        'type',
+        'asset_id',
+        'fa_posting_type',
+    ];
+
     protected $casts = [
+        'type' => PurchaseLineType::class,
         'quantity' => 'decimal:4',
         'unit_cost' => 'decimal:4',
         'line_total' => 'decimal:4',
@@ -48,73 +54,115 @@ class PurchaseOrderLine extends Model
         'expected_delivery_date' => 'date',
     ];
 
-    /**
-     * Parent order
-     */
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        /**
+         * Logic for calculations and metadata syncing is now
+         * primarily handled in PurchaseOrderService or via
+         * Filament RelationManager hooks to ensure UI/UX consistency.
+         */
+        static::saving(function ($line) {
+            $line->line_total = (float) $line->quantity * (float) $line->unit_cost;
+            $line->vat_amount = (float) $line->line_total * ((float) $line->vat_percentage / 100);
+            $line->total_amount = (float) $line->line_total + (float) $line->vat_amount;
+        });
+
+        // Auto-set posting group from item if not already set
+        static::creating(function ($line) {
+            if ($line->item_id && ! $line->general_product_posting_group_id) {
+                $item = Item::find($line->item_id);
+                if ($item) {
+                    $line->general_product_posting_group_id = $item->general_product_posting_group_id;
+                    $line->item_code = $item->item_code;
+                }
+            }
+        });
+    }
+
+    // ==================== RELATIONSHIPS ====================
+
     public function purchaseOrder(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrder::class);
     }
 
-    /**
-     * Item master
-     */
+    public function vendor(): BelongsTo
+    {
+        return $this->belongsTo(Vendor::class, 'vendor_id');
+    }
+
     public function item(): BelongsTo
     {
-        return $this->belongsTo(ItemMaster::class);
+        return $this->belongsTo(Item::class, 'item_id');
     }
 
-    /**
-     * Calculate line totals before save
-     */
-    protected static function boot(): void
+    public function asset(): BelongsTo
     {
-        parent::boot();
-
-        static::saving(function ($line) {
-            $line->line_total = $line->quantity * $line->unit_cost;
-            $line->vat_amount = $line->line_total * ($line->vat_percentage / 100);
-            $line->total_amount = $line->line_total + $line->vat_amount;
-        });
+        return $this->belongsTo(FixedAsset::class, 'asset_id');
     }
 
-    /**
-     * Get remaining quantity to receive
-     */
+    public function generalProductPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralProductPostingGroup::class);
+    }
+
+    public function warehouseReceiptLines(): HasMany
+    {
+        return $this->hasMany(WarehouseReceiptLine::class, 'source_line_id');
+    }
+
+    public function postedInvoiceLines(): HasMany
+    {
+        return $this->hasMany(PurchaseInvoiceLine::class, 'po_line_id');
+    }
+
+    // ==================== CALCULATED ATTRIBUTES ====================
+
     public function getRemainingQuantityAttribute(): float
     {
-        return max(0, $this->quantity - $this->received_quantity);
+        return max(0, (float) $this->quantity - (float) $this->received_quantity);
     }
 
-    /**
-     * Check if fully received
-     */
+    public function getRemainingToInvoiceAttribute(): float
+    {
+        return max(0, (float) $this->received_quantity - (float) $this->invoiced_quantity);
+    }
+
     public function getIsFullyReceivedAttribute(): bool
     {
-        return $this->received_quantity >= $this->quantity;
+        return (float) $this->received_quantity >= (float) $this->quantity;
     }
 
-    /**
-     * Check if partially received
-     */
     public function getIsPartiallyReceivedAttribute(): bool
     {
-        return $this->received_quantity > 0 && $this->received_quantity < $this->quantity;
+        return (float) $this->received_quantity > 0 && (float) $this->received_quantity < (float) $this->quantity;
     }
 
-    // In PurchaseOrderLine model
-    public function getLineTotalAttribute(): float
+    public function getIsFullyInvoicedAttribute(): bool
     {
-        return $this->quantity * $this->unit_cost;
+        return (float) $this->invoiced_quantity >= (float) $this->quantity;
     }
 
-    public function getVatAmountAttribute(): float
-    {
-        return $this->line_total * ($this->vat_percentage / 100);
-    }
+    // ==================== POSTING HELPERS ====================
 
-    public function getTotalAmountAttribute(): float
+    /**
+     * Get General Posting Setup for this line by combining
+     * Header (Business) and Line (Product) posting groups.
+     */
+    public function getPostingSetup(): ?GeneralPostingSetup
     {
-        return $this->line_total + $this->vat_amount;
+        $businessGroupId = $this->purchaseOrder?->general_business_posting_group_id;
+        $productGroupId = $this->general_product_posting_group_id;
+
+        if (! $businessGroupId || ! $productGroupId) {
+            return null;
+        }
+
+        return GeneralPostingSetup::where([
+            'general_business_posting_group_id' => $businessGroupId,
+            'general_product_posting_group_id' => $productGroupId,
+        ])->first();
     }
 }

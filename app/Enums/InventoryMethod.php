@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/InventoryMethod.php
 
 namespace App\Enums;
@@ -12,7 +13,7 @@ enum InventoryMethod: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::FIFO => 'FIFO (First In, First Out)',
             self::LIFO => 'LIFO (Last In, First Out)',
             self::AVERAGE => 'Weighted Average',
@@ -22,7 +23,7 @@ enum InventoryMethod: string
 
     public function shortLabel(): string
     {
-        return match($this) {
+        return match ($this) {
             self::FIFO => 'FIFO',
             self::LIFO => 'LIFO',
             self::AVERAGE => 'Average',
@@ -32,7 +33,7 @@ enum InventoryMethod: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::FIFO => 'Assumes oldest inventory is used first. Good for perishables.',
             self::LIFO => 'Assumes newest inventory is used first. Tax advantages in inflation.',
             self::AVERAGE => 'Calculates weighted average cost. Smoothes price fluctuations.',
@@ -52,7 +53,7 @@ enum InventoryMethod: string
 
     public function getCalculationFormula(): string
     {
-        return match($this) {
+        return match ($this) {
             self::FIFO => 'Oldest unit cost applied to issues',
             self::LIFO => 'Newest unit cost applied to issues',
             self::AVERAGE => 'Total Cost / Total Quantity = Unit Cost',
@@ -69,6 +70,7 @@ enum InventoryMethod: string
     {
         return array_reduce(self::cases(), function ($carry, $case) {
             $carry[$case->value] = $case->label();
+
             return $carry;
         }, []);
     }
@@ -80,6 +82,7 @@ enum InventoryMethod: string
                 'label' => $case->label(),
                 'description' => $case->description(),
             ];
+
             return $carry;
         }, []);
     }

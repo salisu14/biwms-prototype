@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/UomType.php
 
 namespace App\Enums;
@@ -16,7 +17,7 @@ enum UomType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::BASE => 'Base/Inventory',
             self::SALES => 'Sales',
             self::PURCHASE => 'Purchase',
@@ -30,7 +31,7 @@ enum UomType: string
 
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::BASE => 'Standard inventory unit of measure',
             self::SALES => 'Unit used for customer sales',
             self::PURCHASE => 'Unit used for vendor purchases',
@@ -51,6 +52,7 @@ enum UomType: string
     {
         return array_reduce(self::cases(), function ($carry, $case) {
             $carry[$case->value] = $case->label();
+
             return $carry;
         }, []);
     }

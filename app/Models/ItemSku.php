@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/ItemSku.php
 
 namespace App\Models;
@@ -7,7 +8,6 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
 
 #[Fillable([
     'item_id',
@@ -26,6 +26,7 @@ class ItemSku extends Model
     use HasFactory;
 
     protected $primaryKey = 'id';
+
     protected $table = 'item_skus';
 
     protected $casts = [
@@ -42,7 +43,7 @@ class ItemSku extends Model
      */
     public function item(): BelongsTo
     {
-        return $this->belongsTo(ItemMaster::class);
+        return $this->belongsTo(Item::class);
     }
 
     /**
@@ -50,7 +51,7 @@ class ItemSku extends Model
      */
     public function location(): BelongsTo
     {
-        return $this->belongsTo(LocationMaster::class);
+        return $this->belongsTo(Location::class);
     }
 
     /**
@@ -63,14 +64,14 @@ class ItemSku extends Model
         static::creating(function ($sku) {
             if (empty($sku->sku_code)) {
                 // Eager load if not already loaded
-                $item = $sku->item ?? \App\Models\ItemMaster::find($sku->item_id);
-                $location = $sku->location ?? \App\Models\LocationMaster::find($sku->location_id);
+                $item = $sku->item ?? Item::find($sku->item_id);
+                $location = $sku->location ?? Location::find($sku->location_id);
 
                 if ($item && $location) {
                     $sku->sku_code = sprintf(
                         '%s-%s',
                         $item->item_code,
-                        $location->location_code
+                        $location->code
                     );
                 }
             }
@@ -99,6 +100,7 @@ class ItemSku extends Model
     public function getIsEffectiveAttribute(): bool
     {
         $now = now();
+
         return $this->is_active
             && ($this->effective_date === null || $this->effective_date <= $now)
             && ($this->expiry_date === null || $this->expiry_date >= $now);

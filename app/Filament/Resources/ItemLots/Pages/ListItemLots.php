@@ -10,6 +10,8 @@ class ListItemLots extends ListRecords
 {
     protected static string $resource = ItemLotResource::class;
 
+    protected static ?string $title = 'Item Lots';
+
     protected function getHeaderActions(): array
     {
         return [

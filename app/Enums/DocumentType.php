@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/DocumentType.php
 
 namespace App\Enums;
@@ -35,7 +36,7 @@ enum DocumentType: string
      */
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'Purchase Order',
             self::PRODUCTION_ORDER => 'Production Order',
             self::SALES_ORDER => 'Sales Order',
@@ -68,7 +69,7 @@ enum DocumentType: string
      */
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'bg-blue-100 text-blue-800 border-blue-200',
             self::PRODUCTION_ORDER => 'bg-purple-100 text-purple-800 border-purple-200',
             self::SALES_ORDER => 'bg-green-100 text-green-800 border-green-200',
@@ -101,7 +102,7 @@ enum DocumentType: string
      */
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PURCHASE_ORDER => 'shopping-cart',
             self::PRODUCTION_ORDER => 'factory',
             self::SALES_ORDER => 'truck',

@@ -1,0 +1,124 @@
+<?php
+
+use App\Enums\AccountCategory;
+use App\Enums\CalculationMethod;
+use App\Enums\PayCodeType;
+use App\Enums\PayrollStatus;
+use App\Models\AccountingPeriod;
+use App\Models\ChartOfAccount;
+use App\Models\Employee;
+use App\Models\EmployeeBankAccount;
+use App\Models\GeneralLedgerSetup;
+use App\Models\GlEntry;
+use App\Models\PayCode;
+use App\Models\PayrollDocument;
+use App\Models\PayrollLine;
+use App\Models\PayrollPostingGroup;
+use App\Models\Permission;
+use App\Models\User;
+use App\Services\PayrollPostingService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
+
+test('posting payroll calculates balanced gl entries for earning and deduction', function () {
+    // Setup Admin
+    $user = User::factory()->create();
+    Permission::query()->firstOrCreate(['name' => 'payroll.post', 'guard_name' => 'web']);
+    $user->givePermissionTo('payroll.post');
+    $this->actingAs($user);
+    GeneralLedgerSetup::query()->firstOrCreate(['company_name' => 'Default Company'], [
+        'allow_posting_from' => '2026-01-01',
+        'allow_posting_to' => '2026-12-31',
+    ]);
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+
+    // Setup Accounting
+    $salaryExpenseAccount = ChartOfAccount::factory()->create(['account_category' => AccountCategory::OPERATING_EXPENSE]);
+    $salaryPayableAccount = ChartOfAccount::factory()->create(['account_category' => AccountCategory::LIABILITY]);
+    $taxPayableAccount = ChartOfAccount::factory()->create(['account_category' => AccountCategory::LIABILITY]);
+
+    // Setup Employee
+    $postingGroup = PayrollPostingGroup::create([
+        'code' => 'TEST',
+        'description' => 'Test Group',
+        'salaries_account_id' => $salaryExpenseAccount->id,
+        'social_security_account_id' => $taxPayableAccount->id,
+        'tax_payable_account_id' => $taxPayableAccount->id,
+        'net_pay_account_id' => $salaryPayableAccount->id,
+    ]);
+    $employee = Employee::factory()->create(['payroll_posting_group_id' => $postingGroup->id]);
+    EmployeeBankAccount::create([
+        'employee_id' => $employee->id,
+        'bank_code' => 'TESTBANK',
+        'bank_name' => 'Test Bank',
+        'account_number' => '1234567890',
+        'account_name' => "{$employee->first_name} {$employee->last_name}",
+        'is_primary' => true,
+        'payment_method' => 'Bank Transfer',
+    ]);
+
+    // Setup PayCodes
+    $salaryCode = PayCode::create([
+        'code' => 'BASE',
+        'name' => 'Base Salary',
+        'type' => PayCodeType::EARNING,
+        'calculation_method' => CalculationMethod::FIXED_AMOUNT,
+        'gl_account_id' => $salaryExpenseAccount->id,
+    ]);
+
+    $taxCode = PayCode::create([
+        'code' => 'TAX',
+        'name' => 'Income Tax',
+        'type' => PayCodeType::DEDUCTION,
+        'calculation_method' => CalculationMethod::FIXED_AMOUNT,
+        'gl_account_id' => $taxPayableAccount->id,
+    ]);
+
+    // Setup Payroll Document
+    $doc = PayrollDocument::create([
+        'document_number' => 'PRL-001',
+        'period_start' => '2026-04-01',
+        'period_end' => '2026-04-30',
+        'status' => PayrollStatus::CALCULATED,
+    ]);
+
+    PayrollLine::create([
+        'payroll_document_id' => $doc->id,
+        'employee_id' => $employee->id,
+        'pay_code_id' => $salaryCode->id,
+        'amount' => 5000,
+    ]);
+
+    PayrollLine::create([
+        'payroll_document_id' => $doc->id,
+        'employee_id' => $employee->id,
+        'pay_code_id' => $taxCode->id,
+        'amount' => 1000,
+    ]);
+
+    // Action
+    $service = app(PayrollPostingService::class);
+    $service->post($doc);
+
+    // Assert Status is Posted
+    expect($doc->fresh()->status)->toBe(PayrollStatus::POSTED);
+
+    // Earning should Debit Expense (5000) and Credit Payable (-5000)
+    $salaryExpenseEntry = GlEntry::where('chart_of_account_id', $salaryExpenseAccount->id)->first();
+    expect((float) $salaryExpenseEntry->amount)->toBe(5000.00);
+
+    // Deduction should Debit Payable (1000) and Credit Tax Liability (-1000)
+    $taxLiabilityEntry = GlEntry::where('chart_of_account_id', $taxPayableAccount->id)->first();
+    expect((float) $taxLiabilityEntry->amount)->toBe(-1000.00);
+
+    // Total Salaries Payable net should be -4000 (Cr 5000 + Dr 1000)
+    $netPayable = GlEntry::where('chart_of_account_id', $salaryPayableAccount->id)->sum('amount');
+    expect((float) $netPayable)->toBe(-4000.00);
+});

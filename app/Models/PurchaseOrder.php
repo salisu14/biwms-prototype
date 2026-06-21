@@ -1,47 +1,51 @@
 <?php
-// app/Models/PurchaseOrder.php
 
 namespace App\Models;
 
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
+use App\Services\Purchase\PurchaseOrderService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\DB;
 
-#[Fillable([
-    'order_number',
-    'order_type',
-    'vendor_id',
-    'vendor_name',
-    'order_date',
-    'location_id',
-    'posting_date',
-    'due_date',
-    'delivery_date',
-    'payment_terms',
-    'status',
-    'comment',
-    'total_amount',
-    'total_vat',
-    'grand_total',
-    'created_by',
-    'approved_by',
-    'approved_at'
-])]
 class PurchaseOrder extends Model
 {
     use HasFactory;
 
-    protected $primaryKey = 'id';
     protected $table = 'purchase_orders';
 
+    protected $fillable = [
+        'order_number',
+        'order_type',
+        'vendor_id',
+        'vendor_name',
+        'order_date',
+        'location_id',
+        'posting_date',
+        'due_date',
+        'delivery_date',
+        'payment_terms',
+        'currency_code',
+        'status',
+        'comment',
+        'total_amount',
+        'total_vat',
+        'grand_total',
+        'created_by',
+        'approved_by',
+        'approved_at',
+        'general_business_posting_group_id',
+        'vendor_posting_group_id',
+        'vat_bus_posting_group',
+        'vat_business_posting_group_id',
+        'is_price_inclusive',
+    ];
+
     protected $casts = [
-        'order_type' => PurchaseOrderType::class,  // Enum cast
-        'status' => PurchaseOrderStatus::class,      // Enum cast
+        'order_type' => PurchaseOrderType::class,
+        'status' => PurchaseOrderStatus::class,
         'order_date' => 'date',
         'posting_date' => 'date',
         'due_date' => 'date',
@@ -49,201 +53,168 @@ class PurchaseOrder extends Model
         'total_amount' => 'decimal:4',
         'total_vat' => 'decimal:4',
         'grand_total' => 'decimal:4',
+        'is_price_inclusive' => 'boolean',
         'approved_at' => 'datetime',
     ];
 
-    /**
-     * Default values
-     */
     protected $attributes = [
         'status' => PurchaseOrderStatus::PENDING,
         'order_type' => PurchaseOrderType::PURCHASE_ORDER,
+        'currency_code' => 'USD',
+        'is_price_inclusive' => false,
     ];
 
-    /**
-     * Auto-generate order number on create
-     */
     protected static function boot(): void
     {
         parent::boot();
 
         static::creating(function ($order) {
-            if (empty($order->order_number)) {
-                $order->order_number = self::generateOrderNumber($order->order_type);
-            }
-
-            // Set default status if not provided
+            // Default status if not provided
             if (empty($order->status)) {
                 $order->status = PurchaseOrderStatus::PENDING;
+            }
+
+            if (empty($order->order_number)) {
+                $order->order_number = app(PurchaseOrderService::class)
+                    ->generateOrderNumber($order->order_type);
+            }
+        });
+
+        // Auto-set posting groups from vendor as a fallback safeguard
+        static::saving(function ($order) {
+            if ($order->vendor_id && ! $order->general_business_posting_group_id) {
+                $vendor = Vendor::find($order->vendor_id);
+                if ($vendor) {
+                    $order->general_business_posting_group_id = $vendor->general_business_posting_group_id;
+                    $order->vendor_posting_group_id = $vendor->vendor_posting_group_id;
+                    $order->vat_bus_posting_group = $vendor->vat_bus_posting_group;
+                    $order->is_price_inclusive = $vendor->is_price_inclusive;
+                }
             }
         });
     }
 
-    /**
-     * Generate order number from series using enum
-     */
-    public static function generateOrderNumber(PurchaseOrderType $orderType): ?string
-    {
-        $series = NumberSeries::where('code', $orderType->seriesCode())
-            ->where('is_active', true)
-            ->first();
+    // ==================== RELATIONSHIPS ====================
 
-        if (!$series) {
-            // Fallback using enum code
-            $year = date('Y');
-            $count = self::whereYear('created_at', $year)
-                    ->where('order_type', $orderType)
-                    ->count() + 1;
-            return sprintf('%d-%s-%05d', $year, $orderType->code(), $count);
-        }
-
-        $series->checkYearReset();
-        return $series->generateNumber();
-    }
-
-    /**
-     * Vendor relationship
-     */
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
     }
 
-    /**
-     * Location/Warehouse
-     */
     public function location(): BelongsTo
     {
-        return $this->belongsTo(LocationMaster::class, 'location_id');
+        return $this->belongsTo(Location::class, 'location_id');
     }
 
-    /**
-     * Order lines/items
-     */
     public function lines(): HasMany
     {
         return $this->hasMany(PurchaseOrderLine::class, 'purchase_order_id');
     }
 
-    /**
-     * Creator
-     */
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /**
-     * Approver
-     */
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    public function generalBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralBusinessPostingGroup::class);
+    }
+
+    public function vendorPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VendorPostingGroup::class);
+    }
+
+    public function vatBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(VatBusinessPostingGroup::class);
+    }
+
+    public function warehouseReceipts(): HasMany
+    {
+        return $this->hasMany(WarehouseReceipt::class, 'source_document_id')
+            ->where('source_document', 'PURCHASE_ORDER');
+    }
+
+    public function postedInvoices(): HasMany
+    {
+        return $this->hasMany(PurchaseInvoice::class, 'order_id');
+    }
+
+    public function glEntries(): HasMany
+    {
+        return $this->hasMany(GlEntry::class, 'source_number', 'order_number')
+            ->where('source_type', 'VENDOR')
+            ->whereIn('source_number', $this->postedInvoices()->select('document_number'));
+    }
+
+    // ==================== HELPERS & ACCESORS ====================
+
     /**
-     * Calculate totals from lines
+     * Recalculate totals based on current lines.
+     * Often used by RelationManagers or Services after line changes.
      */
     public function recalculateTotals(): void
     {
         static::withoutEvents(function () {
             $this->total_amount = $this->lines()->sum('line_total');
             $this->total_vat = $this->lines()->sum('vat_amount');
-            $this->grand_total = $this->total_amount + $this->total_vat;
+            $this->grand_total = (float) $this->total_amount + (float) $this->total_vat;
             $this->save();
         });
     }
 
-    /**
-     * Scope by order type enum
-     */
-    public function scopeOfType($query, PurchaseOrderType $type)
-    {
-        return $query->where('order_type', $type);
-    }
-
-    /**
-     * Scope by status enum
-     */
-    public function scopeWithStatus($query, PurchaseOrderStatus $status)
-    {
-        return $query->where('status', $status);
-    }
-
-    /**
-     * Check if can be edited using enum method
-     */
     public function getCanEditAttribute(): bool
     {
         return $this->status->canEdit();
     }
 
-    /**
-     * Check if can receive using enum method
-     */
     public function getCanReceiveAttribute(): bool
     {
         return $this->status->canReceive();
     }
 
-    /**
-     * Get order type label (delegates to enum)
-     */
-    public function getOrderTypeLabelAttribute(): string
+    // ==================== SCOPES ====================
+
+    public function scopeOfType($query, PurchaseOrderType $type)
     {
-        return $this->order_type->label();
+        return $query->where('order_type', $type);
     }
 
-    /**
-     * Get status label (delegates to enum)
-     */
-    public function getStatusLabelAttribute(): string
+    public function scopeWithStatus($query, PurchaseOrderStatus $status)
     {
-        return $this->status->label();
+        return $query->where('status', $status);
     }
 
-    /**
-     * Get status color for UI
-     */
-    public function getStatusColorAttribute(): string
+    public function refreshLifecycleStatus(): void
     {
-        return $this->status->color();
-    }
+        $this->loadMissing('lines');
 
-    /**
-     * Get status icon for UI
-     */
-    public function getStatusIconAttribute(): string
-    {
-        return $this->status->icon();
-    }
+        $allReceived = $this->lines->isNotEmpty()
+            && $this->lines->every(fn (PurchaseOrderLine $line): bool => (float) $line->received_quantity >= (float) $line->quantity);
+        $allInvoiced = $this->lines->isNotEmpty()
+            && $this->lines->every(fn (PurchaseOrderLine $line): bool => (float) $line->invoiced_quantity >= (float) $line->quantity);
 
-    /**
-     * Approve the order
-     */
-    public function approve(int $userId): void
-    {
-        $this->status = PurchaseOrderStatus::APPROVED;
-        $this->approved_by = $userId;
-        $this->approved_at = now();
-        $this->save();
-    }
+        if ($allReceived && $allInvoiced) {
+            $this->update(['status' => PurchaseOrderStatus::CLOSED]);
 
-    /**
-     * Cancel the order
-     */
-    public function cancel(): void
-    {
-        $this->status = PurchaseOrderStatus::CANCELLED;
-        $this->save();
-    }
+            return;
+        }
 
-    /**
-     * Close the order
-     */
-    public function close(): void
-    {
-        $this->status = PurchaseOrderStatus::CLOSED;
-        $this->save();
+        if ($allReceived) {
+            $this->update(['status' => PurchaseOrderStatus::RECEIVED]);
+
+            return;
+        }
+
+        if ($this->lines->contains(fn (PurchaseOrderLine $line): bool => (float) $line->received_quantity > 0)) {
+            $this->update(['status' => PurchaseOrderStatus::PARTIALLY_RECEIVED]);
+        }
     }
 }

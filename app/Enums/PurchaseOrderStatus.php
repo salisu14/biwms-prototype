@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/PurchaseOrderStatus.php
 
 namespace App\Enums;
@@ -11,19 +12,21 @@ enum PurchaseOrderStatus: string
     case INVOICED = 'INVOICED';
     case CLOSED = 'CLOSED';
     case CANCELLED = 'CANCELLED';
+    case PARTIALLY_RECEIVED = 'PARTIALLY_RECEIVED';
 
     /**
      * Get human-readable label
      */
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'Pending',
             self::APPROVED => 'Approved',
             self::RECEIVED => 'Received',
             self::INVOICED => 'Invoiced',
             self::CLOSED => 'Closed',
             self::CANCELLED => 'Cancelled',
+            self::PARTIALLY_RECEIVED => 'Partially Received',
         };
     }
 
@@ -32,13 +35,14 @@ enum PurchaseOrderStatus: string
      */
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'warning',
             self::APPROVED => 'success',
             self::RECEIVED => 'info',
             self::INVOICED => 'primary',
             self::CLOSED => 'secondary',
             self::CANCELLED => 'danger',
+            self::PARTIALLY_RECEIVED => 'warning',
         };
     }
 
@@ -47,10 +51,11 @@ enum PurchaseOrderStatus: string
      */
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'heroicon-m-clock',
             self::APPROVED => 'heroicon-m-check-badge',
             self::RECEIVED => 'heroicon-m-truck',
+            self::PARTIALLY_RECEIVED => 'heroicon-m-arrow-down-tray',
             self::INVOICED => 'heroicon-m-document-text',
             self::CLOSED => 'heroicon-m-lock-closed',
             self::CANCELLED => 'heroicon-m-x-circle',
@@ -70,7 +75,7 @@ enum PurchaseOrderStatus: string
      */
     public function canReceive(): bool
     {
-        return in_array($this, [self::APPROVED, self::PARTIAL]);
+        return in_array($this, [self::APPROVED, self::PARTIALLY_RECEIVED]);
     }
 
     /**
@@ -88,6 +93,7 @@ enum PurchaseOrderStatus: string
     {
         return array_reduce(self::cases(), function ($carry, $case) {
             $carry[$case->value] = $case->label();
+
             return $carry;
         }, []);
     }

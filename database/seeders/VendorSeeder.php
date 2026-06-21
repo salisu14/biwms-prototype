@@ -1,15 +1,34 @@
 <?php
-// database/seeders/VendorSeeder.php
 
 namespace Database\Seeders;
 
+use App\Enums\AccountCategory;
+use App\Enums\AccountType;
+use App\Models\ChartOfAccount;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\VatBusinessPostingGroup;
 use App\Models\Vendor;
+use App\Models\VendorPostingGroup;
 use Illuminate\Database\Seeder;
 
 class VendorSeeder extends Seeder
 {
     public function run(): void
     {
+        // Ensure posting groups and chart of accounts exist
+        $this->ensurePostingGroupsExist();
+
+        // Get posting groups
+        $domesticBusGroup = GeneralBusinessPostingGroup::where('code', 'DOMESTIC')->first();
+        $foreignBusGroup = GeneralBusinessPostingGroup::where('code', 'FOREIGN')->first();
+        $euBusGroup = GeneralBusinessPostingGroup::where('code', 'EU')->first();
+
+        $domesticVendGroup = VendorPostingGroup::where('code', 'DOMESTIC')->first();
+        $foreignVendGroup = VendorPostingGroup::where('code', 'FOREIGN')->first();
+
+        $domesticVatBusGroup = VatBusinessPostingGroup::where('code', 'DOMESTIC')->first();
+        $exportVatBusGroup = VatBusinessPostingGroup::where('code', 'EXPORT')->first();
+
         $vendors = [
             [
                 'vendor_code' => 'V0001',
@@ -30,6 +49,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 500.00,
                 'is_active' => true,
                 'notes' => 'Preferred supplier for raw chemicals. ISO 9001 certified.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET30',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0002',
@@ -50,6 +76,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 250.00,
                 'is_active' => true,
                 'notes' => 'Fast delivery for packaging materials.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET15',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0003',
@@ -70,6 +103,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 5000.00,
                 'is_active' => true,
                 'notes' => 'Overseas supplier for specialized equipment. Long lead times but competitive pricing.',
+                'general_business_posting_group_id' => $foreignBusGroup?->id,
+                'vendor_posting_group_id' => $foreignVendGroup?->id,
+                'vat_bus_posting_group' => 'EXPORT',
+                'vat_business_posting_group_id' => $exportVatBusGroup?->id,
+                'payment_terms_code' => 'NET60',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0004',
@@ -90,6 +130,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 100.00,
                 'is_active' => true,
                 'notes' => 'Custom packaging solutions. Eco-friendly options available.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET30',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0005',
@@ -110,6 +157,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 1000.00,
                 'is_active' => true,
                 'notes' => 'Bulk raw material supplier. Volume discounts available.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET45',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0006',
@@ -130,6 +184,12 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 2000.00,
                 'is_active' => true,
                 'notes' => 'Premium European quality products. Higher cost but excellent quality.',
+                'general_business_posting_group_id' => $euBusGroup?->id,
+                'vendor_posting_group_id' => $foreignVendGroup?->id,
+                'vat_bus_posting_group' => 'EU',
+                'payment_terms_code' => 'NET30',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0007',
@@ -150,6 +210,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 100.00,
                 'is_active' => true,
                 'notes' => 'Emergency supplier for rush orders. Premium pricing for speed.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET15',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0008',
@@ -170,6 +237,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 750.00,
                 'is_active' => true,
                 'notes' => 'Laboratory grade materials. Certification documentation provided.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET30',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0009',
@@ -190,6 +264,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 2500.00,
                 'is_active' => true,
                 'notes' => 'Wholesale pricing for high volume orders. Limited product range.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET60',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             [
                 'vendor_code' => 'V0010',
@@ -210,6 +291,13 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => 1500.00,
                 'is_active' => true,
                 'notes' => 'Rare and specialty chemicals. Exclusive distribution rights.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET30',
+                'blocked' => false,
+                'blocked_reason' => 'NONE',
             ],
             // Inactive vendor for testing
             [
@@ -231,19 +319,124 @@ class VendorSeeder extends Seeder
                 'minimum_order_amount' => null,
                 'is_active' => false,
                 'notes' => 'Vendor no longer active. Keep for historical records only.',
+                'general_business_posting_group_id' => $domesticBusGroup?->id,
+                'vendor_posting_group_id' => $domesticVendGroup?->id,
+                'vat_bus_posting_group' => 'DOMESTIC',
+                'vat_business_posting_group_id' => $domesticVatBusGroup?->id,
+                'payment_terms_code' => 'NET30',
+                'blocked' => true,
+                'blocked_reason' => 'INACTIVE',
             ],
         ];
 
+        $contactSeeder = new ContactSeeder;
+
         foreach ($vendors as $vendor) {
+
+            $contact = $contactSeeder->createFromVendor($vendor);
+
             Vendor::firstOrCreate(
                 ['vendor_code' => $vendor['vendor_code']],
-                $vendor
+                [
+                    ...$vendor,
+                    'contact_id' => $contact->id, // 🔥 KEY LINK
+                ]
             );
         }
 
         $this->command->info('Vendors seeded successfully!');
-        $this->command->info('Total: ' . count($vendors) . ' vendors');
-        $this->command->info('Active: ' . collect($vendors)->where('is_active', true)->count());
-        $this->command->info('Inactive: ' . collect($vendors)->where('is_active', false)->count());
+        $this->command->info('Total: '.count($vendors).' vendors');
+        $this->command->info('Active: '.collect($vendors)->where('is_active', true)->count());
+        $this->command->info('Inactive: '.collect($vendors)->where('is_active', false)->count());
+    }
+
+    private function ensurePostingGroupsExist(): void
+    {
+        // Create Chart of Accounts for payables if they don't exist
+        $payablesDomestic = ChartOfAccount::firstOrCreate(
+            ['account_number' => '21100'],
+            [
+                'name' => 'Trade Payables - Domestic',
+                'account_type' => AccountType::LIABILITY,
+                'account_category' => AccountCategory::PAYABLE,
+            ]
+        );
+
+        $payablesForeign = ChartOfAccount::firstOrCreate(
+            ['account_number' => '21200'],
+            [
+                'name' => 'Trade Payables - Foreign',
+                'account_type' => AccountType::LIABILITY,
+                'account_category' => AccountCategory::PAYABLE,
+            ]
+        );
+
+        $discountDebit = ChartOfAccount::firstOrCreate(
+            ['account_number' => '50900'],
+            [
+                'name' => 'Purchase Discounts',
+                'account_type' => AccountType::EXPENSE,
+                'account_category' => AccountCategory::COGS,
+            ]
+        );
+
+        $discountCredit = ChartOfAccount::firstOrCreate(
+            ['account_number' => '40900'],
+            [
+                'name' => 'Sales Discounts',
+                'account_type' => AccountType::REVENUE,
+                'account_category' => AccountCategory::REVENUE,
+            ]
+        );
+
+        $rounding = ChartOfAccount::firstOrCreate(
+            ['account_number' => '60950'],
+            [
+                'name' => 'Invoice Rounding',
+                'account_type' => AccountType::REVENUE,
+                'account_category' => AccountCategory::OPERATING_EXPENSE,
+            ]
+        );
+
+        // Create General Business Posting Groups
+        $generalGroups = [
+            ['code' => 'DOMESTIC', 'description' => 'Domestic Vendors'],
+            ['code' => 'FOREIGN', 'description' => 'Foreign Vendors'],
+            ['code' => 'EU', 'description' => 'European Union'],
+        ];
+
+        foreach ($generalGroups as $group) {
+            GeneralBusinessPostingGroup::firstOrCreate(
+                ['code' => $group['code']],
+                $group
+            );
+        }
+
+        // Create Vendor Posting Groups with foreign keys
+        $vendorGroups = [
+            [
+                'code' => 'DOMESTIC',
+                'description' => 'Domestic Vendors',
+                'payables_account_id' => $payablesDomestic->id,
+                'payment_disc_debit_account_id' => $discountDebit->id,
+                'payment_disc_credit_account_id' => $discountCredit->id,
+                'invoice_rounding_account_id' => $rounding->id,
+            ],
+            [
+                'code' => 'FOREIGN',
+                'description' => 'Foreign Vendors',
+                'payables_account_id' => $payablesForeign->id,
+                'payment_disc_debit_account_id' => $discountDebit->id,
+                'payment_disc_credit_account_id' => $discountCredit->id,
+                'invoice_rounding_account_id' => $rounding->id,
+            ],
+        ];
+
+        foreach ($vendorGroups as $group) {
+            VendorPostingGroup::firstOrCreate(
+                ['code' => $group['code']],
+                $group
+            );
+        }
     }
 }

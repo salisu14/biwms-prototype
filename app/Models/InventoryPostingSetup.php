@@ -1,11 +1,12 @@
 <?php
+
 // app/Models/InventoryPostingSetup.php
 
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InventoryPostingSetup extends Model
 {
@@ -14,40 +15,63 @@ class InventoryPostingSetup extends Model
     protected $table = 'inventory_posting_setups';
 
     protected $fillable = [
-        'code',
-        'description',
-        'inventory_account',           // Inventory asset account
-        'inventory_adjmt_account',       // Inventory adjustment
-        'invt_accrual_account',        // Inventory accrual (interim)
-        'cogs_account',                // Cost of Goods Sold
-        'direct_cost_applied_account',
-        'overhead_applied_account',
-        'purchase_variance_account',
-        'material_variance_account',
-        'capacity_variance_account',
-        'subcontracted_variance_account',
-        'cap_overhead_variance_account',
-        'mfg_overhead_variance_account',
-        'is_active',
+        'location_id',
+        'inventory_posting_group_id',
+        'inventory_account_id',
+        'inventory_account_interim_id',
+        'wip_account_id',
     ];
 
-    protected $casts = [
-        'is_active' => 'boolean',
-    ];
-
-    /**
-     * Categories using this setup
-     */
-    public function categories(): HasMany
+    // Relationships
+    public function location(): BelongsTo
     {
-        return $this->hasMany(Category::class, 'inventory_posting_setup_id');
+        return $this->belongsTo(Location::class);
     }
 
-    /**
-     * Items using this setup directly
-     */
-    public function items(): HasMany
+    public function inventoryPostingGroup(): BelongsTo
     {
-        return $this->hasMany(ItemMaster::class, 'inventory_posting_setup_id');
+        return $this->belongsTo(InventoryPostingGroup::class);
+    }
+
+    public function inventoryAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'inventory_account_id');
+    }
+
+    public function inventoryAccountInterim(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'inventory_account_interim_id');
+    }
+
+    public function wipAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'wip_account_id');
+    }
+
+    // Scope for location (including default)
+    public function scopeForLocation($query, ?int $locationId)
+    {
+        return $query->where(function ($q) use ($locationId) {
+            $q->where('location_id', $locationId)
+                ->orWhereNull('location_id');
+        })->orderByRaw('location_id IS NOT NULL DESC'); // Specific first, then default
+    }
+
+    // Get most specific setup
+    public static function getFor(int $inventoryPostingGroupId, ?int $locationId = null): ?self
+    {
+        if ($locationId) {
+            $specific = self::where('inventory_posting_group_id', $inventoryPostingGroupId)
+                ->where('location_id', $locationId)
+                ->first();
+            
+            if ($specific) {
+                return $specific;
+            }
+        }
+
+        return self::where('inventory_posting_group_id', $inventoryPostingGroupId)
+            ->whereNull('location_id')
+            ->first();
     }
 }

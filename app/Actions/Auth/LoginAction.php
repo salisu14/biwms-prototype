@@ -11,11 +11,11 @@ class LoginAction
 {
     public static function run(LoginData $data)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = User::where('email', $data->email)->first();
 
         // Check if the user exists and the password is correct
-        if (!$user || !Hash::check($data->password, $user->password)) {
+        if (! $user || ! Hash::check($data->password, $user->password)) {
             throw ValidationException::withMessages([
                 'email' => __('Invalid login credentials.'),
             ]);

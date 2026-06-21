@@ -1,0 +1,143 @@
+<?php
+
+namespace App\Filament\Resources\PurchaseQuotes\Pages;
+
+use App\Filament\Resources\PurchaseQuotes\PurchaseQuoteResource;
+use App\Filament\Shared\Actions\ApprovalActions;
+use App\Filament\Traits\ShowsMissingApprovalTemplateWarning;
+use App\Services\Approval\ApprovalService;
+use Filament\Actions\Action;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
+use Filament\Resources\Pages\ViewRecord;
+
+class ViewPurchaseQuote extends ViewRecord
+{
+    use ShowsMissingApprovalTemplateWarning;
+
+    protected static string $resource = PurchaseQuoteResource::class;
+
+    public function mount($record): void
+    {
+        parent::mount($record);
+
+        $this->warnIfMissingApprovalTemplate($this->record, 'Purchase Quote');
+    }
+
+    public function getHeading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->document_no ?? 'Purchase Quote')
+            .' • Scope '.($record->vendor?->vendor_code ?? '—')
+            .' • Attribute '.number_format((float) $record->amount_including_vat, 2);
+    }
+
+    public function getSubheading(): string
+    {
+        $record = $this->getRecord();
+
+        return ($record->vendor?->vendor_name ?? 'Unknown Vendor')
+            .' • '.($record->buyer?->name ?? 'Unknown Buyer')
+            .' • '.($record->currency_code ?? 'USD');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        $record = $this->getRecord();
+
+        return $record->document_no ?? 'Purchase Quote';
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            EditAction::make(),
+
+            Action::make('submit_for_approval')
+                ->label('Submit for Approval')
+                ->icon('heroicon-o-paper-airplane')
+                ->color('info')
+                ->visible(fn ($record) => $record->status?->canSubmitForApproval() === true)
+                ->action(function ($record) {
+                    app(ApprovalService::class)->submitForApproval($record);
+
+                    Notification::make()
+                        ->title('Submitted for approval')
+                        ->success()
+                        ->send();
+                }),
+
+            Action::make('approve')
+                ->label('Approve')
+                ->icon('heroicon-o-check-circle')
+                ->color('success')
+                ->visible(fn ($record) => $record->approvalEntries()->where('status', 'created')
+                    ->where(function ($q) {
+                        $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                    })
+                    ->exists())
+                ->requiresConfirmation()
+                ->action(function ($record) {
+                    $entry = $record->approvalEntries()->where('status', 'created')
+                        ->where(function ($q) {
+                            $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                        })
+                        ->orderBy('sequence_no')
+                        ->first();
+
+                    if (! $entry) {
+                        Notification::make()->title('No pending approval')->danger()->send();
+
+                        return;
+                    }
+
+                    app(ApprovalService::class)->approve($entry);
+
+                    Notification::make()
+                        ->title('Approved')
+                        ->success()
+                        ->send();
+                }),
+
+            Action::make('reject')
+                ->label('Reject')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->visible(fn ($record) => $record->approvalEntries()->where('status', 'created')
+                    ->where(function ($q) {
+                        $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                    })
+                    ->exists())
+                ->form([
+                    Textarea::make('reason')
+                        ->label('Reason')
+                        ->required(),
+                ])
+                ->action(function ($record, array $data) {
+                    $entry = $record->approvalEntries()->where('status', 'created')
+                        ->where(function ($q) {
+                            $q->where('approver_id', auth()->id())->orWhere('delegated_to', auth()->id());
+                        })
+                        ->orderBy('sequence_no')
+                        ->first();
+
+                    if (! $entry) {
+                        Notification::make()->title('No pending approval')->danger()->send();
+
+                        return;
+                    }
+
+                    app(ApprovalService::class)->reject($entry, $data['reason']);
+
+                    Notification::make()
+                        ->title('Rejected')
+                        ->success()
+                        ->send();
+                }),
+            ApprovalActions::makeCancelApprovalRequestAction(),
+            ApprovalActions::makeDelegateAction(),
+        ];
+    }
+}

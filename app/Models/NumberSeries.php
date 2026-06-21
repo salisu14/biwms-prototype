@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/NumberSeries.php
 
 namespace App\Models;
@@ -6,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'code',
@@ -17,13 +19,14 @@ use Illuminate\Database\Eloquent\Model;
     'year',
     'is_active',
     'allow_manual',
-    'module' // purchase, sales, inventory, etc.
+    'module', // purchase, sales, inventory, etc.
 ])]
 class NumberSeries extends Model
 {
     use HasFactory;
 
     protected $primaryKey = 'id';
+
     protected $table = 'number_series';
 
     protected $casts = [
@@ -35,12 +38,17 @@ class NumberSeries extends Model
         'allow_manual' => 'boolean',
     ];
 
+    public function lines(): HasMany
+    {
+        return $this->hasMany(NumberSeriesLine::class);
+    }
+
     /**
      * Get next number in series
      */
     public function getNextNumber(): ?string
     {
-        if (!$this->is_active) {
+        if (! $this->is_active) {
             return null;
         }
 

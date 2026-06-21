@@ -8,6 +8,8 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
 class GeneralPostingSetupsTable
@@ -16,39 +18,40 @@ class GeneralPostingSetupsTable
     {
         return $table
             ->columns([
-                TextColumn::make('code')
-                    ->searchable(),
-                TextColumn::make('description')
-                    ->searchable(),
-                TextColumn::make('sales_account')
-                    ->searchable(),
-                TextColumn::make('sales_credit_account')
-                    ->searchable(),
-                TextColumn::make('sales_discount_account')
-                    ->searchable(),
-                TextColumn::make('purchase_account')
-                    ->searchable(),
-                TextColumn::make('purchase_credit_account')
-                    ->searchable(),
-                TextColumn::make('purchase_discount_account')
-                    ->searchable(),
-                TextColumn::make('cogs_account')
-                    ->searchable(),
-                TextColumn::make('purchase_variance_account')
-                    ->searchable(),
-                IconColumn::make('is_active')
-                    ->boolean(),
-                TextColumn::make('created_at')
-                    ->dateTime()
+                TextColumn::make('generalBusinessPostingGroup.code')
+                    ->label('Bus. Group')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->searchable(),
+                TextColumn::make('generalProductPostingGroup.code')
+                    ->label('Prod. Group')
+                    ->sortable()
+                    ->searchable(),
+                TextColumn::make('salesAccount.name')
+                    ->label('Sales Account')
+                    ->toggleable(),
+                TextColumn::make('cogsAccount.name')
+                    ->label('COGS Account')
+                    ->toggleable(),
+                TextColumn::make('inventoryAccount.name')
+                    ->label('Inventory Account')
+                    ->toggleable(),
+                IconColumn::make('blocked')
+                    ->boolean()
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                TernaryFilter::make('blocked'),
+                SelectFilter::make('general_business_posting_group_id')
+                    ->relationship('generalBusinessPostingGroup', 'code')
+                    ->label('Business Group'),
+                SelectFilter::make('general_product_posting_group_id')
+                    ->relationship('generalProductPostingGroup', 'code')
+                    ->label('Product Group'),
             ])
             ->recordActions([
                 ViewAction::make(),

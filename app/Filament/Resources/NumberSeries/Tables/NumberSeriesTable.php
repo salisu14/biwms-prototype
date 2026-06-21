@@ -17,37 +17,48 @@ class NumberSeriesTable
         return $table
             ->columns([
                 TextColumn::make('code')
-                    ->searchable(),
+                    ->label('Code')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
+
                 TextColumn::make('description')
-                    ->searchable(),
-                TextColumn::make('prefix')
-                    ->searchable(),
-                TextColumn::make('starting_number')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('ending_number')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('current_number')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('year')
-                    ->numeric()
-                    ->sortable(),
-                IconColumn::make('is_active')
-                    ->boolean(),
-                IconColumn::make('allow_manual')
-                    ->boolean(),
+                    ->label('Description')
+                    ->searchable()
+                    ->wrap(),
+
                 TextColumn::make('module')
-                    ->searchable(),
-                TextColumn::make('created_at')
-                    ->dateTime()
+                    ->badge()
+                    ->color('gray')
+                    ->sortable(),
+
+                TextColumn::make('current_formatted')
+                    ->label('Next Expected No.')
+                    ->getStateUsing(fn ($record) => $record->getNextNumber() ?? 'Exhausted')
+                    ->fontFamily('mono')
+                    ->color('primary')
+                    ->weight('bold'),
+
+                TextColumn::make('range')
+                    ->label('Range (Start - End)')
+                    ->getStateUsing(fn ($record) => "{$record->starting_number} → " . ($record->ending_number ?? '∞'))
+                    ->color('gray'),
+
+                TextColumn::make('year')
+                    ->label('Fiscal Year')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(),
+
+                IconColumn::make('is_active')
+                    ->label('Active')
+                    ->boolean()
+                    ->trueColor('success')
+                    ->falseColor('danger'),
+
+                IconColumn::make('allow_manual')
+                    ->label('Manual')
+                    ->boolean()
+                    ->toggleable(),
             ])
             ->filters([
                 //

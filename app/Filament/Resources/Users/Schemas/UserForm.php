@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\Users\Schemas;
 
+use App\Models\Employee;
 use App\Models\User;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Hash;
@@ -16,58 +16,62 @@ class UserForm
     {
         return $schema
             ->components([
-                Section::make('Profile Information')
-                    ->description('Basic account details.')
+                Section::make('Account Information')
                     ->schema([
-                        Grid::make(2)->schema([
-                            TextInput::make('name')
-                                ->label('Full Name')
-                                ->required()
-                                ->maxLength(100), // Match DTO max:100
+                        TextInput::make('name')
+                            ->required()
+                            ->maxLength(255),
+                        TextInput::make('email')
+                            ->email()
+                            ->required()
+                            ->unique(ignoreRecord: true)
+                            ->maxLength(255),
+                        TextInput::make('password')
+                            ->password()
+                            ->dehydrateStateUsing(fn ($state) => Hash::make($state))
+                            ->dehydrated(fn ($state) => filled($state))
+                            ->required(fn (string $context): bool => $context === 'create'),
+                    ])->columns(2),
 
-                            TextInput::make('email')
-                                ->label('Email Address')
-                                ->email()
-                                ->required()
-                                ->unique(User::class, 'email'),
-                        ]),
-                    ])
-                    ->columns(1),
-
-                Section::make('Security')
-                    ->description('Set a password to secure the account.')
+                Section::make('Identity & Roles')
                     ->schema([
-                        Grid::make(2)->schema([
-                            TextInput::make('password')
-                                ->label('Password')
-                                ->password()
-                                ->required(fn (string $operation) => $operation === 'create')
-                                ->confirmed()
-                                ->minLength(8)
-                                ->dehydrateStateUsing(fn ($state) => filled($state) ? Hash::make($state) : null)
-                                ->dehydrated(fn ($state) => filled($state))
-                                ->helperText('Minimum 8 characters'),
+                        Select::make('employee_id')
+                            ->label('Link to Employee')
+                            ->options(function (?User $record): array {
+                                return Employee::query()
+                                    ->where('is_active', true)
+                                    ->where(function ($query) use ($record): void {
+                                        $query->whereDoesntHave('user');
 
-                            TextInput::make('password_confirmation')
-                                ->label('Confirm Password')
-                                ->password()
-                                ->required(fn (string $operation) => $operation === 'create')
-                                ->dehydrated(false),
-                        ]),
-                    ])
-                    ->columns(1),
+                                        if ($record?->employee_id) {
+                                            $query->orWhere('id', $record->employee_id);
+                                        }
+                                    })
+                                    ->orderBy('employee_number')
+                                    ->get()
+                                    ->mapWithKeys(fn (Employee $employee): array => [
+                                        $employee->id => "{$employee->first_name} {$employee->last_name} ({$employee->employee_number})",
+                                    ])
+                                    ->all();
+                            })
+                            ->required()
+                            ->helperText('All application users must be linked to one active employee.')
+                            ->searchable()
+                            ->preload(),
 
-                Section::make('Access Control')
-                    ->description('Assign roles to this user.')
-                    ->schema([
                         Select::make('roles')
                             ->relationship('roles', 'name')
                             ->multiple()
                             ->preload()
+                            ->searchable(),
+
+                        Select::make('salesperson_code')
+                            ->label('Default Salesperson / Purchaser')
+                            ->helperText('Used to auto-populate the Salesperson field on orders and invoices.')
+                            ->relationship('defaultSalesperson', 'name')
                             ->searchable()
-                            ->columnSpanFull(),
-                    ])
-                    ->columns(1),
+                            ->preload(),
+                    ])->columns(2),
             ]);
     }
 }

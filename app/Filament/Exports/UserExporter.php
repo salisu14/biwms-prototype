@@ -18,9 +18,9 @@ class UserExporter extends Exporter
             ExportColumn::make('id')
                 ->label('ID'),
             ExportColumn::make('name')
-            ->label('Name'),
+                ->label('Name'),
             ExportColumn::make('email')
-            ->label('Email'),
+                ->label('Email'),
             ExportColumn::make('created_at'),
             ExportColumn::make('updated_at'),
         ];
@@ -28,10 +28,10 @@ class UserExporter extends Exporter
 
     public static function getCompletedNotificationBody(Export $export): string
     {
-        $body = 'Your user export has completed and ' . Number::format($export->successful_rows) . ' ' . str('row')->plural($export->successful_rows) . ' exported.';
+        $body = 'Your user export has completed and '.Number::format($export->successful_rows).' '.str('row')->plural($export->successful_rows).' exported.';
 
         if ($failedRowsCount = $export->getFailedRowsCount()) {
-            $body .= ' ' . Number::format($failedRowsCount) . ' ' . str('row')->plural($failedRowsCount) . ' failed to export.';
+            $body .= ' '.Number::format($failedRowsCount).' '.str('row')->plural($failedRowsCount).' failed to export.';
         }
 
         return $body;

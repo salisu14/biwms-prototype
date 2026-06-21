@@ -30,7 +30,6 @@ return new class extends Migration
             $table->json('attributes')->nullable(); // Flexible attributes per category
             $table->boolean('is_active')->default(true);
 
-
             $table->timestamps();
 
             $table->index(['category_type', 'level', 'is_active']);

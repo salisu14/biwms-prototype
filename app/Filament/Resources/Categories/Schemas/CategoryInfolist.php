@@ -31,9 +31,9 @@ class CategoryInfolist
                                 ->label('Type')
                                 ->inlineLabel()
                                 ->badge(),
-//                                ->color(fn ($state): string => CategoryType::tryFrom($state)?->color() ?? 'gray')
-//                                ->icon(fn ($state): ?string => CategoryType::tryFrom($state)?->icon())
-//                                ->formatStateUsing(fn ($state): string => CategoryType::tryFrom($state)?->label() ?? $state),
+                            //                                ->color(fn ($state): string => CategoryType::tryFrom($state)?->color() ?? 'gray')
+                            //                                ->icon(fn ($state): ?string => CategoryType::tryFrom($state)?->icon())
+                            //                                ->formatStateUsing(fn ($state): string => CategoryType::tryFrom($state)?->label() ?? $state),
 
                             TextEntry::make('description')
                                 ->label('Description')
@@ -53,7 +53,7 @@ class CategoryInfolist
                             TextEntry::make('level')
                                 ->label('Hierarchy Level')
                                 ->inlineLabel()
-                                ->formatStateUsing(fn ($state) => 'Level ' . $state),
+                                ->formatStateUsing(fn ($state) => 'Level '.$state),
 
                             TextEntry::make('hierarchy_path')
                                 ->label('Path')

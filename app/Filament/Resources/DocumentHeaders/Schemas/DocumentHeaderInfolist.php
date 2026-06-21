@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\DocumentHeaders\Schemas;
 
-use App\Enums\DocumentType;
 use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -21,7 +21,7 @@ class DocumentHeaderInfolist
                             ->label('Type')
                             ->formatStateUsing(fn ($state): string => DocumentType::tryFrom($state)?->label() ?? $state)
                             ->color(fn ($state): string => DocumentType::tryFrom($state)?->color() ?? 'gray'),
-//                            ->icon(fn ($state): ?string => DocumentType::tryFrom($state)?->icon()),
+                        //                            ->icon(fn ($state): ?string => DocumentType::tryFrom($state)?->icon()),
 
                         TextEntry::make('doc_no')
                             ->label('Document Number')
@@ -31,7 +31,7 @@ class DocumentHeaderInfolist
                             ->label('Status')
                             ->formatStateUsing(fn ($state): string => DocumentStatus::tryFrom($state)?->label() ?? $state)
                             ->color(fn ($state): string => DocumentStatus::tryFrom($state)?->color() ?? 'gray'),
-//                            ->icon(fn ($state): ?string => DocumentStatus::tryFrom($state)?->icon()),
+                        //                            ->icon(fn ($state): ?string => DocumentStatus::tryFrom($state)?->icon()),
 
                         TextEntry::make('creator.name')
                             ->label('Created By'),

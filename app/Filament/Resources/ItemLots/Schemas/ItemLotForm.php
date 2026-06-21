@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ItemLots\Schemas;
 
+use App\Models\Item;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -14,11 +15,17 @@ class ItemLotForm
         return $schema
             ->components([
                 Select::make('item_id')
-                    ->relationship('item', 'id')
+                    ->label('Item')
+                    ->relationship('item', 'item_code')
+                    ->getOptionLabelFromRecordUsing(fn (Item $record): string => "{$record->item_code} - {$record->description}")
+                    ->searchable()
+                    ->preload()
                     ->required(),
                 TextInput::make('lot_number')
+                    ->label('Lot No')
                     ->required(),
-                TextInput::make('supplier_lot'),
+                TextInput::make('supplier_lot')
+                    ->label('Supplier Lot'),
                 DatePicker::make('receipt_date')
                     ->required(),
                 DatePicker::make('expiry_date')
@@ -34,7 +41,8 @@ class ItemLotForm
                 TextInput::make('status')
                     ->required()
                     ->default('QUARANTINE'),
-                TextInput::make('coa_reference'),
+                TextInput::make('coa_reference')
+                    ->label('COA Reference'),
             ]);
     }
 }

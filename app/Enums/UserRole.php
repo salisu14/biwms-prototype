@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/UserRole.php
 
 namespace App\Enums;
@@ -14,7 +15,7 @@ enum UserRole: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ADMIN => 'System Administrator',
             self::MANAGER => 'Department Manager',
             self::SUPERVISOR => 'Team Supervisor',
@@ -26,7 +27,7 @@ enum UserRole: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ADMIN => 'bg-red-100 text-red-800 border-red-300',
             self::MANAGER => 'bg-purple-100 text-purple-800 border-purple-300',
             self::SUPERVISOR => 'bg-blue-100 text-blue-800 border-blue-300',
@@ -38,7 +39,7 @@ enum UserRole: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::ADMIN => 'user-shield',
             self::MANAGER => 'user-tie',
             self::SUPERVISOR => 'user-cog',
@@ -53,7 +54,7 @@ enum UserRole: string
      */
     public function level(): int
     {
-        return match($this) {
+        return match ($this) {
             self::VIEWER => 1,
             self::OPERATOR => 2,
             self::AUDITOR => 3,
@@ -92,7 +93,7 @@ enum UserRole: string
      */
     public function approvalLimit(): ?float
     {
-        return match($this) {
+        return match ($this) {
             self::OPERATOR => 0,
             self::SUPERVISOR => 1000.00,
             self::MANAGER => 10000.00,

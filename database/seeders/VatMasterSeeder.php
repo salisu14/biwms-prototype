@@ -1,8 +1,10 @@
 <?php
+
 // database/seeders/VatMasterSeeder.php
 
 namespace Database\Seeders;
 
+use App\Models\ChartOfAccount;
 use App\Models\VatMaster;
 use Illuminate\Database\Seeder;
 
@@ -10,32 +12,39 @@ class VatMasterSeeder extends Seeder
 {
     public function run(): void
     {
+        $purchaseVatAccount = ChartOfAccount::where('account_number', '14100')->first();
+        $salesVatAccount = ChartOfAccount::where('account_number', '20100')->first();
+
+        // Fallback for safety if COA seeder hasn't run or is different
+        $purchaseAccountId = $purchaseVatAccount?->id;
+        $salesAccountId = $salesVatAccount?->id;
+
         $vatRates = [
             [
-                'code' => 'no',
-                'description' => 'no vat',
-                'purchase_account_number' => 'GL-1001',
-                'sales_account_number' => 'GL-1002',
+                'code' => 'NO VAT',
+                'description' => 'Zero-rated / Exempt',
+                'purchase_account_id' => $purchaseAccountId,
+                'sales_account_id' => $salesAccountId,
                 'percentage' => 0,
             ],
             [
-                'code' => 'VAT 7',
-                'description' => 'VAT 7.5',
-                'purchase_account_number' => 'GL-1001',
-                'sales_account_number' => 'GL-1002',
+                'code' => 'VAT 7.5',
+                'description' => 'Standard VAT Rate (7.5%)',
+                'purchase_account_id' => $purchaseAccountId,
+                'sales_account_id' => $salesAccountId,
                 'percentage' => 7.5,
             ],
             [
                 'code' => 'VAT 10',
-                'description' => 'VAT 10',
-                'purchase_account_number' => 'GL-1002',
-                'sales_account_number' => 'GL-1003',
+                'description' => 'Higher VAT Rate (10%)',
+                'purchase_account_id' => $purchaseAccountId,
+                'sales_account_id' => $salesAccountId,
                 'percentage' => 10,
             ],
         ];
 
         foreach ($vatRates as $vat) {
-            VatMaster::firstOrCreate(['code' => $vat['code']], $vat);
+            VatMaster::updateOrCreate(['code' => $vat['code']], $vat);
         }
     }
 }

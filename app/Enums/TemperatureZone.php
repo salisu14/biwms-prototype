@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/TemperatureZone.php
 
 namespace App\Enums;
@@ -12,7 +13,7 @@ enum TemperatureZone: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::AMBIENT => 'Ambient (15-25°C)',
             self::COOL => 'Cool (8-15°C)',
             self::COLD => 'Cold (2-8°C)',
@@ -22,7 +23,7 @@ enum TemperatureZone: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::AMBIENT => 'bg-gray-100 text-gray-800 border-gray-300',
             self::COOL => 'bg-teal-100 text-teal-800 border-teal-300',
             self::COLD => 'bg-blue-100 text-blue-800 border-blue-300',
@@ -32,7 +33,7 @@ enum TemperatureZone: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::AMBIENT => 'thermometer-half',
             self::COOL => 'thermometer-quarter',
             self::COLD => 'snowflake',
@@ -45,7 +46,7 @@ enum TemperatureZone: string
      */
     public function temperatureRange(): array
     {
-        return match($this) {
+        return match ($this) {
             self::AMBIENT => ['min' => 15, 'max' => 25],
             self::COOL => ['min' => 8, 'max' => 15],
             self::COLD => ['min' => 2, 'max' => 8],
@@ -66,7 +67,7 @@ enum TemperatureZone: string
      */
     public function excursionTolerance(): int
     {
-        return match($this) {
+        return match ($this) {
             self::AMBIENT => 24,
             self::COOL => 4,
             self::COLD => 2,
@@ -79,7 +80,7 @@ enum TemperatureZone: string
      */
     public function ichZone(): string
     {
-        return match($this) {
+        return match ($this) {
             self::AMBIENT => 'Zone IVb (30°C/75% RH)',
             self::COOL => 'Zone III (30°C/65% RH)',
             self::COLD, self::FROZEN => 'Refrigerated/Frozen',

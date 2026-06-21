@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\ItemSkus\Schemas;
 
-use App\Models\ItemMaster;
-use App\Models\LocationMaster;
-use Filament\Forms;
-use Filament\Forms\Components\DatePicker; // Added for date fields
+use App\Filament\Traits\HasSystemGeneratedField;
+use App\Models\Item;
+use App\Models\Location;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -17,6 +17,8 @@ use Filament\Schemas\Schema;
 
 class ItemSkuForm
 {
+    use HasSystemGeneratedField;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -30,6 +32,7 @@ class ItemSkuForm
                                 name: 'item',
                                 titleAttribute: 'item_code'
                             )
+                            ->getOptionLabelFromRecordUsing(fn (Item $record): string => "{$record->item_code} - {$record->description}")
                             ->searchable()
                             ->preload()
                             ->live()
@@ -42,8 +45,9 @@ class ItemSkuForm
                             ->label('Location')
                             ->relationship(
                                 name: 'location',
-                                titleAttribute: 'location_code'
+                                titleAttribute: 'code'
                             )
+                            ->getOptionLabelFromRecordUsing(fn (Location $record): string => "{$record->code} - {$record->name}")
                             ->searchable()
                             ->preload()
                             ->live()
@@ -52,11 +56,12 @@ class ItemSkuForm
                             })
                             ->required(),
 
-                        TextInput::make('sku_code')
-                            ->label('SKU Code (Auto-Generated)')
-                            ->disabled()
-                            ->dehydrated(false)
-                            ->required(),
+                        static::makeSystemGeneratedTextInput(
+                            'sku_code',
+                            'SKU Code',
+                            'Built automatically from the selected item and location and cannot be changed.',
+                            'Auto-generated from Item and Location'
+                        ),
 
                         // ADDED: Barcode field
                         TextInput::make('barcode')
@@ -88,7 +93,7 @@ class ItemSkuForm
                                 ->numeric()
                                 ->default(0)
                                 ->suffix('days'),
-                        ])
+                        ]),
                     ]),
 
                 Section::make('Validity & Status')
@@ -126,11 +131,11 @@ class ItemSkuForm
         $locationId = $get('location_id');
 
         if ($itemId && $locationId) {
-            $item = ItemMaster::find($itemId);
-            $location = LocationMaster::find($locationId);
+            $item = Item::find($itemId);
+            $location = Location::find($locationId);
 
             if ($item && $location) {
-                $skuCode = sprintf('%s-%s', $item->item_code, $location->location_code);
+                $skuCode = sprintf('%s-%s', $item->item_code, $location->code);
                 $set('sku_code', $skuCode);
             } else {
                 $set('sku_code', null);

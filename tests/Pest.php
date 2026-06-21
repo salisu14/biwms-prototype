@@ -1,5 +1,6 @@
 <?php
 
+use Tests\CreatesFinancialDocumentFixtures;
 use Tests\TestCase;
 
 /*
@@ -14,6 +15,7 @@ use Tests\TestCase;
 */
 
 pest()->extend(TestCase::class)
+    ->use(CreatesFinancialDocumentFixtures::class)
  // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
     ->in('Feature');
 

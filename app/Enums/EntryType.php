@@ -1,4 +1,5 @@
 <?php
+
 // app/Enums/EntryType.php
 
 namespace App\Enums;
@@ -18,7 +19,7 @@ enum EntryType: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIPT => 'Goods Receipt',
             self::ISSUE => 'Material Issue',
             self::TRANSFER_IN => 'Transfer In',
@@ -34,7 +35,7 @@ enum EntryType: string
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIPT => 'bg-emerald-100 text-emerald-800 border-emerald-200',
             self::ISSUE => 'bg-amber-100 text-amber-800 border-amber-200',
             self::TRANSFER_IN => 'bg-cyan-100 text-cyan-800 border-cyan-200',
@@ -50,7 +51,7 @@ enum EntryType: string
 
     public function icon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::RECEIPT => 'arrow-down',
             self::ISSUE => 'arrow-up',
             self::TRANSFER_IN => 'sign-in-alt',
@@ -105,7 +106,7 @@ enum EntryType: string
      */
     public function nature(): string
     {
-        return match(true) {
+        return match (true) {
             $this->isInbound() => 'Inbound',
             $this->isOutbound() => 'Outbound',
             default => 'Neutral',
@@ -117,7 +118,7 @@ enum EntryType: string
      */
     public function tracksCost(): bool
     {
-        return !in_array($this, [self::TRANSFER_IN, self::TRANSFER_OUT]);
+        return ! in_array($this, [self::TRANSFER_IN, self::TRANSFER_OUT]);
     }
 
     /**

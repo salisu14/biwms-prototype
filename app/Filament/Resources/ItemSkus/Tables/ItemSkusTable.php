@@ -2,16 +2,17 @@
 
 namespace App\Filament\Resources\ItemSkus\Tables;
 
+use App\Filament\Resources\Items\ItemResource;
+use App\Filament\Resources\Locations\LocationResource;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Table;
 
 class ItemSkusTable
 {
@@ -21,37 +22,51 @@ class ItemSkusTable
             ->defaultSort('sku_code')
             ->columns([
                 TextColumn::make('sku_code')
-                    ->label('SKU Code')
+                    ->label('SKU')
                     ->searchable()
                     ->sortable()
                     ->weight('bold')
-                    ->copyable(),
+                    ->copyable()
+                    ->description(fn ($record): string => $record->item
+                        ? "{$record->item->item_code} - {$record->item->description}"
+                        : ''),
 
                 TextColumn::make('barcode')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('item.item_code')
-                    ->label('Item Code')
+                    ->label('Item')
                     ->searchable()
                     ->sortable()
-                    ->tooltip(fn ($record): string => $record->item->description ?? '')
-                    ->description(fn ($record): string => $record->item->description ?? '')
+                    ->tooltip(fn ($record): string => $record->item ? "{$record->item->item_code} - {$record->item->description}" : '')
+                    ->description(fn ($record): string => $record->item?->description ?? '')
+                    ->formatStateUsing(fn ($state, $record): string => $record->item
+                        ? "{$record->item->item_code} - {$record->item->description}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->item
+                        ? ItemResource::getUrl('view', ['record' => $record->item])
+                        : null)
                     ->limit(30),
 
-                TextColumn::make('location.location_name')
+                TextColumn::make('location.name')
                     ->label('Location')
                     ->searchable()
                     ->sortable()
                     ->badge()
-                    ->color('gray'),
+                    ->color('gray')
+                    ->formatStateUsing(fn ($state, $record): string => $record->location
+                        ? "{$record->location->code} - {$record->location->name}"
+                        : '—')
+                    ->url(fn ($record): ?string => $record->location
+                        ? LocationResource::getUrl('view', ['record' => $record->location])
+                        : null),
 
                 TextColumn::make('current_quantity')
                     ->label('On Hand')
                     ->sortable()
                     ->badge()
-                    ->color(fn ($record): string =>
-                    $record->needs_reorder ? 'danger' : 'success'
+                    ->color(fn ($record): string => $record->needs_reorder ? 'danger' : 'success'
                     )
                     ->suffix(' qty'),
 
@@ -62,8 +77,7 @@ class ItemSkusTable
                     ->falseIcon('heroicon-o-check')
                     ->trueColor('danger')
                     ->falseColor('success')
-                    ->tooltip(fn ($record): string =>
-                    $record->needs_reorder
+                    ->tooltip(fn ($record): string => $record->needs_reorder
                         ? "Below Reorder Point ({$record->reorder_point})"
                         : 'Stock Sufficient'
                     ),
@@ -119,7 +133,7 @@ class ItemSkusTable
 
                 SelectFilter::make('location_id')
                     ->label('Location')
-                    ->relationship('location', 'location_name')
+                    ->relationship('location', 'name')
                     ->searchable()
                     ->preload(),
 

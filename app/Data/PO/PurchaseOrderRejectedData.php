@@ -1,4 +1,5 @@
 <?php
+
 // app/Data/PO/PurchaseOrderRejectedData.php
 
 namespace App\Data\PO;

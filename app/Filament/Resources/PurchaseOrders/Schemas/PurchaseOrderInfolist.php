@@ -28,18 +28,21 @@ class PurchaseOrderInfolist
                                 $enum = $state instanceof PurchaseOrderType
                                     ? $state
                                     : PurchaseOrderType::tryFrom($state);
+
                                 return $enum?->label() ?? (string) $state;
                             })
                             ->color(function ($state): string {
                                 $enum = $state instanceof PurchaseOrderType
                                     ? $state
                                     : PurchaseOrderType::tryFrom($state);
+
                                 return $enum?->color() ?? 'gray';
                             })
                             ->icon(function ($state): ?string {
                                 $enum = $state instanceof PurchaseOrderType
                                     ? $state
                                     : PurchaseOrderType::tryFrom($state);
+
                                 return $enum?->icon();
                             }),
 
@@ -50,18 +53,21 @@ class PurchaseOrderInfolist
                                 $enum = $state instanceof PurchaseOrderStatus
                                     ? $state
                                     : PurchaseOrderStatus::tryFrom($state);
+
                                 return $enum?->label() ?? (string) $state;
                             })
                             ->color(function ($state): string {
                                 $enum = $state instanceof PurchaseOrderStatus
                                     ? $state
                                     : PurchaseOrderStatus::tryFrom($state);
+
                                 return $enum?->color() ?? 'gray';
                             })
                             ->icon(function ($state): ?string {
                                 $enum = $state instanceof PurchaseOrderStatus
                                     ? $state
                                     : PurchaseOrderStatus::tryFrom($state);
+
                                 return $enum?->icon();
                             }),
                     ]),
@@ -73,8 +79,11 @@ class PurchaseOrderInfolist
                             ->label('Vendor')
                             ->helperText(fn ($record): string => $record->payment_terms ?? 'No payment terms set'),
 
-                        TextEntry::make('location.location_name')
+                        TextEntry::make('location.name')
                             ->label('Ship To Location')
+                            ->state(fn ($record): string => $record->location
+                                ? "{$record->location->code} - {$record->location->name}"
+                                : '—')
                             ->badge()
                             ->color('gray'),
                     ]),

@@ -1,4 +1,5 @@
 <?php
+
 // app/Models/DocumentHeader.php
 
 namespace App\Models;
@@ -16,13 +17,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'posting_date',
     'status',
     'created_by',
-    'notes'
+    'notes',
 ])]
 class DocumentHeader extends Model
 {
     use HasFactory;
 
     protected $table = 'document_headers';
+
     protected $casts = [
         'doc_date' => 'date',
         'posting_date' => 'date',

@@ -15,6 +15,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class GeneralPostingSetupResource extends Resource
 {
@@ -22,7 +24,7 @@ class GeneralPostingSetupResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
-    protected static ?string $recordTitleAttribute = 'description';
+    protected static ?string $recordTitleAttribute = null;
 
     public static function form(Schema $schema): Schema
     {
@@ -46,6 +48,47 @@ class GeneralPostingSetupResource extends Resource
         ];
     }
 
+    public static function getRecordTitle(?Model $record): string
+    {
+        if (! $record instanceof GeneralPostingSetup) {
+            return static::getModelLabel();
+        }
+
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'generalBusinessPostingGroup.code',
+            'generalProductPostingGroup.code',
+        ];
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        /** @var GeneralPostingSetup $record */
+        return static::formatRecordTitle($record);
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var GeneralPostingSetup $record */
+        return [
+            'Sales Account' => $record->salesAccount?->name ?? '—',
+            'Blocked' => $record->blocked ? 'Yes' : 'No',
+        ];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with([
+            'generalBusinessPostingGroup',
+            'generalProductPostingGroup',
+            'salesAccount',
+        ]);
+    }
+
     public static function getPages(): array
     {
         return [
@@ -54,5 +97,13 @@ class GeneralPostingSetupResource extends Resource
             'view' => ViewGeneralPostingSetup::route('/{record}'),
             'edit' => EditGeneralPostingSetup::route('/{record}/edit'),
         ];
+    }
+
+    protected static function formatRecordTitle(GeneralPostingSetup $record): string
+    {
+        $businessGroupCode = $record->generalBusinessPostingGroup?->code ?? 'Unknown Business Group';
+        $productGroupCode = $record->generalProductPostingGroup?->code ?? 'Unknown Product Group';
+
+        return "{$businessGroupCode} / {$productGroupCode}";
     }
 }
