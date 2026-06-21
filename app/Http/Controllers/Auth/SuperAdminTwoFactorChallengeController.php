@@ -15,7 +15,7 @@ class SuperAdminTwoFactorChallengeController extends Controller
     public function create(): View
     {
         return view('auth.two-factor.challenge', [
-            'action' => route('super-admin-2fa.challenge.store'),
+            'action' => route('admin.two-factor.challenge.store'),
         ]);
     }
 
@@ -28,7 +28,7 @@ class SuperAdminTwoFactorChallengeController extends Controller
 
         $user = $request->user();
 
-        abort_unless($user && $user->hasRole('super_admin') && $user->hasConfirmedTwoFactorAuthentication(), 404);
+        abort_unless($user && $user->hasConfirmedTwoFactorAuthentication(), 404);
 
         $code = (string) $request->input('code');
         $verified = $twoFactorService->verifyCode((string) $user->two_factor_secret, $code)
@@ -37,26 +37,28 @@ class SuperAdminTwoFactorChallengeController extends Controller
         if (! $verified) {
             $auditTrailService->recordGeneric(
                 eventType: 'security',
-                action: 'super_admin_2fa_challenge_failed',
+                action: 'two_factor_challenge_failed',
                 auditable: $user,
                 userId: $user->id,
-                description: 'Super Admin 2FA challenge failed',
+                description: '2FA challenge failed',
             );
 
             return response()->view('auth.two-factor.challenge', [
-                'action' => route('super-admin-2fa.challenge.store'),
+                'action' => route('admin.two-factor.challenge.store'),
                 'errorMessage' => 'The code was not valid.',
             ], 422);
         }
 
+        $user->forceFill(['two_factor_last_challenged_at' => now()])->save();
+        $request->session()->put('two_factor_passed_at', now()->timestamp);
         $request->session()->put('super_admin_2fa_passed_at', now()->timestamp);
 
         $auditTrailService->recordGeneric(
             eventType: 'security',
-            action: 'super_admin_2fa_challenge_passed',
+            action: 'two_factor_challenge_passed',
             auditable: $user,
             userId: $user->id,
-            description: 'Super Admin 2FA challenge completed',
+            description: '2FA challenge completed',
         );
 
         return redirect()->intended('/admin');

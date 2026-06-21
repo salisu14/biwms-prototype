@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\User;
 use App\Services\HR\EmployeeOnboardingService;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
@@ -17,6 +18,8 @@ use Tests\TestCase;
 
 class EmployeeOnboardingTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected EmployeeOnboardingService $service;
 
     protected function setUp(): void

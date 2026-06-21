@@ -21,7 +21,7 @@ class SuperAdminTwoFactorSetupController extends Controller
         }
 
         return view('auth.two-factor.setup', [
-            'action' => route('super-admin-2fa.setup.store'),
+            'action' => route('admin.two-factor.setup.store'),
             'secret' => $secret,
         ]);
     }
@@ -36,33 +36,28 @@ class SuperAdminTwoFactorSetupController extends Controller
         $user = $request->user();
         $secret = $request->session()->get('super_admin_2fa_setup_secret');
 
-        abort_unless($user && $user->hasRole('super_admin') && is_string($secret), 404);
+        abort_unless($user && is_string($secret), 404);
 
         if (! $twoFactorService->verifyCode($secret, (string) $request->input('code'))) {
             $auditTrailService->recordGeneric(
                 eventType: 'security',
-                action: 'super_admin_2fa_setup_failed',
+                action: 'two_factor_setup_failed',
                 auditable: $user,
                 userId: $user->id,
-                description: 'Super Admin 2FA setup failed',
+                description: '2FA setup failed',
             );
 
             return response()->view('auth.two-factor.setup', [
-                'action' => route('super-admin-2fa.setup.store'),
+                'action' => route('admin.two-factor.setup.store'),
                 'secret' => $secret,
                 'errorMessage' => 'The code was not valid. Try the current authenticator code.',
             ], 422);
         }
 
-        $plainRecoveryCodes = $twoFactorService->generateRecoveryCodes();
-
-        $user->forceFill([
-            'two_factor_secret' => $secret,
-            'two_factor_recovery_codes' => $twoFactorService->hashRecoveryCodes($plainRecoveryCodes),
-            'two_factor_confirmed_at' => now(),
-        ])->save();
+        $plainRecoveryCodes = $twoFactorService->enable($user, $secret, $user->id);
 
         $request->session()->forget('super_admin_2fa_setup_secret');
+        $request->session()->put('two_factor_passed_at', now()->timestamp);
         $request->session()->put('super_admin_2fa_passed_at', now()->timestamp);
 
         $auditTrailService->recordGeneric(
@@ -70,7 +65,7 @@ class SuperAdminTwoFactorSetupController extends Controller
             action: 'two_factor_enabled',
             auditable: $user,
             userId: $user->id,
-            description: 'Super Admin 2FA enabled',
+            description: '2FA enabled',
             metadata: ['recovery_code_count' => count($plainRecoveryCodes)],
         );
 

@@ -18,40 +18,43 @@ class EnsureSuperAdminTwoFactorIsVerified
     {
         $user = $request->user();
 
-        if (! $user?->hasRole('super_admin')) {
+        if (! $user?->requiresTwoFactor()) {
             return $next($request);
         }
 
-        if ($request->routeIs('super-admin-2fa.*') || $request->is('admin/two-factor/*', 'super-admin/two-factor/*')) {
+        if (
+            $request->routeIs('admin.two-factor.setup.*', 'admin.two-factor.challenge.*')
+            || $request->is('admin/two-factor/setup', 'admin/two-factor/challenge', 'super-admin/two-factor/*', 'logout', 'forgot-password', 'reset-password*')
+        ) {
             return $next($request);
         }
 
         if (! $user->hasConfirmedTwoFactorAuthentication()) {
             app(AuditTrailService::class)->recordGeneric(
                 eventType: 'security',
-                action: 'super_admin_2fa_setup_required',
+                action: 'two_factor_setup_required',
                 auditable: $user,
                 userId: $user->id,
-                description: 'Super Admin login requires 2FA setup',
+                description: 'User login requires 2FA setup',
             );
 
             $request->session()->put('url.intended', $request->fullUrl());
 
-            return redirect()->route('super-admin-2fa.setup.create');
+            return redirect()->route('admin.two-factor.setup.create');
         }
 
-        if (! $request->session()->has('super_admin_2fa_passed_at')) {
+        if (! $request->session()->has('two_factor_passed_at')) {
             app(AuditTrailService::class)->recordGeneric(
                 eventType: 'security',
-                action: 'super_admin_2fa_challenge_required',
+                action: 'two_factor_challenge_required',
                 auditable: $user,
                 userId: $user->id,
-                description: 'Super Admin login requires 2FA challenge',
+                description: 'User login requires 2FA challenge',
             );
 
             $request->session()->put('url.intended', $request->fullUrl());
 
-            return redirect()->route('super-admin-2fa.challenge.create');
+            return redirect()->route('admin.two-factor.challenge.create');
         }
 
         return $next($request);

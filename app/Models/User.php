@@ -15,7 +15,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password', 'salesperson_code', 'employee_id', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'])]
+#[Fillable(['name', 'email', 'password', 'salesperson_code', 'employee_id', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at', 'two_factor_required', 'two_factor_enabled_by', 'two_factor_disabled_at', 'two_factor_disabled_by', 'two_factor_last_challenged_at', 'two_factor_reset_at', 'two_factor_reset_by'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable implements FilamentUser
 {
@@ -35,6 +35,10 @@ class User extends Authenticatable implements FilamentUser
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
+            'two_factor_required' => 'boolean',
+            'two_factor_disabled_at' => 'datetime',
+            'two_factor_last_challenged_at' => 'datetime',
+            'two_factor_reset_at' => 'datetime',
         ];
     }
 
@@ -46,6 +50,22 @@ class User extends Authenticatable implements FilamentUser
     public function hasConfirmedTwoFactorAuthentication(): bool
     {
         return filled($this->two_factor_secret) && $this->two_factor_confirmed_at !== null;
+    }
+
+    public function requiresTwoFactor(): bool
+    {
+        if ((bool) $this->two_factor_required) {
+            return true;
+        }
+
+        $requiredRoles = config('security.two_factor_required_roles', []);
+
+        return $this->hasAnyRole($requiredRoles);
+    }
+
+    public function twoFactorRecoveryCodesRemaining(): int
+    {
+        return count($this->two_factor_recovery_codes ?? []);
     }
 
     public function canAccessPanel(Panel $panel): bool

@@ -139,22 +139,29 @@ class EmployeeForm
                 ->schema([
                     Toggle::make('create_user_account')
                         ->label('Create Login Account')
+                        ->default(false)
                         ->live()
                         ->helperText('Enable to grant this employee access to the system.'),
 
                     TextInput::make('login_email')
                         ->label('Login Email')
                         ->email()
-                        ->required()
+                        ->required(fn (Get $get): bool => (bool) $get('create_user_account'))
                         ->unique(table: 'users', column: 'email')
                         ->validationMessages(['unique' => 'This login email is already in use by another user.'])
-                        ->visible(fn (Get $get) => $get('create_user_account')),
+                        ->visible(fn (Get $get): bool => (bool) $get('create_user_account'))
+                        ->dehydrated(fn (Get $get): bool => (bool) $get('create_user_account')),
 
                     Select::make('initial_role')
                         ->label('Initial Role')
-                        ->required()
-                        ->options(fn () => Role::query()->pluck('name', 'name'))
-                        ->visible(fn (Get $get) => $get('create_user_account')),
+                        ->required(fn (Get $get): bool => (bool) $get('create_user_account'))
+                        ->options(fn (): array => Role::query()
+                            ->where('guard_name', 'web')
+                            ->orderBy('name')
+                            ->pluck('name', 'name')
+                            ->all())
+                        ->visible(fn (Get $get): bool => (bool) $get('create_user_account'))
+                        ->dehydrated(fn (Get $get): bool => (bool) $get('create_user_account')),
 
                     ToggleButtons::make('password_method')
                         ->label('Password Setup Method')
@@ -163,17 +170,19 @@ class EmployeeForm
                             'temporary_password' => 'Set Temporary Password',
                         ])
                         ->inline()
-                        ->required()
+                        ->required(fn (Get $get): bool => (bool) $get('create_user_account'))
                         ->default('send_password_reset')
-                        ->visible(fn (Get $get) => $get('create_user_account'))
+                        ->visible(fn (Get $get): bool => (bool) $get('create_user_account'))
+                        ->dehydrated(fn (Get $get): bool => (bool) $get('create_user_account'))
                         ->live(),
 
                     TextInput::make('temporary_password')
                         ->label('Temporary Password')
                         ->password()
-                        ->required()
+                        ->required(fn (Get $get): bool => (bool) $get('create_user_account') && $get('password_method') === 'temporary_password')
                         ->minLength(8)
-                        ->visible(fn (Get $get) => $get('create_user_account') && $get('password_method') === 'temporary_password')
+                        ->visible(fn (Get $get): bool => (bool) $get('create_user_account') && $get('password_method') === 'temporary_password')
+                        ->dehydrated(fn (Get $get): bool => (bool) $get('create_user_account') && $get('password_method') === 'temporary_password')
                         ->helperText('User will be forced to change this on first login.'),
                 ])
                 ->visible(fn (?Employee $record) => $record === null), // Hide entirely on edit

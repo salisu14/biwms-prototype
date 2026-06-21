@@ -3,6 +3,7 @@
 namespace App\Services\Auth;
 
 use App\Models\User;
+use App\Services\AuditTrailService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -81,9 +82,78 @@ class SuperAdminTwoFactorService
             return false;
         }
 
-        $user->forceFill(['two_factor_recovery_codes' => $remainingCodes])->save();
+        $user->forceFill([
+            'two_factor_recovery_codes' => $remainingCodes,
+            'two_factor_last_challenged_at' => now(),
+        ])->save();
+
+        $this->auditTrailService->recordGeneric(
+            eventType: 'security',
+            action: 'two_factor_recovery_code_used',
+            auditable: $user,
+            userId: $user->id,
+            description: '2FA recovery code used',
+            metadata: ['recovery_codes_remaining' => count($remainingCodes)],
+        );
 
         return true;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function enable(User $user, string $secret, ?int $actorId = null): array
+    {
+        $plainRecoveryCodes = $this->generateRecoveryCodes();
+
+        $user->forceFill([
+            'two_factor_secret' => $secret,
+            'two_factor_recovery_codes' => $this->hashRecoveryCodes($plainRecoveryCodes),
+            'two_factor_confirmed_at' => now(),
+            'two_factor_enabled_by' => $actorId ?? $user->id,
+            'two_factor_disabled_at' => null,
+            'two_factor_disabled_by' => null,
+            'two_factor_reset_at' => null,
+            'two_factor_reset_by' => null,
+        ])->save();
+
+        return $plainRecoveryCodes;
+    }
+
+    public function disable(User $user, ?int $actorId = null): void
+    {
+        $user->forceFill([
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+            'two_factor_disabled_at' => now(),
+            'two_factor_disabled_by' => $actorId,
+        ])->save();
+    }
+
+    public function forceReset(User $user, ?int $actorId = null): void
+    {
+        $user->forceFill([
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+            'two_factor_reset_at' => now(),
+            'two_factor_reset_by' => $actorId,
+        ])->save();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function regenerateRecoveryCodes(User $user): array
+    {
+        $plainRecoveryCodes = $this->generateRecoveryCodes();
+
+        $user->forceFill([
+            'two_factor_recovery_codes' => $this->hashRecoveryCodes($plainRecoveryCodes),
+        ])->save();
+
+        return $plainRecoveryCodes;
     }
 
     /**
@@ -141,3 +211,6 @@ class SuperAdminTwoFactorService
         return $decoded;
     }
 }
+    public function __construct(
+        private readonly AuditTrailService $auditTrailService
+    ) {}
