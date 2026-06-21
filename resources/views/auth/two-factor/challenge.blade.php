@@ -1,5 +1,5 @@
-@component('auth.two-factor.layout', ['title' => 'Super Admin 2FA Challenge'])
-    <h1>Super Admin 2FA Challenge</h1>
+@component('auth.two-factor.layout', ['title' => '2FA Challenge'])
+    <h1>2FA Challenge</h1>
     <p>Enter an authenticator code or one of your recovery codes to continue to the admin panel.</p>
 
     @if ($errors->any() || filled($errorMessage ?? null))

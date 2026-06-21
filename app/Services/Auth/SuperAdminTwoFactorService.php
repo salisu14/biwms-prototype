@@ -16,6 +16,10 @@ class SuperAdminTwoFactorService
 
     private const SECRET_LENGTH = 20;
 
+    public function __construct(
+        private readonly AuditTrailService $auditTrailService
+    ) {}
+
     public function generateSecret(): string
     {
         $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -211,6 +215,3 @@ class SuperAdminTwoFactorService
         return $decoded;
     }
 }
-    public function __construct(
-        private readonly AuditTrailService $auditTrailService
-    ) {}

@@ -35,7 +35,7 @@
         }
 
         .card {
-            width: min(100%, 520px);
+            width: min(100%, {{ $wide ?? false ? '1120px' : '520px' }});
             border: 1px solid var(--line);
             border-radius: 8px;
             background: var(--card);
@@ -120,6 +120,57 @@
             color: var(--danger-ink);
         }
 
+        .notice {
+            border: 1px solid #bbf7d0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 18px;
+            background: #f0fdf4;
+            color: #166534;
+        }
+
+        .status-list {
+            display: grid;
+            gap: 10px;
+            margin: 0 0 22px;
+        }
+
+        .status-list div {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 10px;
+        }
+
+        .status-list dt {
+            color: var(--muted);
+            font-weight: 650;
+        }
+
+        .status-list dd {
+            margin: 0;
+            text-align: right;
+        }
+
+        .badge {
+            display: inline-flex;
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .badge-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
         .codes {
             display: grid;
             gap: 8px;
@@ -132,6 +183,57 @@
             gap: 12px;
             align-items: center;
             margin-top: 18px;
+        }
+
+        .stack {
+            display: grid;
+            gap: 14px;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid var(--line);
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .action-cell {
+            display: grid;
+            gap: 8px;
+            min-width: 180px;
+        }
+
+        .action-cell form {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .action-cell input {
+            min-height: 36px;
+        }
+
+        .action-cell button {
+            min-height: 36px;
+            padding: 7px 10px;
+            white-space: nowrap;
         }
     </style>
 </head>

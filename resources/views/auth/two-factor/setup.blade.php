@@ -1,5 +1,5 @@
-@component('auth.two-factor.layout', ['title' => 'Set up Super Admin 2FA'])
-    <h1>Set up Super Admin 2FA</h1>
+@component('auth.two-factor.layout', ['title' => 'Set up 2FA'])
+    <h1>Set up 2FA</h1>
     <p>Add this TOTP secret to your authenticator app, then enter the current code to finish setup.</p>
 
     @if ($errors->any() || filled($errorMessage ?? null))
