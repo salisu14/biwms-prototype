@@ -79,7 +79,7 @@ class ItemLedgerEntriesTable
                     ->color(fn ($state) => $state > 0 ? 'warning' : 'gray'),
                 TextColumn::make('cost_amount_actual')
                     ->label('Cost')
-                    ->money()
+                    ->money('NGN')
                     ->sortable(),
                 IconColumn::make('open')
                     ->label('Status')

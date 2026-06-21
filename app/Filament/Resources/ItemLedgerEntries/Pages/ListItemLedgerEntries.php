@@ -22,7 +22,6 @@ class ListItemLedgerEntries extends ListRecords
                 ->icon('heroicon-o-chart-bar')
                 ->color('gray')
                 ->url(ItemLedgerSummary::getUrl()),
-            CreateAction::make(),
         ];
     }
 }

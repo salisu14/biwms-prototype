@@ -100,9 +100,7 @@ class ItemLedgerEntryResource extends Resource
     {
         return [
             'index' => ListItemLedgerEntries::route('/'),
-            'create' => CreateItemLedgerEntry::route('/create'),
             'view' => ViewItemLedgerEntry::route('/{record}'),
-            'edit' => EditItemLedgerEntry::route('/{record}/edit'),
         ];
     }
 
