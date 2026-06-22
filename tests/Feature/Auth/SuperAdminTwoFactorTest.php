@@ -1,11 +1,13 @@
 <?php
 
+use App\Filament\Pages\UserSecurity;
 use App\Models\AuditTrail;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Auth\SuperAdminTwoFactorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
 
 uses(RefreshDatabase::class);
@@ -195,24 +197,24 @@ it('lets Super Admin manage user security and audits sensitive actions', functio
     ])->save();
 
     $this->actingAs($target)
-        ->get(route('admin.user-security.index'))
+        ->get(UserSecurity::getUrl())
         ->assertNotFound();
 
     $this->actingAs($superAdmin)
         ->withSession(['two_factor_passed_at' => now()->timestamp])
-        ->get(route('admin.user-security.index'))
+        ->get(UserSecurity::getUrl())
         ->assertSuccessful()
         ->assertSee('User Security');
 
-    $this->post(route('admin.user-security.require-two-factor', $target))
-        ->assertRedirect();
-
-    $this->post(route('admin.user-security.reset-two-factor', $target))
-        ->assertRedirect();
+    Livewire::actingAs($superAdmin)
+        ->test(UserSecurity::class)
+        ->callTableAction('require_two_factor', $target)
+        ->callTableAction('force_reset', $target)
+        ->assertHasNoTableActionErrors();
 
     expect($target->fresh()->two_factor_required)->toBeTrue()
         ->and($target->fresh()->two_factor_reset_at)->not->toBeNull()
-        ->and(AuditTrail::query()->where('action', 'two_factor_required_enabled')->exists())->toBeTrue()
+        ->and(AuditTrail::query()->where('action', 'two_factor_required')->exists())->toBeTrue()
         ->and(AuditTrail::query()->where('action', 'two_factor_admin_reset')->exists())->toBeTrue();
 });
 

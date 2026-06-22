@@ -92,7 +92,7 @@ class RoleResource extends Resource
 
     public static function canDelete(Model $record): bool
     {
-        return static::canAccess() && !in_array($record->getAttribute('name'), ['super_admin', 'admin'], true);
+        return static::canAccess() && ! in_array($record->getAttribute('name'), ['super_admin', 'admin'], true);
     }
 
     public static function table(Table $table): Table
@@ -120,7 +120,7 @@ class RoleResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->modifyQueryUsing(fn($query) => $query->withCount('permissions'))
+            ->modifyQueryUsing(fn ($query) => $query->withCount('permissions'))
             ->recordActions([
                 ActionGroup::make([
                     ViewAction::make(),
@@ -151,15 +151,15 @@ class RoleResource extends Resource
                 ->schema([
                     TextEntry::make('permissions_count')
                         ->label('Total Permissions')
-                        ->state(fn(Role $record) => $record->permissions->count())
+                        ->state(fn (Role $record) => $record->permissions->count())
                         ->badge()
                         ->color('success'),
 
                     TextEntry::make('dangerous_permissions_count')
                         ->label('Dangerous Permissions')
-                        ->state(fn(Role $record) => $record->permissions
+                        ->state(fn (Role $record) => $record->permissions
                             ->pluck('name')
-                            ->filter(fn($permission) => static::isDangerousPermission($permission))
+                            ->filter(fn ($permission) => static::isDangerousPermission($permission))
                             ->count()
                         )
                         ->badge()
@@ -178,7 +178,7 @@ class RoleResource extends Resource
 
                     TextEntry::make('permissions_count')
                         ->label('Assigned Permissions')
-                        ->state(fn(Role $record) => $record->permissions->count())
+                        ->state(fn (Role $record) => $record->permissions->count())
                         ->badge()
                         ->color('success'),
                 ])
@@ -186,15 +186,15 @@ class RoleResource extends Resource
 
             Section::make('Dangerous Permissions')
                 ->description('Permissions that can affect security, accounting, or system configuration.')
-                ->visible(fn(Role $record) => $record->permissions
+                ->visible(fn (Role $record) => $record->permissions
                     ->pluck('name')
-                    ->contains(fn($permission) => static::isDangerousPermission($permission)))
+                    ->contains(fn ($permission) => static::isDangerousPermission($permission)))
                 ->schema([
                     TextEntry::make('dangerous_permissions')
                         ->state(function (Role $record) {
                             return $record->permissions
                                 ->pluck('name')
-                                ->filter(fn($permission) => static::isDangerousPermission($permission))
+                                ->filter(fn ($permission) => static::isDangerousPermission($permission))
                                 ->all();
                         })
                         ->badge()
@@ -218,7 +218,7 @@ class RoleResource extends Resource
             ->where('guard_name', 'web')
             ->orderBy('name')
             ->get()
-            ->groupBy(fn($permission) => static::permissionGroupFor($permission->name));
+            ->groupBy(fn ($permission) => static::permissionGroupFor($permission->name));
 
         $tabs = [];
 
@@ -236,7 +236,7 @@ class RoleResource extends Resource
                         ->badge()
                         ->separator(',')
                         ->color('gray')
-                        ->formatStateUsing(fn($state) => static::permissionBadgeLabelFor($state)),
+                        ->formatStateUsing(fn ($state) => static::permissionBadgeLabelFor($state)),
                 ]);
         }
 
@@ -244,7 +244,7 @@ class RoleResource extends Resource
     }
 
     /**
-     * @param array<int, string> $permissionNames
+     * @param  array<int, string>  $permissionNames
      */
     protected static function permissionBadgeGrid(array $permissionNames): Grid
     {
@@ -252,8 +252,8 @@ class RoleResource extends Resource
             ->schema([
                 TextEntry::make('permissions.name')
                     ->badge()
-                    ->color(fn(string $state): string => static::isDangerousPermission($state) ? 'danger' : 'gray')
-                    ->formatStateUsing(fn(string $state): string => static::permissionBadgeLabelFor($state))
+                    ->color(fn (string $state): string => static::isDangerousPermission($state) ? 'danger' : 'gray')
+                    ->formatStateUsing(fn (string $state): string => static::permissionBadgeLabelFor($state))
                     ->state(function (Model $record) use ($permissionNames): array {
                         return array_values(array_intersect(
                             $record->permissions->pluck('name')->all(),
@@ -272,7 +272,7 @@ class RoleResource extends Resource
             ->where('guard_name', 'web')
             ->orderBy('name')
             ->get(['id', 'name'])
-            ->mapWithKeys(fn(Permission $permission): array => [
+            ->mapWithKeys(fn (Permission $permission): array => [
                 $permission->id => static::permissionLabelFor($permission->name),
             ])
             ->all();
@@ -286,7 +286,7 @@ class RoleResource extends Resource
         return Permission::query()
             ->where('guard_name', 'web')
             ->get(['id', 'name'])
-            ->mapWithKeys(fn(Permission $permission): array => [
+            ->mapWithKeys(fn (Permission $permission): array => [
                 $permission->id => static::isDangerousPermission($permission->name)
                     ? 'Dangerous permission. Grant only to trusted administrators.'
                     : $permission->name,
@@ -305,12 +305,12 @@ class RoleResource extends Resource
             str_starts_with($permission, 'hr.') => 'Human Resources',
             str_starts_with($permission, 'payroll.') => 'Payroll',
             str_starts_with($permission, 'fixed_asset.') => 'Fixed Assets',
+            str_contains($permission, ':') => 'Legacy',
             str_contains($permission, 'report') => 'Reports',
             str_starts_with($permission, 'audit_trail.') => 'Audit Trail',
             str_contains($permission, 'role')
             || str_contains($permission, 'user')
-            || str_contains($permission, 'permission')
-            => 'Security',
+            || str_contains($permission, 'permission') => 'Security',
             default => 'System Setup',
         };
     }
