@@ -20,13 +20,13 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use UnitEnum;
 
 class UserSecurity extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    // FIXED: Removed trailing space from slug
     protected static ?string $slug = 'user-security';
 
     protected string $view = 'filament.pages.user-security';
@@ -37,15 +37,22 @@ class UserSecurity extends Page implements HasTable
 
     protected static string|UnitEnum|null $navigationGroup = 'Security';
 
+    /**
+     * @var array<int, string>
+     */
+    public array $generatedRecoveryCodes = [];
+
+    public ?string $generatedRecoveryCodesFor = null;
+
     public static function canAccess(): bool
     {
         $user = Auth::user();
 
         return $user && (
-                $user->hasRole('super_admin')
-                || $user->can('user_security.view')
-                || $user->can('role_permission.manage')
-            );
+            $user->hasRole('super_admin')
+            || $user->can('user_security.view')
+            || $user->can('role_permission.manage')
+        );
     }
 
     protected function canManageUserSecurity(): bool
@@ -53,10 +60,10 @@ class UserSecurity extends Page implements HasTable
         $user = Auth::user();
 
         return $user && (
-                $user->hasRole('super_admin')
-                || $user->can('user_security.manage')
-                || $user->can('role_permission.manage')
-            );
+            $user->hasRole('super_admin')
+            || $user->can('user_security.manage')
+            || $user->can('role_permission.manage')
+        );
     }
 
     public function table(Table $table): Table
@@ -76,9 +83,9 @@ class UserSecurity extends Page implements HasTable
                 ->searchable()
                 ->formatStateUsing(
                     fn (User $record): string => e($record->name)
-                        . '<br><small class="text-gray-500 dark:text-gray-400">'
-                        . e($record->email)
-                        . '</small>'
+                        .'<br><small class="text-gray-500 dark:text-gray-400">'
+                        .e($record->email)
+                        .'</small>'
                 )
                 ->html(),
 
@@ -164,6 +171,14 @@ class UserSecurity extends Page implements HasTable
                         ]);
                     }
 
+                    app(AuditTrailService::class)->recordGeneric(
+                        eventType: 'security',
+                        action: 'two_factor_admin_reset',
+                        auditable: $record,
+                        userId: auth()->id(),
+                        description: "Forced 2FA reset for user {$record->email}",
+                    );
+
                     Notification::make()
                         ->title('Authenticator Reset')
                         ->success()
@@ -177,19 +192,19 @@ class UserSecurity extends Page implements HasTable
                 ->visible(fn (User $record): bool => $this->canManageUserSecurity()
                     && $record->hasConfirmedTwoFactorAuthentication()
                     && ! $record->requiresTwoFactor())
-                ->schema([
+                ->form([
                     TextInput::make('confirmation')
                         ->label('Type the user email to confirm')
                         ->required()
-                        ->email()
-                        ->rule(function (string $attribute, mixed $value, \Closure $fail) use (&$record): void {
-                            // We reference $record directly as it's passed down by the table action scope
-                            if ((string) $value !== $record->email) {
-                                $fail('The email does not match the selected user.');
-                            }
-                        }),
+                        ->email(),
                 ])
-                ->action(function (array $data, User $record): void {
+                ->action(function (User $record, array $data): void {
+                    if ((string) ($data['confirmation'] ?? '') !== $record->email) {
+                        throw ValidationException::withMessages([
+                            'mountedActions.0.data.confirmation' => 'The email does not match the selected user.',
+                        ]);
+                    }
+
                     if ($record->requiresTwoFactor()) {
                         Notification::make()
                             ->title('Cannot disable 2FA')
@@ -230,9 +245,12 @@ class UserSecurity extends Page implements HasTable
                 ->visible(fn (User $record): bool => $this->canManageUserSecurity()
                     && $record->hasConfirmedTwoFactorAuthentication())
                 ->requiresConfirmation()
-                ->action(function (User $record) {
+                ->action(function (User $record): void {
                     $codes = app(SuperAdminTwoFactorService::class)
-                        ->regenerateRecoveryCodes($record, auth()->id());
+                        ->regenerateRecoveryCodes($record);
+
+                    $this->generatedRecoveryCodes = $codes;
+                    $this->generatedRecoveryCodesFor = $record->email;
 
                     app(AuditTrailService::class)->recordGeneric(
                         eventType: 'security',
@@ -243,18 +261,11 @@ class UserSecurity extends Page implements HasTable
                         metadata: ['recovery_code_count' => count($codes)],
                     );
 
-                    $filename = 'recovery-codes-' . str($record->email)->replace(['@', '.'], '-') . '-' . now()->timestamp . '.txt';
-
                     Notification::make()
                         ->title('Recovery Codes Regenerated')
-                        ->body('Your browser should download the codes automatically.')
+                        ->body('New recovery codes are shown below the table. Copy them now; they will not be shown again after you leave this page.')
                         ->success()
                         ->send();
-
-                    return response()->streamDownload(
-                        fn () => print implode(PHP_EOL, $codes),
-                        $filename
-                    );
                 }),
 
             Action::make('clear_session')

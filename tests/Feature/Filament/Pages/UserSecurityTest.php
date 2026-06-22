@@ -50,8 +50,14 @@ class UserSecurityTest extends TestCase
     {
         $superAdmin = User::factory()->create();
         $superAdmin->assignRole('super_admin');
+        $superAdmin->forceFill([
+            'two_factor_secret' => 'secret',
+            'two_factor_recovery_codes' => [],
+            'two_factor_confirmed_at' => now(),
+        ])->save();
 
         $this->actingAs($superAdmin)
+            ->withSession(['two_factor_passed_at' => now()->timestamp])
             ->get('/admin/user-security')
             ->assertSuccessful()
             ->assertSee('User Security');

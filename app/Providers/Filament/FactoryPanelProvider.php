@@ -44,6 +44,12 @@ class FactoryPanelProvider extends PanelProvider
             ])
             ->brandName('BIFLI Globals - Factory Role Center')
             ->favicon(asset('favicon.ico'))
+            ->spa(hasPrefetching: true)
+            ->sidebarCollapsibleOnDesktop()
+            ->globalSearch()
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->globalSearchFieldKeyBindingSuffix()
+            ->brandName('BIFLI Group')
             ->resources([
                 ProductionOrderResource::class,
                 ReleasedProductionOrderResource::class,

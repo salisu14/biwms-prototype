@@ -93,6 +93,7 @@ class RolePermissionSetSeeder extends Seeder
                 'sales.order.view_any', 'sales.order.view', 'sales.order.post',
             ],
             'factory-operator' => [
+                'factory.production_order.planned.view_any', 'factory.production_order.planned.view',
                 'factory.production_order.view_any', 'factory.production_order.view',
                 'sales.item.view_any', 'sales.item.view',
             ],
