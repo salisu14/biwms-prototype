@@ -37,28 +37,37 @@ class RoleResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return $schema
-            ->components([
-                Section::make('Role Details')
-                    ->schema([
-                        TextInput::make('name')
-                            ->required()
-                            ->unique(ignoreRecord: true)
-                            ->columnSpan(1),
+        return $schema->components([
+            Section::make('Role Details')
+                ->schema([
+                    TextInput::make('name')
+                        ->required()
+                        ->unique(ignoreRecord: true)
+                        ->columnSpan(1),
 
-                        TextInput::make('guard_name')
-                            ->default('web')
-                            ->required()
-                            ->columnSpan(1),
-                    ])
-                    ->columns(2),
+                    TextInput::make('guard_name')
+                        ->default('web')
+                        ->required()
+                        ->columnSpan(1),
+                ])
+                ->columns(2),
 
-                Tabs::make('Permissions')
-                    ->tabs(static::permissionTabs())
-                    ->columnSpanFull()
-                    ->persistTabInQueryString()
-                    ->contained(false),
-            ]);
+            Section::make('Permissions')
+                ->description('Use search to find permissions. Dangerous permissions are marked.')
+                ->schema([
+                    CheckboxList::make('permissions')
+                        ->label('')
+                        ->relationship('permissions', 'name')
+                        ->options(static::permissionOptions())
+                        ->descriptions(static::permissionDescriptions())
+                        ->columns(4)
+                        ->bulkToggleable()
+                        ->allowHtml()
+                        ->searchable()
+                        ->helperText('Only one permission selector is used to avoid invalid selections across grouped tabs.'),
+                ])
+                ->columnSpanFull(),
+        ]);
     }
 
     public static function canAccess(): bool
@@ -93,22 +102,23 @@ class RoleResource extends Resource
             ->columns([
                 TextColumn::make('name')
                     ->searchable(),
+
                 TextColumn::make('permissions_count')
                     ->counts('permissions')
                     ->label('Permissions'),
+
                 TextColumn::make('guard_name')
                     ->searchable(),
+
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                //
             ])
             ->modifyQueryUsing(fn ($query) => $query->withCount('permissions'))
             ->recordActions([
@@ -136,84 +146,22 @@ class RoleResource extends Resource
 
     public static function infolist(Schema $schema): Schema
     {
-        return $schema
-            ->schema([
-                Section::make('Role Information')
-                    ->schema([
-                        TextEntry::make('name'),
-                        TextEntry::make('guard_name'),
-                    ]),
-
-                Tabs::make('Permissions')
-                    ->tabs(static::permissionInfolistTabs())
-                    ->columnSpanFull()
-                    ->contained(false),
-            ]);
-    }
-
-    /**
-     * Generate tabs for the permission checkbox list in forms.
-     *
-     * @return array<Tab>
-     */
-    protected static function permissionTabs(): array
-    {
-        $grouped = Permission::query()
-            ->where('guard_name', 'web')
-            ->orderBy('name')
-            ->get()
-            ->groupBy(fn (Permission $p): string => static::permissionGroupFor($p->name))
-            ->sortKeys();
-
-        $tabs = [];
-
-        // "All Permissions" tab first
-        $allPermissions = $grouped->flatten();
-        $tabs[] = Tab::make('All Permissions')
-            ->badge($allPermissions->count())
-            ->schema([
-                CheckboxList::make('permissions')
-                    ->label('')
-                    ->relationship('permissions', 'name')
-                    ->options(
-                        $allPermissions
-                            ->pluck('name', 'id')
-                            ->map(fn (string $name): string => static::permissionLabelFor($name))
-                            ->all()
-                    )
-                    ->columns(5)
-                    ->bulkToggleable()
-                    ->allowHtml()
-                    ->searchable()
-                    ->helperText('Use the search box to quickly find permissions. Toggle all to select/deselect entire list.'),
-            ]);
-
-        // Individual group tabs
-        foreach ($grouped as $group => $permissions) {
-            $tabs[] = Tab::make($group)
-                ->badge($permissions->count())
+        return $schema->schema([
+            Section::make('Role Information')
                 ->schema([
-                    CheckboxList::make('permissions')
-                        ->label('')
-                        ->relationship('permissions', 'name')
-                        ->options(
-                            $permissions
-                                ->pluck('name', 'id')
-                                ->map(fn (string $name): string => static::permissionLabelFor($name))
-                                ->all()
-                        )
-                        ->columns(4)
-                        ->bulkToggleable()
-                        ->allowHtml()
-                        ->helperText("{$group} module permissions."),
-                ]);
-        }
+                    TextEntry::make('name'),
+                    TextEntry::make('guard_name'),
+                ]),
 
-        return $tabs;
+            Tabs::make('Permissions')
+                ->tabs(static::permissionInfolistTabs())
+                ->columnSpanFull()
+                ->contained(false),
+        ]);
     }
 
     /**
-     * Generate tabs for the permission display in infolist (read-only view).
+     * Generate tabs for the permission display in infolist only.
      *
      * @return array<Tab>
      */
@@ -223,26 +171,24 @@ class RoleResource extends Resource
             ->where('guard_name', 'web')
             ->orderBy('name')
             ->get()
-            ->groupBy(fn (Permission $p): string => static::permissionGroupFor($p->name))
+            ->groupBy(fn (Permission $permission): string => static::permissionGroupFor($permission->name))
             ->sortKeys();
 
         $tabs = [];
 
-        // "All Permissions" tab
         $allPermissions = $grouped->flatten();
+
         $tabs[] = Tab::make('All Permissions')
             ->badge($allPermissions->count())
             ->schema([
                 static::permissionBadgeGrid($allPermissions->pluck('name')->all()),
             ]);
 
-        // Individual group tabs
         foreach ($grouped as $group => $permissions) {
-            $permissionNames = $permissions->pluck('name')->all();
             $tabs[] = Tab::make($group)
                 ->badge($permissions->count())
                 ->schema([
-                    static::permissionBadgeGrid($permissionNames),
+                    static::permissionBadgeGrid($permissions->pluck('name')->all()),
                 ]);
         }
 
@@ -250,9 +196,7 @@ class RoleResource extends Resource
     }
 
     /**
-     * Create a grid of permission badges for the infolist.
-     *
-     * @param  array<int, string>  $permissionNames
+     * @param array<int, string> $permissionNames
      */
     protected static function permissionBadgeGrid(array $permissionNames): Grid
     {
@@ -317,31 +261,36 @@ class RoleResource extends Resource
             str_contains($permission, 'setup') || str_contains($permission, 'posting_group') || str_contains($permission, 'number_series') => 'Settings',
             str_contains($permission, 'role') || str_contains($permission, 'user') || str_contains($permission, 'permission') => 'Security',
             str_starts_with($permission, 'audit_trail.') => 'Audit',
-            str_contains($permission, ':') || str_ends_with($permission, '_access') || str_ends_with($permission, '_show') || str_ends_with($permission, '_create') || str_ends_with($permission, '_edit') || str_ends_with($permission, '_delete') => 'Legacy',
+            str_contains($permission, ':')
+            || str_ends_with($permission, '_access')
+            || str_ends_with($permission, '_show')
+            || str_ends_with($permission, '_create')
+            || str_ends_with($permission, '_edit')
+            || str_ends_with($permission, '_delete') => 'Legacy',
             default => 'Settings',
         };
     }
 
-    /**
-     * Format permission label for forms (includes raw name for searchability).
-     */
     public static function permissionLabelFor(string $permission): string
     {
-        $danger = static::isDangerousPermission($permission) ? '<strong class="text-danger-600">[DANGEROUS]</strong> ' : '';
+        $danger = static::isDangerousPermission($permission)
+            ? '<strong class="text-danger-600">[DANGEROUS]</strong> '
+            : '';
+
+        $group = static::permissionGroupFor($permission);
+
         $humanName = str($permission)
             ->replace(['view_any', 'view:any', ':', '.', '_'], ['View List', 'View List', ' ', ' ', ' '])
             ->headline()
             ->toString();
 
-        return "{$danger}{$humanName} <span class=\"text-xs text-gray-500\">({$permission})</span>";
+        return "{$danger}<strong>{$group}:</strong> {$humanName} <span class=\"text-xs text-gray-500\">({$permission})</span>";
     }
 
-    /**
-     * Format permission label for infolist badges (clean text, no HTML).
-     */
     public static function permissionBadgeLabelFor(string $permission): string
     {
         $danger = static::isDangerousPermission($permission) ? '⚠ ' : '';
+
         $humanName = str($permission)
             ->replace(['view_any', 'view:any', ':', '.', '_'], ['View List', 'View List', ' ', ' ', ' '])
             ->headline()
