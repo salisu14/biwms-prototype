@@ -8,7 +8,7 @@
 
         <x-filament::section
             heading="Quick Actions"
-            description="Common fiscal setup and year-end tasks, grouped the same way we manage BC-style workflows."
+            description="Common fiscal setup and year-end tasks, grouped the same way we manage Standard ERP workflows."
         >
             <div class="grid gap-4 xl:grid-cols-2">
                 <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">

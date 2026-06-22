@@ -41,7 +41,7 @@ class FiscalYearManagement extends Page
                 Action::make('setup')
                     ->label('GL Fiscal Setup')
                     ->icon('heroicon-o-cog-6-tooth')
-                    ->form([
+                    ->schema([
                         Select::make('retained_earnings_account_id')
                             ->label('Retained Earnings Account')
                             ->options(
@@ -88,7 +88,7 @@ class FiscalYearManagement extends Page
                 Action::make('createPeriod')
                     ->label('Create Accounting Period')
                     ->icon('heroicon-o-plus')
-                    ->form([
+                    ->schema([
                         TextInput::make('name')->required(),
                         DatePicker::make('start_date')->required(),
                         DatePicker::make('end_date')->required(),
@@ -117,7 +117,7 @@ class FiscalYearManagement extends Page
                     ->label('Close Accounting Period')
                     ->icon('heroicon-o-lock-closed')
                     ->color('danger')
-                    ->form([
+                    ->schema([
                         Select::make('period_id')
                             ->label('Period')
                             ->options(fn () => AccountingPeriod::query()
@@ -149,7 +149,7 @@ class FiscalYearManagement extends Page
                     ->label('Reopen Accounting Period')
                     ->icon('heroicon-o-lock-open')
                     ->color('warning')
-                    ->form([
+                    ->schema([
                         Select::make('period_id')
                             ->label('Period')
                             ->options(fn () => AccountingPeriod::query()
@@ -184,7 +184,7 @@ class FiscalYearManagement extends Page
                     ->icon('heroicon-o-lock-closed')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->form([
+                    ->schema([
                         TextInput::make('fiscal_year')
                             ->numeric()
                             ->required()
@@ -201,7 +201,7 @@ class FiscalYearManagement extends Page
                     ->label('Reopen Posting Window')
                     ->icon('heroicon-o-lock-open')
                     ->color('warning')
-                    ->form([
+                    ->schema([
                         DatePicker::make('allow_posting_from')->required(),
                         DatePicker::make('allow_posting_to')->required(),
                         TextInput::make('reason')->required()->maxLength(255),
