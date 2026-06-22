@@ -10,6 +10,7 @@ use App\Filament\Resources\PriceLists\Schemas\PriceListForm;
 use App\Filament\Resources\PriceLists\Schemas\PriceListInfolist;
 use App\Filament\Resources\PriceLists\Tables\PriceListsTable;
 use App\Models\PriceList;
+use App\Models\User;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -24,6 +25,27 @@ class PriceListResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static ?string $recordTitleAttribute = null;
+
+    public static function canEdit(Model $record): bool
+    {
+        return auth()->user()?->can('edit_price_list') ?? false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->can('view_any_price_list') ?? false;
+    }
+
+
+    public function viewAny(User $user): bool
+    {
+        return  auth()->user()?->can('view_any_price_list');
+    }
 
     public static function form(Schema $schema): Schema
     {

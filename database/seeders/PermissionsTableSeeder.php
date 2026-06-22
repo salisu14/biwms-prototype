@@ -4,11 +4,16 @@ namespace Database\Seeders;
 
 use App\Models\Permission;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 class PermissionsTableSeeder extends Seeder
 {
     public function run(): void
     {
+        app()[\Spatie\Permission\PermissionRegistrar::class]
+            ->forgetCachedPermissions();
+
         $now = now();
         $guard = 'web';
 
@@ -140,8 +145,11 @@ class PermissionsTableSeeder extends Seeder
             'view:any:order', 'create:order', 'edit:order', 'delete:order', 'approve:order', 'post:order',
         ];
 
+        $filamentPermissions = $this->generateFilamentPermissions();
+
         $all = collect($legacyPermissions)
             ->merge($bcPermissions)
+            ->merge($filamentPermissions)
             ->unique()
             ->values();
 
@@ -153,5 +161,59 @@ class PermissionsTableSeeder extends Seeder
         ])->all();
 
         Permission::query()->upsert($payload, ['name', 'guard_name'], ['updated_at']);
+    }
+
+    private function getFilamentResources(): array
+    {
+        $resourcePath = app_path('Filament/Resources');
+
+        if (! File::exists($resourcePath)) {
+            return [];
+        }
+
+        return collect(File::allFiles($resourcePath))
+            ->filter(fn ($file) => str_ends_with($file->getFilename(), 'Resource.php'))
+            ->map(function ($file) {
+                $relative = $file->getRelativePathname();
+
+                return 'App\\Filament\\Resources\\'
+                    . str_replace(['/', '.php'], ['\\', ''], $relative);
+            })
+            ->filter(fn ($class) => class_exists($class))
+            ->filter(fn ($class) => is_subclass_of($class, \Filament\Resources\Resource::class))
+            ->filter(fn ($class) => method_exists($class, 'getModel'))
+            ->values()
+            ->all();
+    }
+
+    private function generateFilamentPermissions(): array
+    {
+        $permissions = [];
+
+        $actions = [
+            'view_any',
+            'view',
+            'create',
+            'update',
+            'delete',
+            'delete_any',
+            'restore',
+            'restore_any',
+            'force_delete',
+            'force_delete_any',
+        ];
+
+        foreach ($this->getFilamentResources() as $resourceClass) {
+
+            $modelClass = $resourceClass::getModel();
+
+            $modelName = Str::snake(class_basename($modelClass));
+
+            foreach ($actions as $action) {
+                $permissions[] = "{$action}_{$modelName}";
+            }
+        }
+
+        return $permissions;
     }
 }
