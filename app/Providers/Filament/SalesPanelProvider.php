@@ -36,8 +36,12 @@ class SalesPanelProvider extends PanelProvider
                 'success' => Color::Green,
                 'warning' => Color::Amber,
             ])
+            ->spa(hasPrefetching: true)
+            ->sidebarCollapsibleOnDesktop()
+            ->globalSearch()
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->globalSearchFieldKeyBindingSuffix()
             ->brandName('BIFLI Globals - Sales Portal')
-//            ->brandLogo(fn () => view('filament.sales.logo'))
             ->favicon(asset('favicon.ico'))
             ->discoverResources(in: app_path('Filament/Sales/Resources'), for: 'App\Filament\Sales\Resources')
             ->discoverPages(in: app_path('Filament/Sales/Pages'), for: 'App\Filament\Sales\Pages')

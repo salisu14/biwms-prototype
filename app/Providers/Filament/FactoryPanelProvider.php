@@ -8,6 +8,7 @@ use App\Filament\Pages\Manufacturing\WipValuationReport;
 use App\Filament\Pages\MyAttendance;
 use App\Filament\Resources\Items\ItemResource;
 use App\Filament\Resources\MachineCenters\MachineCenterResource;
+use App\Filament\Resources\PriceLists\PriceListResource;
 use App\Filament\Resources\ProductionBoms\ProductionBomResource;
 use App\Filament\Resources\ProductionJournalBatches\ProductionJournalBatchResource;
 use App\Filament\Resources\ProductionJournalTemplates\ProductionJournalTemplateResource;
@@ -26,7 +27,7 @@ use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
-use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
@@ -60,6 +61,7 @@ class FactoryPanelProvider extends PanelProvider
                 ProductionJournalBatchResource::class,
                 ProductionJournalTemplateResource::class,
                 ItemResource::class,
+                PriceListResource::class,
             ])
             ->pages([
                 Dashboard::class,
@@ -82,7 +84,7 @@ class FactoryPanelProvider extends PanelProvider
                 StartSession::class,
                 AuthenticateSession::class,
                 ShareErrorsFromSession::class,
-                VerifyCsrfToken::class,
+                PreventRequestForgery::class,
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
