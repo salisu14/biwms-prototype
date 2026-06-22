@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\ProductionOrders\Pages;
 
+use App\Filament\Pages\BaseViewRecord;
 use App\Filament\Resources\ProductionOrders\FinishedProductionOrderResource;
-use Filament\Resources\Pages\ViewRecord;
 
-class ViewFinishedProductionOrder extends ViewRecord
+class ViewFinishedProductionOrder extends BaseViewRecord
 {
     protected static string $resource = FinishedProductionOrderResource::class;
 
