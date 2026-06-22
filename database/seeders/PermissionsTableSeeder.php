@@ -64,6 +64,22 @@ class PermissionsTableSeeder extends Seeder
             'warehouse.shipment.view_any', 'warehouse.shipment.view', 'warehouse.shipment.create', 'warehouse.shipment.update', 'warehouse.shipment.delete',
 
             // Factory
+            'factory.production_order.planned.view_any',
+            'factory.production_order.planned.view',
+            'factory.production_order.released.view_any',
+            'factory.production_order.released.view',
+            'factory.production_order.finished.view_any',
+            'factory.production_order.finished.view',
+
+            'factory.production_order.view_any',
+            'factory.production_order.view',
+            'factory.production_order.create',
+            'factory.production_order.update',
+            'factory.production_order.delete',
+            'factory.production_order.post_output',
+            'factory.production_order.finish',
+            'factory.production_order.post',
+
             'factory.production_order.view_any', 'factory.production_order.view', 'factory.production_order.create', 'factory.production_order.update', 'factory.production_order.delete',
             'factory.production_order.post_output', 'factory.production_order.finish', 'factory.production_order.post',
             'factory.production_bom.view_any', 'factory.production_bom.view', 'factory.production_bom.create', 'factory.production_bom.update', 'factory.production_bom.delete',

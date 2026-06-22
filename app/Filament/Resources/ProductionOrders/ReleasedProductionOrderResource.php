@@ -82,16 +82,25 @@ class ReleasedProductionOrderResource extends Resource
         return false;
     }
 
-    public static function canEdit($record): bool
+    public static function canEdit(Model $record): bool
     {
-        return true;
+        return auth()->user()?->can('factory.production_order.update') ?? false;
     }
 
-    public static function canDelete($record): bool
+    public static function canDelete(Model $record): bool
     {
         return false;
     }
 
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->can('factory.production_order.released.view_any') ?? false;
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::canViewAny();
+    }
     public static function getPages(): array
     {
         return [

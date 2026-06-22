@@ -63,6 +63,16 @@ class ProductionOrderResource extends Resource
         ]);
     }
 
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->can('factory.production_order.planned.view_any') ?? false;
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::canViewAny();
+    }
+
     public static function getRelations(): array
     {
         return [

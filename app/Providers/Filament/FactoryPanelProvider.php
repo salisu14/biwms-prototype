@@ -11,7 +11,9 @@ use App\Filament\Resources\MachineCenters\MachineCenterResource;
 use App\Filament\Resources\ProductionBoms\ProductionBomResource;
 use App\Filament\Resources\ProductionJournalBatches\ProductionJournalBatchResource;
 use App\Filament\Resources\ProductionJournalTemplates\ProductionJournalTemplateResource;
+use App\Filament\Resources\ProductionOrders\FinishedProductionOrderResource;
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
+use App\Filament\Resources\ProductionOrders\ReleasedProductionOrderResource;
 use App\Filament\Resources\Routings\RoutingResource;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -44,6 +46,8 @@ class FactoryPanelProvider extends PanelProvider
             ->favicon(asset('favicon.ico'))
             ->resources([
                 ProductionOrderResource::class,
+                ReleasedProductionOrderResource::class,
+                FinishedProductionOrderResource::class,
                 ProductionBomResource::class,
                 RoutingResource::class,
                 MachineCenterResource::class,
