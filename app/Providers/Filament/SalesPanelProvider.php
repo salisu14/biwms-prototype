@@ -11,6 +11,7 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -45,6 +46,22 @@ class SalesPanelProvider extends PanelProvider
             ->favicon(asset('favicon.ico'))
             ->discoverResources(in: app_path('Filament/Sales/Resources'), for: 'App\Filament\Sales\Resources')
             ->discoverPages(in: app_path('Filament/Sales/Pages'), for: 'App\Filament\Sales\Pages')
+            ->renderHook(
+                PanelsRenderHook::STYLES_AFTER,
+                fn(): string => <<<'HTML'
+                    <style>
+                        html:not(.dark) .fi-body,
+                        html:not(.dark) body {
+                            background-color: rgb(243 244 246);
+                        }
+
+                        html.dark .fi-body,
+                        html.dark body {
+                            background-color: rgb(3 7 18);
+                        }
+                    </style>
+                    HTML
+            )
             ->pages([
                 Dashboard::class,
                 MyAttendance::class,

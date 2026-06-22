@@ -18,6 +18,7 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -44,6 +45,22 @@ class HrPanelProvider extends PanelProvider
             ->globalSearchFieldKeyBindingSuffix()
             ->brandName('BIFLI Globals - HR Role Center')
             ->favicon(asset('favicon.ico'))
+            ->renderHook(
+                PanelsRenderHook::STYLES_AFTER,
+                fn(): string => <<<'HTML'
+                    <style>
+                        html:not(.dark) .fi-body,
+                        html:not(.dark) body {
+                            background-color: rgb(243 244 246);
+                        }
+
+                        html.dark .fi-body,
+                        html.dark body {
+                            background-color: rgb(3 7 18);
+                        }
+                    </style>
+                    HTML
+            )
             ->resources([
                 EmployeeResource::class,
                 AttendanceLedgerEntryResource::class,
