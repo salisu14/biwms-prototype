@@ -17,10 +17,12 @@ use App\Filament\Resources\AccountSchedules\AccountScheduleResource;
 use App\Filament\Resources\BankAccounts\BankAccountResource;
 use App\Filament\Resources\CurrencyAdjustmentLedgers\CurrencyAdjustmentLedgerResource;
 use App\Filament\Resources\CustomerLedgerEntries\CustomerLedgerEntryResource;
+use App\Filament\Resources\FixedAssets\FixedAssetResource;
 use App\Filament\Resources\GeneralJournalBatches\GeneralJournalBatchResource;
 use App\Filament\Resources\JournalLines\JournalLineResource;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
+use App\Models\FixedAsset;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -81,6 +83,7 @@ class FinancePanelProvider extends PanelProvider
                 CurrencyAdjustmentLedgerResource::class,
                 CustomerLedgerEntryResource::class,
                 AccountScheduleResource::class,
+                FixedAssetResource::class,
             ])
             ->pages([
                 Dashboard::class,

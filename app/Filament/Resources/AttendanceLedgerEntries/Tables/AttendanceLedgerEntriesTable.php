@@ -4,6 +4,7 @@ namespace App\Filament\Resources\AttendanceLedgerEntries\Tables;
 
 use App\Models\AttendanceLedgerEntry;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -37,54 +38,56 @@ class AttendanceLedgerEntriesTable
                     ]),
             ])
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
-                Action::make('clock_out')
-                    ->label('Clock Out')
-                    ->icon('heroicon-o-clock')
-                    ->color('gray')
-                    ->visible(fn (AttendanceLedgerEntry $record): bool => $record->status === 'OPEN' && $record->clock_in_at && ! $record->clock_out_at)
-                    ->action(function (AttendanceLedgerEntry $record): void {
-                        $record->update(['clock_out_at' => now()]);
-                    }),
-                Action::make('approve')
-                    ->label('Approve')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->visible(fn (AttendanceLedgerEntry $record): bool => $record->status === 'OPEN')
-                    ->action(function (AttendanceLedgerEntry $record): void {
-                        if (! auth()->user()?->can('hr.attendance.approve')) {
-                            Notification::make()->danger()->title('Not allowed')->body('Missing permission: hr.attendance.approve')->send();
+                ActionGroup::make([
+                    ViewAction::make(),
+                    EditAction::make(),
+                    Action::make('clock_out')
+                        ->label('Clock Out')
+                        ->icon('heroicon-o-clock')
+                        ->color('gray')
+                        ->visible(fn(AttendanceLedgerEntry $record): bool => $record->status === 'OPEN' && $record->clock_in_at && !$record->clock_out_at)
+                        ->action(function (AttendanceLedgerEntry $record): void {
+                            $record->update(['clock_out_at' => now()]);
+                        }),
+                    Action::make('approve')
+                        ->label('Approve')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->visible(fn(AttendanceLedgerEntry $record): bool => $record->status === 'OPEN')
+                        ->action(function (AttendanceLedgerEntry $record): void {
+                            if (!auth()->user()?->can('hr.attendance.approve')) {
+                                Notification::make()->danger()->title('Not allowed')->body('Missing permission: hr.attendance.approve')->send();
 
-                            return;
-                        }
+                                return;
+                            }
 
-                        $record->update([
-                            'status' => 'APPROVED',
-                            'approved_by' => auth()->id(),
-                            'approved_at' => now(),
-                        ]);
-                    }),
-                Action::make('reject')
-                    ->label('Reject')
-                    ->icon('heroicon-o-x-circle')
-                    ->color('danger')
-                    ->requiresConfirmation()
-                    ->visible(fn (AttendanceLedgerEntry $record): bool => $record->status === 'OPEN')
-                    ->action(function (AttendanceLedgerEntry $record): void {
-                        if (! auth()->user()?->can('hr.attendance.reject')) {
-                            Notification::make()->danger()->title('Not allowed')->body('Missing permission: hr.attendance.reject')->send();
+                            $record->update([
+                                'status' => 'APPROVED',
+                                'approved_by' => auth()->id(),
+                                'approved_at' => now(),
+                            ]);
+                        }),
+                    Action::make('reject')
+                        ->label('Reject')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->visible(fn(AttendanceLedgerEntry $record): bool => $record->status === 'OPEN')
+                        ->action(function (AttendanceLedgerEntry $record): void {
+                            if (!auth()->user()?->can('hr.attendance.reject')) {
+                                Notification::make()->danger()->title('Not allowed')->body('Missing permission: hr.attendance.reject')->send();
 
-                            return;
-                        }
+                                return;
+                            }
 
-                        $record->update([
-                            'status' => 'REJECTED',
-                            'approved_by' => auth()->id(),
-                            'approved_at' => now(),
-                        ]);
-                    }),
+                            $record->update([
+                                'status' => 'REJECTED',
+                                'approved_by' => auth()->id(),
+                                'approved_at' => now(),
+                            ]);
+                        }),
+                ])
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
