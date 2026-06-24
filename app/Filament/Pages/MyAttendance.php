@@ -31,12 +31,7 @@ class MyAttendance extends Page
         $employeeId = auth()->user()?->employee_id;
 
         if (! $employeeId) {
-            Notification::make()
-                ->danger()
-                ->title('No linked employee')
-                ->body('Your account must be linked to an employee profile before attendance can be tracked.')
-                ->send();
-
+            Notification::make()->danger()->title('No linked employee')->body('Your account must be linked to an employee profile.')->send();
             return;
         }
 
@@ -47,23 +42,19 @@ class MyAttendance extends Page
             ['created_by' => auth()->id(), 'status' => 'OPEN']
         );
 
-        if ($entry->clock_in_at) {
-            Notification::make()
-                ->warning()
-                ->title('Already clocked in')
-                ->body('You have already clocked in for today.')
-                ->send();
+        if ($entry->clock_out_at) {
+            Notification::make()->danger()->title('Day already closed')->body('You have already clocked out for today.')->send();
+            return;
+        }
 
+        if ($entry->clock_in_at) {
+            Notification::make()->warning()->title('Already clocked in')->body('You have already clocked in for today.')->send();
             return;
         }
 
         $entry->update(['clock_in_at' => now()]);
 
-        Notification::make()
-            ->success()
-            ->title('Clocked in')
-            ->body('Your start time has been recorded.')
-            ->send();
+        Notification::make()->success()->title('Clocked in')->body('Your start time has been recorded.')->send();
     }
 
     public function clockOut(): void
@@ -71,12 +62,7 @@ class MyAttendance extends Page
         $employeeId = auth()->user()?->employee_id;
 
         if (! $employeeId) {
-            Notification::make()
-                ->danger()
-                ->title('No linked employee')
-                ->body('Your account must be linked to an employee profile before attendance can be tracked.')
-                ->send();
-
+            Notification::make()->danger()->title('No linked employee')->body('Your account must be linked to an employee profile.')->send();
             return;
         }
 
@@ -86,42 +72,23 @@ class MyAttendance extends Page
             ->first();
 
         if (! $entry || ! $entry->clock_in_at) {
-            Notification::make()
-                ->warning()
-                ->title('Clock in first')
-                ->body('No active attendance session found for today.')
-                ->send();
-
+            Notification::make()->warning()->title('Clock in first')->body('No active attendance session found for today.')->send();
             return;
         }
 
         if ($entry->clock_out_at) {
-            Notification::make()
-                ->warning()
-                ->title('Already clocked out')
-                ->body('Your end time for today is already recorded.')
-                ->send();
-
+            Notification::make()->warning()->title('Already clocked out')->body('Your end time for today is already recorded.')->send();
             return;
         }
 
         if ($entry->status !== 'OPEN') {
-            Notification::make()
-                ->warning()
-                ->title('Cannot edit attendance')
-                ->body('This attendance entry is already finalized by HR.')
-                ->send();
-
+            Notification::make()->warning()->title('Cannot edit attendance')->body('This attendance entry is already finalized by HR.')->send();
             return;
         }
 
         $entry->update(['clock_out_at' => now()]);
 
-        Notification::make()
-            ->success()
-            ->title('Clocked out')
-            ->body('Your end time has been recorded.')
-            ->send();
+        Notification::make()->success()->title('Clocked out')->body('Your end time has been recorded.')->send();
     }
 
     public function getViewData(): array
@@ -144,7 +111,7 @@ class MyAttendance extends Page
         }
 
         return [
-            'todayEntry' => $todayEntry,
+            'todayEntry' => $todayEntry, // <-- This was missing!
             'recentEntries' => $recentEntries,
         ];
     }

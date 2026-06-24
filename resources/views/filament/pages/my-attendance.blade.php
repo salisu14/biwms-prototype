@@ -53,35 +53,65 @@
         </x-filament::section>
 
         <x-filament::section heading="Recent Attendance">
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead>
-                        <tr class="border-b">
-                            <th class="py-2 pr-4">Date</th>
-                            <th class="py-2 pr-4">In</th>
-                            <th class="py-2 pr-4">Out</th>
-                            <th class="py-2 pr-4">Hours</th>
-                            <th class="py-2 pr-4">Status</th>
-                        </tr>
+            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                <table class="w-full text-left text-sm text-gray-600 dark:text-gray-300">
+                    <thead class="bg-gray-50 dark:bg-gray-800/50">
+                    <tr>
+                        <th class="px-4 py-3 font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-200">
+                            Date
+                        </th>
+                        <th class="px-4 py-3 font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-200 text-center">
+                            Clock In
+                        </th>
+                        <th class="px-4 py-3 font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-200 text-center">
+                            Clock Out
+                        </th>
+                        <th class="px-4 py-3 font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-200 text-right">
+                            Hours
+                        </th>
+                        <th class="px-4 py-3 font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-200 text-center">
+                            Status
+                        </th>
+                    </tr>
                     </thead>
-                    <tbody>
-                        @forelse($recentEntries as $entry)
-                            <tr class="border-b">
-                                <td class="py-2 pr-4">{{ $entry->attendance_date?->format('Y-m-d') }}</td>
-                                <td class="py-2 pr-4">{{ $entry->clock_in_at?->format('H:i') ?? '—' }}</td>
-                                <td class="py-2 pr-4">{{ $entry->clock_out_at?->format('H:i') ?? '—' }}</td>
-                                <td class="py-2 pr-4">{{ number_format((float) $entry->worked_hours, 2) }}</td>
-                                <td class="py-2 pr-4">{{ $entry->status }}</td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="5" class="py-4 text-gray-500">No attendance records yet.</td>
-                            </tr>
-                        @endforelse
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                    @forelse($recentEntries as $entry)
+                        <tr class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td class="px-4 py-3 whitespace-nowrap font-medium text-gray-900 dark:text-white">
+                                {{ $entry->attendance_date?->format('D, M j, Y') }}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                {{ $entry->clock_in_at?->format('h:i A') ?? '—' }}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                {{ $entry->clock_out_at?->format('h:i A') ?? '—' }}
+                            </td>
+                            <td class="px-4 py-3 text-right font-semibold text-gray-900 dark:text-white">
+                                {{ number_format((float) $entry->worked_hours, 2) }} hrs
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                @php
+                                    $color = match($entry->status) {
+                                        'APPROVED' => 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
+                                        'REJECTED' => 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+                                        default => 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400',
+                                    };
+                                @endphp
+                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold {{ $color }}">
+                                        {{ ucfirst(strtolower($entry->status)) }}
+                                    </span>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                No recent attendance records found.
+                            </td>
+                        </tr>
+                    @endforelse
                     </tbody>
                 </table>
             </div>
         </x-filament::section>
     </div>
 </x-filament-panels::page>
-
