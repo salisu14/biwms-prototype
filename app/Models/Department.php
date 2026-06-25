@@ -140,7 +140,10 @@ class Department extends Model
     {
         return $this->hasMany(DepartmentEmployee::class);
     }
-
+    public function getEmployeeDisplayNameAttribute(): string
+    {
+        return $this->employee?->full_name ?? 'Unknown Employee';
+    }
     public function activeEmployees(): HasMany
     {
         return $this->hasMany(Employee::class)->where('status', 'active');

@@ -30,6 +30,8 @@ class DepartmentEmployee extends Model
         'end_date' => 'date',
         'allocation_percentage' => 'decimal:2',
         'is_default_dimension' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     public function department(): BelongsTo
@@ -53,7 +55,7 @@ class DepartmentEmployee extends Model
         return $query->where('assignment_type', 'primary');
     }
 
-    protected static function booted()
+    protected static function booted(): void
     {
         static::saved(function ($assignment) {
             // Push department assignment to Employee's native dimension handling if it's the primary/default assignment
