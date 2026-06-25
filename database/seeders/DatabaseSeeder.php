@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             LocationSeeder::class,
             UnitOfMeasureSeeder::class,
             ChartOfAccountSeeder::class,
+            ReasonCodeSeeder::class,
             CurrencySeeder::class,
             GlAccountSeeder::class,
             VatPostingSeeder::class,
