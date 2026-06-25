@@ -16,8 +16,8 @@ class ReasonCode extends Model
     protected $fillable = [
         'code',
         'description',
-        'default_location_code',
-        'default_bin_code',
+        'default_location_id',      // ✅ CHANGED: was default_location_code
+        'default_bin_id',           // ✅ CHANGED: was default_bin_code
         'inventory_adjustment_account',
         'inventory_account',
         'blocked',
@@ -30,7 +30,12 @@ class ReasonCode extends Model
 
     public function location(): BelongsTo
     {
-        return $this->belongsTo(Location::class, 'default_location_code', 'code');
+        return $this->belongsTo(Location::class, 'default_location_id', 'id');
+    }
+
+    public function bin(): BelongsTo
+    {
+        return $this->belongsTo(Bin::class, 'default_bin_id', 'id');
     }
 
     /**
@@ -39,11 +44,6 @@ class ReasonCode extends Model
     public function journals(): HasMany
     {
         return $this->hasMany(InventoryAdjustmentJournal::class, 'reason_code', 'code');
-    }
-
-    public function bin(): BelongsTo
-    {
-        return $this->belongsTo(Bin::class, 'default_bin_code', 'bin_code');
     }
 
     public function scopeActive($query)
@@ -56,8 +56,28 @@ class ReasonCode extends Model
         return $query->where('blocked', true);
     }
 
-    public function scopeForLocation($query, string $locationCode)
+    public function scopeForLocation($query, int $locationId)
     {
-        return $query->where('default_location_code', $locationCode);
+        return $query->where('default_location_id', $locationId);
+    }
+    public function scopeForBin($query, int $binId)
+    {
+        return $query->where('default_bin_id', $binId);
+    }
+
+    /**
+     * Scope for reason codes that have a default location set
+     */
+    public function scopeWithDefaultLocation($query)
+    {
+        return $query->whereNotNull('default_location_id');
+    }
+
+    /**
+     * Scope for reason codes that have a default bin set
+     */
+    public function scopeWithDefaultBin($query)
+    {
+        return $query->whereNotNull('default_bin_id');
     }
 }

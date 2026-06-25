@@ -33,9 +33,25 @@ class ReasonCodesTable
                     ->color('info')
                     ->sortable(),
 
-                TextColumn::make('default_location_code')
-                    ->label('Default Location')
-                    ->toggleable(),
+                // ✅ UPDATED: Show related location name via relationship
+                TextColumn::make('location.name')       // Changed from default_location_code
+                ->label('Default Location')
+                    ->toggleable()
+                    ->sortable()
+                    ->placeholder('—')
+                    ->description(fn ($record): string =>
+                        $record->location?->code ?? ''  // Show code as description
+                    ),
+
+                // ✅ UPDATED: Show related bin info via relationship
+                TextColumn::make('bin.bin_name')        // Changed from default_bin_code
+                ->label('Default Bin')
+                    ->toggleable()
+                    ->sortable()
+                    ->placeholder('—')
+                    ->description(fn ($record): string =>
+                        $record->bin?->bin_code ?? ''   // Show code as description
+                    ),
 
                 TextColumn::make('inventory_adjustment_account')
                     ->label('Adj. Account')

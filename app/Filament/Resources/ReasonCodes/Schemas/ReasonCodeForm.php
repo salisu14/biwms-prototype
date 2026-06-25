@@ -29,15 +29,30 @@ class ReasonCodeForm
                             ->maxLength(100)
                             ->placeholder('Damaged Goods'),
 
-                        Select::make('default_location_code')
-                            ->relationship('location', 'code')
+                        Select::make('default_location_id')  // Changed from default_location_code
+                        ->label('Default Location')
+                            ->relationship(
+                                name: 'location',
+                                titleAttribute: 'name',      // Show name instead of code
+                                modifyQueryUsing: fn ($query) => $query->active(),
+                            )
+                            ->searchable()
                             ->preload()
-                            ->searchable(),
+                            ->placeholder('Select a location...')
+                            ->helperText('Default warehouse location for this adjustment type'),
 
-                        Select::make('default_bin_code')
-                            ->relationship('bin', 'bin_code')
+                        // ✅ UPDATED: Use ID-based relationship
+                        Select::make('default_bin_id')       // Changed from default_bin_code
+                        ->label('Default Bin')
+                            ->relationship(
+                                name: 'bin',
+                                titleAttribute: 'bin_name',  // Show name instead of bin_code
+                                modifyQueryUsing: fn ($query) => $query->where('is_active', true),
+                            )
+                            ->searchable()
                             ->preload()
-                            ->searchable(),
+                            ->placeholder('Select a bin...')
+                            ->helperText('Default storage bin for this adjustment type'),
 
                         TextInput::make('inventory_adjustment_account')
                             ->label('Inventory Adjustment Account')
