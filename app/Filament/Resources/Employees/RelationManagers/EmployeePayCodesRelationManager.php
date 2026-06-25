@@ -58,7 +58,7 @@ class EmployeePayCodesRelationManager extends RelationManager
                     TextInput::make('amount')
                         ->numeric()
                         ->label('Fixed Amount')
-                        ->prefix('$')
+                        ->prefix('₦')
                         ->placeholder('0.00'),
 
                     TextInput::make('percentage')
@@ -98,7 +98,7 @@ class EmployeePayCodesRelationManager extends RelationManager
 
                 TextColumn::make('amount')
                     ->label('Amount')
-                    ->money()
+                    ->money('NGN')
                     ->sortable(),
 
                 TextColumn::make('percentage')

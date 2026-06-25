@@ -31,7 +31,7 @@ class CompensationsRelationManager extends RelationManager
                 TextInput::make('base_salary')
                     ->required()
                     ->numeric()
-                    ->prefix('$'),
+                    ->prefix('₦'),
                 TextInput::make('reason_code')
                     ->maxLength(255)
                     ->placeholder('e.g. ANNUAL_RAISE, PROMOTION'),
@@ -54,7 +54,7 @@ class CompensationsRelationManager extends RelationManager
                     ->date()
                     ->sortable(),
                 TextColumn::make('base_salary')
-                    ->money()
+                    ->money('NGN')
                     ->sortable(),
                 TextColumn::make('reason_code')
                     ->searchable(),
