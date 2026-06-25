@@ -36,7 +36,7 @@ class DepartmentsTable
                     ->badge(),
                 TextColumn::make('budget_utilized')
                     ->label('Budget Utilization')
-                    ->money()
+                    ->money('NGN')
                     ->description(fn ($record) => 'of '.number_format((float) $record->annual_budget, 2).' ('.$record->budget_utilization_percent.'%)')
                     ->sortable(),
                 IconColumn::make('is_cost_center')

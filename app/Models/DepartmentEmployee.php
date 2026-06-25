@@ -57,6 +57,24 @@ class DepartmentEmployee extends Model
 
     protected static function booted(): void
     {
+        static::saving(function ($assignment) {
+            // Prevent duplicate active primary assignments
+            if ($assignment->assignment_type === 'primary' && $assignment->is_default_dimension) {
+                $exists = static::where('employee_id', $assignment->employee_id)
+                    ->where('assignment_type', 'primary')
+                    ->where('id', '!=', $assignment->id ?? 0)
+                    ->where(function ($q) {
+                        $q->whereNull('end_date')
+                            ->orWhere('end_date', '>=', now());
+                    })
+                    ->exists();
+
+                if ($exists) {
+                    throw \Exception('Employee already has an active primary assignment');
+                }
+            }
+        });
+
         static::saved(function ($assignment) {
             // Push department assignment to Employee's native dimension handling if it's the primary/default assignment
             if (($assignment->is_default_dimension || $assignment->assignment_type === 'primary')

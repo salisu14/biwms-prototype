@@ -17,6 +17,7 @@ use App\Http\Controllers\PhysicalInventoryJournalPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
 use App\Http\Controllers\VoucherPrintController;
 use App\Http\Controllers\WaybillController;
+use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -113,4 +114,23 @@ Route::get('/admin/reports/expense/export', ExpenseReportExportController::class
 Route::middleware(['auth'])->prefix('petty-cash')->group(function () {
     Route::get('vouchers/{voucher}/print', [VoucherPrintController::class, 'print'])
         ->name('petty-cash.vouchers.print');
+});
+
+
+Route::middleware(['auth', 'web'])->group(function () {
+    Route::post('/notifications/{notification}/mark-as-read', function ($notification) {
+        /** @var User $user */
+        $user = auth()->user();
+
+        $notif = $user->notifications()->findOrFail($notification);
+        $notif->markAsRead();
+
+        return response()->json(['status' => 'marked']);
+    })->name('notifications.mark-read');
+
+    Route::post('/notifications/mark-all-read', function () {
+        auth()->user()->unreadNotifications->markAsRead();
+
+        return response()->json(['status' => 'all_marked']);
+    });
 });

@@ -79,10 +79,10 @@ class DepartmentForm
                                 Grid::make(2)->schema([
                                     TextInput::make('annual_budget')
                                         ->numeric()
-                                        ->prefix('$'),
+                                        ->prefix('₦'),
                                     TextInput::make('budget_utilized')
                                         ->numeric()
-                                        ->prefix('$')
+                                        ->prefix('₦')
                                         ->disabled()
                                         ->dehydrated(false),
                                     TextInput::make('cost_center_code'),

@@ -52,8 +52,8 @@ class DepartmentInfolist
                         Group::make([
                             Section::make('Financial Summary')
                                 ->schema([
-                                    TextEntry::make('annual_budget')->money(),
-                                    TextEntry::make('budget_utilized')->money()
+                                    TextEntry::make('annual_budget')->money('NGN'),
+                                    TextEntry::make('budget_utilized')->money('NGN')
                                         ->color(fn ($record) => $record->budget_utilization_percent > 90 ? 'danger' : 'success'),
                                     TextEntry::make('budget_utilization_percent')
                                         ->label('Utilization')

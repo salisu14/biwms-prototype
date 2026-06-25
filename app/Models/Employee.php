@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Cache;
 
 class Employee extends Model
 {
@@ -29,7 +30,7 @@ class Employee extends Model
         'business_code',
         'factory_code',
         'department_code',
-        'department_id',  // ✅ Ensure this is here!
+        'department_id',
         'is_active',
     ];
 
@@ -54,9 +55,9 @@ class Employee extends Model
     }
 
     /**
-     * ✅ NEW: Auto-sync department assignment when department_id changes
+     * Auto-sync department assignment when department_id changes.
      */
-    public function syncDepartmentAssignment(): void
+    public function syncDepartmentAssignment(?int $previousDeptId = null): void
     {
         // If department was removed, delete all assignments
         if (empty($this->department_id)) {
@@ -93,6 +94,72 @@ class Employee extends Model
         }
     }
 
+    /**
+     * Notify department manager about assignment changes.
+     */
+    public function notifyDepartmentManager(?int $previousDeptId = null): void
+    {
+        $oldDeptId = $previousDeptId;
+        $newDeptId = $this->department_id;
+
+        // Determine action type
+        if ($oldDeptId && $newDeptId) {
+            $action = 'changed';
+            $previousDepartment = \App\Models\Department::find($oldDeptId);
+        } elseif (!$oldDeptId && $newDeptId) {
+            $action = 'assigned';
+            $previousDepartment = null;
+        } elseif ($oldDeptId && !$newDeptId) {
+            $action = 'removed';
+            $previousDepartment = null;
+        } else {
+            return; // No change
+        }
+
+        // Get current department
+        $department = $this->department;
+        if (!$department) {
+            return;
+        }
+
+        // Notify new department manager (if exists and not self)
+        if ($department->manager_id && $department->manager_id != $this->id) {
+            $manager = $department->manager;
+
+            if ($manager->user) { // Only notify if manager has user account
+                $manager->user->notify(new \App\Notifications\EmployeeAssignedNotification(
+                    employee: $this,
+                    department: $department,
+                    action: $action,
+                    previousDepartment: $previousDepartment ?? null,
+                ));
+
+                \Log::info("Notified manager {$manager->email} about employee {$this->employee_number} {$action}");
+            }
+        }
+
+        // If transferred, also notify old department manager
+        if ($action === 'changed' && isset($previousDepartment)) {
+            if ($previousDepartment->manager_id
+                && $previousDepartment->manager_id != $this->id
+                && $previousDepartment->manager_id != $department->manager_id) {
+
+                $oldManager = $previousDepartment->manager;
+
+                if ($oldManager?->user) {
+                    $oldManager->user->notify(new \App\Notifications\EmployeeAssignedNotification(
+                        employee: $this,
+                        department: $previousDepartment, // Their perspective
+                        action: 'removed',
+                        previousDepartment: null,
+                    ));
+
+                    \Log::info("Notified old manager {$oldManager->email} about employee departure");
+                }
+            }
+        }
+    }
+
     protected static function booted(): void
     {
         static::saving(function ($employee) {
@@ -104,6 +171,14 @@ class Employee extends Model
             // Sync department_code from department_id if changed
             if ($employee->isDirty('department_id') && $employee->department_id) {
                 $employee->department_code = $employee->department->department_code;
+
+                // ✅ FIXED: Store in Cache instead of model property!
+                // This won't try to save to DB
+                Cache::put(
+                    "employee_prev_dept_{$employee->id}",
+                    $employee->getOriginal('department_id'),
+                    now()->addMinutes(5)
+                );
             }
         });
 
@@ -112,7 +187,14 @@ class Employee extends Model
 
             // ✅ NEW: Auto-create/update DepartmentEmployee when department_id changes
             if ($employee->isDirty('department_id')) {
-                $employee->syncDepartmentAssignment();
+                // Retrieve from cache (not from model property)
+                $previousDeptId = Cache::get("employee_prev_dept_{$employee->id}");
+
+                // Clear cache after use
+                Cache::forget("employee_prev_dept_{$employee->id}");
+
+                $employee->syncDepartmentAssignment($previousDeptId);
+                $employee->notifyDepartmentManager($previousDeptId);
             }
         });
     }
@@ -190,7 +272,7 @@ class Employee extends Model
     }
 
     /**
-     * ✅ NEW HELPER: Get all department assignments
+     * Get all department assignments.
      */
     public function departmentAssignments(): HasMany
     {
@@ -198,7 +280,7 @@ class Employee extends Model
     }
 
     /**
-     * ✅ NEW HELPER: Get primary department assignment
+     * Get primary department assignment.
      */
     public function primaryDepartmentAssignment(): ?DepartmentEmployee
     {
