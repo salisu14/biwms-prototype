@@ -9,6 +9,8 @@ use App\Filament\Pages\Finance\ExpenseReport;
 use App\Filament\Pages\Finance\FixedAssetListReport;
 use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\Finance\ItemLedgerSummary;
+use App\Filament\Pages\Finance\PurchaseStatisticsReport;
+use App\Filament\Pages\Finance\SalesStatisticsReport;
 use App\Filament\Pages\FiscalYearManagement;
 use App\Filament\Pages\PurchaseHistory;
 use App\Filament\Pages\SalesHistory;
@@ -48,9 +50,12 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->passwordReset()
+            ->profile()
             ->colors([
                 'primary' => Color::Amber,
             ])
+            ->strictAuthorization()
             ->spa(hasPrefetching: true)
             ->sidebarCollapsibleOnDesktop()
             ->globalSearch()
@@ -63,8 +68,6 @@ class AdminPanelProvider extends PanelProvider
                     ->label('Two-Factor Authentication')
                     ->icon('heroicon-o-shield-check')
                     ->url(fn(): string => UserSecurity::getUrl()),
-//                    ->url(fn (): string => route('admin.two-factor.manage'))
-
             ])
             ->renderHook(
                 PanelsRenderHook::TOPBAR_START,
@@ -356,6 +359,19 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-chart-bar')
                                     ->isActiveWhen(fn() => request()->is('admin/depreciation-book-report*'))
                                     ->url(DepreciationBookReport::getUrl()),
+
+                                NavigationItem::make('Sales Statistics')
+                                    ->icon('heroicon-o-chart-bar')
+//                                    ->url('/admin/sales-statistics')
+                                    ->url(SalesStatisticsReport::getUrl())
+                                    ->isActiveWhen(fn() => request()->is('admin/sales-statistics*'))
+                                    ->sort(10),
+
+                                NavigationItem::make('Purchase Statistics')
+                                    ->icon('heroicon-o-shopping-cart')
+                                    ->url(PurchaseStatisticsReport::getUrl())
+                                    ->isActiveWhen(fn() => request()->is('admin/purchase-statistics*'))
+                                    ->sort(11),
 
                                 NavigationItem::make('WIP Valuation')
                                     ->icon('heroicon-o-currency-dollar')
