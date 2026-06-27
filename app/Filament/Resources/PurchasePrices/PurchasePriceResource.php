@@ -21,6 +21,16 @@ use Illuminate\Support\Number;
 
 class PurchasePriceResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'pricing';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'purchase_price';
+    }
+
     protected static ?string $model = PurchasePrice::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ItemLotResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'item_lots';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'item_lot';
+    }
+
     protected static ?string $model = ItemLot::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -23,6 +23,16 @@ use Illuminate\Support\Facades\Auth;
 
 class SalesInvoiceResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'sales';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'sales_invoice';
+    }
+
     protected static ?string $model = SalesInvoice::class;
 
     protected static ?string $recordTitleAttribute = null;

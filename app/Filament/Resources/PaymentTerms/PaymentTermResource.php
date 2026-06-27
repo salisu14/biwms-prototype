@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class PaymentTermResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'payment_term';
+    }
+
     protected static ?string $model = PaymentTerm::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

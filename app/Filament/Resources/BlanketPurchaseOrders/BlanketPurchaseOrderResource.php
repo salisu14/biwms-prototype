@@ -19,6 +19,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class BlanketPurchaseOrderResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'blanket_order';
+    }
+
     protected static ?string $model = BlanketOrder::class;
 
     protected static \UnitEnum|string|null $navigationGroup = 'Purchasing';

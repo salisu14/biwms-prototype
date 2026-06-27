@@ -18,6 +18,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class BankAccountLedgerEntryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'bank_account_ledger_entry';
+    }
+
     protected static ?string $model = BankAccountLedgerEntry::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

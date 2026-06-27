@@ -21,6 +21,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class CapExProjectResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'cap_ex_projects';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'cap_ex_project';
+    }
+
     protected static ?string $model = CapExProject::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

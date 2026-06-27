@@ -17,6 +17,16 @@ use Filament\Tables\Table;
 
 class PhysicalInventoryJournalResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'physical_inventory_journal';
+    }
+
     protected static ?string $model = PhysicalInventoryJournal::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

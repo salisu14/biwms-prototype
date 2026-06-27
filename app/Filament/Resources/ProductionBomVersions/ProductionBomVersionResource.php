@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class ProductionBomVersionResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'production_bom_version';
+    }
+
     protected static ?string $model = ProductionBomVersion::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

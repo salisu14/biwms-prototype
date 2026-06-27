@@ -12,6 +12,16 @@ use Filament\Tables\Table;
 
 class SalespersonPurchaserResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'salesperson_purchaser';
+    }
+
     protected static ?string $model = SalespersonPurchaser::class;
 
     protected static \UnitEnum|string|null $navigationGroup = 'Administration';

@@ -23,6 +23,16 @@ use UnitEnum;
 
 class PurchaseCreditMemoResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'purchase_credit_memo';
+    }
+
     protected static ?string $model = PurchaseCreditMemo::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-document-duplicate';

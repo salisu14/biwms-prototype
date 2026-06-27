@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class MachineCenterResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'machine_center';
+    }
+
     protected static ?string $model = MachineCenter::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

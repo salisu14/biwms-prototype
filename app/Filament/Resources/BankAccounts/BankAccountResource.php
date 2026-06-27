@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class BankAccountResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'bank_account';
+    }
+
     protected static ?string $model = BankAccount::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
@@ -43,7 +53,7 @@ class BankAccountResource extends Resource
 
     public function viewAny(User $user): bool
     {
-        return  auth()->user()?->can('finance.bank_account.view');
+        return auth()->user()?->can('finance.bank_account.view');
     }
 
     public static function form(Schema $schema): Schema

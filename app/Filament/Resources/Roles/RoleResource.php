@@ -29,6 +29,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class RoleResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'admin';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'role';
+    }
+
     protected static ?string $model = Role::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedLockClosed;

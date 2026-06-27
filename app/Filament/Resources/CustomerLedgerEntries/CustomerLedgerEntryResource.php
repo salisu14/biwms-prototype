@@ -19,6 +19,16 @@ use Illuminate\Support\Number;
 
 class CustomerLedgerEntryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'sales';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'customer_ledger_entry';
+    }
+
     protected static ?string $model = CustomerLedgerEntry::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

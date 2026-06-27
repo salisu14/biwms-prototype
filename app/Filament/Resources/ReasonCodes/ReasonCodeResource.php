@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class ReasonCodeResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'reason_codes';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'reason_code';
+    }
+
     protected static ?string $model = ReasonCode::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

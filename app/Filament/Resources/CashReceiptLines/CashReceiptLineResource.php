@@ -19,6 +19,16 @@ use UnitEnum;
 
 class CashReceiptLineResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'cash_receipt_lines';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'cash_receipt_line';
+    }
+
     protected static ?string $model = CashReceiptLine::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;

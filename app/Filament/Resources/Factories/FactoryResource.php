@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class FactoryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factories';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'factory';
+    }
+
     protected static ?string $model = Factory::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

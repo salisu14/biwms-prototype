@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class PettyCashTransactionResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'petty_cash_transactions';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'petty_cash_transaction';
+    }
+
     protected static ?string $model = PettyCashTransaction::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowsRightLeft;
@@ -76,9 +86,9 @@ class PettyCashTransactionResource extends Resource
     {
         return [
             'index' => ListPettyCashTransactions::route('/'),
-//            'create' => CreatePettyCashTransaction::route('/create'),
+            //            'create' => CreatePettyCashTransaction::route('/create'),
             'view' => ViewPettyCashTransaction::route('/{record}'),
-//            'edit' => EditPettyCashTransaction::route('/{record}/edit'),
+            //            'edit' => EditPettyCashTransaction::route('/{record}/edit'),
         ];
     }
 }

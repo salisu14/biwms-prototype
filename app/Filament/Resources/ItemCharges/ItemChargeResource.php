@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ItemChargeResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'item_charges';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'item_charge';
+    }
+
     protected static ?string $model = ItemCharge::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

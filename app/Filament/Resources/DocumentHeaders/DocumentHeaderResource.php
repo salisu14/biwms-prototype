@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class DocumentHeaderResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'document_headers';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'document_header';
+    }
+
     protected static ?string $model = DocumentHeader::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

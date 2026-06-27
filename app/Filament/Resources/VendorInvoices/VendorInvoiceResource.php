@@ -22,6 +22,16 @@ use Illuminate\Support\Number;
 
 class VendorInvoiceResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'vendor_invoice';
+    }
+
     protected static ?string $model = VendorInvoice::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

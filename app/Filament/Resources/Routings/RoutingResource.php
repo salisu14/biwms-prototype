@@ -19,6 +19,16 @@ use Filament\Tables\Table;
 
 class RoutingResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'routing';
+    }
+
     protected static ?string $model = Routing::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class AttendanceLedgerEntryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'hr';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'attendance_ledger_entry';
+    }
+
     protected static ?string $model = AttendanceLedgerEntry::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -18,6 +18,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ChartOfAccountResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'chart_of_account';
+    }
+
     protected static ?string $model = ChartOfAccount::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

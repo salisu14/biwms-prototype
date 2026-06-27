@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class BusinessResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'businesses';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'business';
+    }
+
     protected static ?string $model = Business::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

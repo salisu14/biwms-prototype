@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class LocationResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'locations';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'location';
+    }
+
     protected static ?string $model = Location::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

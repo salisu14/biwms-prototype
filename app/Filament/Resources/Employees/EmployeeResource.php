@@ -21,6 +21,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class EmployeeResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'hr';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'employee';
+    }
+
     protected static ?string $model = Employee::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

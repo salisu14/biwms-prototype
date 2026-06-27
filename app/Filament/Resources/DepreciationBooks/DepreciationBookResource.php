@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class DepreciationBookResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'fixed_asset';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'depreciation_book';
+    }
+
     protected static ?string $model = DepreciationBook::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

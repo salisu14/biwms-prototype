@@ -19,6 +19,16 @@ use UnitEnum;
 
 class FAJournalBatchResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'fixed_asset';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'f_a_journal_batch';
+    }
+
     protected static ?string $model = FAJournalBatch::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

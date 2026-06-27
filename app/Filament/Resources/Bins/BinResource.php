@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class BinResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'bin';
+    }
+
     protected static ?string $model = Bin::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

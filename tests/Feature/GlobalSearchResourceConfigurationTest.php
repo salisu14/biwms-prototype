@@ -69,6 +69,11 @@ use Spatie\Permission\Models\Role;
 uses(RefreshDatabase::class);
 
 it('searches setup resources by their real combination keys', function () {
+    $user = User::factory()->create();
+    Role::findOrCreate('super_admin', 'web');
+    $user->assignRole('super_admin');
+    $this->actingAs($user);
+
     $businessPostingGroup = GeneralBusinessPostingGroup::factory()->create([
         'code' => 'SO-BUS',
     ]);

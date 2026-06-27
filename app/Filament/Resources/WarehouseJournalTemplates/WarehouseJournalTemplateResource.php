@@ -17,6 +17,16 @@ use UnitEnum;
 
 class WarehouseJournalTemplateResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'warehouse_journal_template';
+    }
+
     protected static ?string $model = WarehouseJournalTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInbox;

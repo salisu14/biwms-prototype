@@ -19,6 +19,16 @@ use UnitEnum;
 
 class VatPostingSetupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'vat_posting_setup';
+    }
+
     protected static ?string $model = VatPostingSetup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTableCells;

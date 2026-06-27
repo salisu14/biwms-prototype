@@ -19,6 +19,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class PricingMasterQuantityBreakResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'pricing_master_quantity_breaks';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'pricing_master_quantity_break';
+    }
+
     protected static ?string $model = PricingMasterQuantityBreak::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

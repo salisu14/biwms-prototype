@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class PettyCashVoucherResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'petty_cash_vouchers';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'petty_cash_voucher';
+    }
+
     protected static ?string $model = PettyCashVoucher::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

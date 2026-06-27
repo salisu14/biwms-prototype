@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class MaintenanceContractScheduleResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'maintenance_contract_schedules';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'maintenance_contract_schedule';
+    }
+
     protected static ?string $model = MaintenanceContractSchedule::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

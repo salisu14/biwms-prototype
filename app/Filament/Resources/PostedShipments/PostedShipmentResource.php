@@ -17,6 +17,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class PostedShipmentResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'posted_shipments';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'sales_shipment_header';
+    }
+
     // Change this line to point to your actual Model
     protected static ?string $model = SalesShipmentHeader::class;
 

@@ -21,6 +21,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class PurchaseQuoteResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'purchase_quote';
+    }
+
     protected static ?string $model = PurchaseQuote::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

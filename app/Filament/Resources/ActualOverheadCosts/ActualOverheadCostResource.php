@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class ActualOverheadCostResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'actual_overhead_cost';
+    }
+
     protected static ?string $model = ActualOverheadCost::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

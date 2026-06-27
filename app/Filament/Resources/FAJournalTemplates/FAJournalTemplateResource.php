@@ -19,6 +19,16 @@ use UnitEnum;
 
 class FAJournalTemplateResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'fixed_asset';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'f_a_journal_template';
+    }
+
     protected static ?string $model = FAJournalTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

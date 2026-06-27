@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class WarehouseSetupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'warehouse_setup';
+    }
+
     protected static ?string $model = WarehouseSetup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Cog6Tooth;

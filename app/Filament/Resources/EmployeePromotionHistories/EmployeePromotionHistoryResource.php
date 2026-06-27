@@ -15,6 +15,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class EmployeePromotionHistoryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'hr';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'employee_promotion_history';
+    }
+
     protected static ?string $model = EmployeePromotionHistory::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

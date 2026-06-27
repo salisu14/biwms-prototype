@@ -22,6 +22,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class SalesQuoteResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'sales';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'sales_quote';
+    }
+
     protected static ?string $model = SalesQuote::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductionOrderResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'production_order';
+    }
+
     protected static ?string $model = ProductionOrder::class;
 
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

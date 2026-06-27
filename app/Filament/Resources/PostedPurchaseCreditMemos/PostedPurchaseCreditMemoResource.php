@@ -19,6 +19,16 @@ use Illuminate\Support\Number;
 
 class PostedPurchaseCreditMemoResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'posted_purchase_credit_memo';
+    }
+
     protected static ?string $model = PostedPurchaseCreditMemo::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

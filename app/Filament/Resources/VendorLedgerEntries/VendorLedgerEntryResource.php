@@ -19,6 +19,16 @@ use Illuminate\Support\Number;
 
 class VendorLedgerEntryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'vendor_ledger_entry';
+    }
+
     protected static ?string $model = VendorLedgerEntry::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

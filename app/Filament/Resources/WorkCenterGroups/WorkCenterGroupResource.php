@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class WorkCenterGroupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'work_center_group';
+    }
+
     protected static ?string $model = WorkCenterGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

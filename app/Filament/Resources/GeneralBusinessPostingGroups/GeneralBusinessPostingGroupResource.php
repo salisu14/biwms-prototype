@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class GeneralBusinessPostingGroupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'general_business_posting_group';
+    }
+
     protected static ?string $model = GeneralBusinessPostingGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

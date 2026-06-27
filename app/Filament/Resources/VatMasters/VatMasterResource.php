@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class VatMasterResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'vat_master';
+    }
+
     protected static ?string $model = VatMaster::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

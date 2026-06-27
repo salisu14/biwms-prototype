@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class SalesShipmentHeaderResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'sales';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'sales_shipment_header';
+    }
+
     protected static ?string $model = SalesShipmentHeader::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

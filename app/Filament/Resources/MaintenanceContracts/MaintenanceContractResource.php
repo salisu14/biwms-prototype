@@ -21,6 +21,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class MaintenanceContractResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'maintenance_contracts';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'maintenance_contract';
+    }
+
     protected static ?string $model = MaintenanceContract::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

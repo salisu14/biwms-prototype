@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class AllocationResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'allocations';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'allocation';
+    }
+
     protected static ?string $model = Allocation::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

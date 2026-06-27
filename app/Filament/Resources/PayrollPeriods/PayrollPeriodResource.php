@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class PayrollPeriodResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'hr';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'payroll_period';
+    }
+
     protected static ?string $model = PayrollPeriod::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -22,6 +22,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class PricingGroupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'pricing_groups';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'pricing_group';
+    }
+
     protected static ?string $model = PricingGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -19,6 +19,16 @@ use UnitEnum;
 
 class ProductionJournalTemplateResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'production_journal_template';
+    }
+
     protected static ?string $model = ProductionJournalTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

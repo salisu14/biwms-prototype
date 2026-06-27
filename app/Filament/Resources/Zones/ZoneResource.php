@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class ZoneResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'zone';
+    }
+
     protected static ?string $model = Zone::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

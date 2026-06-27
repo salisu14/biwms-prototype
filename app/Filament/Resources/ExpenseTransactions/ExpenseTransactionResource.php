@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ExpenseTransactionResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'expense_transaction';
+    }
+
     protected static ?string $model = ExpenseTransaction::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

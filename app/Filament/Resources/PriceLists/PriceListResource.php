@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class PriceListResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'pricing';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'price_list';
+    }
+
     protected static ?string $model = PriceList::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
@@ -41,10 +51,9 @@ class PriceListResource extends Resource
         return auth()->user()?->can('view_any_price_list') ?? false;
     }
 
-
     public function viewAny(User $user): bool
     {
-        return  auth()->user()?->can('view_any_price_list');
+        return auth()->user()?->can('view_any_price_list');
     }
 
     public static function form(Schema $schema): Schema

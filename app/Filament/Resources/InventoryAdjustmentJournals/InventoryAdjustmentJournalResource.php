@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class InventoryAdjustmentJournalResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'inventory_adjustment_journal';
+    }
+
     protected static ?string $model = InventoryAdjustmentJournal::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;

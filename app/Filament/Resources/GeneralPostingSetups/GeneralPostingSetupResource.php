@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class GeneralPostingSetupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'general_posting_setup';
+    }
+
     protected static ?string $model = GeneralPostingSetup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

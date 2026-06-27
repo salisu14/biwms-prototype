@@ -91,6 +91,7 @@ use App\Policies\CustomerPolicy;
 use App\Policies\EmployeePolicy;
 use App\Policies\FixedAssetPolicy;
 use App\Policies\GeneralJournalBatchPolicy;
+use App\Policies\GenericFilamentPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\MachineCenterPolicy;
 use App\Policies\MaintenanceContractPolicy;
@@ -110,12 +111,14 @@ use App\Policies\PurchaseInvoicePolicy;
 use App\Policies\PurchaseOrderPolicy;
 use App\Policies\PurchaseQuotePolicy;
 use App\Policies\PurchaseReceiptPolicy;
+use App\Policies\RolePolicy;
 use App\Policies\RoutingPolicy;
 use App\Policies\RoutingVersionPolicy;
 use App\Policies\SalesCreditMemoPolicy;
 use App\Policies\SalesInvoicePolicy;
 use App\Policies\SalesOrderPolicy;
 use App\Policies\SalesQuotePolicy;
+use App\Policies\UserPolicy;
 use App\Policies\VendorPolicy;
 use App\Policies\WarehouseActivityPolicy;
 use App\Policies\WarehousePutawayPolicy;
@@ -123,6 +126,7 @@ use App\Policies\WarehouseReceiptPolicy;
 use App\Policies\WarehouseShipmentPolicy;
 use App\Policies\WorkCenterGroupPolicy;
 use App\Policies\WorkCenterPolicy;
+use App\Support\FilamentPermissionRegistry;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
@@ -194,6 +198,20 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(CapExProject::class, CapExProjectPolicy::class);
         Gate::policy(MaintenanceContract::class, MaintenanceContractPolicy::class);
         Gate::policy(MaintenanceContractSchedule::class, MaintenanceContractSchedulePolicy::class);
+        Gate::policy(User::class, UserPolicy::class);
+        Gate::policy(Role::class, RolePolicy::class);
+
+        foreach (app(FilamentPermissionRegistry::class)->resources() as $resourceClass) {
+            if (! method_exists($resourceClass, 'getModel')) {
+                continue;
+            }
+
+            $modelClass = $resourceClass::getModel();
+
+            if (Gate::getPolicyFor($modelClass) === null) {
+                Gate::policy($modelClass, GenericFilamentPolicy::class);
+            }
+        }
 
         Relation::morphMap([
             'CUSTOMER' => Customer::class,

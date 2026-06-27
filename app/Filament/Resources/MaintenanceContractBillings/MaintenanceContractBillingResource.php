@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class MaintenanceContractBillingResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'maintenance_contract_billings';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'maintenance_contract_billing';
+    }
+
     protected static ?string $model = MaintenanceContractBilling::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

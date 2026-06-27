@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class PayrollPostingGroupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'hr';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'payroll_posting_group';
+    }
+
     protected static ?string $model = PayrollPostingGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

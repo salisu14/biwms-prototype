@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class TaxTableResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'tax_table';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'tax_table';
+    }
+
     protected static ?string $model = TaxTable::class;
 
     protected static ?string $slug = 'tax-tables';

@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class SalesCreditMemoResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'sales';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'sales_credit_memo';
+    }
+
     protected static ?string $model = SalesCreditMemo::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

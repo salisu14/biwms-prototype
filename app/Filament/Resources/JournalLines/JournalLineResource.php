@@ -19,6 +19,16 @@ use UnitEnum;
 
 class JournalLineResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'journal_line';
+    }
+
     protected static ?string $model = JournalLine::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class CategoryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'categories';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'category';
+    }
+
     protected static ?string $model = Category::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

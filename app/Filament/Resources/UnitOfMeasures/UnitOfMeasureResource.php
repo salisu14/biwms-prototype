@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class UnitOfMeasureResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'unit_of_measures';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'unit_of_measure';
+    }
+
     protected static ?string $model = UnitOfMeasure::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

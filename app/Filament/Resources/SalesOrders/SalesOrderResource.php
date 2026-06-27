@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class SalesOrderResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'sales';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'sales_order';
+    }
+
     protected static ?string $model = SalesOrder::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

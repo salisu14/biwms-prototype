@@ -19,6 +19,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class PayrollDocumentResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'hr';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'payroll_document';
+    }
+
     protected static ?string $model = PayrollDocument::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

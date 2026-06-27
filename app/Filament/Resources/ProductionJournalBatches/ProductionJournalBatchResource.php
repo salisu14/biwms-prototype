@@ -20,6 +20,16 @@ use UnitEnum;
 
 class ProductionJournalBatchResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'production_journal_batch';
+    }
+
     protected static ?string $model = ProductionJournalBatch::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

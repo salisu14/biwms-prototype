@@ -20,6 +20,16 @@ use UnitEnum;
 
 class VendorContactResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'contact';
+    }
+
     protected static ?string $model = Contact::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-users';

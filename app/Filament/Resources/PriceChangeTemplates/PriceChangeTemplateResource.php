@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class PriceChangeTemplateResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'pricing';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'price_change_template';
+    }
+
     protected static ?string $model = PriceChangeTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

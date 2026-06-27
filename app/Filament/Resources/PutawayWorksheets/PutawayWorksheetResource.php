@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class PutawayWorksheetResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'putaway_worksheets';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'putaway_worksheet';
+    }
+
     protected static ?string $model = PutawayWorksheet::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

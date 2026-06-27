@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class ShippingAgentResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'shipping_agents';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'shipping_agent';
+    }
+
     protected static ?string $model = ShippingAgent::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

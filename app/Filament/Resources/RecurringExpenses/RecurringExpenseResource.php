@@ -32,6 +32,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class RecurringExpenseResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'recurring_expense';
+    }
+
     protected static ?string $model = RecurringExpense::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

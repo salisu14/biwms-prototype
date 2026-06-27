@@ -17,6 +17,16 @@ use UnitEnum;
 
 class RecurringJournalTemplateResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'recurring_journal_template';
+    }
+
     protected static ?string $model = RecurringJournalTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowPath;

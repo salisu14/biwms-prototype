@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ItemSkuResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'item_skus';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'item_sku';
+    }
+
     protected static ?string $model = ItemSku::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

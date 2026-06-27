@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class WorkCenterCalendarResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'work_center_calendar';
+    }
+
     protected static ?string $model = WorkCenterCalendar::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

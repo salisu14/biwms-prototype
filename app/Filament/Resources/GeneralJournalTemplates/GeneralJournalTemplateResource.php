@@ -17,6 +17,16 @@ use UnitEnum;
 
 class GeneralJournalTemplateResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'general_journal_template';
+    }
+
     protected static ?string $model = GeneralJournalTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;

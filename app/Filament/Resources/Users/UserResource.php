@@ -22,6 +22,16 @@ class UserResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
+    public static function permissionModule(): string
+    {
+        return 'admin';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'user';
+    }
+
     public static function form(Schema $schema): Schema
     {
         return UserForm::configure($schema);
@@ -41,7 +51,7 @@ class UserResource extends Resource
 
     public static function canAccess(): bool
     {
-        return auth()->check() && auth()->user()->can('user.manage');
+        return auth()->check() && auth()->user()->can('admin.user.view_any');
     }
 
     public static function canViewAny(): bool
@@ -51,17 +61,21 @@ class UserResource extends Resource
 
     public static function canCreate(): bool
     {
-        return static::canAccess();
+        return auth()->check() && auth()->user()->can('admin.user.create');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::canAccess();
+        return auth()->check() && auth()->user()->can('admin.user.update');
     }
 
     public static function canDelete(Model $record): bool
     {
-        return static::canAccess() && ! $record->hasRole('super_admin');
+        /** @var User $record */
+        return auth()->check()
+            && ! auth()->user()->is($record)
+            && ! $record->hasRole('super_admin')
+            && auth()->user()->can('admin.user.delete');
     }
 
     public static function getGloballySearchableAttributes(): array

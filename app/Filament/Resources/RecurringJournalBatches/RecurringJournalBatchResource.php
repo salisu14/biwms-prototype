@@ -20,6 +20,16 @@ use UnitEnum;
 
 class RecurringJournalBatchResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'recurring_journal_batch';
+    }
+
     protected static ?string $model = RecurringJournalBatch::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowPath;

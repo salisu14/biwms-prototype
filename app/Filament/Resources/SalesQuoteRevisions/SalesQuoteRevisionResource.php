@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class SalesQuoteRevisionResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'sales';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'sales_quote_revision';
+    }
+
     protected static ?string $model = SalesQuoteRevision::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

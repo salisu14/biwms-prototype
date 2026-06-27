@@ -21,6 +21,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ItemResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'items';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'item';
+    }
+
     protected static ?string $model = Item::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class CompanyInformationResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'company_information';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'company_information';
+    }
+
     protected static ?string $model = CompanyInformation::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingOffice2;

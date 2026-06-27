@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class OverheadCostCategoryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'factory';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'overhead_cost_category';
+    }
+
     protected static ?string $model = OverheadCostCategory::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

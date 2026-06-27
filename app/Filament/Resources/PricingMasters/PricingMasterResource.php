@@ -22,6 +22,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class PricingMasterResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'pricing_masters';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'pricing_master';
+    }
+
     protected static ?string $model = PricingMaster::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

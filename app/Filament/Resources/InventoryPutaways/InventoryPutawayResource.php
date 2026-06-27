@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class InventoryPutawayResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'inventory_putaway';
+    }
+
     protected static ?string $model = InventoryPutaway::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

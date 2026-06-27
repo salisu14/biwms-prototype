@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class DimensionResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'dimensions';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'dimension';
+    }
+
     protected static ?string $model = Dimension::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

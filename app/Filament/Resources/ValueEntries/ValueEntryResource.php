@@ -17,6 +17,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ValueEntryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'value_entry';
+    }
+
     protected static ?string $model = ValueEntry::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

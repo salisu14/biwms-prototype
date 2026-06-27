@@ -21,6 +21,16 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class DepartmentResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'departments';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'department';
+    }
+
     protected static ?string $model = Department::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

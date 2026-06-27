@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class CustomerPostingGroupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'sales';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'customer_posting_group';
+    }
+
     protected static ?string $model = CustomerPostingGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class FAPostingGroupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'fixed_asset';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'f_a_posting_group';
+    }
+
     protected static ?string $model = FAPostingGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -16,6 +16,16 @@ use Filament\Tables\Table;
 
 class PayCodeResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'hr';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'pay_code';
+    }
+
     protected static ?string $model = PayCode::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

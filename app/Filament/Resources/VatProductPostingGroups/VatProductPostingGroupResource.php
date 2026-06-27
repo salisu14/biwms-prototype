@@ -19,6 +19,16 @@ use UnitEnum;
 
 class VatProductPostingGroupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'finance';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'vat_product_posting_group';
+    }
+
     protected static ?string $model = VatProductPostingGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTag;

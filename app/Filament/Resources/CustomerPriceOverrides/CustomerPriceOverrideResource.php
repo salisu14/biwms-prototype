@@ -21,6 +21,16 @@ use Illuminate\Support\Number;
 
 class CustomerPriceOverrideResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'pricing';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'customer_price_override';
+    }
+
     protected static ?string $model = CustomerPriceOverride::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

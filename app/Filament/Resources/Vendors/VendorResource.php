@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class VendorResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'procurement';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'vendor';
+    }
+
     protected static ?string $model = Vendor::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

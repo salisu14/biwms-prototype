@@ -19,6 +19,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class NumberSeriesResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'number_series';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'number_series';
+    }
+
     protected static ?string $model = NumberSeries::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

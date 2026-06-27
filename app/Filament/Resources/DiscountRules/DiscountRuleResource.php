@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class DiscountRuleResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'pricing';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'discount_rule';
+    }
+
     protected static ?string $model = DiscountRule::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

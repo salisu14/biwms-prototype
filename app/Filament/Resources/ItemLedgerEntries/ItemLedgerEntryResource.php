@@ -2,8 +2,6 @@
 
 namespace App\Filament\Resources\ItemLedgerEntries;
 
-use App\Filament\Resources\ItemLedgerEntries\Pages\CreateItemLedgerEntry;
-use App\Filament\Resources\ItemLedgerEntries\Pages\EditItemLedgerEntry;
 use App\Filament\Resources\ItemLedgerEntries\Pages\ListItemLedgerEntries;
 use App\Filament\Resources\ItemLedgerEntries\Pages\ViewItemLedgerEntry;
 use App\Filament\Resources\ItemLedgerEntries\Schemas\ItemLedgerEntryForm;
@@ -20,6 +18,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ItemLedgerEntryResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'item_ledger_entry';
+    }
+
     protected static ?string $model = ItemLedgerEntry::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

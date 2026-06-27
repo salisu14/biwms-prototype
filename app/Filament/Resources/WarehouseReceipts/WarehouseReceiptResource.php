@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class WarehouseReceiptResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'warehouse_receipt';
+    }
+
     protected static ?string $model = WarehouseReceipt::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

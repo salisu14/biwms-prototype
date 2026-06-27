@@ -16,6 +16,16 @@ use UnitEnum;
 
 class AuditTrailResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'admin';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'audit_trail';
+    }
+
     protected static ?string $model = AuditTrail::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;

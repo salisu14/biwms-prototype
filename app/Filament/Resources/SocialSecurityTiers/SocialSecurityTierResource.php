@@ -19,6 +19,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class SocialSecurityTierResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'social_security_tiers';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'social_security_tier';
+    }
+
     protected static ?string $model = SocialSecurityTier::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

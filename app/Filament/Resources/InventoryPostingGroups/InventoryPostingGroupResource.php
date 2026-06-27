@@ -17,6 +17,16 @@ use Filament\Tables\Table;
 
 class InventoryPostingGroupResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'warehouse';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'inventory_posting_group';
+    }
+
     protected static ?string $model = InventoryPostingGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSquare3Stack3d;

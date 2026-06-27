@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class PettyCashFundResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'petty_cash_funds';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'petty_cash_fund';
+    }
+
     protected static ?string $model = PettyCashFund::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

@@ -18,6 +18,16 @@ use Filament\Tables\Table;
 
 class ApprovalTemplateResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'approval_templates';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'approval_template';
+    }
+
     protected static ?string $model = ApprovalTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
@@ -42,7 +52,7 @@ class ApprovalTemplateResource extends Resource
     public static function getRelations(): array
     {
         return [
-          RelationManagers\EntriesRelationManager::class,
+            RelationManagers\EntriesRelationManager::class,
         ];
     }
 

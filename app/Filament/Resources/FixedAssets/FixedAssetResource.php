@@ -20,6 +20,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class FixedAssetResource extends Resource
 {
+    public static function permissionModule(): string
+    {
+        return 'fixed_asset';
+    }
+
+    public static function permissionResource(): string
+    {
+        return 'fixed_asset';
+    }
+
     protected static ?string $model = FixedAsset::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;

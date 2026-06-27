@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Users\Schemas;
 
 use App\Models\Employee;
+use App\Models\Role;
 use App\Models\User;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -62,6 +63,30 @@ class UserForm
                         Select::make('roles')
                             ->relationship('roles', 'name')
                             ->multiple()
+                            ->options(function (?User $record): array {
+                                $query = Role::query()
+                                    ->orderBy('name');
+
+                                $query->where(function ($query) use ($record): void {
+                                    $query->where('guard_name', 'web');
+
+                                    if (! auth()->user()?->hasRole('super_admin')) {
+                                        $query->where('name', '!=', 'super_admin');
+                                    }
+
+                                    if ($record && auth()->user()?->is($record) && $record->hasRole('super_admin')) {
+                                        $query->orWhere(function ($query): void {
+                                            $query
+                                                ->where('guard_name', 'web')
+                                                ->where('name', 'super_admin');
+                                        });
+                                    }
+                                });
+
+                                return $query->pluck('name', 'id')->all();
+                            })
+                            ->disabled(fn (?User $record): bool => $record !== null && auth()->user()?->is($record) && $record->hasRole('super_admin'))
+                            ->helperText('Only Super Admin can assign or revoke the Super Admin role. Super Admins cannot remove their own Super Admin role here.')
                             ->preload()
                             ->searchable(),
 
