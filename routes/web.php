@@ -1,9 +1,9 @@
 <?php
 
+use App\Http\Controllers\Admin\UserSecurityController;
 use App\Http\Controllers\Auth\SuperAdminTwoFactorChallengeController;
 use App\Http\Controllers\Auth\SuperAdminTwoFactorSetupController;
 use App\Http\Controllers\Auth\TwoFactorManagementController;
-use App\Http\Controllers\Admin\UserSecurityController;
 use App\Http\Controllers\BalanceSheetPrintController;
 use App\Http\Controllers\CashFlowStatementPrintController;
 use App\Http\Controllers\CustomerSubledgerSummaryPrintController;
@@ -15,6 +15,8 @@ use App\Http\Controllers\GroupSummaryPrintController;
 use App\Http\Controllers\ItemLedgerSummaryPrintController;
 use App\Http\Controllers\PhysicalInventoryJournalPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
+use App\Http\Controllers\PurchaseStatisticsReportExportController;
+use App\Http\Controllers\SalesStatisticsReportExportController;
 use App\Http\Controllers\VoucherPrintController;
 use App\Http\Controllers\WaybillController;
 use App\Models\User;
@@ -42,18 +44,18 @@ Route::middleware(['web', 'auth'])->group(function (): void {
     Route::post('/admin/two-factor/recovery-codes', [TwoFactorManagementController::class, 'regenerateRecoveryCodes'])
         ->name('admin.two-factor.recovery-codes.regenerate');
 
-//    Route::get('/admin/user-security', [UserSecurityController::class, 'index'])
-//        ->name('admin.user-security.index');
-//    Route::post('/admin/user-security/{user}/require-two-factor', [UserSecurityController::class, 'requireTwoFactor'])
-//        ->name('admin.user-security.require-two-factor');
-//    Route::post('/admin/user-security/{user}/disable-two-factor', [UserSecurityController::class, 'disableTwoFactor'])
-//        ->name('admin.user-security.disable-two-factor');
-//    Route::post('/admin/user-security/{user}/reset-two-factor', [UserSecurityController::class, 'resetTwoFactor'])
-//        ->name('admin.user-security.reset-two-factor');
-//    Route::post('/admin/user-security/{user}/regenerate-recovery-codes', [UserSecurityController::class, 'regenerateRecoveryCodes'])
-//        ->name('admin.user-security.regenerate-recovery-codes');
-//    Route::post('/admin/user-security/{user}/clear-two-factor-session', [UserSecurityController::class, 'clearCurrentTwoFactorSession'])
-//        ->name('admin.user-security.clear-two-factor-session');
+    //    Route::get('/admin/user-security', [UserSecurityController::class, 'index'])
+    //        ->name('admin.user-security.index');
+    //    Route::post('/admin/user-security/{user}/require-two-factor', [UserSecurityController::class, 'requireTwoFactor'])
+    //        ->name('admin.user-security.require-two-factor');
+    //    Route::post('/admin/user-security/{user}/disable-two-factor', [UserSecurityController::class, 'disableTwoFactor'])
+    //        ->name('admin.user-security.disable-two-factor');
+    //    Route::post('/admin/user-security/{user}/reset-two-factor', [UserSecurityController::class, 'resetTwoFactor'])
+    //        ->name('admin.user-security.reset-two-factor');
+    //    Route::post('/admin/user-security/{user}/regenerate-recovery-codes', [UserSecurityController::class, 'regenerateRecoveryCodes'])
+    //        ->name('admin.user-security.regenerate-recovery-codes');
+    //    Route::post('/admin/user-security/{user}/clear-two-factor-session', [UserSecurityController::class, 'clearCurrentTwoFactorSession'])
+    //        ->name('admin.user-security.clear-two-factor-session');
 
     Route::redirect('/super-admin/two-factor/setup', '/admin/two-factor/setup');
     Route::redirect('/super-admin/two-factor/challenge', '/admin/two-factor/challenge');
@@ -111,11 +113,18 @@ Route::get('/admin/reports/expense/export', ExpenseReportExportController::class
     ->name('reports.expense.export')
     ->middleware(['web', 'auth']);
 
+Route::get('/admin/reports/sales-statistics/export', SalesStatisticsReportExportController::class)
+    ->name('reports.sales-statistics.export')
+    ->middleware(['web', 'auth']);
+
+Route::get('/admin/reports/purchase-statistics/export', PurchaseStatisticsReportExportController::class)
+    ->name('reports.purchase-statistics.export')
+    ->middleware(['web', 'auth']);
+
 Route::middleware(['auth'])->prefix('petty-cash')->group(function () {
     Route::get('vouchers/{voucher}/print', [VoucherPrintController::class, 'print'])
         ->name('petty-cash.vouchers.print');
 });
-
 
 Route::middleware(['auth', 'web'])->group(function () {
     Route::post('/notifications/{notification}/mark-as-read', function ($notification) {
