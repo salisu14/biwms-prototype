@@ -49,7 +49,13 @@ it('registers policies and permission metadata for every Filament resource', fun
             ->and(method_exists($resourceClass, 'permissionResource'))->toBeTrue($resourceClass.' is missing permissionResource().');
 
         if (method_exists($resourceClass, 'getModel')) {
-            expect(Gate::getPolicyFor($resourceClass::getModel()))->not->toBeNull($resourceClass.' has no registered policy.');
+            $policy = Gate::getPolicyFor($resourceClass::getModel());
+
+            expect($policy)->not->toBeNull($resourceClass.' has no registered policy.');
+
+            foreach (['viewAny', 'view', 'create', 'update', 'delete', 'deleteAny', 'restore', 'restoreAny', 'forceDelete', 'forceDeleteAny'] as $method) {
+                expect(method_exists($policy, $method))->toBeTrue($resourceClass.' policy is missing '.$method.'().');
+            }
         }
     }
 });

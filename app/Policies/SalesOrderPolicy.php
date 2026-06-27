@@ -61,6 +61,17 @@ class SalesOrderPolicy
         ]);
     }
 
+    public function deleteAny(User $user): bool
+    {
+        return $this->canAny($user, [
+            'sales.order.delete_any',
+            'sales.order.delete',
+            'delete:sales_order',
+            'delete:order',
+            'sales_order_delete',
+        ]);
+    }
+
     public function approve(User $user, SalesOrder $salesOrder): bool
     {
         return $this->canAny($user, [
@@ -84,8 +95,18 @@ class SalesOrderPolicy
         return $this->delete($user, $salesOrder);
     }
 
+    public function restoreAny(User $user): bool
+    {
+        return $this->deleteAny($user);
+    }
+
     public function forceDelete(User $user, SalesOrder $salesOrder): bool
     {
         return $this->delete($user, $salesOrder);
+    }
+
+    public function forceDeleteAny(User $user): bool
+    {
+        return $this->deleteAny($user);
     }
 }

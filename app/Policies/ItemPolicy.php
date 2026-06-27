@@ -56,13 +56,33 @@ class ItemPolicy
         ]);
     }
 
+    public function deleteAny(User $user): bool
+    {
+        return $this->canAny($user, [
+            'sales.item.delete_any',
+            'sales.item.delete',
+            'delete:item',
+            'item_delete',
+        ]);
+    }
+
     public function restore(User $user, Item $item): bool
     {
         return $this->delete($user, $item);
     }
 
+    public function restoreAny(User $user): bool
+    {
+        return $this->deleteAny($user);
+    }
+
     public function forceDelete(User $user, Item $item): bool
     {
         return $this->delete($user, $item);
+    }
+
+    public function forceDeleteAny(User $user): bool
+    {
+        return $this->deleteAny($user);
     }
 }

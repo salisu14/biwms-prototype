@@ -60,13 +60,55 @@ abstract class AbstractPermissionPolicy
         ]);
     }
 
+    public function deleteAny(User $user): bool
+    {
+        return $this->canAny($user, [
+            $this->permissionPrefix().'.delete_any',
+            $this->permissionPrefix().'.delete',
+            'delete:'.$this->legacyKey(),
+            $this->legacyKey().'_delete',
+        ]);
+    }
+
     public function restore(User $user, mixed $record): bool
     {
-        return $this->delete($user, $record);
+        return $this->canAny($user, [
+            $this->permissionPrefix().'.restore',
+            $this->permissionPrefix().'.delete',
+            'delete:'.$this->legacyKey(),
+            $this->legacyKey().'_delete',
+        ]);
+    }
+
+    public function restoreAny(User $user): bool
+    {
+        return $this->canAny($user, [
+            $this->permissionPrefix().'.restore_any',
+            $this->permissionPrefix().'.restore',
+            $this->permissionPrefix().'.delete',
+            'delete:'.$this->legacyKey(),
+            $this->legacyKey().'_delete',
+        ]);
     }
 
     public function forceDelete(User $user, mixed $record): bool
     {
-        return $this->delete($user, $record);
+        return $this->canAny($user, [
+            $this->permissionPrefix().'.force_delete',
+            $this->permissionPrefix().'.delete',
+            'delete:'.$this->legacyKey(),
+            $this->legacyKey().'_delete',
+        ]);
+    }
+
+    public function forceDeleteAny(User $user): bool
+    {
+        return $this->canAny($user, [
+            $this->permissionPrefix().'.force_delete_any',
+            $this->permissionPrefix().'.force_delete',
+            $this->permissionPrefix().'.delete',
+            'delete:'.$this->legacyKey(),
+            $this->legacyKey().'_delete',
+        ]);
     }
 }

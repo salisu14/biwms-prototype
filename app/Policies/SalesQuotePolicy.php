@@ -56,6 +56,16 @@ class SalesQuotePolicy
         ]);
     }
 
+    public function deleteAny(User $user): bool
+    {
+        return $this->canAny($user, [
+            'sales.quote.delete_any',
+            'sales.quote.delete',
+            'delete:sales_quote',
+            'sales_quote_delete',
+        ]);
+    }
+
     public function approve(User $user, SalesQuote $salesQuote): bool
     {
         return $this->canAny($user, [
@@ -79,8 +89,18 @@ class SalesQuotePolicy
         return $this->delete($user, $salesQuote);
     }
 
+    public function restoreAny(User $user): bool
+    {
+        return $this->deleteAny($user);
+    }
+
     public function forceDelete(User $user, SalesQuote $salesQuote): bool
     {
         return $this->delete($user, $salesQuote);
+    }
+
+    public function forceDeleteAny(User $user): bool
+    {
+        return $this->deleteAny($user);
     }
 }

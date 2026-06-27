@@ -56,13 +56,33 @@ class CustomerPolicy
         ]);
     }
 
+    public function deleteAny(User $user): bool
+    {
+        return $this->canAny($user, [
+            'sales.customer.delete_any',
+            'sales.customer.delete',
+            'delete:customer',
+            'customer_delete',
+        ]);
+    }
+
     public function restore(User $user, Customer $customer): bool
     {
         return $this->delete($user, $customer);
     }
 
+    public function restoreAny(User $user): bool
+    {
+        return $this->deleteAny($user);
+    }
+
     public function forceDelete(User $user, Customer $customer): bool
     {
         return $this->delete($user, $customer);
+    }
+
+    public function forceDeleteAny(User $user): bool
+    {
+        return $this->deleteAny($user);
     }
 }

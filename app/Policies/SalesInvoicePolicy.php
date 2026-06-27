@@ -56,6 +56,16 @@ class SalesInvoicePolicy
         ]);
     }
 
+    public function deleteAny(User $user): bool
+    {
+        return $this->canAny($user, [
+            'sales.invoice.delete_any',
+            'sales.invoice.delete',
+            'delete:sales_invoice',
+            'sales_invoice_delete',
+        ]);
+    }
+
     public function post(User $user, SalesInvoice $salesInvoice): bool
     {
         return $this->canAny($user, [
@@ -70,8 +80,18 @@ class SalesInvoicePolicy
         return $this->delete($user, $salesInvoice);
     }
 
+    public function restoreAny(User $user): bool
+    {
+        return $this->deleteAny($user);
+    }
+
     public function forceDelete(User $user, SalesInvoice $salesInvoice): bool
     {
         return $this->delete($user, $salesInvoice);
+    }
+
+    public function forceDeleteAny(User $user): bool
+    {
+        return $this->deleteAny($user);
     }
 }
