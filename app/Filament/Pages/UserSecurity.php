@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Models\User;
 use App\Services\AuditTrailService;
 use App\Services\Auth\SuperAdminTwoFactorService;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -192,12 +193,12 @@ class UserSecurity extends Page implements HasTable
                 ->visible(fn (User $record): bool => $this->canManageUserSecurity()
                     && $record->hasConfirmedTwoFactorAuthentication()
                     && ! $record->requiresTwoFactor())
-                ->form([
+                ->form(SensitiveActionPasswordConfirmation::schemaWithPasswordConfirmation([
                     TextInput::make('confirmation')
                         ->label('Type the user email to confirm')
                         ->required()
                         ->email(),
-                ])
+                ]))
                 ->action(function (User $record, array $data): void {
                     if ((string) ($data['confirmation'] ?? '') !== $record->email) {
                         throw ValidationException::withMessages([

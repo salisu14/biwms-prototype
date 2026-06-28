@@ -7,6 +7,7 @@ use App\Filament\Resources\Payments\PaymentResource;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedSalesInvoice;
 use App\Services\Finance\PaymentService;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
@@ -184,10 +185,10 @@ class ViewPayment extends ViewRecord
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
                 ->requiresConfirmation()
-                ->form([
+                ->form(SensitiveActionPasswordConfirmation::schemaWithPasswordConfirmation([
                     Textarea::make('reason')
                         ->required(),
-                ])
+                ]))
                 ->visible(fn ($record) => (auth()->user()?->can('void', $record) ?? false) && $record->status === 'POSTED' && ! $record->reconciled)
                 ->action(function (array $data, $record, PaymentService $service) {
                     $service->void($record, $data['reason'], auth()->id());

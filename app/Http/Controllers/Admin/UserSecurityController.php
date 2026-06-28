@@ -47,6 +47,7 @@ class UserSecurityController extends Controller
     public function requireTwoFactor(Request $request, User $user, AuditTrailService $auditTrailService): RedirectResponse
     {
         $actor = $this->authorizeSuperAdmin($request);
+        $this->validateCurrentPassword($request);
 
         $user->forceFill(['two_factor_required' => true])->save();
 
@@ -64,6 +65,7 @@ class UserSecurityController extends Controller
     public function disableTwoFactor(Request $request, User $user, SuperAdminTwoFactorService $twoFactorService, AuditTrailService $auditTrailService): RedirectResponse|Response
     {
         $actor = $this->authorizeSuperAdmin($request);
+        $this->validateCurrentPassword($request);
 
         if ($actor->is($user) && $request->input('confirmation') !== $actor->email) {
             return response('Type your email address to confirm disabling your own 2FA.', 422);
@@ -90,6 +92,7 @@ class UserSecurityController extends Controller
     public function resetTwoFactor(Request $request, User $user, SuperAdminTwoFactorService $twoFactorService, AuditTrailService $auditTrailService): RedirectResponse|Response
     {
         $actor = $this->authorizeSuperAdmin($request);
+        $this->validateCurrentPassword($request);
 
         if ($actor->is($user) && $request->input('confirmation') !== $actor->email) {
             return response('Type your email address to confirm resetting your own 2FA.', 422);
@@ -115,6 +118,7 @@ class UserSecurityController extends Controller
     public function regenerateRecoveryCodes(Request $request, User $user, SuperAdminTwoFactorService $twoFactorService, AuditTrailService $auditTrailService): View
     {
         $actor = $this->authorizeSuperAdmin($request);
+        $this->validateCurrentPassword($request);
 
         abort_unless($user->hasConfirmedTwoFactorAuthentication(), 404);
 
@@ -138,6 +142,7 @@ class UserSecurityController extends Controller
     public function clearCurrentTwoFactorSession(Request $request, User $user, AuditTrailService $auditTrailService): RedirectResponse
     {
         $actor = $this->authorizeSuperAdmin($request);
+        $this->validateCurrentPassword($request);
 
         if ($actor->is($user)) {
             $request->session()->forget(['two_factor_passed_at', 'super_admin_2fa_passed_at']);
@@ -161,5 +166,12 @@ class UserSecurityController extends Controller
         abort_unless($user?->hasRole('super_admin'), 404);
 
         return $user;
+    }
+
+    private function validateCurrentPassword(Request $request): void
+    {
+        $request->validate([
+            'password' => ['required', 'current_password'],
+        ]);
     }
 }

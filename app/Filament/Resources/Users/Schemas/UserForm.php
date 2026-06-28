@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Users\Schemas;
 use App\Models\Employee;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
@@ -97,6 +98,12 @@ class UserForm
                             ->searchable()
                             ->preload(),
                     ])->columns(2),
+
+                Section::make('Security Confirmation')
+                    ->description('Confirm your password before creating users or changing roles.')
+                    ->schema([
+                        SensitiveActionPasswordConfirmation::passwordField(),
+                    ]),
             ]);
     }
 }

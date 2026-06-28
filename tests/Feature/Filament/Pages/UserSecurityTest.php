@@ -6,6 +6,7 @@ namespace Tests\Feature\Filament\Pages;
 
 use App\Filament\Pages\UserSecurity;
 use App\Models\User;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
@@ -94,7 +95,9 @@ class UserSecurityTest extends TestCase
 
         Livewire::actingAs($superAdmin)
             ->test(UserSecurity::class)
-            ->callTableAction('require_two_factor', $targetUser)
+            ->callTableAction('require_two_factor', $targetUser, data: [
+                SensitiveActionPasswordConfirmation::FIELD => 'password',
+            ])
             ->assertHasNoTableActionErrors();
 
         $this->assertDatabaseHas('users', [
@@ -123,7 +126,9 @@ class UserSecurityTest extends TestCase
 
         Livewire::actingAs($superAdmin)
             ->test(UserSecurity::class)
-            ->callTableAction('force_reset', $targetUser)
+            ->callTableAction('force_reset', $targetUser, data: [
+                SensitiveActionPasswordConfirmation::FIELD => 'password',
+            ])
             ->assertHasNoTableActionErrors();
 
         $targetUser->refresh();
@@ -150,6 +155,7 @@ class UserSecurityTest extends TestCase
             ->test(UserSecurity::class)
             ->callTableAction('disable_two_factor', $targetUser, data: [
                 'confirmation' => 'wrong@example.com',
+                SensitiveActionPasswordConfirmation::FIELD => 'password',
             ])
             ->assertHasTableActionErrors(['confirmation']);
 
@@ -173,6 +179,7 @@ class UserSecurityTest extends TestCase
             ->test(UserSecurity::class)
             ->callTableAction('disable_two_factor', $targetUser, data: [
                 'confirmation' => 'target@example.com',
+                SensitiveActionPasswordConfirmation::FIELD => 'password',
             ])
             ->assertHasNoTableActionErrors();
 
@@ -208,7 +215,9 @@ class UserSecurityTest extends TestCase
 
         Livewire::actingAs($superAdmin)
             ->test(UserSecurity::class)
-            ->callTableAction('clear_session', $targetUser)
+            ->callTableAction('clear_session', $targetUser, data: [
+                SensitiveActionPasswordConfirmation::FIELD => 'password',
+            ])
             ->assertHasNoTableActionErrors();
 
         $this->assertDatabaseHas('audit_trails', [

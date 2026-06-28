@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Payments\Tables;
 
 use App\Services\Finance\PaymentService;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -149,9 +150,9 @@ class PaymentsTable
                         ->color('danger')
                         ->requiresConfirmation()
                         ->visible(fn ($record): bool => auth()->user()?->can('void', $record) ?? false)
-                        ->form([
+                        ->form(SensitiveActionPasswordConfirmation::schemaWithPasswordConfirmation([
                             Textarea::make('reason')->required(),
-                        ])
+                        ]))
                         ->disabled(fn ($record) => $record->status !== 'POSTED' || (bool) $record->reconciled)
                         ->action(function (array $data, $record, PaymentService $service): void {
                             $service->void($record, $data['reason'], auth()->id());

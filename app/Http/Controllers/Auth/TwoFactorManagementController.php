@@ -41,6 +41,8 @@ class TwoFactorManagementController extends Controller
             ], 422);
         }
 
+        $this->validateCurrentPassword($request);
+
         $twoFactorService->disable($user, $user->id);
         $request->session()->forget(['two_factor_passed_at', 'super_admin_2fa_passed_at']);
 
@@ -64,6 +66,8 @@ class TwoFactorManagementController extends Controller
 
         abort_unless($user, 404);
 
+        $this->validateCurrentPassword($request);
+
         $twoFactorService->forceReset($user, $user->id);
         $request->session()->forget(['super_admin_2fa_setup_secret', 'two_factor_passed_at', 'super_admin_2fa_passed_at']);
 
@@ -84,6 +88,8 @@ class TwoFactorManagementController extends Controller
 
         abort_unless($user && $user->hasConfirmedTwoFactorAuthentication(), 404);
 
+        $this->validateCurrentPassword($request);
+
         $plainRecoveryCodes = $twoFactorService->regenerateRecoveryCodes($user);
 
         $auditTrailService->recordGeneric(
@@ -98,6 +104,13 @@ class TwoFactorManagementController extends Controller
         return view('auth.two-factor.recovery-codes', [
             'codes' => $plainRecoveryCodes,
             'continueUrl' => route('admin.two-factor.manage'),
+        ]);
+    }
+
+    private function validateCurrentPassword(Request $request): void
+    {
+        $request->validate([
+            'password' => ['required', 'current_password'],
         ]);
     }
 }

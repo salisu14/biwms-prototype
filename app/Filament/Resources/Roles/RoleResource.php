@@ -6,6 +6,7 @@ use App\Filament\Resources\Roles\Pages\ManageRoles;
 use App\Filament\Resources\Roles\Pages\ViewRole;
 use App\Models\Permission;
 use App\Models\Role;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use BackedEnum;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -75,6 +76,13 @@ class RoleResource extends Resource
                         ->allowHtml()
                         ->searchable()
                         ->helperText('Only one permission selector is used to avoid invalid selections across grouped tabs.'),
+                ])
+                ->columnSpanFull(),
+
+            Section::make('Security Confirmation')
+                ->description('Confirm your password before creating roles or changing role permissions.')
+                ->schema([
+                    SensitiveActionPasswordConfirmation::passwordField(),
                 ])
                 ->columnSpanFull(),
         ]);

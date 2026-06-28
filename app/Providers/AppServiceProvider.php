@@ -126,9 +126,13 @@ use App\Policies\WarehouseReceiptPolicy;
 use App\Policies\WarehouseShipmentPolicy;
 use App\Policies\WorkCenterGroupPolicy;
 use App\Policies\WorkCenterPolicy;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use App\Support\FilamentPermissionRegistry;
+use Filament\Actions\Action;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Events\PermissionAttachedEvent;
@@ -213,6 +217,8 @@ class AppServiceProvider extends ServiceProvider
             }
         }
 
+        $this->registerGenericPoliciesForRelationModels();
+
         Relation::morphMap([
             'CUSTOMER' => Customer::class,
             'VENDOR' => Vendor::class,
@@ -223,6 +229,34 @@ class AppServiceProvider extends ServiceProvider
 
         $this->registerAuditTrailListeners();
         $this->registerSensitiveSetupObservers();
+        $this->registerSensitiveFilamentActionConfirmation();
+    }
+
+    private function registerSensitiveFilamentActionConfirmation(): void
+    {
+        Action::configureUsing(
+            function (Action $action): void {
+                SensitiveActionPasswordConfirmation::configureAction($action);
+            },
+            isImportant: true,
+        );
+    }
+
+    private function registerGenericPoliciesForRelationModels(): void
+    {
+        foreach (File::allFiles(app_path('Models')) as $file) {
+            $modelClass = 'App\\Models\\'.str_replace(['/', '.php'], ['\\', ''], $file->getRelativePathname());
+
+            if (
+                ! class_exists($modelClass)
+                || ! is_subclass_of($modelClass, Model::class)
+                || Gate::getPolicyFor($modelClass) !== null
+            ) {
+                continue;
+            }
+
+            Gate::policy($modelClass, GenericFilamentPolicy::class);
+        }
     }
 
     private function registerAuditTrailListeners(): void

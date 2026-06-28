@@ -5,6 +5,7 @@ use App\Models\AuditTrail;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Auth\SuperAdminTwoFactorService;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
@@ -128,14 +129,19 @@ it('lets users view and manage their own 2FA lifecycle', function (): void {
     ])->save();
 
     $this->actingAs($user)
-        ->post(route('admin.two-factor.recovery-codes.regenerate'))
+        ->post(route('admin.two-factor.recovery-codes.regenerate'), [
+            'password' => 'password',
+        ])
         ->assertSuccessful()
         ->assertSee('Recovery Codes');
 
     expect($user->fresh()->twoFactorRecoveryCodesRemaining())->toBe(8)
         ->and(AuditTrail::query()->where('action', 'two_factor_recovery_codes_regenerated')->exists())->toBeTrue();
 
-    $this->post(route('admin.two-factor.disable'), ['confirmation' => $user->email])
+    $this->post(route('admin.two-factor.disable'), [
+        'confirmation' => $user->email,
+        'password' => 'password',
+    ])
         ->assertSuccessful()
         ->assertSee('2FA has been disabled');
 
@@ -208,8 +214,12 @@ it('lets Super Admin manage user security and audits sensitive actions', functio
 
     Livewire::actingAs($superAdmin)
         ->test(UserSecurity::class)
-        ->callTableAction('require_two_factor', $target)
-        ->callTableAction('force_reset', $target)
+        ->callTableAction('require_two_factor', $target, data: [
+            SensitiveActionPasswordConfirmation::FIELD => 'password',
+        ])
+        ->callTableAction('force_reset', $target, data: [
+            SensitiveActionPasswordConfirmation::FIELD => 'password',
+        ])
         ->assertHasNoTableActionErrors();
 
     expect($target->fresh()->two_factor_required)->toBeTrue()

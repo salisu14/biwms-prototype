@@ -41,13 +41,13 @@
                     </td>
                     <td>{{ $user->two_factor_last_challenged_at?->toDateTimeString() ?? '—' }}</td>
                     <td class="action-cell">
-                        <form method="POST" action="{{ route('admin.user-security.require-two-factor', $user) }}">@csrf<button>Require 2FA</button></form>
-                        <form method="POST" action="{{ route('admin.user-security.reset-two-factor', $user) }}">@csrf<button>Force Reset</button></form>
-                        <form method="POST" action="{{ route('admin.user-security.disable-two-factor', $user) }}">@csrf<input name="confirmation" placeholder="Own email only"><button>Disable</button></form>
+                        <form method="POST" action="{{ route('admin.user-security.require-two-factor', $user) }}">@csrf<input name="password" type="password" autocomplete="current-password" placeholder="Password" required><button>Require 2FA</button></form>
+                        <form method="POST" action="{{ route('admin.user-security.reset-two-factor', $user) }}">@csrf<input name="password" type="password" autocomplete="current-password" placeholder="Password" required><button>Force Reset</button></form>
+                        <form method="POST" action="{{ route('admin.user-security.disable-two-factor', $user) }}">@csrf<input name="confirmation" placeholder="Own email only"><input name="password" type="password" autocomplete="current-password" placeholder="Password" required><button>Disable</button></form>
                         @if ($user->hasConfirmedTwoFactorAuthentication())
-                            <form method="POST" action="{{ route('admin.user-security.regenerate-recovery-codes', $user) }}">@csrf<button>Recovery Codes</button></form>
+                            <form method="POST" action="{{ route('admin.user-security.regenerate-recovery-codes', $user) }}">@csrf<input name="password" type="password" autocomplete="current-password" placeholder="Password" required><button>Recovery Codes</button></form>
                         @endif
-                        <form method="POST" action="{{ route('admin.user-security.clear-two-factor-session', $user) }}">@csrf<button>Clear Session</button></form>
+                        <form method="POST" action="{{ route('admin.user-security.clear-two-factor-session', $user) }}">@csrf<input name="password" type="password" autocomplete="current-password" placeholder="Password" required><button>Clear Session</button></form>
                     </td>
                 </tr>
             @endforeach

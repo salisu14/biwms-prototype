@@ -2,7 +2,9 @@
 
 use App\Filament\Resources\Users\UserResource;
 use App\Models\AuditTrail;
+use App\Models\Manufacturing\ProductionOrderLine;
 use App\Models\Permission;
+use App\Models\PriceChangeTemplateLine;
 use App\Models\Role;
 use App\Models\User;
 use App\Policies\UserPolicy;
@@ -75,6 +77,16 @@ it('protects user management with the standard UserPolicy', function (): void {
     $this->actingAs($actor);
 
     expect(UserResource::canViewAny())->toBeTrue();
+});
+
+it('registers generic policies for nested relation-manager models', function (): void {
+    foreach ([ProductionOrderLine::class, PriceChangeTemplateLine::class] as $modelClass) {
+        $policy = Gate::getPolicyFor($modelClass);
+
+        expect($policy)->not->toBeNull($modelClass.' has no registered policy.')
+            ->and(method_exists($policy, 'viewAny'))->toBeTrue()
+            ->and(method_exists($policy, 'deleteAny'))->toBeTrue();
+    }
 });
 
 it('audits role assignment changes', function (): void {

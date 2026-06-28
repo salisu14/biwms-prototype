@@ -26,11 +26,15 @@
         @else
             <form method="POST" action="{{ route('admin.two-factor.recovery-codes.regenerate') }}">
                 @csrf
+                <label for="recovery-codes-password">Confirm your password</label>
+                <input id="recovery-codes-password" name="password" type="password" autocomplete="current-password" required>
                 <button type="submit">Regenerate Recovery Codes</button>
             </form>
 
             <form method="POST" action="{{ route('admin.two-factor.reset-authenticator') }}">
                 @csrf
+                <label for="reset-authenticator-password">Confirm your password</label>
+                <input id="reset-authenticator-password" name="password" type="password" autocomplete="current-password" required>
                 <button type="submit">Reset Authenticator App</button>
             </form>
 
@@ -38,6 +42,8 @@
                 @csrf
                 <label for="confirmation">Type your email to disable 2FA</label>
                 <input id="confirmation" name="confirmation" autocomplete="off">
+                <label for="disable-password">Confirm your password</label>
+                <input id="disable-password" name="password" type="password" autocomplete="current-password" required>
                 <div class="actions">
                     <button type="submit">Disable 2FA</button>
                 </div>
