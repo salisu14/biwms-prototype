@@ -120,17 +120,22 @@ class SalesInvoiceForm
 
                                         $item = Item::find($state);
                                         if ($item) {
+                                            $defaultSalesUom = $item->uoms()
+                                                ->wherePivot('uom_type', 'SALES')
+                                                ->wherePivot('is_default', true)
+                                                ->first();
+                                            $defaultUomCode = $defaultSalesUom?->uom_code ?? $item->base_unit_of_measure;
                                             $customer = Customer::find((int) $get('../../customer_id'));
                                             $pricing = app(SalesPricingResolver::class)->resolve(
                                                 item: $item,
                                                 customer: $customer,
                                                 quantity: (float) ($get('quantity') ?? 1),
                                                 variantCode: null,
-                                                uom: $item->base_unit_of_measure
+                                                uom: $defaultUomCode
                                             );
                                             $set('description', $item->description);
                                             $set('unit_price', $pricing['unit_price']);
-                                            $set('unit_of_measure', $item->base_unit_of_measure);
+                                            $set('unit_of_measure', $defaultUomCode);
                                             $set('discount_percent', $pricing['discount_percent']);
                                             $set('discount_amount', $pricing['discount_amount']);
                                             SalesInvoiceForm::updateLineTotal($set, $get);
@@ -149,9 +154,55 @@ class SalesInvoiceForm
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateLineTotal($set, $get)),
 
-                                TextInput::make('unit_of_measure')
+                                Select::make('unit_of_measure')
                                     ->label('UOM')
-                                    ->maxLength(20),
+                                    ->options(function (Get $get): array {
+                                        $itemId = $get('item_id');
+                                        if (! $itemId) {
+                                            return [];
+                                        }
+
+                                        $item = Item::find($itemId);
+                                        if (! $item) {
+                                            return [];
+                                        }
+
+                                        $uoms = $item->uoms()
+                                            ->get()
+                                            ->mapWithKeys(fn ($uom) => [
+                                                $uom->uom_code => $uom->uom_code,
+                                            ])
+                                            ->toArray();
+
+                                        if (! array_key_exists($item->base_unit_of_measure, $uoms)) {
+                                            $uoms[$item->base_unit_of_measure] = $item->base_unit_of_measure;
+                                        }
+
+                                        return $uoms;
+                                    })
+                                    ->required()
+                                    ->searchable()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get): void {
+                                        $item = Item::find((int) $get('item_id'));
+                                        if (! $item || ! $state) {
+                                            return;
+                                        }
+
+                                        $customer = Customer::find((int) $get('../../customer_id'));
+                                        $pricing = app(SalesPricingResolver::class)->resolve(
+                                            item: $item,
+                                            customer: $customer,
+                                            quantity: (float) ($get('quantity') ?? 1),
+                                            variantCode: null,
+                                            uom: $state
+                                        );
+
+                                        $set('unit_price', $pricing['unit_price']);
+                                        $set('discount_percent', $pricing['discount_percent']);
+                                        $set('discount_amount', $pricing['discount_amount']);
+                                        SalesInvoiceForm::updateLineTotal($set, $get);
+                                    }),
 
                                 TextInput::make('unit_price')
                                     ->numeric()

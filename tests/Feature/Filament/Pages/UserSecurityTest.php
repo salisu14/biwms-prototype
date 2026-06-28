@@ -138,6 +138,31 @@ class UserSecurityTest extends TestCase
         $this->assertNull($targetUser->two_factor_confirmed_at);
     }
 
+    public function test_force_reset_action_requires_password_confirmation(): void
+    {
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole('super_admin');
+
+        $targetUser = User::factory()->create([
+            'two_factor_secret' => 'some-secret',
+            'two_factor_recovery_codes' => ['hashed-code'],
+            'two_factor_confirmed_at' => now(),
+        ]);
+
+        Livewire::actingAs($superAdmin)
+            ->test(UserSecurity::class)
+            ->callTableAction('force_reset', $targetUser)
+            ->assertHasTableActionErrors([SensitiveActionPasswordConfirmation::FIELD]);
+
+        $this->assertNotNull($targetUser->fresh()->two_factor_secret);
+        $this->assertDatabaseMissing('audit_trails', [
+            'event_type' => 'security',
+            'action' => 'two_factor_admin_reset',
+            'auditable_type' => User::class,
+            'auditable_id' => $targetUser->id,
+        ]);
+    }
+
     public function test_disable_two_factor_requires_email_confirmation(): void
     {
         $superAdmin = User::factory()->create();

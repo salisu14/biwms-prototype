@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Payments\Tables;
 
 use App\Services\Finance\PaymentService;
+use App\Services\Workflow\DocumentApprovalWorkflowService;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -60,6 +61,8 @@ class PaymentsTable
                     ->color(fn (string $state): string => match ($state) {
                         'POSTED' => 'success',
                         'VOIDED' => 'danger',
+                        'APPROVED' => 'success',
+                        'SUBMITTED' => 'warning',
                         'PENDING' => 'warning',
                         default => 'gray',
                     }),
@@ -84,6 +87,8 @@ class PaymentsTable
                 SelectFilter::make('status')
                     ->options([
                         'PENDING' => 'Pending',
+                        'SUBMITTED' => 'Submitted',
+                        'APPROVED' => 'Approved',
                         'POSTED' => 'Posted',
                         'VOIDED' => 'Voided',
                     ]),
@@ -98,14 +103,55 @@ class PaymentsTable
             ->recordActions([
                 ActionGroup::make([
                     ViewAction::make(),
-                    EditAction::make(),
+                    EditAction::make()
+                        ->visible(fn ($record): bool => auth()->user()?->can('update', $record) === true && in_array($record->status, ['PENDING', 'SUBMITTED'], true)),
+                    Action::make('submit')
+                        ->label('Submit')
+                        ->icon('heroicon-o-paper-airplane')
+                        ->color('primary')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record): bool => auth()->user()?->can('submit', $record) === true && $record->status === 'PENDING')
+                        ->action(function ($record, DocumentApprovalWorkflowService $workflow): void {
+                            $workflow->submit($record, auth()->id());
+                            Notification::make()->title('Payment Submitted')->success()->send();
+                        }),
+                    Action::make('approve')
+                        ->label('Approve')
+                        ->icon('heroicon-o-check')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record): bool => auth()->user()?->can('approve', $record) === true && $record->status === 'SUBMITTED')
+                        ->action(function ($record, DocumentApprovalWorkflowService $workflow): void {
+                            $workflow->approve($record, auth()->id());
+                            Notification::make()->title('Payment Approved')->success()->send();
+                        }),
+                    Action::make('reject')
+                        ->label('Reject')
+                        ->icon('heroicon-o-x-mark')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record): bool => auth()->user()?->can('reject', $record) === true && $record->status === 'SUBMITTED')
+                        ->action(function ($record, DocumentApprovalWorkflowService $workflow): void {
+                            $workflow->reject($record, auth()->id());
+                            Notification::make()->title('Payment Rejected')->warning()->send();
+                        }),
+                    Action::make('reopen')
+                        ->label('Reopen')
+                        ->icon('heroicon-o-arrow-path')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record): bool => auth()->user()?->can('reopen', $record) === true && in_array($record->status, ['SUBMITTED', 'APPROVED'], true))
+                        ->action(function ($record, DocumentApprovalWorkflowService $workflow): void {
+                            $workflow->reopen($record, auth()->id());
+                            Notification::make()->title('Payment Reopened')->success()->send();
+                        }),
                     Action::make('post')
                         ->label('Post')
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
                         ->visible(fn ($record): bool => auth()->user()?->can('post', $record) ?? false)
-                        ->disabled(fn ($record) => $record->status !== 'PENDING')
+                        ->disabled(fn ($record) => $record->status !== 'APPROVED')
                         ->action(function ($record, PaymentService $service): void {
                             $service->post($record, auth()->id());
                             Notification::make()->title('Payment Posted')->success()->send();

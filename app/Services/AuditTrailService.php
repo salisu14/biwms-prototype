@@ -214,7 +214,7 @@ class AuditTrailService
             ->mapWithKeys(function (mixed $value, string|int $key): array {
                 $key = (string) $key;
 
-                if (str($key)->lower()->contains(['password', 'token', 'secret', 'api_key', 'recovery_code', 'recovery_codes', 'two_factor', 'totp', 'otp', 'session'])) {
+                if (str($key)->lower()->contains(['password', 'token', 'secret', 'api_key', 'apikey', 'credential', 'authorization', 'bearer', 'cookie', 'recovery_code', 'recovery_codes', 'two_factor', 'totp', 'otp', 'session'])) {
                     return [$key => '[redacted]'];
                 }
 

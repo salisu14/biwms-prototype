@@ -50,7 +50,7 @@ it('creates a bank ledger entry and increases bank balance for a customer receip
         'payment_amount_lcy' => 450,
         'applied_amount' => 0,
         'unapplied_amount' => 450,
-        'status' => 'PENDING',
+        'status' => 'APPROVED',
         'created_by' => $user->id,
     ]);
 
@@ -96,7 +96,7 @@ it('creates a bank ledger entry and reduces bank balance for a vendor payment', 
         'payment_amount_lcy' => 600,
         'applied_amount' => 0,
         'unapplied_amount' => 600,
-        'status' => 'PENDING',
+        'status' => 'APPROVED',
         'created_by' => $user->id,
     ]);
 
@@ -129,7 +129,7 @@ it('blocks double posting and does not duplicate bank ledger entries', function 
         'payment_amount_lcy' => 300,
         'applied_amount' => 0,
         'unapplied_amount' => 300,
-        'status' => 'PENDING',
+        'status' => 'APPROVED',
         'created_by' => $user->id,
     ]);
 
@@ -137,7 +137,7 @@ it('blocks double posting and does not duplicate bank ledger entries', function 
     $service->post($payment, $user->id);
 
     expect(fn () => $service->post($payment->fresh(), $user->id))
-        ->toThrow(Exception::class, 'Payment is not pending');
+        ->toThrow(Exception::class, 'Payment is already posted.');
 
     expect(BankAccountLedgerEntry::query()
         ->where('document_no', $payment->payment_number)
@@ -157,14 +157,14 @@ it('rejects posting without a bank account', function () {
         'payment_amount_lcy' => 300,
         'applied_amount' => 0,
         'unapplied_amount' => 300,
-        'status' => 'PENDING',
+        'status' => 'APPROVED',
         'created_by' => $user->id,
     ]);
 
     expect(fn () => app(PaymentService::class)->post($payment, $user->id))
         ->toThrow(Exception::class, 'A bank account is required before posting this payment.');
 
-    expect($payment->fresh()->status)->toBe('PENDING')
+    expect($payment->fresh()->status)->toBe('APPROVED')
         ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse();
 });
 
@@ -182,14 +182,14 @@ it('rejects zero and negative payment amounts', function (float $amount) {
         'payment_amount_lcy' => $amount,
         'applied_amount' => 0,
         'unapplied_amount' => $amount,
-        'status' => 'PENDING',
+        'status' => 'APPROVED',
         'created_by' => $user->id,
     ]);
 
     expect(fn () => app(PaymentService::class)->post($payment, $user->id))
         ->toThrow(Exception::class, 'Payment amount must be greater than zero.');
 
-    expect($payment->fresh()->status)->toBe('PENDING')
+    expect($payment->fresh()->status)->toBe('APPROVED')
         ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse();
 })->with([
     'zero amount' => 0.0,
@@ -208,14 +208,14 @@ it('blocks users without payment posting permission', function () {
         'payment_amount_lcy' => 300,
         'applied_amount' => 0,
         'unapplied_amount' => 300,
-        'status' => 'PENDING',
+        'status' => 'APPROVED',
         'created_by' => $user->id,
     ]);
 
     expect(fn () => app(PaymentService::class)->post($payment, $user->id))
         ->toThrow(AuthorizationException::class);
 
-    expect($payment->fresh()->status)->toBe('PENDING')
+    expect($payment->fresh()->status)->toBe('APPROVED')
         ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse();
 });
 
@@ -237,7 +237,7 @@ it('requires the bank ledger number series and rolls back payment posting when i
         'payment_amount_lcy' => 250,
         'applied_amount' => 0,
         'unapplied_amount' => 250,
-        'status' => 'PENDING',
+        'status' => 'APPROVED',
         'created_by' => $user->id,
     ]);
 
@@ -246,7 +246,7 @@ it('requires the bank ledger number series and rolls back payment posting when i
     expect(fn () => app(PaymentService::class)->post($payment, $user->id))
         ->toThrow(RuntimeException::class, 'Missing or invalid BANK-LEDGER number series configuration.');
 
-    expect($payment->fresh()->status)->toBe('PENDING')
+    expect($payment->fresh()->status)->toBe('APPROVED')
         ->and((float) $bankAccount->fresh()->current_balance)->toBe(700.0)
         ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse()
         ->and(CustomerLedgerEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeFalse()

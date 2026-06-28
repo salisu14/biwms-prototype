@@ -3,6 +3,7 @@
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Schema;
 
 it('adds password confirmation to sensitive action schemas', function (): void {
@@ -16,4 +17,16 @@ it('globally protects destructive and posting actions', function (): void {
     expect(DeleteAction::make()->getSchema(app(Schema::class)))->not->toBeNull()
         ->and(Action::make('post')->getSchema(app(Schema::class)))->not->toBeNull()
         ->and(Action::make('open')->getSchema(app(Schema::class)))->toBeNull();
+});
+
+it('adds password confirmation after evaluating closure schemas', function (): void {
+    $schema = SensitiveActionPasswordConfirmation::schemaWithPasswordConfirmation(
+        fn (): array => [TextInput::make('reason')]
+    );
+
+    $resolvedSchema = $schema();
+
+    expect($resolvedSchema)->toHaveCount(2)
+        ->and($resolvedSchema[0]->getName())->toBe('reason')
+        ->and($resolvedSchema[1]->getName())->toBe(SensitiveActionPasswordConfirmation::FIELD);
 });

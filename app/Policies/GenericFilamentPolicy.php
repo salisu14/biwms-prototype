@@ -25,8 +25,7 @@ class GenericFilamentPolicy extends BaseFilamentPolicy
 
     public function view(User $user, mixed $model): bool
     {
-        return $this->can($user, 'view', $model::class)
-            || $this->can($user, 'view', $this->modelClassFromCurrentRoute());
+        return $this->canModelOrOwnerResource($user, 'view', $model::class);
     }
 
     public function create(User $user): bool
@@ -36,14 +35,12 @@ class GenericFilamentPolicy extends BaseFilamentPolicy
 
     public function update(User $user, mixed $model): bool
     {
-        return $this->can($user, 'update', $model::class)
-            || $this->can($user, 'update', $this->modelClassFromCurrentRoute());
+        return $this->canModelOrOwnerResource($user, 'update', $model::class);
     }
 
     public function delete(User $user, mixed $model): bool
     {
-        return $this->can($user, 'delete', $model::class)
-            || $this->can($user, 'delete', $this->modelClassFromCurrentRoute());
+        return $this->canModelOrOwnerResource($user, 'delete', $model::class);
     }
 
     public function deleteAny(User $user): bool
@@ -53,8 +50,7 @@ class GenericFilamentPolicy extends BaseFilamentPolicy
 
     public function restore(User $user, mixed $model): bool
     {
-        return $this->can($user, 'restore', $model::class)
-            || $this->can($user, 'restore', $this->modelClassFromCurrentRoute());
+        return $this->canModelOrOwnerResource($user, 'restore', $model::class);
     }
 
     public function restoreAny(User $user): bool
@@ -64,13 +60,47 @@ class GenericFilamentPolicy extends BaseFilamentPolicy
 
     public function forceDelete(User $user, mixed $model): bool
     {
-        return $this->can($user, 'force_delete', $model::class)
-            || $this->can($user, 'force_delete', $this->modelClassFromCurrentRoute());
+        return $this->canModelOrOwnerResource($user, 'force_delete', $model::class);
     }
 
     public function forceDeleteAny(User $user): bool
     {
         return $this->can($user, 'force_delete_any', $this->modelClassFromCurrentRoute());
+    }
+
+    public function submit(User $user, mixed $model): bool
+    {
+        return $this->canModelOrOwnerResource($user, 'submit', $model::class);
+    }
+
+    public function approve(User $user, mixed $model): bool
+    {
+        return $this->canModelOrOwnerResource($user, 'approve', $model::class);
+    }
+
+    public function reject(User $user, mixed $model): bool
+    {
+        return $this->canModelOrOwnerResource($user, 'reject', $model::class);
+    }
+
+    public function reopen(User $user, mixed $model): bool
+    {
+        return $this->canModelOrOwnerResource($user, 'reopen', $model::class);
+    }
+
+    public function post(User $user, mixed $model): bool
+    {
+        return $this->canModelOrOwnerResource($user, 'post', $model::class);
+    }
+
+    public function reverse(User $user, mixed $model): bool
+    {
+        return $this->canModelOrOwnerResource($user, 'reverse', $model::class);
+    }
+
+    public function cancel(User $user, mixed $model): bool
+    {
+        return $this->canModelOrOwnerResource($user, 'cancel', $model::class);
     }
 
     private function modelClassFromCurrentRoute(): ?string
@@ -89,5 +119,14 @@ class GenericFilamentPolicy extends BaseFilamentPolicy
         }
 
         return request()->route()?->parameter('record')?->getMorphClass();
+    }
+
+    private function canModelOrOwnerResource(User $user, string $action, string $modelClass): bool
+    {
+        if (app(FilamentPermissionRegistry::class)->permissionPartsForModel($modelClass) !== null) {
+            return $this->can($user, $action, $modelClass);
+        }
+
+        return $this->can($user, $action, $this->modelClassFromCurrentRoute());
     }
 }

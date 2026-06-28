@@ -132,6 +132,7 @@ class PaymentJournalLine extends Model
                 'unapplied_amount' => (float) $this->amount_paid,
                 'payment_date' => $journalLine->document_date ?? $journalLine->posting_date,
                 'posting_date' => $journalLine->posting_date,
+                'status' => 'APPROVED',
                 'created_by' => $userId,
             ]);
 

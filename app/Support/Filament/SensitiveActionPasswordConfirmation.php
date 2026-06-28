@@ -4,8 +4,10 @@ namespace App\Support\Filament;
 
 use Closure;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Component;
 use ReflectionClass;
 
 class SensitiveActionPasswordConfirmation
@@ -19,12 +21,15 @@ class SensitiveActionPasswordConfirmation
         'delete',
         'forceDelete',
         'post',
+        'postOutput',
+        'post_output',
         'post_shipment',
         'post_and_invoice',
         'post_receipt',
         'finish',
         'void',
         'reverse',
+        'cancel',
         'reconcile',
         'markReconciled',
         'undoReconciled',
@@ -54,12 +59,15 @@ class SensitiveActionPasswordConfirmation
     }
 
     /**
-     * @return array<int, \Filament\Schemas\Components\Component|\Filament\Actions\Action|\Filament\Actions\ActionGroup>|\Closure|null
+     * @return array<int, Component|Action|ActionGroup>|Closure|null
      */
     public static function schemaWithPasswordConfirmation(array|Closure|null $schema): array|Closure|null
     {
         if ($schema instanceof Closure) {
-            return $schema;
+            return fn (...$arguments): array => [
+                ...($schema(...$arguments) ?? []),
+                static::passwordField(),
+            ];
         }
 
         return [
@@ -94,7 +102,7 @@ class SensitiveActionPasswordConfirmation
     }
 
     /**
-     * @return array<int, \Filament\Schemas\Components\Component|\Filament\Actions\Action|\Filament\Actions\ActionGroup>|\Closure|null
+     * @return array<int, Component|Action|ActionGroup>|Closure|null
      */
     private static function rawSchema(Action $action): array|Closure|null
     {
@@ -111,7 +119,7 @@ class SensitiveActionPasswordConfirmation
         $property = $reflection->getProperty('schema');
         $property->setAccessible(true);
 
-        /** @var array<int, \Filament\Schemas\Components\Component|\Filament\Actions\Action|\Filament\Actions\ActionGroup>|\Closure|null $schema */
+        /** @var array<int, Component|Action|ActionGroup>|Closure|null $schema */
         $schema = $property->getValue($action);
 
         return $schema;

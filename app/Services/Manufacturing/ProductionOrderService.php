@@ -245,14 +245,27 @@ class ProductionOrderService
             throw new \Exception('Output quantity must be positive');
         }
 
-        // Note: $quantityBase passed here MUST be in BASE units.
-        if ($quantityBase > (float) $order->remaining_quantity) {
-            throw new \Exception('Cannot overproduce');
-        }
-
         $postingDate = $postingDate ?? now();
 
         DB::transaction(function () use ($order, $quantityBase, $postingDate, $routingLineId, $userId) {
+            /** @var ProductionOrder $order */
+            $order = ProductionOrder::query()
+                ->lockForUpdate()
+                ->findOrFail($order->id);
+
+            if ($order->status !== ProductionOrderStatus::RELEASED) {
+                throw new \Exception('Production order must be approved/released before output can be posted');
+            }
+
+            if ($order->posted || $order->status === ProductionOrderStatus::FINISHED) {
+                throw new \Exception('Production order is already finished');
+            }
+
+            // Note: $quantityBase passed here MUST be in BASE units.
+            if ($quantityBase > (float) $order->remaining_quantity) {
+                throw new \Exception('Cannot overproduce');
+            }
+
             $expectedUnitCost = (float) ($order->cost_rollup ?? $order->unit_cost ?? 0);
             $locationId = Location::query()
                 ->where('code', $order->location_code)
@@ -504,13 +517,22 @@ class ProductionOrderService
         Gate::forUser(User::query()->findOrFail($userId))->authorize('finish', $order);
 
         $postingDate = $postingDate ?? now();
-        $order = $order->fresh();
-
-        if ($order->status === ProductionOrderStatus::FINISHED || $order->posted) {
-            throw new \Exception('Production order is already finished');
-        }
 
         DB::transaction(function () use ($order, $userId, $postingDate) {
+            /** @var ProductionOrder $order */
+            $order = ProductionOrder::query()
+                ->with(['routingLines', 'components', 'itemLedgerEntries'])
+                ->lockForUpdate()
+                ->findOrFail($order->id);
+
+            if ($order->status === ProductionOrderStatus::FINISHED || $order->posted) {
+                throw new \Exception('Production order is already finished');
+            }
+
+            if ($order->status !== ProductionOrderStatus::RELEASED) {
+                throw new \Exception('Only approved/released production orders can be finished');
+            }
+
             if ($order->flushing_method === 'BACKWARD') {
                 $this->backwardFlushComponents($order, $postingDate, $userId);
             }

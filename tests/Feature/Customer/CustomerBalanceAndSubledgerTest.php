@@ -3,6 +3,8 @@
 use App\Models\BankAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
+use App\Models\NumberSeries;
+use App\Models\NumberSeriesLine;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\Customer\CustomerSubledgerSummaryService;
@@ -118,6 +120,7 @@ it('reports customer subledger open remaining as a net receivable position', fun
 
 it('posts customer receipts as open credit ledger entries until they are applied', function () {
     $this->ensureOpenAccountingPeriod(now());
+    ensureCustomerSubledgerBankLedgerNumberSeries();
 
     $customer = Customer::factory()->create();
     $user = User::factory()->create();
@@ -129,7 +132,7 @@ it('posts customer receipts as open credit ledger entries until they are applied
         'party_id' => $customer->id,
         'party_name' => $customer->name,
         'bank_account_id' => $bankAccount->id,
-        'status' => 'PENDING',
+        'status' => 'APPROVED',
         'payment_amount' => 450,
         'applied_amount' => 0,
         'unapplied_amount' => 450,
@@ -156,4 +159,36 @@ function grantCustomerSubledgerPaymentPostingPermission(User $user): void
     ]);
 
     $user->givePermissionTo('finance.payment.post');
+}
+
+function ensureCustomerSubledgerBankLedgerNumberSeries(): void
+{
+    $series = NumberSeries::query()->firstOrCreate(
+        ['code' => 'BANK-LEDGER'],
+        [
+            'description' => 'Bank Ledger Entries',
+            'prefix' => '',
+            'starting_number' => 1,
+            'ending_number' => null,
+            'current_number' => 0,
+            'year' => 2026,
+            'is_active' => true,
+            'allow_manual' => false,
+            'module' => 'finance',
+        ]
+    );
+
+    NumberSeriesLine::query()->firstOrCreate(
+        ['number_series_id' => $series->id, 'starting_date' => now()->startOfYear()->toDateString()],
+        [
+            'prefix' => '',
+            'suffix' => '',
+            'starting_no' => 0,
+            'ending_no' => null,
+            'increment_by' => 1,
+            'last_no_used' => 0,
+            'no_of_digits' => 6,
+            'blocked' => false,
+        ]
+    );
 }

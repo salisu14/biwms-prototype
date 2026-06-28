@@ -35,9 +35,18 @@ class PostInventoryAdjustment implements ShouldQueue
     public function handle(): void
     {
         DB::transaction(function () {
+            $this->journal = InventoryAdjustmentJournal::query()
+                ->with('lines')
+                ->lockForUpdate()
+                ->findOrFail($this->journal->id);
+
+            if ($this->journal->status === 'Posted') {
+                throw new \RuntimeException('Journal is already posted.');
+            }
+
             // 1. Validate state
-            if ($this->journal->status !== 'Released') {
-                throw new \RuntimeException('Journal must be Released before posting.');
+            if (! in_array($this->journal->status, ['Released', 'Approved'], true)) {
+                throw new \RuntimeException('Journal must be approved before posting.');
             }
 
             if ($this->journal->lines()->count() === 0) {

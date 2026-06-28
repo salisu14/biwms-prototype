@@ -36,4 +36,63 @@ class ProductionOrderPolicy extends AbstractPermissionPolicy
             'production_order_finish',
         ]);
     }
+
+    public function post(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->postOutput($user, $productionOrder) || $this->finish($user, $productionOrder);
+    }
+
+    public function submit(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'factory.production_order.submit',
+            'submit:production_order',
+            'production_order_submit',
+        ]);
+    }
+
+    public function approve(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'factory.production_order.approve',
+            'approve:production_order',
+            'production_order_approve',
+        ]);
+    }
+
+    public function reject(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'factory.production_order.reject',
+            'reject:production_order',
+            'production_order_reject',
+        ]);
+    }
+
+    public function reopen(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'factory.production_order.reopen',
+            'reopen:production_order',
+            'production_order_reopen',
+        ]);
+    }
+
+    public function reverse(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'factory.production_order.reverse',
+            'reverse:production_order',
+            'production_order_reverse',
+        ]);
+    }
+
+    public function cancel(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'factory.production_order.cancel',
+            'cancel:production_order',
+            'production_order_cancel',
+        ]);
+    }
 }

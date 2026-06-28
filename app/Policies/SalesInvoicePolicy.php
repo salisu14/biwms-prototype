@@ -40,11 +40,21 @@ class SalesInvoicePolicy
 
     public function update(User $user, SalesInvoice $salesInvoice): bool
     {
-        return $this->canAny($user, [
+        if ($salesInvoice->isPosted()) {
+            return false;
+        }
+
+        if (! $this->canAny($user, [
             'sales.invoice.update',
             'edit:sales_invoice',
             'sales_invoice_edit',
-        ]);
+        ])) {
+            return false;
+        }
+
+        return $salesInvoice->status?->canEdit()
+            || $this->approve($user, $salesInvoice)
+            || $this->reopen($user, $salesInvoice);
     }
 
     public function delete(User $user, SalesInvoice $salesInvoice): bool
@@ -72,6 +82,60 @@ class SalesInvoicePolicy
             'sales.invoice.post',
             'post:sales_invoice',
             'post:invoice',
+        ]);
+    }
+
+    public function submit(User $user, SalesInvoice $salesInvoice): bool
+    {
+        return $this->canAny($user, [
+            'sales.invoice.submit',
+            'submit:sales_invoice',
+            'sales_invoice_submit',
+        ]);
+    }
+
+    public function approve(User $user, SalesInvoice $salesInvoice): bool
+    {
+        return $this->canAny($user, [
+            'sales.invoice.approve',
+            'approve:sales_invoice',
+            'sales_invoice_approve',
+        ]);
+    }
+
+    public function reject(User $user, SalesInvoice $salesInvoice): bool
+    {
+        return $this->canAny($user, [
+            'sales.invoice.reject',
+            'reject:sales_invoice',
+            'sales_invoice_reject',
+        ]);
+    }
+
+    public function reopen(User $user, SalesInvoice $salesInvoice): bool
+    {
+        return $this->canAny($user, [
+            'sales.invoice.reopen',
+            'reopen:sales_invoice',
+            'sales_invoice_reopen',
+        ]);
+    }
+
+    public function reverse(User $user, SalesInvoice $salesInvoice): bool
+    {
+        return $this->canAny($user, [
+            'sales.invoice.reverse',
+            'reverse:sales_invoice',
+            'sales_invoice_reverse',
+        ]);
+    }
+
+    public function cancel(User $user, SalesInvoice $salesInvoice): bool
+    {
+        return $this->canAny($user, [
+            'sales.invoice.cancel',
+            'cancel:sales_invoice',
+            'sales_invoice_cancel',
         ]);
     }
 

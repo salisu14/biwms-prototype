@@ -14,6 +14,7 @@ use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceLine;
 use App\Models\SalesOrder;
 use App\Models\ValueEntry;
+use App\Services\AuditTrailService;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
@@ -38,23 +39,14 @@ class SalesInvoiceService
                 throw new \Exception('Unauthenticated user');
             }
 
-            // ✅ Determine initial status (safe)
-            $isSuperAdmin = method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin();
-
-            $status = $isSuperAdmin
-                ? ApprovalStatus::APPROVED
-                : ApprovalStatus::PENDING;
-
             $invoice = SalesInvoice::create([
                 'customer_id' => $data->customer_id,
                 'sales_order_id' => $data->sales_order_id,
                 'invoice_number' => $data->invoice_number ?? $this->generateNumber(),
-                'status' => $status,
+                'status' => ApprovalStatus::DRAFT,
                 'invoice_date' => $data->invoice_date,
                 'due_date' => $data->due_date,
                 'currency_code' => $data->currency_code ?? 'NGN',
-                'approved_by' => $isSuperAdmin ? $user->id : null,
-                'approved_at' => $isSuperAdmin ? now() : null,
             ]);
 
             $lines = $data->lines;
@@ -141,18 +133,19 @@ class SalesInvoiceService
      */
     public function post(SalesInvoice $invoice): void
     {
-        if ($invoice->isPosted()) {
-            throw new \Exception('Invoice already posted');
-        }
-
-        // ✅ Only approved invoices can be posted
-        if ($invoice->status !== ApprovalStatus::APPROVED) {
-            throw new \Exception('Only approved invoices can be posted');
-        }
-
         DB::transaction(function () use ($invoice) {
+            $invoice = SalesInvoice::query()
+                ->with(['lines.item', 'customer', 'salesOrder'])
+                ->lockForUpdate()
+                ->findOrFail($invoice->id);
 
-            $invoice->load(['lines.item', 'customer']);
+            if ($invoice->isPosted()) {
+                throw new \Exception('Invoice already posted');
+            }
+
+            if ($invoice->status !== ApprovalStatus::APPROVED) {
+                throw new \Exception('Only approved invoices can be posted');
+            }
 
             if ($invoice->lines->isEmpty()) {
                 throw new \Exception('No lines to post');
@@ -305,6 +298,20 @@ class SalesInvoiceService
                 'posted_at' => now(),
                 'posted_by' => Auth::id(),
             ]);
+
+            app(AuditTrailService::class)->recordGeneric(
+                eventType: 'posting',
+                action: 'sales_invoice_posted',
+                auditable: $invoice,
+                documentType: 'SALES_INVOICE',
+                documentNo: $invoice->invoice_number,
+                userId: Auth::id(),
+                description: "Sales invoice {$invoice->invoice_number} posted",
+                metadata: [
+                    'posted_sales_invoice_id' => $postedInvoice->id,
+                    'total_amount' => $grandTotal,
+                ],
+            );
         });
     }
 

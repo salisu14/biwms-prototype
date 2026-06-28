@@ -31,7 +31,7 @@ class ViewPayment extends ViewRecord
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
                 ->requiresConfirmation()
-                ->visible(fn ($record) => (auth()->user()?->can('post', $record) ?? false) && $record->status === 'PENDING')
+                ->visible(fn ($record) => (auth()->user()?->can('post', $record) ?? false) && $record->status === 'APPROVED')
                 ->action(function ($record, PaymentService $service) {
                     $service->post($record, auth()->id());
                     Notification::make()

@@ -149,6 +149,26 @@ it('lets users view and manage their own 2FA lifecycle', function (): void {
         ->and(AuditTrail::query()->where('action', 'two_factor_disabled')->exists())->toBeTrue();
 });
 
+it('rejects direct backend 2FA management requests without current password confirmation', function (): void {
+    $user = User::factory()->create();
+    $service = app(SuperAdminTwoFactorService::class);
+
+    $user->forceFill([
+        'two_factor_secret' => $service->generateSecret(),
+        'two_factor_recovery_codes' => $service->hashRecoveryCodes(['ABCDE-FGHIJ-KLMNO']),
+        'two_factor_confirmed_at' => now(),
+    ])->save();
+
+    $this->actingAs($user)
+        ->from(route('admin.two-factor.manage'))
+        ->post(route('admin.two-factor.recovery-codes.regenerate'))
+        ->assertRedirect(route('admin.two-factor.manage'))
+        ->assertSessionHasErrors('password');
+
+    expect($user->fresh()->twoFactorRecoveryCodesRemaining())->toBe(1)
+        ->and(AuditTrail::query()->where('action', 'two_factor_recovery_codes_regenerated')->exists())->toBeFalse();
+});
+
 it('requires admin role users and explicitly flagged users to complete 2FA', function (): void {
     Role::query()->firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
     $admin = User::factory()->create();

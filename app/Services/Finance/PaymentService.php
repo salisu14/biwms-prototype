@@ -41,30 +41,41 @@ class PaymentService
      */
     public function post(Payment $payment, int $userId): void
     {
-        $this->postingDateValidator->validate($payment->posting_date ?? now());
         Gate::forUser(User::query()->findOrFail($userId))->authorize('post', $payment);
 
-        if ($payment->status !== 'PENDING') {
-            throw new \Exception('Payment is not pending');
-        }
-
-        if ((float) $payment->payment_amount <= 0) {
-            throw new \Exception('Payment amount must be greater than zero.');
-        }
-
-        if (! $payment->bankAccount) {
-            throw new \Exception('A bank account is required before posting this payment.');
-        }
-
-        if ($payment->payment_direction === 'RECEIPT' && ! $payment->bankAccount->allow_receipts) {
-            throw new \Exception('The selected bank account is not enabled for receipts.');
-        }
-
-        if ($payment->payment_direction !== 'RECEIPT' && ! $payment->bankAccount->allow_payments) {
-            throw new \Exception('The selected bank account is not enabled for payments.');
-        }
-
         DB::transaction(function () use ($payment, $userId) {
+            /** @var Payment $payment */
+            $payment = Payment::query()
+                ->with(['bankAccount', 'currency'])
+                ->lockForUpdate()
+                ->findOrFail($payment->id);
+
+            $this->postingDateValidator->validate($payment->posting_date ?? now());
+
+            if ($payment->status === 'POSTED') {
+                throw new \Exception('Payment is already posted.');
+            }
+
+            if ($payment->status !== 'APPROVED') {
+                throw new \Exception('Only approved payments can be posted.');
+            }
+
+            if ((float) $payment->payment_amount <= 0) {
+                throw new \Exception('Payment amount must be greater than zero.');
+            }
+
+            if (! $payment->bankAccount) {
+                throw new \Exception('A bank account is required before posting this payment.');
+            }
+
+            if ($payment->payment_direction === 'RECEIPT' && ! $payment->bankAccount->allow_receipts) {
+                throw new \Exception('The selected bank account is not enabled for receipts.');
+            }
+
+            if ($payment->payment_direction !== 'RECEIPT' && ! $payment->bankAccount->allow_payments) {
+                throw new \Exception('The selected bank account is not enabled for payments.');
+            }
+
             // 1. Create Ledger Entries
             if ($payment->payment_direction === 'RECEIPT') {
                 $this->postCustomerReceipt($payment, $userId);
@@ -418,11 +429,21 @@ class PaymentService
      */
     public function void(Payment $payment, string $reason, int $userId): void
     {
-        if ($payment->reconciled) {
-            throw new \Exception('Cannot void reconciled payment');
-        }
-
         DB::transaction(function () use ($payment, $reason, $userId) {
+            /** @var Payment $payment */
+            $payment = Payment::query()
+                ->with(['applications', 'ledgerEntries'])
+                ->lockForUpdate()
+                ->findOrFail($payment->id);
+
+            if ($payment->reconciled) {
+                throw new \Exception('Cannot void reconciled payment');
+            }
+
+            if ($payment->status !== 'POSTED') {
+                throw new \Exception('Only posted payments can be voided.');
+            }
+
             // 1. Reverse all applications
             foreach ($payment->applications()->where('reversed', false)->get() as $app) {
                 $this->unapply($app, $userId);

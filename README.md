@@ -169,18 +169,29 @@ Before production:
 
 ```bash
 php artisan migrate:fresh --seed # if safe for new deployment only
+php artisan migrate --force # for existing production/staging deployments
 php artisan optimize:clear
 php artisan permission:cache-reset
 php artisan biwms:security-audit
 php artisan biwms:permissions-cleanup --dry-run
 php artisan biwms:health-check
 php artisan test --compact
+
+
+--
+vendor/bin/pint --dirty --format agent
+php artisan test --compact
+php artisan biwms:security-audit
+php artisan biwms:health-check
+php artisan biwms:permissions-cleanup --dry-run
 ```
 
 ### Production Readiness Checklist
 
 - Confirm `.env` uses `APP_DEBUG=false`.
 - Confirm HTTPS is enforced and `SESSION_SECURE_COOKIE=true`.
+- Confirm pending migrations have been applied with `php artisan migrate --force`.
+- Confirm CSP remains report-only until Filament/admin assets have been reviewed under production traffic.
 - Run `php artisan biwms:security-audit`.
 - Review `php artisan biwms:permissions-cleanup --dry-run` before any cleanup.
 - Run `php artisan biwms:health-check` and resolve critical failures.
