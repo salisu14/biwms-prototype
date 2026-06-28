@@ -16,11 +16,17 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
     'document_no',
     'source_type',
     'source_id',
+    'actor_id',
+    'subject_type',
+    'subject_id',
     'user_id',
     'description',
     'old_values',
     'new_values',
     'metadata',
+    'business_id',
+    'factory_id',
+    'warehouse_id',
     'ip_address',
     'user_agent',
     'occurred_at',
@@ -50,5 +56,10 @@ class AuditTrail extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function actor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'actor_id');
     }
 }

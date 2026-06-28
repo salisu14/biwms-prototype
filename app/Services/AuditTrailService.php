@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\Schema;
 class AuditTrailService
 {
     /**
+     * @var array<int, string>|null
+     */
+    private static ?array $auditTrailColumns = null;
+
+    /**
      * @param  array<string, mixed>|null  $oldValues
      * @param  array<string, mixed>|null  $newValues
      * @param  array<string, mixed>|null  $metadata
@@ -33,7 +38,8 @@ class AuditTrailService
             return null;
         }
 
-        return AuditTrail::query()->create([
+        $actorId = $userId ?? Auth::id();
+        $attributes = [
             'event_type' => $eventType,
             'action' => $action,
             'auditable_type' => $auditable?->getMorphClass(),
@@ -42,15 +48,23 @@ class AuditTrailService
             'document_no' => $documentNo,
             'source_type' => $source?->getMorphClass(),
             'source_id' => $source?->getKey(),
-            'user_id' => $userId ?? Auth::id(),
+            'actor_id' => $actorId,
+            'subject_type' => $auditable?->getMorphClass(),
+            'subject_id' => $auditable?->getKey(),
+            'user_id' => $actorId,
             'description' => $description,
             'old_values' => $this->sanitizePayload($oldValues),
             'new_values' => $this->sanitizePayload($newValues),
             'metadata' => $this->sanitizePayload($metadata),
+            'business_id' => $this->contextValue('business_id', $auditable, $metadata),
+            'factory_id' => $this->contextValue('factory_id', $auditable, $metadata),
+            'warehouse_id' => $this->contextValue('warehouse_id', $auditable, $metadata) ?? $this->contextValue('location_id', $auditable, $metadata),
             'ip_address' => $this->requestIp(),
             'user_agent' => $this->requestUserAgent(),
             'occurred_at' => $occurredAt ?? now(),
-        ]);
+        ];
+
+        return AuditTrail::query()->create($this->attributesForCurrentSchema($attributes));
     }
 
     /**
@@ -200,7 +214,7 @@ class AuditTrailService
             ->mapWithKeys(function (mixed $value, string|int $key): array {
                 $key = (string) $key;
 
-                if (str($key)->lower()->contains(['password', 'token', 'secret', 'key'])) {
+                if (str($key)->lower()->contains(['password', 'token', 'secret', 'api_key', 'recovery_code', 'recovery_codes', 'two_factor', 'totp', 'otp', 'session'])) {
                     return [$key => '[redacted]'];
                 }
 
@@ -229,5 +243,38 @@ class AuditTrailService
         }
 
         return str((string) request()->userAgent())->limit(1000)->toString();
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function attributesForCurrentSchema(array $attributes): array
+    {
+        return collect($attributes)
+            ->filter(fn (mixed $value, string $column): bool => in_array($column, $this->auditTrailColumns(), true))
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function auditTrailColumns(): array
+    {
+        return self::$auditTrailColumns ??= Schema::getColumnListing('audit_trails');
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $metadata
+     */
+    private function contextValue(string $key, ?Model $auditable, ?array $metadata): ?int
+    {
+        $value = $metadata[$key] ?? $auditable?->getAttribute($key) ?? session($key) ?? null;
+
+        if ($key === 'business_id') {
+            $value ??= session('active_business_id');
+        }
+
+        return is_numeric($value) ? (int) $value : null;
     }
 }

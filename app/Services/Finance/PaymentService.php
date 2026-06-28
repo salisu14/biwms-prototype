@@ -16,6 +16,7 @@ use App\Models\PurchaseOrder;
 use App\Models\SalesOrder;
 use App\Models\User;
 use App\Models\VendorLedgerEntry;
+use App\Services\AuditTrailService;
 use App\Services\BankAccountLedgerService;
 use App\Services\CurrencyService;
 use App\Services\PostingDateValidator;
@@ -31,7 +32,8 @@ class PaymentService
         protected PostingService $postingService,
         protected BankAccountLedgerService $bankAccountLedgerService,
         protected CurrencyService $currencyService,
-        protected PostingDateValidator $postingDateValidator
+        protected PostingDateValidator $postingDateValidator,
+        protected AuditTrailService $auditTrailService
     ) {}
 
     /**
@@ -82,6 +84,21 @@ class PaymentService
                 'posted_by' => $userId,
                 'posted_at' => now(),
             ]);
+
+            $this->auditTrailService->recordGeneric(
+                eventType: 'posting',
+                action: $payment->payment_direction === 'RECEIPT' ? 'customer_receipt_posted' : 'vendor_payment_posted',
+                auditable: $payment,
+                documentType: 'PAYMENT',
+                documentNo: $payment->payment_number,
+                userId: $userId,
+                description: "Payment {$payment->payment_number} posted",
+                metadata: [
+                    'amount' => $payment->payment_amount,
+                    'bank_account_id' => $payment->bank_account_id,
+                    'payment_direction' => $payment->payment_direction,
+                ],
+            );
         });
     }
 
@@ -425,6 +442,20 @@ class PaymentService
                 'voided_by' => $userId,
                 'void_reason' => $reason,
             ]);
+
+            $this->auditTrailService->recordGeneric(
+                eventType: 'reversal',
+                action: 'payment_voided',
+                auditable: $payment,
+                documentType: 'PAYMENT',
+                documentNo: $payment->payment_number,
+                userId: $userId,
+                description: "Payment {$payment->payment_number} voided",
+                metadata: [
+                    'reason' => $reason,
+                    'amount' => $payment->payment_amount,
+                ],
+            );
         });
     }
 

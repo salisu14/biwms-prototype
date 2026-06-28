@@ -10,15 +10,42 @@ use App\Models\ItemJournalBatch;
 use App\Models\ProductionJournalBatch;
 use App\Models\RecurringJournalBatch;
 use App\Models\WarehouseJournalBatch;
+use App\Services\AuditTrailService;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
 class JournalPostingService
 {
+    private readonly AuditTrailService $auditTrailService;
+
+    public function __construct(?AuditTrailService $auditTrailService = null)
+    {
+        $this->auditTrailService = $auditTrailService ?? app(AuditTrailService::class);
+    }
+
     public function post(object $batch): PostingResult
     {
         $routine = $this->resolveRoutine($batch);
 
-        return $routine->post($batch);
+        $result = $routine->post($batch);
+
+        if ($batch instanceof Model) {
+            $this->auditTrailService->recordGeneric(
+                eventType: 'posting',
+                action: 'journal_posted',
+                auditable: $batch,
+                documentType: class_basename($batch),
+                documentNo: $this->auditTrailService->documentNoFor($batch),
+                description: class_basename($batch).' posted',
+                metadata: [
+                    'success' => $result->success,
+                    'document_no' => $result->documentNo,
+                    'posted_entry_count' => count($result->postedEntries),
+                ],
+            );
+        }
+
+        return $result;
     }
 
     public function validate(object $batch): array
@@ -39,6 +66,20 @@ class JournalPostingService
     {
         $routine = $this->resolveRoutine($batch);
         $routine->reverse($batch, $reason);
+
+        if ($batch instanceof Model) {
+            $this->auditTrailService->recordGeneric(
+                eventType: 'reversal',
+                action: 'journal_reversed',
+                auditable: $batch,
+                documentType: class_basename($batch),
+                documentNo: $this->auditTrailService->documentNoFor($batch),
+                description: class_basename($batch).' reversed',
+                metadata: [
+                    'reason' => $reason,
+                ],
+            );
+        }
     }
 
     private function resolveRoutine(object $batch): PostingRoutineInterface

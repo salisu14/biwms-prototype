@@ -79,6 +79,7 @@ use App\Models\WarehouseShipment;
 use App\Observers\GlEntryObserver;
 use App\Observers\SalesCreditMemoLineObserver;
 use App\Observers\SensitiveSetupAuditObserver;
+use App\Observers\UserAuditObserver;
 use App\Policies\ActualOverheadCostPolicy;
 use App\Policies\AttendanceLedgerEntryPolicy;
 use App\Policies\AuditTrailPolicy;
@@ -126,9 +127,14 @@ use App\Policies\WarehouseReceiptPolicy;
 use App\Policies\WarehouseShipmentPolicy;
 use App\Policies\WorkCenterGroupPolicy;
 use App\Policies\WorkCenterPolicy;
+use App\Services\AuditTrailService;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use App\Support\FilamentPermissionRegistry;
 use Filament\Actions\Action;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
@@ -226,7 +232,9 @@ class AppServiceProvider extends ServiceProvider
 
         SalesCreditMemoLine::observe(SalesCreditMemoLineObserver::class);
         GlEntry::observe(GlEntryObserver::class);
+        User::observe(UserAuditObserver::class);
 
+        $this->registerAuthenticationAuditListeners();
         $this->registerAuditTrailListeners();
         $this->registerSensitiveSetupObservers();
         $this->registerSensitiveFilamentActionConfirmation();
@@ -257,6 +265,60 @@ class AppServiceProvider extends ServiceProvider
 
             Gate::policy($modelClass, GenericFilamentPolicy::class);
         }
+    }
+
+    private function registerAuthenticationAuditListeners(): void
+    {
+        Event::listen(Login::class, function (Login $event): void {
+            app(AuditTrailService::class)->recordGeneric(
+                eventType: 'auth',
+                action: 'login',
+                auditable: $event->user,
+                userId: $event->user->getAuthIdentifier(),
+                description: 'User logged in',
+                metadata: [
+                    'guard' => $event->guard,
+                    'remember' => $event->remember,
+                ],
+            );
+        });
+
+        Event::listen(Failed::class, function (Failed $event): void {
+            app(AuditTrailService::class)->recordGeneric(
+                eventType: 'auth',
+                action: 'failed_login',
+                auditable: $event->user,
+                userId: $event->user?->getAuthIdentifier(),
+                description: 'Failed login attempt',
+                metadata: [
+                    'guard' => $event->guard,
+                    'email' => $event->credentials['email'] ?? null,
+                ],
+            );
+        });
+
+        Event::listen(Logout::class, function (Logout $event): void {
+            app(AuditTrailService::class)->recordGeneric(
+                eventType: 'auth',
+                action: 'logout',
+                auditable: $event->user,
+                userId: $event->user?->getAuthIdentifier(),
+                description: 'User logged out',
+                metadata: [
+                    'guard' => $event->guard,
+                ],
+            );
+        });
+
+        Event::listen(PasswordReset::class, function (PasswordReset $event): void {
+            app(AuditTrailService::class)->recordGeneric(
+                eventType: 'security',
+                action: 'password_reset',
+                auditable: $event->user,
+                userId: $event->user->getAuthIdentifier(),
+                description: 'User password reset completed',
+            );
+        });
     }
 
     private function registerAuditTrailListeners(): void

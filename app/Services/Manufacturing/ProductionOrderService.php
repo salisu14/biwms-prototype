@@ -21,6 +21,7 @@ use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderRoutingLine;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Models\User;
+use App\Services\AuditTrailService;
 use App\Services\Inventory\CostingService;
 use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
@@ -46,7 +47,8 @@ class ProductionOrderService
         protected PickWorksheetService $pickService,
         protected PutAwayWorksheetService $putAwayService,
         protected CostingService $costingService,
-        protected InventoryPostingResolverService $inventoryPostingResolver
+        protected InventoryPostingResolverService $inventoryPostingResolver,
+        protected AuditTrailService $auditTrailService
     ) {}
 
     /**
@@ -250,7 +252,7 @@ class ProductionOrderService
 
         $postingDate = $postingDate ?? now();
 
-        DB::transaction(function () use ($order, $quantityBase, $postingDate, $routingLineId) {
+        DB::transaction(function () use ($order, $quantityBase, $postingDate, $routingLineId, $userId) {
             $expectedUnitCost = (float) ($order->cost_rollup ?? $order->unit_cost ?? 0);
             $locationId = Location::query()
                 ->where('code', $order->location_code)
@@ -300,6 +302,22 @@ class ProductionOrderService
                     ]);
                 }
             }
+
+            $this->auditTrailService->recordGeneric(
+                eventType: 'manufacturing',
+                action: 'production_output_posted',
+                auditable: $order,
+                documentType: 'PRODUCTION_ORDER',
+                documentNo: $order->document_number,
+                userId: $userId,
+                description: "Production output posted for {$order->document_number}",
+                metadata: [
+                    'quantity_base' => $quantityBase,
+                    'item_id' => $order->item_id,
+                    'location_id' => $locationId,
+                    'routing_line_id' => $routingLineId,
+                ],
+            );
         });
     }
 
@@ -569,6 +587,21 @@ class ProductionOrderService
                 'posted_at' => now(),
                 'posted_by' => $userId,
             ])->save();
+
+            $this->auditTrailService->recordGeneric(
+                eventType: 'manufacturing',
+                action: 'production_order_finished',
+                auditable: $order,
+                documentType: 'PRODUCTION_ORDER',
+                documentNo: $order->document_number,
+                userId: $userId,
+                description: "Production order {$order->document_number} finished",
+                metadata: [
+                    'total_actual_cost' => $totalActualCost,
+                    'total_output_base' => $totalOutput,
+                    'total_inventory_cost' => $totalInventoryCost,
+                ],
+            );
         });
 
         return $order->fresh();

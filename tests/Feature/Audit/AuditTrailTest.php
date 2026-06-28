@@ -7,11 +7,13 @@ use App\Events\PayrollPosted;
 use App\Filament\Resources\AuditTrails\AuditTrailResource;
 use App\Models\AuditTrail;
 use App\Models\BankAccount;
+use App\Models\Business;
 use App\Models\Payment;
 use App\Models\PaymentApplication;
 use App\Models\PayrollDocument;
 use App\Models\Permission;
 use App\Models\User;
+use App\Services\AuditTrailService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 
@@ -111,6 +113,7 @@ it('records permission grants and setup changes', function () {
         ->where('action', 'permission_granted')
         ->where('auditable_type', $user->getMorphClass())
         ->where('auditable_id', $user->id)
+        ->where('actor_id', $actor->id)
         ->where('user_id', $actor->id)
         ->exists())->toBeTrue();
 
@@ -129,6 +132,91 @@ it('records permission grants and setup changes', function () {
         ->and($auditTrail->old_values['bank_name'])->toBe('Old Bank')
         ->and($auditTrail->new_values['bank_name'])->toBe('New Bank')
         ->and($auditTrail->metadata['changed_by'])->toBe($actor->id);
+});
+
+it('records MFA recovery actions without storing recovery codes', function () {
+    $actor = User::factory()->create();
+    $target = User::factory()->create();
+
+    $this->actingAs($actor);
+
+    $auditTrail = app(AuditTrailService::class)->recordGeneric(
+        eventType: 'security',
+        action: 'two_factor_recovery_codes_regenerated',
+        auditable: $target,
+        description: 'Recovery codes regenerated',
+        metadata: [
+            'recovery_codes' => ['ABCDE-FGHIJ-KLMNO'],
+            'safe_count' => 8,
+        ],
+    );
+
+    expect($auditTrail)->not->toBeNull()
+        ->and($auditTrail->actor_id)->toBe($actor->id)
+        ->and($auditTrail->subject_type)->toBe($target->getMorphClass())
+        ->and($auditTrail->subject_id)->toBe($target->id)
+        ->and($auditTrail->metadata['recovery_codes'])->toBe('[redacted]')
+        ->and($auditTrail->metadata['safe_count'])->toBe(8);
+});
+
+it('records posting audit context with safe subject and actor fields', function () {
+    $actor = User::factory()->create();
+    $business = Business::query()->create([
+        'code' => 'AUD',
+        'name' => 'Audit Business',
+        'is_active' => true,
+    ]);
+    $payment = Payment::factory()->customerReceipt()->create([
+        'payment_number' => 'PAY-POST-AUD-001',
+    ]);
+
+    $this->actingAs($actor)
+        ->withSession(['active_business_id' => $business->id]);
+
+    $auditTrail = app(AuditTrailService::class)->recordPosting(
+        auditable: $payment,
+        userId: $actor->id,
+        documentType: 'PAYMENT',
+        documentNo: $payment->payment_number,
+        metadata: [
+            'business_id' => $business->id,
+            'amount' => 125,
+        ],
+    );
+
+    expect($auditTrail)->not->toBeNull()
+        ->and($auditTrail->event_type)->toBe('posting')
+        ->and($auditTrail->actor_id)->toBe($actor->id)
+        ->and($auditTrail->subject_type)->toBe($payment->getMorphClass())
+        ->and($auditTrail->subject_id)->toBe($payment->id)
+        ->and($auditTrail->business_id)->toBe($business->id);
+});
+
+it('records user delete audit trails without secrets', function () {
+    $actor = User::factory()->create();
+    $target = User::factory()->create([
+        'email' => 'delete-audit@example.com',
+        'two_factor_secret' => 'secret-value',
+        'two_factor_recovery_codes' => ['SECRET-CODE'],
+    ]);
+
+    $this->actingAs($actor);
+
+    $target->delete();
+
+    $auditTrail = AuditTrail::query()
+        ->where('event_type', 'security')
+        ->where('action', 'user_deleted')
+        ->where('auditable_type', $target->getMorphClass())
+        ->where('auditable_id', $target->id)
+        ->latest('id')
+        ->first();
+
+    expect($auditTrail)->not->toBeNull()
+        ->and($auditTrail->actor_id)->toBe($actor->id)
+        ->and($auditTrail->old_values)->not->toHaveKey('password')
+        ->and($auditTrail->old_values)->not->toHaveKey('two_factor_secret')
+        ->and($auditTrail->old_values)->not->toHaveKey('two_factor_recovery_codes');
 });
 
 it('protects audit trail records with read-only authorization', function () {

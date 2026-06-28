@@ -19,6 +19,7 @@ use App\Filament\Resources\MaintenanceContractAssets\MaintenanceContractAssetRes
 use App\Filament\Resources\MaintenanceContractBillings\MaintenanceContractBillingResource;
 use App\Filament\Resources\MaintenanceContracts\MaintenanceContractResource;
 use App\Filament\Resources\MaintenanceContractSchedules\MaintenanceContractScheduleResource;
+use App\Http\Middleware\AddSecurityHeaders;
 use App\Http\Middleware\EnforceAdminAbsoluteSessionLifetime;
 use App\Http\Middleware\EnforceAdminIdleTimeout;
 use App\Http\Middleware\SetActiveBusinessContext;
@@ -883,6 +884,7 @@ class AdminPanelProvider extends PanelProvider
                 EnforceAdminAbsoluteSessionLifetime::class,
                 EnforceAdminIdleTimeout::class,
                 AuthenticateSession::class,
+                AddSecurityHeaders::class,
                 ShareErrorsFromSession::class,
                 PreventRequestForgery::class,
                 SubstituteBindings::class,

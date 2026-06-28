@@ -130,6 +130,39 @@ Representative direct-object-access tests must cover:
 
 Do not introduce UUID/hashid migrations as part of permission hardening without a separate migration plan.
 
+### Centralized Audit Logging
+
+Security and business-critical events are recorded through `App\Services\AuditTrailService` into `audit_trails`.
+
+Audit entries include the actor, subject, safe old/new values, IP address, user agent, and business/factory/warehouse context where available. Existing `user_id` and `auditable_*` columns remain for compatibility; newer entries also fill `actor_id` and `subject_*`.
+
+Never log passwords, tokens, MFA secrets, recovery codes, full session IDs, or similar credentials. The audit service redacts credential-like payload keys.
+
+Events expected in the audit trail include authentication, password changes, MFA management, role and permission changes, user lifecycle changes, posting and reversal actions, payroll actions, production output/finish actions, posting setup changes, and number series changes.
+
+### Security Headers
+
+Admin routes include production-safe security headers:
+
+- `X-Frame-Options: SAMEORIGIN`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- restrictive `Permissions-Policy`
+- report-only baseline CSP for Filament compatibility
+- HSTS in production when secure cookies or HTTPS are enforced
+
+### Health Check
+
+Run the production readiness check with:
+
+```bash
+php artisan biwms:health-check
+```
+
+The command reports environment/debug status, HTTPS/session cookie posture, admin session timeout settings, database connectivity, writable storage/log paths, queue and failed-job status, security audit hard checks, old generated permission row count, mail configuration, optimization cache files, and disk space.
+
+It returns a non-zero exit code for critical production failures such as `APP_DEBUG=true`, insecure session cookies, database outage, unwritable storage/logs, or security audit hard-check failures.
+
 ### Deployment Checklist
 
 Before production:
@@ -139,12 +172,23 @@ php artisan migrate:fresh --seed # if safe for new deployment only
 php artisan optimize:clear
 php artisan permission:cache-reset
 php artisan biwms:security-audit
+php artisan biwms:permissions-cleanup --dry-run
+php artisan biwms:health-check
 php artisan test --compact
 ```
 
+### Production Readiness Checklist
+
+- Confirm `.env` uses `APP_DEBUG=false`.
+- Confirm HTTPS is enforced and `SESSION_SECURE_COOKIE=true`.
+- Run `php artisan biwms:security-audit`.
+- Review `php artisan biwms:permissions-cleanup --dry-run` before any cleanup.
+- Run `php artisan biwms:health-check` and resolve critical failures.
+- Run `php artisan test --compact`.
+- Confirm audit logging is enabled for security, posting, payroll, production, setup, and number-series changes.
+
 ### TODO: Security Roadmap
 
-- Audit logging for role, permission, and security changes.
 - Broaden IDOR tests as business/factory/warehouse scoping is introduced.
 - Prevent self-privilege escalation.
 - Audit financial posting and reversal actions.

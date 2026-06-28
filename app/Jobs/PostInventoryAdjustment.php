@@ -10,6 +10,7 @@ use App\Models\ItemLedgerEntry;
 use App\Models\ValueEntry;
 use App\Models\WarehouseEntry;
 use App\Models\WarehouseSetup;
+use App\Services\AuditTrailService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -170,6 +171,21 @@ class PostInventoryAdjustment implements ShouldQueue
                 'entry_no_from' => $entryNo - $this->journal->lines()->count() + 1,
                 'entry_no_to' => $entryNo,
             ]);
+
+            app(AuditTrailService::class)->recordGeneric(
+                eventType: 'posting',
+                action: 'inventory_adjustment_posted',
+                auditable: $this->journal,
+                documentType: 'INVENTORY_ADJUSTMENT',
+                documentNo: $this->journal->journal_batch_name,
+                userId: auth()->id(),
+                description: "Inventory adjustment {$this->journal->journal_batch_name} posted",
+                metadata: [
+                    'line_count' => $this->journal->lines()->count(),
+                    'entry_no_from' => $entryNo - $this->journal->lines()->count() + 1,
+                    'entry_no_to' => $entryNo,
+                ],
+            );
         });
     }
 
