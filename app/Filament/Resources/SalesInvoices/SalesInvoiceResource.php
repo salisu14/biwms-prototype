@@ -11,6 +11,7 @@ use App\Filament\Resources\SalesInvoices\Pages\ViewSalesInvoice;
 use App\Filament\Resources\SalesInvoices\Schemas\SalesInvoiceForm;
 use App\Filament\Resources\SalesInvoices\Schemas\SalesInvoiceInfolist;
 use App\Filament\Resources\SalesInvoices\Tables\SalesInvoicesTable;
+use App\Models\PostedSalesInvoice;
 use App\Models\SalesInvoice;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -51,7 +52,7 @@ class SalesInvoiceResource extends Resource
             return false;
         }
 
-        if (! $user->can('viewAny', SalesInvoice::class)) {
+        if (! $user->can('viewAny', PostedSalesInvoice::class)) {
             return false;
         }
 

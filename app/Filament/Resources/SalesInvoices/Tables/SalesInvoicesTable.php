@@ -103,7 +103,7 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-paper-airplane')
                     ->color('primary')
                     ->requiresConfirmation()
-                    ->visible(fn (SalesInvoice $record): bool => auth()->user()?->can('submit', $record) === true && $record->status === ApprovalStatus::DRAFT)
+                    ->visible(fn ($record): bool => $record instanceof SalesInvoice && auth()->user()?->can('submit', $record) === true && $record->status === ApprovalStatus::DRAFT)
                     ->action(function (SalesInvoice $record, DocumentApprovalWorkflowService $workflow): void {
                         $workflow->submit($record, auth()->id());
                         Notification::make()->title('Invoice submitted')->success()->send();
@@ -114,7 +114,7 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-check')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (SalesInvoice $record): bool => auth()->user()?->can('approve', $record) === true && $record->status === ApprovalStatus::PENDING)
+                    ->visible(fn ($record): bool => $record instanceof SalesInvoice && auth()->user()?->can('approve', $record) === true && $record->status === ApprovalStatus::PENDING)
                     ->action(function (SalesInvoice $record, DocumentApprovalWorkflowService $workflow): void {
                         $workflow->approve($record, auth()->id());
                         Notification::make()->title('Invoice approved')->success()->send();
@@ -125,7 +125,7 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-x-mark')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->visible(fn (SalesInvoice $record): bool => auth()->user()?->can('reject', $record) === true && $record->status === ApprovalStatus::PENDING)
+                    ->visible(fn ($record): bool => $record instanceof SalesInvoice && auth()->user()?->can('reject', $record) === true && $record->status === ApprovalStatus::PENDING)
                     ->action(function (SalesInvoice $record, DocumentApprovalWorkflowService $workflow): void {
                         $workflow->reject($record, auth()->id());
                         Notification::make()->title('Invoice rejected')->warning()->send();
@@ -136,7 +136,8 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->visible(fn (SalesInvoice $record): bool => auth()->user()?->can('reopen', $record) === true
+                    ->visible(fn ($record): bool => $record instanceof SalesInvoice
+                        && auth()->user()?->can('reopen', $record) === true
                         && in_array($record->status, [ApprovalStatus::PENDING, ApprovalStatus::APPROVED, ApprovalStatus::REJECTED], true))
                     ->action(function (SalesInvoice $record, DocumentApprovalWorkflowService $workflow): void {
                         $workflow->reopen($record, auth()->id());
@@ -148,7 +149,7 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-check-badge')
                     ->color('primary')
                     ->requiresConfirmation()
-                    ->visible(fn (SalesInvoice $record): bool => auth()->user()?->can('post', $record) === true && $record->status === ApprovalStatus::APPROVED)
+                    ->visible(fn ($record): bool => $record instanceof SalesInvoice && auth()->user()?->can('post', $record) === true && $record->status === ApprovalStatus::APPROVED)
                     ->action(function (SalesInvoice $record) {
                         app(SalesInvoiceService::class)->post($record);
                         Notification::make()->title('Invoice posted')->success()->send();
@@ -159,7 +160,8 @@ class SalesInvoicesTable
                     ->icon('heroicon-o-no-symbol')
                     ->color('gray')
                     ->requiresConfirmation()
-                    ->visible(fn (SalesInvoice $record): bool => auth()->user()?->can('cancel', $record) === true
+                    ->visible(fn ($record): bool => $record instanceof SalesInvoice
+                        && auth()->user()?->can('cancel', $record) === true
                         && ! $record->isPosted()
                         && $record->status !== ApprovalStatus::CANCELLED)
                     ->action(function (SalesInvoice $record, DocumentApprovalWorkflowService $workflow): void {
@@ -168,10 +170,10 @@ class SalesInvoicesTable
                     }),
 
                 ViewAction::make()
-                    ->visible(fn (SalesInvoice $record): bool => auth()->user()?->can('view', $record) === true),
+                    ->visible(fn ($record): bool => $record instanceof SalesInvoice && auth()->user()?->can('view', $record) === true),
 
                 EditAction::make()
-                    ->visible(fn (SalesInvoice $record): bool => auth()->user()?->can('update', $record) === true),
+                    ->visible(fn ($record): bool => $record instanceof SalesInvoice && auth()->user()?->can('update', $record) === true),
 
             ])
             ->toolbarActions([

@@ -232,7 +232,7 @@ class LinesRelationManager extends RelationManager
                     ->alignment('right'),
                 TextColumn::make('unit_of_measure_code')->label('UOM'),
                 TextColumn::make('unit_price')
-                    ->money()
+                    ->money('NGN')
                     ->alignment('right'),
                 TextColumn::make('line_discount_percent')
                     ->label('Disc %')
@@ -240,7 +240,7 @@ class LinesRelationManager extends RelationManager
                     ->color('danger'),
                 TextColumn::make('amount_including_vat')
                     ->label('Total')
-                    ->money()
+                    ->money('NGN')
                     ->alignment('right')
                     ->weight('bold'),
                 TextColumn::make('line_status')
