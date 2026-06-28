@@ -20,6 +20,7 @@ class GlEntry extends Model
         'entry_number',
         'transaction_number',
         'chart_of_account_id',
+        'general_business_posting_group_id',
         'debit_amount',
         'debit_amount_lcy',
         'credit_amount',
@@ -60,6 +61,7 @@ class GlEntry extends Model
         'amount' => 'decimal:2',
         'amount_lcy' => 'decimal:2',
         'currency_id' => 'integer',
+        'general_business_posting_group_id' => 'integer',
         'exchange_rate' => 'decimal:6',
         'dimensions' => 'array',
         'document_date' => 'date',
@@ -74,6 +76,11 @@ class GlEntry extends Model
     public function chartOfAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class);
+    }
+
+    public function generalBusinessPostingGroup(): BelongsTo
+    {
+        return $this->belongsTo(GeneralBusinessPostingGroup::class, 'general_business_posting_group_id');
     }
 
     public function itemLedgerEntry(): BelongsTo
@@ -156,7 +163,7 @@ class GlEntry extends Model
                 // Recalculate the balance directly from the source of truth (GlEntries)
                 // This prevents drift if transactions ever fail halfway
                 $newBalance = GlEntry::where('chart_of_account_id', $account->id)
-                    ->selectRaw("SUM(debit_amount) - SUM(credit_amount) as balance")
+                    ->selectRaw('SUM(debit_amount) - SUM(credit_amount) as balance')
                     ->value('balance');
 
                 $account->update([

@@ -281,7 +281,7 @@ class PurchaseInvoiceService
                 ->exists();
 
             if (! $ledgerEntryExists) {
-                VendorLedgerEntry::createFromInvoice($invoice);
+                VendorLedgerEntry::createFromInvoice($posted);
             }
 
             if ($invoice->purchaseOrder) {

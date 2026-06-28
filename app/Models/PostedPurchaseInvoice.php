@@ -92,6 +92,13 @@ class PostedPurchaseInvoice extends Model
         return $this->belongsTo(User::class, 'posted_by');
     }
 
+    public function glEntries(): HasMany
+    {
+        return $this->hasMany(GlEntry::class, 'source_number', 'document_number')
+            ->where('source_type', 'VENDOR')
+            ->where('document_type', 'PURCHASE_INVOICE');
+    }
+
     public function getStatusAttribute(): string
     {
         if ($this->cancelled) {

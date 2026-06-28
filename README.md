@@ -163,6 +163,37 @@ The command reports environment/debug status, HTTPS/session cookie posture, admi
 
 It returns a non-zero exit code for critical production failures such as `APP_DEBUG=true`, insecure session cookies, database outage, unwritable storage/logs, or security audit hard-check failures.
 
+## Inventory Ledger & Costing
+
+Inventory quantity should be ledger-driven. The item card `inventory` field may remain as a cached quantity for UI and performance, but `item_ledger_entries` is the source of truth for physical stock verification.
+
+Item Ledger Entries record quantity movement:
+
+- purchases and positive adjustments increase stock.
+- sales, purchase returns, consumption, and negative adjustments decrease stock.
+- production output increases finished goods stock.
+- production consumption decreases component stock.
+- transfer/reclassification entries must preserve total quantity while moving location/bin/tracking context.
+
+Value Entries record inventory value and cost separately from quantity. Each inventory-affecting Item Ledger Entry should have a related Value Entry with matching item ledger entry number, document information, quantity, cost amount, and unit cost.
+
+Current costing baseline:
+
+- The current implementation is closest to average/current-cost behavior.
+- Purchase posting records actual cost and updates inventory value through Value Entries.
+- Sales posting uses the item current `unit_cost` for COGS/value reduction.
+- Production output cost is derived from consumed component/capacity cost where available.
+- Inventory adjustments use the provided or derived item cost.
+- FIFO/LIFO/specific costing layers are not fully implemented yet; do not assume those methods are complete.
+
+Run the inventory reconciliation report with:
+
+```bash
+php artisan biwms:inventory-reconcile
+```
+
+The command is report-only and does not correct data automatically. It reports cached item stock vs ledger sum mismatches, negative ledger stock, open item ledger entries, missing Value Entries, Value Entry mismatches, and posted inventory document lines missing Item Ledger Entries.
+
 ### Deployment Checklist
 
 Before production:
@@ -175,6 +206,7 @@ php artisan permission:cache-reset
 php artisan biwms:security-audit
 php artisan biwms:permissions-cleanup --dry-run
 php artisan biwms:health-check
+php artisan biwms:inventory-reconcile
 php artisan test --compact
 
 
@@ -184,6 +216,7 @@ php artisan test --compact
 php artisan biwms:security-audit
 php artisan biwms:health-check
 php artisan biwms:permissions-cleanup --dry-run
+php artisan biwms:inventory-reconcile
 ```
 
 ### Production Readiness Checklist
@@ -195,6 +228,7 @@ php artisan biwms:permissions-cleanup --dry-run
 - Run `php artisan biwms:security-audit`.
 - Review `php artisan biwms:permissions-cleanup --dry-run` before any cleanup.
 - Run `php artisan biwms:health-check` and resolve critical failures.
+- Run `php artisan biwms:inventory-reconcile` and review inventory ledger/value discrepancies before go-live.
 - Run `php artisan test --compact`.
 - Confirm audit logging is enabled for security, posting, payroll, production, setup, and number-series changes.
 

@@ -805,6 +805,7 @@ class SalesOrder extends Model implements Approvable
 
         $postingService->createGlEntry([
             'chart_of_account_id' => $receivablesAccount->id,
+            'general_business_posting_group_id' => $postedInvoice->general_business_posting_group_id,
             'debit_amount' => (float) $postedInvoice->grand_total,
             'credit_amount' => 0,
             'source_type' => 'CUSTOMER',
@@ -842,6 +843,7 @@ class SalesOrder extends Model implements Approvable
 
             $postingService->createGlEntry([
                 'chart_of_account_id' => $salesAccount->id,
+                'general_business_posting_group_id' => $postedInvoice->general_business_posting_group_id,
                 'debit_amount' => 0,
                 'credit_amount' => (float) $line->line_amount,
                 'source_type' => 'CUSTOMER',
@@ -862,6 +864,7 @@ class SalesOrder extends Model implements Approvable
                 if ($vatSetup?->sales_vat_account_id) {
                     $postingService->createGlEntry([
                         'chart_of_account_id' => $vatSetup->sales_vat_account_id,
+                        'general_business_posting_group_id' => $postedInvoice->general_business_posting_group_id,
                         'debit_amount' => 0,
                         'credit_amount' => (float) $line->vat_amount,
                         'source_type' => 'CUSTOMER',
@@ -887,6 +890,7 @@ class SalesOrder extends Model implements Approvable
 
                 $postingService->createGlEntry([
                     'chart_of_account_id' => $cogsAccount->id,
+                    'general_business_posting_group_id' => $postedInvoice->general_business_posting_group_id,
                     'debit_amount' => (float) $line->cost_amount,
                     'credit_amount' => 0,
                     'source_type' => 'CUSTOMER',
@@ -900,6 +904,7 @@ class SalesOrder extends Model implements Approvable
 
                 $postingService->createGlEntry([
                     'chart_of_account_id' => $inventoryAccount->id,
+                    'general_business_posting_group_id' => $postedInvoice->general_business_posting_group_id,
                     'debit_amount' => 0,
                     'credit_amount' => (float) $line->cost_amount,
                     'source_type' => 'CUSTOMER',

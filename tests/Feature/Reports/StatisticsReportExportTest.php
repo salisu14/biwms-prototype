@@ -15,16 +15,21 @@ it('exports sales statistics as csv and print html', function (): void {
         'code' => 'DOM',
         'description' => 'Domestic',
     ]);
+    $accountPostingGroup = GeneralBusinessPostingGroup::factory()->create([
+        'code' => 'ACC',
+        'description' => 'Account Group',
+    ]);
 
     $account = ChartOfAccount::factory()->create([
         'structural_type' => AccountStructuralType::POSTING,
-        'gen_bus_posting_group_id' => $postingGroup->id,
+        'gen_bus_posting_group_id' => $accountPostingGroup->id,
     ]);
 
     GlEntry::query()->create([
         'entry_number' => 1001,
         'transaction_number' => 5001,
         'chart_of_account_id' => $account->id,
+        'general_business_posting_group_id' => $postingGroup->id,
         'debit_amount' => 0,
         'credit_amount' => 1250,
         'amount' => -1250,
@@ -41,13 +46,15 @@ it('exports sales statistics as csv and print html', function (): void {
             'format' => 'csv',
             'date_from' => '2026-06-01',
             'date_to' => '2026-06-30',
+            'gen_bus_posting_group_id' => $postingGroup->id,
         ]))
         ->assertOk();
 
     expect($csvResponse->streamedContent())
         ->toContain('Sales Statistics')
         ->toContain('DOM')
-        ->toContain('1250.00');
+        ->toContain('1250.00')
+        ->not->toContain('ACC');
 
     $this
         ->actingAs($user)
@@ -55,10 +62,12 @@ it('exports sales statistics as csv and print html', function (): void {
             'format' => 'print',
             'date_from' => '2026-06-01',
             'date_to' => '2026-06-30',
+            'gen_bus_posting_group_id' => $postingGroup->id,
         ]))
         ->assertOk()
         ->assertSee('Sales Statistics')
         ->assertSee('Domestic')
+        ->assertDontSee('Account Group')
         ->assertSee('1,250.00');
 });
 
@@ -68,16 +77,21 @@ it('exports purchase statistics as csv and print html', function (): void {
         'code' => 'LOCAL',
         'description' => 'Local Procurement',
     ]);
+    $accountPostingGroup = GeneralBusinessPostingGroup::factory()->create([
+        'code' => 'ACC',
+        'description' => 'Account Group',
+    ]);
 
     $account = ChartOfAccount::factory()->create([
         'structural_type' => AccountStructuralType::POSTING,
-        'gen_bus_posting_group_id' => $postingGroup->id,
+        'gen_bus_posting_group_id' => $accountPostingGroup->id,
     ]);
 
     GlEntry::query()->create([
         'entry_number' => 1002,
         'transaction_number' => 5002,
         'chart_of_account_id' => $account->id,
+        'general_business_posting_group_id' => $postingGroup->id,
         'debit_amount' => 750,
         'credit_amount' => 0,
         'amount' => 750,
@@ -94,13 +108,15 @@ it('exports purchase statistics as csv and print html', function (): void {
             'format' => 'csv',
             'date_from' => '2026-06-01',
             'date_to' => '2026-06-30',
+            'gen_bus_posting_group_id' => $postingGroup->id,
         ]))
         ->assertOk();
 
     expect($csvResponse->streamedContent())
         ->toContain('Purchase Statistics')
         ->toContain('LOCAL')
-        ->toContain('750.00');
+        ->toContain('750.00')
+        ->not->toContain('ACC');
 
     $this
         ->actingAs($user)
@@ -108,9 +124,11 @@ it('exports purchase statistics as csv and print html', function (): void {
             'format' => 'print',
             'date_from' => '2026-06-01',
             'date_to' => '2026-06-30',
+            'gen_bus_posting_group_id' => $postingGroup->id,
         ]))
         ->assertOk()
         ->assertSee('Purchase Statistics')
         ->assertSee('Local Procurement')
+        ->assertDontSee('Account Group')
         ->assertSee('750.00');
 });

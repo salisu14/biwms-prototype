@@ -18,9 +18,11 @@ use App\Models\Payment;
 use App\Models\PaymentApplication;
 use App\Models\PaymentJournalLine;
 use App\Models\Permission;
+use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedSalesInvoice;
 use App\Models\User;
 use App\Models\Vendor;
+use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
 use App\Services\BankAccountLedgerService;
 use App\Services\Finance\PaymentService;
@@ -70,6 +72,20 @@ it('creates a bank ledger entry and increases bank balance for a customer receip
         ->and($bankEntry->user_id)->toBe($user->id)
         ->and((float) $bankAccount->fresh()->current_balance)->toBe(1700.0)
         ->and($payment->fresh()->status)->toBe('POSTED');
+
+    $ledgerEntry = CustomerLedgerEntry::query()
+        ->where('document_type', 'PAYMENT')
+        ->where('document_number', $payment->payment_number)
+        ->where('customer_id', $customer->id)
+        ->first();
+
+    expect($ledgerEntry)->not->toBeNull()
+        ->and((float) $ledgerEntry->debit_amount)->toBe(0.0)
+        ->and((float) $ledgerEntry->credit_amount)->toBe(450.0)
+        ->and((float) $ledgerEntry->amount)->toBe(-450.0)
+        ->and((float) $ledgerEntry->remaining_amount)->toBe(450.0)
+        ->and($ledgerEntry->open)->toBeTrue()
+        ->and((float) $customer->fresh()->balance)->toBe(-450.0);
 });
 
 it('creates a bank ledger entry and reduces bank balance for a vendor payment', function () {
@@ -113,6 +129,20 @@ it('creates a bank ledger entry and reduces bank balance for a vendor payment', 
         ->and((float) $bankEntry->credit_amount)->toBe(600.0)
         ->and((float) $bankAccount->fresh()->current_balance)->toBe(1400.0)
         ->and($payment->fresh()->status)->toBe('POSTED');
+
+    $ledgerEntry = VendorLedgerEntry::query()
+        ->where('document_type', 'PAYMENT')
+        ->where('document_number', $payment->payment_number)
+        ->where('vendor_id', $vendor->id)
+        ->first();
+
+    expect($ledgerEntry)->not->toBeNull()
+        ->and((float) $ledgerEntry->debit_amount)->toBe(0.0)
+        ->and((float) $ledgerEntry->credit_amount)->toBe(600.0)
+        ->and((float) $ledgerEntry->amount)->toBe(-600.0)
+        ->and((float) $ledgerEntry->remaining_amount)->toBe(600.0)
+        ->and($ledgerEntry->open)->toBeTrue()
+        ->and((float) $vendor->fresh()->balance)->toBe(-600.0);
 });
 
 it('blocks double posting and does not duplicate bank ledger entries', function () {
@@ -312,6 +342,126 @@ it('applies payment for authorized users and dispatches an audit event', functio
         ->and((float) $payment->fresh()->unapplied_amount)->toBe(0.0);
 
     Event::assertDispatched(PaymentApplied::class, fn (PaymentApplied $event): bool => $event->application->is($application));
+});
+
+it('partially applies a customer payment and keeps customer ledger balances in sync', function () {
+    $user = User::factory()->create();
+    grantPaymentApplyPermission($user);
+
+    $customer = Customer::factory()->create();
+    $payment = postedCustomerPayment($customer, $user, 60);
+    $paymentEntry = customerPaymentLedgerEntry($payment, $customer, 60);
+    $invoice = postedSalesInvoice($customer, $user, 100);
+    $invoiceEntry = CustomerLedgerEntry::createFromInvoice($invoice);
+
+    app(PaymentService::class)->applyToDocument($payment, [
+        'document_type' => 'SALES_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 60,
+    ], $user->id);
+
+    expect((float) $invoice->fresh()->remaining_amount)->toBe(40.0)
+        ->and($invoice->fresh()->paid_in_full)->toBeFalse()
+        ->and((float) $invoiceEntry->fresh()->remaining_amount)->toBe(40.0)
+        ->and($invoiceEntry->fresh()->open)->toBeTrue()
+        ->and((float) $payment->fresh()->unapplied_amount)->toBe(0.0)
+        ->and((float) $paymentEntry->fresh()->remaining_amount)->toBe(0.0)
+        ->and($paymentEntry->fresh()->open)->toBeFalse()
+        ->and((float) $customer->fresh()->balance)->toBe(40.0);
+});
+
+it('fully applies a customer payment and closes the sales invoice ledger entry', function () {
+    $user = User::factory()->create();
+    grantPaymentApplyPermission($user);
+
+    $customer = Customer::factory()->create();
+    $payment = postedCustomerPayment($customer, $user, 100);
+    customerPaymentLedgerEntry($payment, $customer, 100);
+    $invoice = postedSalesInvoice($customer, $user, 100);
+    $invoiceEntry = CustomerLedgerEntry::createFromInvoice($invoice);
+
+    app(PaymentService::class)->applyToDocument($payment, [
+        'document_type' => 'SALES_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 100,
+    ], $user->id);
+
+    expect((float) $invoice->fresh()->remaining_amount)->toBe(0.0)
+        ->and($invoice->fresh()->paid_in_full)->toBeTrue()
+        ->and((float) $invoiceEntry->fresh()->remaining_amount)->toBe(0.0)
+        ->and($invoiceEntry->fresh()->open)->toBeFalse()
+        ->and((float) $customer->fresh()->balance)->toBe(0.0);
+});
+
+it('blocks customer payment over-allocation to a posted invoice', function () {
+    $user = User::factory()->create();
+    grantPaymentApplyPermission($user);
+
+    $customer = Customer::factory()->create();
+    $payment = postedCustomerPayment($customer, $user, 150);
+    customerPaymentLedgerEntry($payment, $customer, 150);
+    $invoice = postedSalesInvoice($customer, $user, 100);
+    $invoiceEntry = CustomerLedgerEntry::createFromInvoice($invoice);
+
+    expect(fn () => app(PaymentService::class)->applyToDocument($payment, [
+        'document_type' => 'SALES_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 150,
+    ], $user->id))->toThrow(Exception::class, 'Cannot apply more than the document remaining amount.');
+
+    expect(PaymentApplication::query()->count())->toBe(0)
+        ->and((float) $invoice->fresh()->remaining_amount)->toBe(100.0)
+        ->and((float) $invoiceEntry->fresh()->remaining_amount)->toBe(100.0)
+        ->and((float) $payment->fresh()->unapplied_amount)->toBe(150.0);
+});
+
+it('applies a vendor payment and keeps vendor ledger balances in sync', function () {
+    $user = User::factory()->create();
+    grantPaymentApplyPermission($user);
+
+    $vendor = Vendor::factory()->create();
+    $payment = postedVendorPayment($vendor, $user, 75);
+    $paymentEntry = vendorPaymentLedgerEntry($payment, $vendor, 75);
+    $invoice = postedPurchaseInvoice($vendor, $user, 100);
+    $invoiceEntry = VendorLedgerEntry::createFromInvoice($invoice);
+
+    app(PaymentService::class)->applyToDocument($payment, [
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 75,
+    ], $user->id);
+
+    expect((float) $invoice->fresh()->remaining_amount)->toBe(25.0)
+        ->and($invoice->fresh()->paid_in_full)->toBeFalse()
+        ->and((float) $invoiceEntry->fresh()->remaining_amount)->toBe(25.0)
+        ->and($invoiceEntry->fresh()->open)->toBeTrue()
+        ->and((float) $payment->fresh()->unapplied_amount)->toBe(0.0)
+        ->and((float) $paymentEntry->fresh()->remaining_amount)->toBe(0.0)
+        ->and($paymentEntry->fresh()->open)->toBeFalse()
+        ->and((float) $vendor->fresh()->balance)->toBe(25.0);
+});
+
+it('fully applies a vendor payment and closes the purchase invoice ledger entry', function () {
+    $user = User::factory()->create();
+    grantPaymentApplyPermission($user);
+
+    $vendor = Vendor::factory()->create();
+    $payment = postedVendorPayment($vendor, $user, 100);
+    vendorPaymentLedgerEntry($payment, $vendor, 100);
+    $invoice = postedPurchaseInvoice($vendor, $user, 100);
+    $invoiceEntry = VendorLedgerEntry::createFromInvoice($invoice);
+
+    app(PaymentService::class)->applyToDocument($payment, [
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 100,
+    ], $user->id);
+
+    expect((float) $invoice->fresh()->remaining_amount)->toBe(0.0)
+        ->and($invoice->fresh()->paid_in_full)->toBeTrue()
+        ->and((float) $invoiceEntry->fresh()->remaining_amount)->toBe(0.0)
+        ->and($invoiceEntry->fresh()->open)->toBeFalse()
+        ->and((float) $vendor->fresh()->balance)->toBe(0.0);
 });
 
 it('unapplies payment without changing bank ledger or bank balance and blocks duplicate unapply', function () {
@@ -550,6 +700,105 @@ function postedSalesInvoice(Customer $customer, User $user, float $amount): Post
         'paid_in_full' => false,
         'posted_by' => $user->id,
         'posted_at' => now(),
+    ]);
+}
+
+function postedVendorPayment(Vendor $vendor, User $user, float $amount): Payment
+{
+    return Payment::factory()->create([
+        'party_type' => 'VENDOR',
+        'party_id' => $vendor->id,
+        'party_name' => $vendor->vendor_name,
+        'payment_amount' => $amount,
+        'payment_amount_lcy' => $amount,
+        'applied_amount' => 0,
+        'unapplied_amount' => $amount,
+        'status' => 'POSTED',
+        'payment_direction' => 'DISBURSEMENT',
+        'created_by' => $user->id,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+    ]);
+}
+
+function postedPurchaseInvoice(Vendor $vendor, User $user, float $amount): PostedPurchaseInvoice
+{
+    return PostedPurchaseInvoice::query()->create([
+        'document_number' => 'PPI-'.fake()->unique()->numberBetween(1000, 9999),
+        'vendor_id' => $vendor->id,
+        'vendor_name' => $vendor->vendor_name,
+        'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+        'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'due_date' => now()->addDays(30),
+        'total_amount' => $amount,
+        'grand_total' => $amount,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'amount_paid' => 0,
+        'remaining_amount' => $amount,
+        'paid_in_full' => false,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+    ]);
+}
+
+function customerPaymentLedgerEntry(Payment $payment, Customer $customer, float $amount): CustomerLedgerEntry
+{
+    return CustomerLedgerEntry::query()->create([
+        'entry_number' => ((int) CustomerLedgerEntry::query()->where('customer_id', $customer->id)->max('entry_number')) + 1,
+        'customer_id' => $customer->id,
+        'document_type' => 'PAYMENT',
+        'document_number' => $payment->payment_number,
+        'description' => "Payment {$payment->payment_number}",
+        'posting_date' => $payment->posting_date,
+        'document_date' => $payment->payment_date,
+        'debit_amount' => 0,
+        'credit_amount' => $amount,
+        'amount' => -$amount,
+        'running_balance' => (float) CustomerLedgerEntry::query()->where('customer_id', $customer->id)->sum('amount') - $amount,
+        'remaining_amount' => $amount,
+        'open' => true,
+        'fully_applied' => false,
+        'currency_id' => $payment->currency_id,
+        'currency_code' => $payment->currency_code,
+        'currency_factor' => $payment->currency_factor,
+        'original_credit_amount' => $amount,
+        'general_business_posting_group_id' => $customer->general_business_posting_group_id,
+        'customer_posting_group_id' => $customer->customer_posting_group_id,
+        'source_id' => $payment->id,
+        'source_type' => Payment::class,
+        'created_by' => $payment->created_by,
+    ]);
+}
+
+function vendorPaymentLedgerEntry(Payment $payment, Vendor $vendor, float $amount): VendorLedgerEntry
+{
+    return VendorLedgerEntry::query()->create([
+        'entry_number' => ((int) VendorLedgerEntry::query()->where('vendor_id', $vendor->id)->max('entry_number')) + 1,
+        'vendor_id' => $vendor->id,
+        'document_type' => 'PAYMENT',
+        'document_number' => $payment->payment_number,
+        'description' => "Payment {$payment->payment_number}",
+        'posting_date' => $payment->posting_date,
+        'document_date' => $payment->payment_date,
+        'debit_amount' => 0,
+        'credit_amount' => $amount,
+        'amount' => -$amount,
+        'running_balance' => (float) VendorLedgerEntry::query()->where('vendor_id', $vendor->id)->sum('amount') - $amount,
+        'remaining_amount' => $amount,
+        'open' => true,
+        'fully_applied' => false,
+        'currency_id' => $payment->currency_id,
+        'currency_code' => $payment->currency_code,
+        'currency_factor' => $payment->currency_factor,
+        'original_credit_amount' => $amount,
+        'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+        'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+        'source_id' => $payment->id,
+        'source_type' => Payment::class,
+        'created_by' => $payment->created_by,
     ]);
 }
 

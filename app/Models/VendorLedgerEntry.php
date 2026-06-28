@@ -464,7 +464,7 @@ class VendorLedgerEntry extends Model
     /**
      * Create from PurchaseInvoice
      */
-    public static function createFromInvoice(PurchaseInvoice $invoice): self
+    public static function createFromInvoice(PurchaseInvoice|PostedPurchaseInvoice $invoice): self
     {
         $amount = $invoice->grand_total; // Debit (we owe vendor)
 
@@ -505,7 +505,7 @@ class VendorLedgerEntry extends Model
             'vendor_posting_group_id' => $invoice->vendor_posting_group_id,
             'gl_entry_id' => $invoice->glEntries()->first()?->id,
             'source_id' => $invoice->id,
-            'source_type' => PurchaseInvoice::class,
+            'source_type' => $invoice::class,
             'payment_terms_code' => $invoice->payment_terms_code,
             'payment_discount_percent' => $discountPercent,
             'payment_discount_due_date' => $discountDueDate,

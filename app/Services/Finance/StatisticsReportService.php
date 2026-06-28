@@ -78,9 +78,13 @@ class StatisticsReportService
     {
         $period = $this->normalizeFilters($filters);
 
+        $postingGroupIdSql = 'COALESCE(gl_entries.general_business_posting_group_id, coa.gen_bus_posting_group_id)';
+
         $query = GlEntry::query()
             ->join('chart_of_accounts as coa', 'gl_entries.chart_of_account_id', '=', 'coa.id')
-            ->leftJoin('general_business_posting_groups as gbpg', 'coa.gen_bus_posting_group_id', '=', 'gbpg.id')
+            ->leftJoin('general_business_posting_groups as gbpg', function ($join) use ($postingGroupIdSql): void {
+                $join->on('gbpg.id', '=', DB::raw($postingGroupIdSql));
+            })
             ->whereBetween('gl_entries.posting_date', [$period['date_from'], $period['date_to']])
             ->where("gl_entries.{$amountColumn}", '>', 0)
             ->where('coa.structural_type', 'posting')
@@ -99,7 +103,7 @@ class StatisticsReportService
             ->orderByDesc('amount');
 
         if ($period['gen_bus_posting_group_id'] !== null) {
-            $query->where('gbpg.id', $period['gen_bus_posting_group_id']);
+            $query->whereRaw("{$postingGroupIdSql} = ?", [$period['gen_bus_posting_group_id']]);
         }
 
         $results = $query->get();

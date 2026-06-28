@@ -609,6 +609,7 @@ class PostingService
 
             $entries[] = $this->createGlEntry([
                 'chart_of_account_id' => $inventoryAccount->id,
+                'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
                 'debit_amount' => $lineTotal,
                 'credit_amount' => 0,
                 'source_type' => 'ITEM',
@@ -628,6 +629,7 @@ class PostingService
             // Expense
             $entries[] = $this->createGlEntry([
                 'chart_of_account_id' => $purchaseAccount->id,
+                'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
                 'debit_amount' => $lineTotal,
                 'credit_amount' => 0,
                 'source_type' => 'ITEM',
@@ -650,6 +652,7 @@ class PostingService
             if ($vatSetup && $vatSetup->purchase_vat_account_id) {
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $vatSetup->purchase_vat_account_id,
+                    'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
                     'debit_amount' => $vatAmount,
                     'credit_amount' => 0,
                     'document_type' => 'PURCHASE_INVOICE',
@@ -872,6 +875,7 @@ class PostingService
                 // 1. Accounts Receivable (Debit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $receivablesAccount->id,
+                    'general_business_posting_group_id' => $customerGroupId,
                     'debit_amount' => $lineTotalWithVat,
                     'credit_amount' => 0,
                     'document_type' => 'SALES_INVOICE',
@@ -884,6 +888,7 @@ class PostingService
                 // 2. Revenue (Credit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $salesAccount->id,
+                    'general_business_posting_group_id' => $customerGroupId,
                     'debit_amount' => 0,
                     'credit_amount' => $lineRevenue,
                     'document_type' => 'SALES_INVOICE',
@@ -897,6 +902,7 @@ class PostingService
                 if ($lineVat > 0 && $vatSetup && $vatSetup->sales_vat_account_id) {
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $vatSetup->sales_vat_account_id,
+                        'general_business_posting_group_id' => $customerGroupId,
                         'debit_amount' => 0,
                         'credit_amount' => $lineVat,
                         'document_type' => 'SALES_INVOICE',
@@ -917,6 +923,7 @@ class PostingService
                     // 3. COGS (Debit)
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $cogsAccount->id,
+                        'general_business_posting_group_id' => $customerGroupId,
                         'debit_amount' => $lineCost,
                         'credit_amount' => 0,
                         'document_type' => 'SALES_INVOICE',
@@ -929,6 +936,7 @@ class PostingService
                     // 4. Inventory (Credit)
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $inventoryAccount->id,
+                        'general_business_posting_group_id' => $customerGroupId,
                         'debit_amount' => 0,
                         'credit_amount' => $lineCost,
                         'document_type' => 'SALES_INVOICE',

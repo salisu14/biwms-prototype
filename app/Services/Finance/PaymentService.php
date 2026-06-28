@@ -159,6 +159,10 @@ class PaymentService
                 throw new \Exception('Payment does not have enough unapplied amount.');
             }
 
+            if ($requestedAmount - (float) $document->remaining_amount > $tolerance) {
+                throw new \Exception('Cannot apply more than the document remaining amount.');
+            }
+
             $amountToApply = min(
                 $requestedAmount,
                 (float) $payment->unapplied_amount,
@@ -235,6 +239,10 @@ class PaymentService
                 $this->syncCustomerInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
             }
 
+            if ($document instanceof PostedPurchaseInvoice) {
+                $this->syncVendorInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
+            }
+
             if ($document instanceof PostedSalesInvoice && ! empty($document->order_id)) {
                 SalesOrder::query()->find($document->order_id)?->refreshLifecycleStatus();
             }
@@ -254,6 +262,10 @@ class PaymentService
 
             if ($payment->party_type === 'CUSTOMER') {
                 $this->syncCustomerPaymentLedgerFromPayment($payment, $tolerance);
+            }
+
+            if ($payment->party_type === 'VENDOR') {
+                $this->syncVendorPaymentLedgerFromPayment($payment, $tolerance);
             }
 
             return $application;
@@ -307,7 +319,7 @@ class PaymentService
             $document = $this->findDocument($application->document_type, $application->document_id);
             if ($document && method_exists($document, 'reversePayment')) {
                 $document->reversePayment($application->amount_applied + $application->discount_applied);
-            } elseif ($document instanceof PostedSalesInvoice) {
+            } elseif ($document instanceof PostedSalesInvoice || $document instanceof PostedPurchaseInvoice) {
                 $precision = $this->resolvePrecision($application->currency ?? null, $document->currency_code);
                 $tolerance = $this->resolveTolerance($precision);
                 $reversalAmount = $this->roundMoney((float) $application->amount_applied + (float) $application->discount_applied + (float) $application->write_off_amount, $precision);
@@ -322,7 +334,14 @@ class PaymentService
                     'paid_in_full' => $newRemaining <= $tolerance,
                     'paid_in_full_date' => $newRemaining <= $tolerance ? $document->paid_in_full_date : null,
                 ]);
-                $this->syncCustomerInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
+
+                if ($document instanceof PostedSalesInvoice) {
+                    $this->syncCustomerInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
+                }
+
+                if ($document instanceof PostedPurchaseInvoice) {
+                    $this->syncVendorInvoiceLedgerStatus($document, max(0, $newRemaining), $tolerance);
+                }
             }
 
             // Mark application reversed
@@ -342,6 +361,12 @@ class PaymentService
                 $precision = $this->resolvePrecision($payment->currency ?? null, $payment->currency_code);
                 $tolerance = $this->resolveTolerance($precision);
                 $this->syncCustomerPaymentLedgerFromPayment($payment, $tolerance);
+            }
+
+            if ($payment->party_type === 'VENDOR') {
+                $precision = $this->resolvePrecision($payment->currency ?? null, $payment->currency_code);
+                $tolerance = $this->resolveTolerance($precision);
+                $this->syncVendorPaymentLedgerFromPayment($payment, $tolerance);
             }
 
             // Reverse Gain/Loss G/L entries if they exist
@@ -405,6 +430,51 @@ class PaymentService
             ->where('document_type', 'PAYMENT')
             ->where('document_number', $payment->payment_number)
             ->where('customer_id', $payment->party_id)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $ledgerEntry) {
+            return;
+        }
+
+        $remaining = $this->roundMoney((float) $payment->unapplied_amount, 4);
+        if (abs($remaining) <= $tolerance) {
+            $remaining = 0.0;
+        }
+
+        $ledgerEntry->update([
+            'remaining_amount' => max(0, $remaining),
+            'open' => $remaining > $tolerance,
+            'fully_applied' => $remaining <= $tolerance,
+        ]);
+    }
+
+    private function syncVendorInvoiceLedgerStatus(PostedPurchaseInvoice $invoice, float $remaining, float $tolerance): void
+    {
+        $ledgerEntry = VendorLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_INVOICE')
+            ->where('document_number', $invoice->document_number)
+            ->where('vendor_id', $invoice->vendor_id)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $ledgerEntry) {
+            return;
+        }
+
+        $ledgerEntry->update([
+            'remaining_amount' => max(0, $remaining),
+            'open' => $remaining > $tolerance,
+            'fully_applied' => $remaining <= $tolerance,
+        ]);
+    }
+
+    private function syncVendorPaymentLedgerFromPayment(Payment $payment, float $tolerance): void
+    {
+        $ledgerEntry = VendorLedgerEntry::query()
+            ->where('document_type', 'PAYMENT')
+            ->where('document_number', $payment->payment_number)
+            ->where('vendor_id', $payment->party_id)
             ->orderByDesc('id')
             ->first();
 
@@ -520,8 +590,16 @@ class PaymentService
 
     protected function postVendorPayment(Payment $payment, int $userId): void
     {
+        $lastEntry = VendorLedgerEntry::query()
+            ->where('vendor_id', $payment->party_id)
+            ->orderByDesc('entry_number')
+            ->first();
+
+        $nextEntryNumber = ((int) ($lastEntry?->entry_number ?? 0)) + 1;
+        $runningBalance = (float) ($lastEntry?->running_balance ?? 0) - (float) $payment->payment_amount;
+
         VendorLedgerEntry::create([
-            'entry_number' => VendorLedgerEntry::getNextEntryNumber($payment->party_id),
+            'entry_number' => $nextEntryNumber,
             'vendor_id' => $payment->party_id,
             'document_type' => 'PAYMENT',
             'document_number' => $payment->payment_number,
@@ -529,15 +607,22 @@ class PaymentService
             'description' => "Payment {$payment->payment_number}",
             'posting_date' => $payment->posting_date,
             'document_date' => $payment->payment_date,
-            'debit_amount' => $payment->payment_amount,
-            'credit_amount' => 0,
-            'amount' => $payment->payment_amount,
-            'remaining_amount' => 0,
-            'open' => false,
+            'debit_amount' => 0,
+            'credit_amount' => $payment->payment_amount,
+            'amount' => -$payment->payment_amount,
+            'running_balance' => $runningBalance,
+            'remaining_amount' => $payment->unapplied_amount,
+            'open' => ((float) $payment->unapplied_amount) > 0.01,
+            'fully_applied' => ((float) $payment->unapplied_amount) <= 0.01,
             'currency_id' => $payment->currency_id,
             'currency_code' => $payment->currency_code,
             'currency_factor' => $payment->currency_factor,
-            'original_debit_amount' => $payment->payment_amount,
+            'original_debit_amount' => 0,
+            'original_credit_amount' => $payment->payment_amount,
+            'general_business_posting_group_id' => $payment->general_business_posting_group_id,
+            'vendor_posting_group_id' => $payment->posting_group_id,
+            'source_id' => $payment->id,
+            'source_type' => Payment::class,
             'created_by' => $userId,
         ]);
     }
