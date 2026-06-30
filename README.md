@@ -190,9 +190,37 @@ Run the inventory reconciliation report with:
 
 ```bash
 php artisan biwms:inventory-reconcile
+php artisan biwms:inventory-reconcile --details
 ```
 
-The command is report-only and does not correct data automatically. It reports cached item stock vs ledger sum mismatches, negative ledger stock, open item ledger entries, missing Value Entries, Value Entry mismatches, and posted inventory document lines missing Item Ledger Entries.
+The command is diagnostic-first and report-only. It does not correct data automatically and intentionally has no `--fix` option. It reports cached item stock vs ledger sum mismatches, negative ledger stock, open item ledger entries, missing Value Entries, Value Entry mismatches, and posted inventory document lines missing Item Ledger Entries. Use the default output for counts; use `--details` to inspect item IDs, item codes, document numbers, linked ledger entry IDs, value entry numbers, and location/lot/serial context.
+
+Inventory reconciliation investigation guide:
+
+- Stock mismatch: compare the item card `inventory` cache with `SUM(item_ledger_entries.quantity)` for the item. Fix the posting path first; only plan data repair after the source of the mismatch is understood.
+- Missing posted sales invoice line ledger entry: inspect `posted_sales_invoice_lines.item_ledger_entry_id` and confirm it points to the related sales shipment or invoice Item Ledger Entry.
+- Value Entry mismatch: compare `item_ledger_entries.entry_number` with `value_entries.item_ledger_entry_no`, then verify quantity and `cost_amount_actual` match.
+- Negative stock: use `--details` to identify item, location, lot, and serial context, then trace the outbound posting that bypassed stock validation.
+- Open Item Ledger Entry: confirm whether the entry is intentionally open for remaining quantity application or whether the posting routine failed to close it.
+
+### How to clean legacy inventory inconsistencies safely
+
+Export a reviewable cleanup report before planning any correction:
+
+```bash
+php artisan biwms:inventory-reconcile --details --export=storage/app/reports/inventory-reconcile.json
+```
+
+The export is a cleanup plan input, not an automatic repair. Each finding includes a classification, severity, and suggested manual remediation. Treat `critical` findings first, especially negative stock, missing item ledger links, and missing/mismatched Value Entries. Treat stock cache mismatches as `warning` items until the source ledger movement has been reviewed. Treat open legacy entries as `info` unless finance confirms they affect current costing or availability.
+
+Safe cleanup workflow:
+
+- Preserve the exported JSON report with the investigation ticket or change request.
+- Confirm posting logic is already fixed before adjusting legacy data.
+- Reconcile each finding back to its source document, item, location, quantity, posting date, and value/cost amount.
+- Prefer business corrections such as approved inventory adjustments, reversals, credit memos, or reviewed value adjustments.
+- Do not manually edit ledger history, delete entries, or insert replacement entries without finance approval, audit notes, and a tested rollback plan.
+- Do not add or run an automatic `--fix` command until the cleanup approach has been reviewed against production backup and audit requirements.
 
 ### Deployment Checklist
 

@@ -471,6 +471,7 @@ it('updates output value entry costs and marks the order posted when finishing',
     $rawMaterial = Item::factory()->create([
         'item_code' => 'RM-FINISH',
         'description' => 'Raw Finish Material',
+        'inventory' => 1000,
         'unit_cost' => 4.5,
         'base_uom_id' => $baseUom->id,
         'general_product_posting_group_id' => $genProdGroup->id,
@@ -678,6 +679,7 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
     $rawMaterial = Item::factory()->create([
         'item_code' => 'RM-REC',
         'description' => 'Raw Reconciliation Material',
+        'inventory' => 1000,
         'unit_cost' => 4.5,
         'base_uom_id' => $baseUom->id,
         'general_product_posting_group_id' => $productGroup->id,
@@ -788,7 +790,8 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
         ->and($consumptionValueEntry->item_no)->toBe('RM-REC')
         ->and($consumptionValueEntry->location_code)->toBe('MAIN')
         ->and((float) $component->actual_quantity_consumed)->toBe(288.0)
-        ->and((float) $component->remaining_quantity)->toBe(0.0);
+        ->and((float) $component->remaining_quantity)->toBe(0.0)
+        ->and((float) $rawMaterial->fresh()->inventory)->toBe(712.0);
 
     expect(fn () => app(ProductionOrderService::class)->postConsumption($order->fresh(), [[
         'component_id' => $component->id,
@@ -835,7 +838,8 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
         ->and((float) $outputEntry->quantity)->toBe(288.0)
         ->and((float) $outputEntry->cost_amount_actual)->toBe(1596.0)
         ->and((float) $outputValueEntry->cost_amount_actual)->toBe(1596.0)
-        ->and((float) $outputValueEntry->unit_cost)->toBe(5.5417);
+        ->and((float) $outputValueEntry->unit_cost)->toBe(5.5417)
+        ->and((float) $finishedGood->fresh()->inventory)->toBe(288.0);
 
     $documentGlEntries = GlEntry::query()
         ->where('document_number', 'PO-REC-001')
@@ -858,6 +862,75 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
 
     expect(fn () => app(ProductionOrderService::class)->finish($order->fresh(), $user->id))
         ->toThrow(Exception::class, 'Production order is already finished');
+});
+
+it('blocks production component consumption when component stock is insufficient', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $productGroup = GeneralProductPostingGroup::create([
+        'code' => 'FG-NOSTOCK',
+        'description' => 'Finished No Stock',
+    ]);
+    $inventoryGroup = InventoryPostingGroup::create([
+        'code' => 'INV-NOSTOCK',
+        'description' => 'Inventory No Stock',
+    ]);
+    $location = Location::factory()->create(['code' => 'MAIN']);
+
+    $finishedGood = Item::factory()->create([
+        'item_code' => 'FG-NOSTOCK',
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+    $rawMaterial = Item::factory()->create([
+        'item_code' => 'RM-NOSTOCK',
+        'inventory' => 0,
+        'unit_cost' => 4.5,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-NOSTOCK-001',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $finishedGood->id,
+        'description' => 'No stock order',
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+    ]);
+
+    $component = $order->components()->create([
+        'line_number' => 10000,
+        'item_id' => $rawMaterial->id,
+        'description' => 'No stock component',
+        'unit_of_measure_code' => 'PCS',
+        'quantity_per' => 1,
+        'expected_quantity' => 1,
+        'expected_quantity_base' => 1,
+        'remaining_quantity' => 1,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+    ]);
+
+    expect(fn () => app(ProductionOrderService::class)->postConsumption($order->fresh(), [[
+        'component_id' => $component->id,
+        'quantity' => 1,
+    ]], $user->id))->toThrow(Exception::class, 'Insufficient component inventory');
+
+    expect(ItemLedgerEntry::query()
+        ->where('document_number', 'PO-NOSTOCK-001')
+        ->where('entry_type', ItemLedgerEntryType::CONSUMPTION)
+        ->exists()
+    )->toBeFalse();
 });
 
 function grantProductionPostingPermissions(User $user): void

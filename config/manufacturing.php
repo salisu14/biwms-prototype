@@ -28,4 +28,16 @@ return [
     |
     */
     'capacity_cost_center_priority' => 'work_center_first',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Negative Component Stock
+    |--------------------------------------------------------------------------
+    |
+    | Production consumption should not push component inventory below zero.
+    | Keep this disabled unless a controlled legacy or backflush process has
+    | explicitly accepted negative component stock risk.
+    |
+    */
+    'allow_negative_component_stock' => env('MANUFACTURING_ALLOW_NEGATIVE_COMPONENT_STOCK', false),
 ];

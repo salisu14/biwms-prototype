@@ -14,6 +14,7 @@ use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
 use App\Models\InventoryPostingSetup;
 use App\Models\Item;
+use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
@@ -25,6 +26,7 @@ use App\Models\SalesOrderLine;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
@@ -71,8 +73,13 @@ it('loads posted sales invoice history after sales order ship and invoice withou
 
     $order->postShipment();
     $postedInvoice = $order->fresh()->postInvoice();
+    $postedLine = $postedInvoice->fresh('lines')->lines->first();
 
     expect($postedInvoice)->toBeInstanceOf(PostedSalesInvoice::class)
+        ->and($postedLine->item_ledger_entry_id)->not->toBeNull()
+        ->and($postedLine->itemLedgerEntry)->toBeInstanceOf(ItemLedgerEntry::class)
+        ->and($postedLine->itemLedgerEntry->document_number)->toBe("SS-{$order->order_number}")
+        ->and((float) $postedLine->itemLedgerEntry->quantity)->toBe(-1.0)
         ->and($postedInvoice->fresh()->wasChanged())->toBeFalse()
         ->and($fixture['user']->can('viewAny', PostedSalesInvoice::class))->toBeTrue()
         ->and($fixture['user']->hasAnyRole(['admin']))->toBeTrue()
@@ -98,6 +105,57 @@ it('loads posted sales invoice history after sales order ship and invoice withou
         ->assertTableActionHidden('approve', $postedInvoice)
         ->assertTableActionHidden('reopen', $postedInvoice)
         ->assertTableActionHidden('cancel', $postedInvoice);
+});
+
+it('blocks sales order shipment when inventory stock is insufficient', function (): void {
+    $fixture = postedSalesInvoiceHistoryFixture();
+    $this->actingAs($fixture['user']);
+
+    $fixture['item']->update(['inventory' => 0]);
+
+    $order = SalesOrder::query()->create([
+        'order_number' => 'SO-NEGATIVE-001',
+        'order_type' => 'SALES_ORDER',
+        'status' => SalesOrderStatus::APPROVED,
+        'customer_id' => $fixture['customer']->id,
+        'customer_name' => $fixture['customer']->name,
+        'customer_address' => $fixture['customer']->address,
+        'ship_to_name' => $fixture['customer']->name,
+        'ship_to_address' => $fixture['customer']->address,
+        'order_date' => now()->toDateString(),
+        'posting_date' => now()->toDateString(),
+        'shipment_date' => now()->toDateString(),
+        'general_business_posting_group_id' => $fixture['businessGroup']->id,
+        'customer_posting_group_id' => $fixture['customerPostingGroup']->id,
+        'location_id' => $fixture['location']->id,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'created_by' => $fixture['user']->id,
+    ]);
+
+    SalesOrderLine::query()->create([
+        'sales_order_id' => $order->id,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => 1,
+        'unit_price' => 100,
+        'unit_cost' => 10,
+        'location_id' => $fixture['location']->id,
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+    ]);
+
+    expect(fn () => $order->postShipment())
+        ->toThrow(ValidationException::class, 'Insufficient stock');
+
+    expect(ItemLedgerEntry::query()
+        ->where('document_number', "SS-{$order->order_number}")
+        ->exists()
+    )->toBeFalse();
 });
 
 /**

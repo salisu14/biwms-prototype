@@ -180,7 +180,22 @@ class ProductionOrderService
                     $postingDate->format('Y-m-d')
                 );
 
-                ItemLedgerEntry::create([
+                if (! (bool) config('manufacturing.allow_negative_component_stock', false)) {
+                    $availableInventory = $this->getAvailableInventory($component->item_id, $component->location_code);
+
+                    if ($availableInventory < $qtyBase) {
+                        $itemDescription = $component->item?->description ?? "item #{$component->item_id}";
+                        $locationLabel = $component->location_code ? " at {$component->location_code}" : '';
+
+                        throw new \Exception(
+                            "Insufficient component inventory for {$itemDescription}{$locationLabel}. ".
+                            'Required: '.number_format($qtyBase, 4).
+                            ', Available: '.number_format($availableInventory, 4)
+                        );
+                    }
+                }
+
+                $itemLedgerEntry = ItemLedgerEntry::create([
                     'entry_type' => ItemLedgerEntryType::CONSUMPTION,
                     'item_id' => $component->item_id,
                     // ✅ FIXED: Always use negative BASE quantity for consumption
@@ -200,6 +215,8 @@ class ProductionOrderService
                     'inventory_posting_group_id' => $component->item->inventory_posting_group_id,
                     'entry_date' => now(),
                 ]);
+
+                $component->item?->decrement('inventory', $qtyBase);
 
                 // ✅ FIXED: Track consumption in base quantities to prevent math errors
                 $component->actual_quantity_consumed = (float) $component->actual_quantity_consumed + $qtyBase;
@@ -221,7 +238,7 @@ class ProductionOrderService
                     $component->item,
                     $qtyBase * $actualUnitCost,
                     $postingDate,
-                    "Consumption: {$component->item->description}"
+                    "Consumption: {$component->item->description} ({$itemLedgerEntry->entry_number})"
                 );
             }
         });
@@ -271,7 +288,7 @@ class ProductionOrderService
                 ->where('code', $order->location_code)
                 ->value('id');
 
-            ItemLedgerEntry::create([
+            $itemLedgerEntry = ItemLedgerEntry::create([
                 'entry_type' => ItemLedgerEntryType::OUTPUT,
                 'item_id' => $order->item_id,
                 // ✅ FIXED: Use BASE quantity for Output
@@ -292,6 +309,8 @@ class ProductionOrderService
                 'inventory_posting_group_id' => $order->inventory_posting_group_id,
                 'entry_date' => now(),
             ]);
+
+            $order->item?->increment('inventory', $quantityBase);
 
             if ($routingLineId) {
                 $routingLine = $order->routingLines()->find($routingLineId);
@@ -329,6 +348,7 @@ class ProductionOrderService
                     'item_id' => $order->item_id,
                     'location_id' => $locationId,
                     'routing_line_id' => $routingLineId,
+                    'item_ledger_entry_id' => $itemLedgerEntry->id,
                 ],
             );
         });

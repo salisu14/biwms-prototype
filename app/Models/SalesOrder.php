@@ -460,35 +460,41 @@ class SalesOrder extends Model implements Approvable
                     ]);
                 }
 
-                ItemLedgerEntry::create([
-                    'entry_type' => ItemLedgerEntryType::SALE,
-                    'document_type' => 'SALES_ORDER_SHIPMENT',
-                    'document_number' => $shipmentDocumentNumber,
-                    'document_line_number' => $line->line_number ?? ($line->id * 10),
-                    'item_id' => $line->item_id,
-                    'variant_code' => $line->variant_code,
-                    'location_id' => $locationId,
-                    'bin_code' => $line->bin_code,
-                    'quantity' => -$baseQuantityToShip,
-                    'remaining_quantity' => -$baseQuantityToShip,
-                    'serial_number' => $line->serial_number,
-                    'lot_number' => $line->lot_number,
-                    'expiration_date' => $line->expiration_date,
-                    'cost_amount_actual' => (float) ($line->unit_cost ?? 0) * $baseQuantityToShip,
-                    'cost_amount_expected' => 0,
-                    'purchase_amount_actual' => 0,
-                    'source_type' => self::class,
-                    'source_id' => $this->id,
-                    'general_business_posting_group_id' => $this->general_business_posting_group_id,
-                    'general_product_posting_group_id' => $line->general_product_posting_group_id,
-                    'inventory_posting_group_id' => $line->inventory_posting_group_id,
-                    'dimensions' => $line->dimensions,
-                    'posting_date' => $this->posting_date ?? $this->order_date ?? now(),
-                    'entry_date' => now(),
-                    'open' => false,
-                ]);
+                if ($line->item?->isInventoryItem()) {
+                    if ((float) $line->item->ledger_on_hand < $baseQuantityToShip) {
+                        throw ValidationException::withMessages([
+                            'inventory' => "Insufficient stock for item {$line->item->description}.",
+                        ]);
+                    }
 
-                if ($line->item) {
+                    ItemLedgerEntry::create([
+                        'entry_type' => ItemLedgerEntryType::SALE,
+                        'document_type' => 'SALES_ORDER_SHIPMENT',
+                        'document_number' => $shipmentDocumentNumber,
+                        'document_line_number' => $line->line_number ?? ($line->id * 10),
+                        'item_id' => $line->item_id,
+                        'variant_code' => $line->variant_code,
+                        'location_id' => $locationId,
+                        'bin_code' => $line->bin_code,
+                        'quantity' => -$baseQuantityToShip,
+                        'remaining_quantity' => -$baseQuantityToShip,
+                        'serial_number' => $line->serial_number,
+                        'lot_number' => $line->lot_number,
+                        'expiration_date' => $line->expiration_date,
+                        'cost_amount_actual' => (float) ($line->unit_cost ?? 0) * $baseQuantityToShip,
+                        'cost_amount_expected' => 0,
+                        'purchase_amount_actual' => 0,
+                        'source_type' => self::class,
+                        'source_id' => $this->id,
+                        'general_business_posting_group_id' => $this->general_business_posting_group_id,
+                        'general_product_posting_group_id' => $line->general_product_posting_group_id,
+                        'inventory_posting_group_id' => $line->inventory_posting_group_id,
+                        'dimensions' => $line->dimensions,
+                        'posting_date' => $this->posting_date ?? $this->order_date ?? now(),
+                        'entry_date' => now(),
+                        'open' => false,
+                    ]);
+
                     $line->item->decrement('inventory', $baseQuantityToShip);
                 }
 
@@ -704,6 +710,13 @@ class SalesOrder extends Model implements Approvable
                 $lineAmount = $lineTotal - $lineDiscountAmount;
                 $vatAmount = $lineAmount * ((float) $line->vat_percentage / 100);
                 $costAmount = $quantityToInvoice * (float) ($line->unit_cost ?? 0);
+                $itemLedgerEntryId = ItemLedgerEntry::query()
+                    ->where('document_number', $this->getShipmentDocumentNumber())
+                    ->where('entry_type', ItemLedgerEntryType::SALE)
+                    ->where('item_id', $line->item_id)
+                    ->where('document_line_number', $line->line_number)
+                    ->orderBy('id')
+                    ->value('id');
 
                 PostedSalesInvoiceLine::query()->create([
                     'posted_sales_invoice_id' => $postedInvoice->id,
@@ -736,6 +749,7 @@ class SalesOrder extends Model implements Approvable
                     'lot_number' => $line->lot_number,
                     'serial_number' => $line->serial_number,
                     'expiration_date' => $line->expiration_date,
+                    'item_ledger_entry_id' => $itemLedgerEntryId,
                     'dimensions' => $line->dimensions,
                     'line_number' => $line->line_number,
                 ]);
