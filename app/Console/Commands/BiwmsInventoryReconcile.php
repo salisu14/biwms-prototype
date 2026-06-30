@@ -7,6 +7,7 @@ use App\Enums\ProductionOrderStatus;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\PurchaseInvoice;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -32,6 +33,11 @@ class BiwmsInventoryReconcile extends Command
         $productionConsumptionWithoutValueEntries = $this->productionLedgerEntriesWithoutValueEntries('Consumption');
         $productionOutputWithoutValueEntries = $this->productionLedgerEntriesWithoutValueEntries('Output');
         $finishedProductionOrdersWithOpenWip = $this->finishedProductionOrdersWithOpenWip();
+        $purchaseReceiptLinesOverInvoiced = $this->purchaseReceiptLinesOverInvoiced();
+        $directPurchaseInvoiceDuplicateInventoryEntries = $this->directPurchaseInvoiceDuplicateInventoryEntries();
+        $postedPurchaseInvoicesMissingVendorLedger = $this->postedPurchaseInvoicesMissingVendorLedger();
+        $salesCreditMemoLinesOverInvoiced = $this->salesCreditMemoLinesOverInvoiced();
+        $purchaseCreditMemoLinesOverInvoiced = $this->purchaseCreditMemoLinesOverInvoiced();
 
         $report = [
             'stock_mismatches' => $stockMismatches,
@@ -44,6 +50,11 @@ class BiwmsInventoryReconcile extends Command
             'production_consumption_without_value_entries' => $productionConsumptionWithoutValueEntries,
             'production_output_without_value_entries' => $productionOutputWithoutValueEntries,
             'finished_production_orders_with_open_wip' => $finishedProductionOrdersWithOpenWip,
+            'purchase_receipt_lines_over_invoiced' => $purchaseReceiptLinesOverInvoiced,
+            'direct_purchase_invoice_duplicate_inventory_entries' => $directPurchaseInvoiceDuplicateInventoryEntries,
+            'posted_purchase_invoices_missing_vendor_ledger' => $postedPurchaseInvoicesMissingVendorLedger,
+            'sales_credit_memo_lines_over_invoiced' => $salesCreditMemoLinesOverInvoiced,
+            'purchase_credit_memo_lines_over_invoiced' => $purchaseCreditMemoLinesOverInvoiced,
         ];
 
         if ($exportPath = $this->option('export')) {
@@ -152,6 +163,49 @@ class BiwmsInventoryReconcile extends Command
             $order['severity'],
             $order['document_number'],
             number_format($order['wip_net_amount'], 4, '.', ''),
+        ));
+        $this->section('Purchase receipt lines over-invoiced', $purchaseReceiptLinesOverInvoiced, $details, fn (array $line): string => sprintf(
+            '[%s] receipt=%s line=%s item=%s received=%s invoiced=%s',
+            $line['severity'],
+            $line['document_number'],
+            $line['line_id'],
+            $line['item_code'] ?? 'N/A',
+            number_format($line['quantity_received'], 4, '.', ''),
+            number_format($line['quantity_invoiced'], 4, '.', ''),
+        ));
+        $this->section('Direct purchase invoice duplicate inventory entries', $directPurchaseInvoiceDuplicateInventoryEntries, $details, fn (array $line): string => sprintf(
+            '[%s] %s line=%s item=%s entries=%s quantity=%s',
+            $line['severity'],
+            $line['document_number'],
+            $line['document_line_number'],
+            $line['item_id'],
+            $line['entry_count'],
+            number_format($line['quantity'], 4, '.', ''),
+        ));
+        $this->section('Posted purchase invoices missing vendor ledger', $postedPurchaseInvoicesMissingVendorLedger, $details, fn (array $invoice): string => sprintf(
+            '[%s] %s vendor=%s amount=%s',
+            $invoice['severity'],
+            $invoice['document_number'],
+            $invoice['vendor_id'],
+            number_format($invoice['grand_total'], 4, '.', ''),
+        ));
+        $this->section('Sales credit memo lines over-invoiced', $salesCreditMemoLinesOverInvoiced, $details, fn (array $line): string => sprintf(
+            '[%s] credit_memo=%s invoice=%s item=%s credited=%s invoiced=%s',
+            $line['severity'],
+            $line['credit_memo_number'],
+            $line['invoice_number'],
+            $line['item_id'],
+            number_format($line['credited_quantity'], 4, '.', ''),
+            number_format($line['invoiced_quantity'], 4, '.', ''),
+        ));
+        $this->section('Purchase credit memo lines over-invoiced', $purchaseCreditMemoLinesOverInvoiced, $details, fn (array $line): string => sprintf(
+            '[%s] credit_memo=%s invoice=%s item=%s credited=%s invoiced=%s',
+            $line['severity'],
+            $line['credit_memo_number'],
+            $line['invoice_number'],
+            $line['item_id'],
+            number_format($line['credited_quantity'], 4, '.', ''),
+            number_format($line['invoiced_quantity'], 4, '.', ''),
         ));
 
         return self::SUCCESS;
@@ -498,6 +552,8 @@ class BiwmsInventoryReconcile extends Command
         return collect()
             ->merge($this->missingPostedSalesInvoiceLineEntries())
             ->merge($this->missingPostedPurchaseInvoiceLineEntries())
+            ->merge($this->missingPostedSalesCreditMemoLineEntries())
+            ->merge($this->missingPostedPurchaseCreditMemoLineEntries())
             ->values()
             ->all();
     }
@@ -563,7 +619,7 @@ class BiwmsInventoryReconcile extends Command
             ->whereNotExists(function ($query): void {
                 $query->selectRaw('1')
                     ->from('item_ledger_entries as ile')
-                    ->whereColumn('ile.document_number', 'headers.document_number')
+                    ->whereColumn('ile.id', 'lines.item_ledger_entry_id')
                     ->whereColumn('ile.item_id', 'lines.item_id')
                     ->where('ile.entry_type', 'Purchase');
             })
@@ -573,18 +629,333 @@ class BiwmsInventoryReconcile extends Command
                 'headers.document_number',
                 'lines.id as line_id',
                 'lines.item_id',
+                'lines.item_ledger_entry_id',
             ])
             ->map(fn ($line): array => [
                 'document_type' => 'POSTED_PURCHASE_INVOICE',
                 'document_number' => $line->document_number,
                 'line_id' => $line->line_id,
                 'item_id' => $line->item_id,
+                'item_ledger_entry_id' => $line->item_ledger_entry_id,
                 ...$this->findingMetadata(
                     classification: 'missing_item_ledger_link',
                     severity: 'critical',
                     suggestedRemediation: 'Find the related purchase receipt or invoice Item Ledger Entry and validate item, quantity, document, and posting date before linking or creating any reviewed correction.'
                 ),
             ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function missingPostedSalesCreditMemoLineEntries(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('posted_sales_credit_memo_lines')) {
+            return [];
+        }
+
+        return DB::table('posted_sales_credit_memo_lines as lines')
+            ->join('posted_sales_credit_memos as headers', 'headers.id', '=', 'lines.posted_sales_credit_memo_id')
+            ->join('items', 'items.id', '=', 'lines.item_id')
+            ->whereNotNull('lines.item_id')
+            ->whereIn('items.item_type', ItemType::inventoryTypes())
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('item_ledger_entries as ile')
+                    ->whereColumn('ile.id', 'lines.item_ledger_entry_id')
+                    ->whereColumn('ile.item_id', 'lines.item_id')
+                    ->where('ile.entry_type', 'Sale')
+                    ->where('ile.document_type', 'SALES_CREDIT_MEMO');
+            })
+            ->orderBy('headers.document_number')
+            ->limit(250)
+            ->get([
+                'headers.document_number',
+                'lines.id as line_id',
+                'lines.item_id',
+                'lines.item_ledger_entry_id',
+            ])
+            ->map(fn ($line): array => [
+                'document_type' => 'POSTED_SALES_CREDIT_MEMO',
+                'document_number' => $line->document_number,
+                'line_id' => $line->line_id,
+                'item_id' => $line->item_id,
+                'item_ledger_entry_id' => $line->item_ledger_entry_id,
+                ...$this->findingMetadata(
+                    classification: 'credit_memo_missing_item_ledger_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the posted sales credit memo return line and create a controlled correction only after validating the related Item Ledger Entry, Value Entry, customer ledger, and G/L reversal.'
+                ),
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function missingPostedPurchaseCreditMemoLineEntries(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('posted_purchase_credit_memo_lines')) {
+            return [];
+        }
+
+        return DB::table('posted_purchase_credit_memo_lines as lines')
+            ->join('posted_purchase_credit_memos as headers', 'headers.id', '=', 'lines.credit_memo_id')
+            ->join('items', 'items.id', '=', 'lines.item_id')
+            ->whereNotNull('lines.item_id')
+            ->whereIn('items.item_type', ItemType::inventoryTypes())
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('item_ledger_entries as ile')
+                    ->whereColumn('ile.document_number', 'headers.document_number')
+                    ->whereColumn('ile.document_line_number', 'lines.line_number')
+                    ->whereColumn('ile.item_id', 'lines.item_id')
+                    ->where('ile.entry_type', 'Purchase')
+                    ->where('ile.document_type', 'PURCHASE_CREDIT_MEMO');
+            })
+            ->orderBy('headers.document_number')
+            ->limit(250)
+            ->get([
+                'headers.document_number',
+                'lines.id as line_id',
+                'lines.item_id',
+            ])
+            ->map(fn ($line): array => [
+                'document_type' => 'POSTED_PURCHASE_CREDIT_MEMO',
+                'document_number' => $line->document_number,
+                'line_id' => $line->line_id,
+                'item_id' => $line->item_id,
+                'item_ledger_entry_id' => null,
+                ...$this->findingMetadata(
+                    classification: 'return_document_missing_item_ledger_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the posted purchase credit memo return line and create a controlled correction only after validating stock, vendor ledger, G/L payable reduction, and Value Entry impact.'
+                ),
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function purchaseReceiptLinesOverInvoiced(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('purchase_receipt_lines')) {
+            return [];
+        }
+
+        return DB::table('purchase_receipt_lines as lines')
+            ->join('purchase_receipts as headers', 'headers.id', '=', 'lines.purchase_receipt_id')
+            ->whereRaw('COALESCE(lines.quantity_invoiced, 0) > COALESCE(lines.quantity_received, 0) + 0.0001')
+            ->orderBy('headers.document_number')
+            ->limit(250)
+            ->get([
+                'headers.document_number',
+                'lines.id as line_id',
+                'lines.no as item_code',
+                'lines.quantity_received',
+                'lines.quantity_invoiced',
+            ])
+            ->map(fn ($line): array => [
+                'document_number' => $line->document_number,
+                'line_id' => $line->line_id,
+                'item_code' => $line->item_code,
+                'quantity_received' => round((float) $line->quantity_received, 4),
+                'quantity_invoiced' => round((float) $line->quantity_invoiced, 4),
+                ...$this->findingMetadata(
+                    classification: 'purchase_receipt_line_over_invoiced',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review receipt and invoice applications. Correct through a posted purchase credit memo or controlled ledger correction after validating vendor invoice history.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function directPurchaseInvoiceDuplicateInventoryEntries(): array
+    {
+        return DB::table('item_ledger_entries as ile')
+            ->where('ile.entry_type', 'Purchase')
+            ->where('ile.document_type', 'PURCHASE_INVOICE')
+            ->where('ile.source_type', PurchaseInvoice::class)
+            ->groupBy('ile.document_number', 'ile.document_line_number', 'ile.item_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->orderBy('ile.document_number')
+            ->limit(250)
+            ->get([
+                'ile.document_number',
+                'ile.document_line_number',
+                'ile.item_id',
+                DB::raw('COUNT(*) as entry_count'),
+                DB::raw('COALESCE(SUM(ile.quantity), 0) as quantity'),
+                DB::raw('COALESCE(SUM(ile.cost_amount_actual), 0) as cost_amount_actual'),
+            ])
+            ->map(fn ($line): array => [
+                'document_number' => $line->document_number,
+                'document_line_number' => $line->document_line_number,
+                'item_id' => $line->item_id,
+                'entry_count' => (int) $line->entry_count,
+                'quantity' => round((float) $line->quantity, 4),
+                'cost_amount_actual' => round((float) $line->cost_amount_actual, 4),
+                ...$this->findingMetadata(
+                    classification: 'direct_purchase_invoice_duplicate_inventory',
+                    severity: 'critical',
+                    suggestedRemediation: 'Confirm whether the purchase invoice was posted more than once. Reverse duplicate inventory/value impact through an approved credit memo or controlled correction.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function postedPurchaseInvoicesMissingVendorLedger(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('posted_purchase_invoices')) {
+            return [];
+        }
+
+        return DB::table('posted_purchase_invoices as invoices')
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('vendor_ledger_entries as vle')
+                    ->whereColumn('vle.document_number', 'invoices.document_number')
+                    ->whereColumn('vle.vendor_id', 'invoices.vendor_id')
+                    ->where('vle.document_type', 'PURCHASE_INVOICE');
+            })
+            ->orderBy('invoices.document_number')
+            ->limit(250)
+            ->get([
+                'invoices.id',
+                'invoices.document_number',
+                'invoices.vendor_id',
+                'invoices.grand_total',
+            ])
+            ->map(fn ($invoice): array => [
+                'posted_purchase_invoice_id' => $invoice->id,
+                'document_number' => $invoice->document_number,
+                'vendor_id' => $invoice->vendor_id,
+                'grand_total' => round((float) $invoice->grand_total, 4),
+                ...$this->findingMetadata(
+                    classification: 'posted_purchase_invoice_missing_vendor_ledger',
+                    severity: 'critical',
+                    suggestedRemediation: 'Create or restore the missing vendor ledger entry only after confirming the posted invoice, G/L payable entry, remaining amount, and payment applications.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function salesCreditMemoLinesOverInvoiced(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('posted_sales_credit_memo_lines')) {
+            return [];
+        }
+
+        $credited = DB::table('posted_sales_credit_memo_lines as credit_lines')
+            ->join('posted_sales_credit_memos as credit_headers', 'credit_headers.id', '=', 'credit_lines.posted_sales_credit_memo_id')
+            ->whereNotNull('credit_headers.corrected_invoice_id')
+            ->groupBy('credit_headers.corrected_invoice_id', 'credit_headers.document_number', 'credit_lines.item_id')
+            ->selectRaw('
+                credit_headers.corrected_invoice_id as invoice_id,
+                credit_headers.document_number as credit_memo_number,
+                credit_lines.item_id,
+                COALESCE(SUM(ABS(credit_lines.quantity)), 0) as credited_quantity
+            ');
+
+        return DB::query()
+            ->fromSub($credited, 'credited')
+            ->join('posted_sales_invoices as invoices', 'invoices.id', '=', 'credited.invoice_id')
+            ->leftJoin('posted_sales_invoice_lines as invoice_lines', function ($join): void {
+                $join->on('invoice_lines.posted_sales_invoice_id', '=', 'invoices.id')
+                    ->on('invoice_lines.item_id', '=', 'credited.item_id');
+            })
+            ->groupBy('credited.invoice_id', 'credited.credit_memo_number', 'credited.item_id', 'invoices.document_number', 'credited.credited_quantity')
+            ->havingRaw('credited.credited_quantity > COALESCE(SUM(ABS(invoice_lines.quantity)), 0) + 0.0001')
+            ->orderBy('credited.credit_memo_number')
+            ->limit(250)
+            ->get([
+                'credited.credit_memo_number',
+                'invoices.document_number as invoice_number',
+                'credited.item_id',
+                'credited.credited_quantity',
+                DB::raw('COALESCE(SUM(ABS(invoice_lines.quantity)), 0) as invoiced_quantity'),
+            ])
+            ->map(fn ($line): array => [
+                'credit_memo_number' => $line->credit_memo_number,
+                'invoice_number' => $line->invoice_number,
+                'item_id' => $line->item_id,
+                'credited_quantity' => round((float) $line->credited_quantity, 4),
+                'invoiced_quantity' => round((float) $line->invoiced_quantity, 4),
+                ...$this->findingMetadata(
+                    classification: 'credited_quantity_exceeds_invoiced_quantity',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the sales credit memo against the posted sales invoice. Reverse or correct excess credits through an approved credit memo correction; do not edit posted history directly.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function purchaseCreditMemoLinesOverInvoiced(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('posted_purchase_credit_memo_lines')) {
+            return [];
+        }
+
+        $credited = DB::table('posted_purchase_credit_memo_lines as credit_lines')
+            ->join('posted_purchase_credit_memos as credit_headers', 'credit_headers.id', '=', 'credit_lines.credit_memo_id')
+            ->whereNotNull('credit_headers.corrects_invoice_number')
+            ->groupBy('credit_headers.corrects_invoice_number', 'credit_headers.document_number', 'credit_lines.item_id')
+            ->selectRaw('
+                credit_headers.corrects_invoice_number as invoice_number,
+                credit_headers.document_number as credit_memo_number,
+                credit_lines.item_id,
+                COALESCE(SUM(ABS(credit_lines.quantity)), 0) as credited_quantity
+            ');
+
+        return DB::query()
+            ->fromSub($credited, 'credited')
+            ->join('posted_purchase_invoices as invoices', 'invoices.document_number', '=', 'credited.invoice_number')
+            ->leftJoin('posted_purchase_invoice_lines as invoice_lines', function ($join): void {
+                $join->on('invoice_lines.posted_purchase_invoice_id', '=', 'invoices.id')
+                    ->on('invoice_lines.item_id', '=', 'credited.item_id');
+            })
+            ->groupBy('credited.invoice_number', 'credited.credit_memo_number', 'credited.item_id', 'credited.credited_quantity')
+            ->havingRaw('credited.credited_quantity > COALESCE(SUM(ABS(invoice_lines.quantity)), 0) + 0.0001')
+            ->orderBy('credited.credit_memo_number')
+            ->limit(250)
+            ->get([
+                'credited.credit_memo_number',
+                'credited.invoice_number',
+                'credited.item_id',
+                'credited.credited_quantity',
+                DB::raw('COALESCE(SUM(ABS(invoice_lines.quantity)), 0) as invoiced_quantity'),
+            ])
+            ->map(fn ($line): array => [
+                'credit_memo_number' => $line->credit_memo_number,
+                'invoice_number' => $line->invoice_number,
+                'item_id' => $line->item_id,
+                'credited_quantity' => round((float) $line->credited_quantity, 4),
+                'invoiced_quantity' => round((float) $line->invoiced_quantity, 4),
+                ...$this->findingMetadata(
+                    classification: 'returned_quantity_exceeds_received_quantity',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the purchase return/credit memo against the posted purchase invoice and receipt history. Reverse or correct excess returns through an approved correction path.'
+                ),
+            ])
+            ->values()
             ->all();
     }
 

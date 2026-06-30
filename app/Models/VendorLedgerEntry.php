@@ -518,7 +518,7 @@ class VendorLedgerEntry extends Model
      */
     public static function createFromCreditMemo(PostedPurchaseCreditMemo $creditMemo): self
     {
-        $amount = $creditMemo->grand_total; // Negative (vendor owes us or reduction)
+        $amount = -abs((float) $creditMemo->grand_total); // Negative (reduces vendor payable)
 
         return self::create([
             'entry_number' => self::getNextEntryNumber($creditMemo->vendor_id),

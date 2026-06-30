@@ -10,9 +10,11 @@ use App\Data\Purchase\CreateReceiptData;
 use App\Data\Purchase\PostInvoiceData;
 use App\Data\Purchase\RecalculatePurchaseOrderTotalsData;
 use App\Data\Purchase\UpdatePurchaseOrderData;
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
 use App\Models\Item;
+use App\Models\ItemLedgerEntry;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
@@ -360,20 +362,132 @@ class PurchaseOrderService
     public function postReceipt(PurchaseOrder $order): PurchaseOrder
     {
         return DB::transaction(function () use ($order): PurchaseOrder {
-            $order->loadMissing('lines');
+            /** @var PurchaseOrder $order */
+            $order = PurchaseOrder::query()
+                ->with('lines.item')
+                ->lockForUpdate()
+                ->findOrFail($order->id);
+
+            if ($order->status === PurchaseOrderStatus::CANCELLED) {
+                throw new Exception('Cancelled purchase orders cannot be received.');
+            }
+
+            $receivedAny = false;
 
             foreach ($order->lines as $line) {
-                if ((float) $line->received_quantity < (float) $line->quantity) {
+                $targetQuantity = (float) $line->received_quantity > 0
+                    ? (float) $line->received_quantity
+                    : (float) $line->quantity;
+
+                if ($targetQuantity <= 0) {
+                    continue;
+                }
+
+                $postedQuantityBase = (float) ItemLedgerEntry::query()
+                    ->where('entry_type', ItemLedgerEntryType::PURCHASE)
+                    ->where('document_type', 'PURCHASE_RECEIPT')
+                    ->where('document_number', $order->order_number)
+                    ->where('document_line_number', $line->line_number)
+                    ->where('item_id', $line->item_id)
+                    ->sum('quantity');
+                $postedQuantity = $this->purchaseLineQuantityFromBase($line, $postedQuantityBase);
+
+                $quantityToReceive = max(0.0, $targetQuantity - $postedQuantity);
+
+                if ($quantityToReceive <= 0) {
+                    if ((float) $line->received_quantity < $targetQuantity) {
+                        $line->update(['received_quantity' => $targetQuantity]);
+                    }
+
+                    continue;
+                }
+
+                if ((float) $line->received_quantity < $targetQuantity) {
                     $line->update([
-                        'received_quantity' => (float) $line->quantity,
+                        'received_quantity' => $targetQuantity,
                     ]);
                 }
+
+                if ($line->item?->isInventoryItem()) {
+                    $this->createReceiptItemLedgerEntry($order, $line, $quantityToReceive);
+                }
+
+                $receivedAny = true;
+            }
+
+            if (! $receivedAny) {
+                throw new Exception('Purchase receipt has already been posted for the received quantities.');
             }
 
             $order->refreshLifecycleStatus();
 
             return $order->fresh('lines');
         });
+    }
+
+    private function createReceiptItemLedgerEntry(PurchaseOrder $order, $line, float $quantity): ItemLedgerEntry
+    {
+        $item = $line->item;
+        $quantityBase = $this->purchaseLineQuantityBase($line, $quantity);
+        $locationId = $order->location_id ?? $item?->location_id;
+
+        if (! $item || ! $item->isInventoryItem()) {
+            throw new Exception("Item is missing for purchase receipt line {$line->id}.");
+        }
+
+        if (! $locationId) {
+            throw new Exception("Location is missing for item {$item->item_code} on purchase receipt {$order->order_number}.");
+        }
+
+        $lineCost = $quantity * (float) $line->unit_cost;
+
+        $entry = ItemLedgerEntry::query()->create([
+            'entry_type' => ItemLedgerEntryType::PURCHASE,
+            'document_type' => 'PURCHASE_RECEIPT',
+            'document_number' => $order->order_number,
+            'document_line_number' => $line->line_number,
+            'item_id' => $item->id,
+            'location_id' => $locationId,
+            'quantity' => $quantityBase,
+            'remaining_quantity' => $quantityBase,
+            'open' => true,
+            'posting_date' => $order->posting_date ?? now(),
+            'entry_date' => now(),
+            'source_id' => $order->id,
+            'source_type' => PurchaseOrder::class,
+            'cost_amount_actual' => $lineCost,
+            'cost_amount_expected' => 0,
+            'purchase_amount_actual' => $lineCost,
+            'general_business_posting_group_id' => $order->general_business_posting_group_id,
+            'general_product_posting_group_id' => $line->general_product_posting_group_id,
+            'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        ]);
+
+        $item->increment('inventory', $quantityBase);
+
+        return $entry;
+    }
+
+    private function purchaseLineQuantityBase($line, float $quantity): float
+    {
+        $conversionFactor = (float) ($line->qty_per_unit_of_measure ?? 0);
+
+        if ($conversionFactor <= 0) {
+            $conversionFactor = (float) ($line->item?->getConversionFactorForUom($line->unit_of_measure ?: $line->item?->base_unit_of_measure) ?? 1);
+        }
+
+        return $quantity * ($conversionFactor > 0 ? $conversionFactor : 1.0);
+    }
+
+    private function purchaseLineQuantityFromBase($line, float $quantityBase): float
+    {
+        $conversionFactor = (float) ($line->qty_per_unit_of_measure ?? 0);
+
+        if ($conversionFactor <= 0) {
+            $conversionFactor = (float) ($line->item?->getConversionFactorForUom($line->unit_of_measure ?: $line->item?->base_unit_of_measure) ?? 1);
+        }
+
+        return $quantityBase / ($conversionFactor > 0 ? $conversionFactor : 1.0);
     }
 
     /**

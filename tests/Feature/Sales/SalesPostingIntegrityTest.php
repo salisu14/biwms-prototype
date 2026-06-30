@@ -29,6 +29,7 @@ use App\Services\Sales\SalesCreditMemoService;
 use App\Services\Sales\SalesInvoiceService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 
 uses(RefreshDatabase::class);
 
@@ -133,7 +134,7 @@ test('sales credit memo reverses inventory, value, customer, and gl entries usin
     $creditMemo = SalesCreditMemo::query()->create([
         'memo_number' => 'SCM-TRACE-001',
         'customer_id' => $fixture['customer']->id,
-        'sales_invoice_id' => $fixture['user']->id,
+        'sales_invoice_id' => null,
         'total_amount' => 1000,
         'status' => ApprovalStatus::APPROVED,
         'reason' => 'Return',
@@ -177,6 +178,91 @@ test('sales credit memo reverses inventory, value, customer, and gl entries usin
         ->toThrow(Exception::class, 'Sales credit memo is already posted.');
 });
 
+test('linked sales credit memo reduces receivable returns stock and blocks over-crediting', function () {
+    $fixture = salesPostingFixture();
+    grantSalesCreditMemoPostPermission($fixture['user']);
+    $this->actingAs($fixture['user']);
+
+    $invoice = SalesInvoice::query()->create([
+        'invoice_number' => 'SI-RETURN-001',
+        'customer_id' => $fixture['customer']->id,
+        'status' => ApprovalStatus::APPROVED,
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(7)->toDateString(),
+        'currency_code' => 'NGN',
+        'approved_by' => $fixture['user']->id,
+        'approved_at' => now(),
+    ]);
+
+    $invoice->lines()->create([
+        'item_id' => $fixture['item']->id,
+        'description' => 'One carton sale',
+        'quantity' => 1,
+        'unit_of_measure' => 'CT',
+        'unit_price' => 1000,
+    ]);
+
+    app(SalesInvoiceService::class)->post($invoice);
+
+    $postedInvoice = PostedSalesInvoice::query()->where('document_number', 'SI-RETURN-001')->firstOrFail();
+
+    expect((float) $fixture['item']->fresh()->inventory)->toBe(0.0)
+        ->and((float) CustomerLedgerEntry::query()->where('customer_id', $fixture['customer']->id)->sum('amount'))->toBe(1000.0);
+
+    $creditMemo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-RETURN-001',
+        'customer_id' => $fixture['customer']->id,
+        'sales_invoice_id' => $invoice->id,
+        'total_amount' => 1000,
+        'status' => ApprovalStatus::APPROVED,
+        'reason' => 'Return',
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+    ]);
+
+    $creditMemo->items()->create([
+        'item_id' => $fixture['item']->id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'CT',
+        'unit_price' => 1000,
+    ]);
+
+    app(SalesCreditMemoService::class)->post($creditMemo);
+
+    $postedMemo = PostedSalesCreditMemo::query()->where('document_number', 'SCM-RETURN-001')->firstOrFail();
+
+    expect((float) $fixture['item']->fresh()->inventory)->toBe(288.0)
+        ->and((float) CustomerLedgerEntry::query()->where('customer_id', $fixture['customer']->id)->sum('amount'))->toBe(0.0)
+        ->and($postedMemo->corrected_invoice_id)->toBe($postedInvoice->id)
+        ->and($postedMemo->corrected_invoice_number)->toBe('SI-RETURN-001')
+        ->and(ItemLedgerEntry::query()
+            ->where('document_type', 'SALES_CREDIT_MEMO')
+            ->where('document_number', 'SCM-RETURN-001')
+            ->where('quantity', 288)
+            ->exists())->toBeTrue();
+
+    $overCreditMemo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-OVER-001',
+        'customer_id' => $fixture['customer']->id,
+        'sales_invoice_id' => $invoice->id,
+        'total_amount' => 1000,
+        'status' => ApprovalStatus::APPROVED,
+        'reason' => 'Return again',
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+    ]);
+
+    $overCreditMemo->items()->create([
+        'item_id' => $fixture['item']->id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'CT',
+        'unit_price' => 1000,
+    ]);
+
+    expect(fn () => app(SalesCreditMemoService::class)->post($overCreditMemo))
+        ->toThrow(ValidationException::class, 'exceeds invoiced quantity');
+});
+
 test('sales credit memo posting requires permission and rolls back on missing setup', function () {
     $fixture = salesPostingFixture(createGeneralPostingSetup: false);
     $this->actingAs($fixture['user']);
@@ -184,7 +270,7 @@ test('sales credit memo posting requires permission and rolls back on missing se
     $creditMemo = SalesCreditMemo::query()->create([
         'memo_number' => 'SCM-MISSING-SETUP',
         'customer_id' => $fixture['customer']->id,
-        'sales_invoice_id' => $fixture['user']->id,
+        'sales_invoice_id' => null,
         'total_amount' => 1000,
         'status' => ApprovalStatus::APPROVED,
         'reason' => 'Return',

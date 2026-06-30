@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedPurchaseCreditMemoLine;
+use App\Models\PostedPurchaseInvoice;
 use App\Models\PurchaseCreditMemo;
 use App\Models\PurchaseCreditMemoLine;
 use App\Models\PurchaseInvoice;
@@ -187,6 +188,12 @@ class PurchaseCreditMemoService
                 throw new \RuntimeException('No lines to post for this purchase credit memo.');
             }
 
+            $correctedPostedInvoice = $this->resolveCorrectedPostedInvoice($memo);
+
+            if ($correctedPostedInvoice) {
+                $this->validateCreditQuantitiesAgainstPostedInvoice($correctedPostedInvoice, $memo);
+            }
+
             $subtotal = $memo->lines->sum(
                 fn (PurchaseCreditMemoLine $line): float => (float) $line->quantity * (float) $line->unit_cost
             );
@@ -253,7 +260,7 @@ class PurchaseCreditMemoService
                     'line_total' => $line->grand_total,
                     'general_product_posting_group_id' => $line->general_product_posting_group_id,
                     'inventory_posting_group_id' => $line->item?->inventory_posting_group_id,
-                    'corrected_invoice_line_id' => $line->purchase_invoice_line_id ?? null,
+                    'corrected_invoice_line_id' => null,
                 ]);
             }
 
@@ -273,6 +280,70 @@ class PurchaseCreditMemoService
 
             return $postedMemo;
         });
+    }
+
+    private function resolveCorrectedPostedInvoice(PurchaseCreditMemo $memo): ?PostedPurchaseInvoice
+    {
+        if (! $memo->corrects_invoice_id && ! $memo->corrects_invoice_number) {
+            return null;
+        }
+
+        if ($memo->corrects_invoice_id) {
+            $postedInvoice = PostedPurchaseInvoice::query()->find($memo->corrects_invoice_id);
+
+            if ($postedInvoice) {
+                return $postedInvoice;
+            }
+        }
+
+        $invoiceNumber = $memo->corrects_invoice_number ?: $memo->correctedInvoice?->document_number;
+
+        if (! $invoiceNumber) {
+            return null;
+        }
+
+        return PostedPurchaseInvoice::query()
+            ->where('document_number', $invoiceNumber)
+            ->first();
+    }
+
+    private function validateCreditQuantitiesAgainstPostedInvoice(PostedPurchaseInvoice $postedInvoice, PurchaseCreditMemo $memo): void
+    {
+        $postedInvoice->loadMissing('lines');
+        $memo->loadMissing('lines.item');
+
+        $invoicedQuantityByItem = $postedInvoice->lines
+            ->groupBy('item_id')
+            ->map(fn ($lines): float => abs((float) $lines->sum('quantity')));
+
+        $alreadyCreditedByItem = PostedPurchaseCreditMemoLine::query()
+            ->join('posted_purchase_credit_memos as headers', 'headers.id', '=', 'posted_purchase_credit_memo_lines.credit_memo_id')
+            ->where(function ($query) use ($postedInvoice): void {
+                $query
+                    ->where('headers.corrects_invoice_id', $postedInvoice->id)
+                    ->orWhere('headers.corrects_invoice_number', $postedInvoice->document_number);
+            })
+            ->groupBy('posted_purchase_credit_memo_lines.item_id')
+            ->selectRaw('posted_purchase_credit_memo_lines.item_id, COALESCE(SUM(ABS(posted_purchase_credit_memo_lines.quantity)), 0) as quantity')
+            ->pluck('quantity', 'item_id');
+
+        $requestedQuantityByItem = $memo->lines
+            ->groupBy('item_id')
+            ->map(fn ($lines): float => abs((float) $lines->sum('quantity')));
+
+        foreach ($requestedQuantityByItem as $itemId => $requestedQuantity) {
+            $invoicedQuantity = (float) ($invoicedQuantityByItem[$itemId] ?? 0.0);
+            $alreadyCreditedQuantity = (float) ($alreadyCreditedByItem[$itemId] ?? 0.0);
+            $availableQuantity = max(0.0, $invoicedQuantity - $alreadyCreditedQuantity);
+
+            if ($requestedQuantity > ($availableQuantity + 0.000001)) {
+                $itemCode = $memo->lines->firstWhere('item_id', $itemId)?->item?->item_code ?? ('#'.$itemId);
+
+                throw ValidationException::withMessages([
+                    'lines' => "Credit quantity for item {$itemCode} exceeds invoiced quantity. Available: {$availableQuantity}, requested: {$requestedQuantity}.",
+                ]);
+            }
+        }
     }
 
     private function createItemLedgerEntryForLine(

@@ -181,6 +181,8 @@ Current costing baseline:
 
 - The current implementation is closest to average/current-cost behavior.
 - Purchase posting records actual cost and updates inventory value through Value Entries.
+- Purchase receipts create inventory Item Ledger Entries/Value Entries; purchase invoices created from receipts link back to receipt ledger entries and must not add inventory a second time.
+- Landed cost and item-charge allocation are not fully allocated into inventory value yet. Treat landed-cost capitalization as a documented TODO until item-charge assignment and cost-adjustment posting are completed.
 - Sales posting uses the item current `unit_cost` for COGS/value reduction.
 - Production output cost is derived from consumed component/capacity cost where available.
 - Inventory adjustments use the provided or derived item cost.
@@ -193,12 +195,16 @@ php artisan biwms:inventory-reconcile
 php artisan biwms:inventory-reconcile --details
 ```
 
-The command is diagnostic-first and report-only. It does not correct data automatically and intentionally has no `--fix` option. It reports cached item stock vs ledger sum mismatches, negative ledger stock, open item ledger entries, missing Value Entries, Value Entry mismatches, and posted inventory document lines missing Item Ledger Entries. Use the default output for counts; use `--details` to inspect item IDs, item codes, document numbers, linked ledger entry IDs, value entry numbers, and location/lot/serial context.
+The command is diagnostic-first and report-only. It does not correct data automatically and intentionally has no `--fix` option. It reports cached item stock vs ledger sum mismatches, negative ledger stock, open item ledger entries, missing Value Entries, Value Entry mismatches, posted inventory document lines missing Item Ledger Entries, purchase receipt lines invoiced above received quantity, duplicate direct purchase invoice inventory entries, and posted purchase invoices missing vendor ledger entries. Use the default output for counts; use `--details` to inspect item IDs, item codes, document numbers, linked ledger entry IDs, value entry numbers, and location/lot/serial context.
 
 Inventory reconciliation investigation guide:
 
 - Stock mismatch: compare the item card `inventory` cache with `SUM(item_ledger_entries.quantity)` for the item. Fix the posting path first; only plan data repair after the source of the mismatch is understood.
 - Missing posted sales invoice line ledger entry: inspect `posted_sales_invoice_lines.item_ledger_entry_id` and confirm it points to the related sales shipment or invoice Item Ledger Entry.
+- Missing posted purchase invoice line ledger entry: inspect `posted_purchase_invoice_lines.item_ledger_entry_id` and confirm it points to either the related purchase receipt Item Ledger Entry or the direct purchase invoice Item Ledger Entry.
+- Purchase receipt over-invoiced: compare receipt line received vs invoiced quantity and correct through purchase credit memo/reversal or a reviewed vendor invoice adjustment.
+- Duplicate direct purchase invoice inventory entry: confirm whether direct invoice posting ran more than once; reverse the duplicate inventory/value impact through an approved correction path.
+- Posted purchase invoice missing vendor ledger: confirm the posted invoice, payable G/L entry, remaining amount, and payment applications before creating any reviewed ledger correction.
 - Value Entry mismatch: compare `item_ledger_entries.entry_number` with `value_entries.item_ledger_entry_no`, then verify quantity and `cost_amount_actual` match.
 - Negative stock: use `--details` to identify item, location, lot, and serial context, then trace the outbound posting that bypassed stock validation.
 - Open Item Ledger Entry: confirm whether the entry is intentionally open for remaining quantity application or whether the posting routine failed to close it.

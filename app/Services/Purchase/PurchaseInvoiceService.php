@@ -300,6 +300,10 @@ class PurchaseInvoiceService
             return null;
         }
 
+        if ($receiptEntry = $this->receiptItemLedgerEntryForLine($line)) {
+            return $receiptEntry;
+        }
+
         $quantityBase = $this->quantityBase($line, $item);
 
         if ($quantityBase <= 0) {
@@ -340,6 +344,30 @@ class PurchaseInvoiceService
         $item->increment('inventory', $quantityBase);
 
         return $entry;
+    }
+
+    private function receiptItemLedgerEntryForLine(PurchaseInvoiceLine $line): ?ItemLedgerEntry
+    {
+        if (! $line->po_line_id) {
+            return null;
+        }
+
+        $line->loadMissing('purchaseOrderLine.purchaseOrder');
+        $orderLine = $line->purchaseOrderLine;
+        $order = $orderLine?->purchaseOrder;
+
+        if (! $orderLine || ! $order) {
+            return null;
+        }
+
+        return ItemLedgerEntry::query()
+            ->where('entry_type', ItemLedgerEntryType::PURCHASE)
+            ->where('document_type', 'PURCHASE_RECEIPT')
+            ->where('document_number', $order->order_number)
+            ->where('document_line_number', $orderLine->line_number)
+            ->where('item_id', $line->item_id)
+            ->orderBy('id')
+            ->first();
     }
 
     private function quantityBase(PurchaseInvoiceLine $line, Item $item): float

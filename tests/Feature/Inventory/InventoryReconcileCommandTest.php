@@ -10,10 +10,20 @@ use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\PostedPurchaseCreditMemo;
+use App\Models\PostedPurchaseCreditMemoLine;
+use App\Models\PostedPurchaseInvoice;
+use App\Models\PostedPurchaseInvoiceLine;
+use App\Models\PostedSalesCreditMemo;
+use App\Models\PostedSalesCreditMemoLine;
 use App\Models\PostedSalesInvoice;
 use App\Models\PostedSalesInvoiceLine;
+use App\Models\PurchaseInvoice;
+use App\Models\PurchaseReceipt;
+use App\Models\PurchaseReceiptLine;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
@@ -299,6 +309,345 @@ it('exports JSON reconciliation reports with cleanup classifications and remedia
         ->and($report['negative_stock_violations'][0]['classification'])->toBe('negative_stock')
         ->and($report['negative_stock_violations'][0]['severity'])->toBe('critical')
         ->and($report['negative_stock_violations'][0]['suggested_remediation'])->toContain('approved inventory adjustment');
+});
+
+it('reports purchase receipt invoice and vendor ledger reconciliation issues', function (): void {
+    $user = User::factory()->create();
+    $vendor = Vendor::factory()->create();
+    $location = Location::factory()->create();
+    $item = Item::factory()->create([
+        'item_code' => 'PI-REC-ITEM',
+        'inventory' => 0,
+        'unit_cost' => 12,
+        'location_id' => $location->id,
+    ]);
+
+    $postedInvoice = PostedPurchaseInvoice::query()->create([
+        'document_number' => 'PPI-MISS-001',
+        'vendor_id' => $vendor->id,
+        'vendor_name' => $vendor->vendor_name,
+        'location_id' => $location->id,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'due_date' => now(),
+        'total_amount' => 100,
+        'total_vat' => 0,
+        'grand_total' => 100,
+        'remaining_amount' => 100,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+    ]);
+
+    PostedPurchaseInvoiceLine::query()->create([
+        'posted_purchase_invoice_id' => $postedInvoice->id,
+        'item_id' => $item->id,
+        'item_code' => $item->item_code,
+        'item_description' => $item->description,
+        'posting_date' => now(),
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => 1,
+        'unit_cost' => 100,
+        'unit_cost_lcy' => 100,
+        'line_total' => 100,
+        'amount_including_vat' => 100,
+        'line_number' => 10000,
+    ]);
+
+    $receipt = PurchaseReceipt::query()->create([
+        'document_number' => 'PR-OVER-001',
+        'vendor_id' => $vendor->id,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'receiving_location_id' => $location->id,
+        'posted' => true,
+        'posted_at' => now(),
+        'posted_by' => $user->id,
+    ]);
+
+    PurchaseReceiptLine::query()->create([
+        'purchase_receipt_id' => $receipt->id,
+        'line_number' => 10000,
+        'type' => 'ITEM',
+        'no' => $item->item_code,
+        'description' => $item->description,
+        'quantity' => 1,
+        'quantity_received' => 1,
+        'quantity_invoiced' => 2,
+        'direct_unit_cost' => 100,
+        'line_amount' => 100,
+    ]);
+
+    $directInvoice = PurchaseInvoice::query()->create([
+        'document_number' => 'PI-DUP-LEDGER-001',
+        'vendor_id' => $vendor->id,
+        'vendor_name' => $vendor->vendor_name,
+        'location_id' => $location->id,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'due_date' => now(),
+        'status' => 'posted',
+        'total_amount' => 100,
+        'total_vat' => 0,
+        'grand_total' => 100,
+        'remaining_amount' => 100,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+    ]);
+
+    foreach ([1, 2] as $index) {
+        ItemLedgerEntry::query()->create([
+            'entry_type' => ItemLedgerEntryType::PURCHASE,
+            'document_type' => 'PURCHASE_INVOICE',
+            'document_number' => $directInvoice->document_number,
+            'document_line_number' => 10000,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'quantity' => 1,
+            'remaining_quantity' => 1,
+            'cost_amount_actual' => 100,
+            'cost_amount_expected' => 0,
+            'source_id' => $directInvoice->id,
+            'source_type' => PurchaseInvoice::class,
+            'general_product_posting_group_id' => $item->general_product_posting_group_id,
+            'inventory_posting_group_id' => $item->inventory_posting_group_id,
+            'posting_date' => now(),
+            'entry_date' => now(),
+            'open' => $index === 1,
+        ]);
+    }
+
+    expect(Artisan::call('biwms:inventory-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect($report['missing_item_ledger_entries_for_posted_documents'])->toHaveCount(1)
+        ->and($report['missing_item_ledger_entries_for_posted_documents'][0]['document_number'])->toBe('PPI-MISS-001')
+        ->and($report['missing_item_ledger_entries_for_posted_documents'][0]['classification'])->toBe('missing_item_ledger_link')
+        ->and($report['purchase_receipt_lines_over_invoiced'])->toHaveCount(1)
+        ->and($report['purchase_receipt_lines_over_invoiced'][0]['classification'])->toBe('purchase_receipt_line_over_invoiced')
+        ->and($report['direct_purchase_invoice_duplicate_inventory_entries'])->toHaveCount(1)
+        ->and($report['direct_purchase_invoice_duplicate_inventory_entries'][0]['classification'])->toBe('direct_purchase_invoice_duplicate_inventory')
+        ->and($report['posted_purchase_invoices_missing_vendor_ledger'])->toHaveCount(1)
+        ->and($report['posted_purchase_invoices_missing_vendor_ledger'][0]['classification'])->toBe('posted_purchase_invoice_missing_vendor_ledger');
+});
+
+it('reports credit memo missing ledger and over credited quantity issues', function (): void {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+    $vendor = Vendor::factory()->create();
+    $location = Location::factory()->create();
+    $item = Item::factory()->create([
+        'item_code' => 'RETURN-REC-ITEM',
+        'inventory' => 0,
+        'unit_cost' => 12,
+        'location_id' => $location->id,
+    ]);
+
+    $salesInvoiceEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::SALE,
+        'document_type' => 'SALES_INVOICE',
+        'document_number' => 'SI-CM-REC-001',
+        'document_line_number' => 10000,
+        'item_id' => $item->id,
+        'location_id' => $location->id,
+        'quantity' => -1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 12,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+    ]);
+
+    $postedSalesInvoice = PostedSalesInvoice::query()->create([
+        'document_number' => 'SI-CM-REC-001',
+        'customer_id' => $customer->id,
+        'customer_name' => 'Return Customer',
+        'location_id' => $location->id,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'due_date' => now(),
+        'subtotal' => 100,
+        'total_amount' => 100,
+        'grand_total' => 100,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+    ]);
+
+    PostedSalesInvoiceLine::query()->create([
+        'posted_sales_invoice_id' => $postedSalesInvoice->id,
+        'item_id' => $item->id,
+        'item_code' => $item->item_code,
+        'item_description' => $item->description,
+        'posting_date' => now(),
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => 1,
+        'unit_price' => 100,
+        'unit_cost' => 12,
+        'unit_cost_lcy' => 12,
+        'line_total' => 100,
+        'line_amount' => 100,
+        'amount_including_vat' => 100,
+        'cost_amount' => 12,
+        'profit_amount' => 88,
+        'line_number' => 10000,
+        'item_ledger_entry_id' => $salesInvoiceEntry->id,
+    ]);
+
+    $postedSalesCreditMemo = PostedSalesCreditMemo::query()->create([
+        'document_number' => 'SCM-REC-001',
+        'corrected_invoice_id' => $postedSalesInvoice->id,
+        'corrected_invoice_number' => $postedSalesInvoice->document_number,
+        'customer_id' => $customer->id,
+        'customer_name' => 'Return Customer',
+        'general_business_posting_group_id' => $customer->general_business_posting_group_id,
+        'customer_posting_group_id' => $customer->customer_posting_group_id,
+        'location_id' => $location->id,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'total_amount' => -200,
+        'grand_total' => -200,
+        'remaining_amount' => 200,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+    ]);
+
+    PostedSalesCreditMemoLine::query()->create([
+        'posted_sales_credit_memo_id' => $postedSalesCreditMemo->id,
+        'item_id' => $item->id,
+        'item_code' => $item->item_code,
+        'item_description' => $item->description,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'quantity' => -2,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => -2,
+        'unit_price' => 100,
+        'line_total' => -200,
+        'line_amount' => -200,
+        'amount_including_vat' => -200,
+        'posting_date' => now(),
+        'line_number' => 10000,
+    ]);
+
+    $purchaseInvoiceEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_number' => 'PI-CM-REC-001',
+        'document_line_number' => 10000,
+        'item_id' => $item->id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 1,
+        'cost_amount_actual' => 100,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => true,
+    ]);
+
+    $postedPurchaseInvoice = PostedPurchaseInvoice::query()->create([
+        'document_number' => 'PI-CM-REC-001',
+        'vendor_id' => $vendor->id,
+        'vendor_name' => $vendor->vendor_name,
+        'location_id' => $location->id,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'due_date' => now(),
+        'total_amount' => 100,
+        'total_vat' => 0,
+        'grand_total' => 100,
+        'remaining_amount' => 100,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+    ]);
+
+    PostedPurchaseInvoiceLine::query()->create([
+        'posted_purchase_invoice_id' => $postedPurchaseInvoice->id,
+        'item_id' => $item->id,
+        'item_code' => $item->item_code,
+        'item_description' => $item->description,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => 1,
+        'unit_cost' => 100,
+        'unit_cost_lcy' => 100,
+        'line_total' => 100,
+        'amount_including_vat' => 100,
+        'line_number' => 10000,
+        'item_ledger_entry_id' => $purchaseInvoiceEntry->id,
+    ]);
+
+    $postedPurchaseCreditMemo = PostedPurchaseCreditMemo::query()->create([
+        'document_number' => 'PCM-REC-001',
+        'vendor_id' => $vendor->id,
+        'vendor_name' => $vendor->vendor_name,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+        'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'subtotal' => 200,
+        'grand_total' => 200,
+        'posted' => true,
+        'posted_at' => now(),
+        'posted_by' => $user->id,
+        'corrects_invoice_number' => $postedPurchaseInvoice->document_number,
+    ]);
+
+    PostedPurchaseCreditMemoLine::query()->create([
+        'credit_memo_id' => $postedPurchaseCreditMemo->id,
+        'line_number' => 10000,
+        'type' => 'ITEM',
+        'item_id' => $item->id,
+        'description' => $item->description,
+        'quantity' => 2,
+        'unit_of_measure' => 'PCS',
+        'unit_price' => 100,
+        'amount' => 200,
+        'line_total' => 200,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+    ]);
+
+    expect(Artisan::call('biwms:inventory-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect($report['missing_item_ledger_entries_for_posted_documents'])->toHaveCount(2)
+        ->and(collect($report['missing_item_ledger_entries_for_posted_documents'])->pluck('classification')->all())
+        ->toContain('credit_memo_missing_item_ledger_entry', 'return_document_missing_item_ledger_entry')
+        ->and($report['sales_credit_memo_lines_over_invoiced'])->toHaveCount(1)
+        ->and($report['sales_credit_memo_lines_over_invoiced'][0]['classification'])->toBe('credited_quantity_exceeds_invoiced_quantity')
+        ->and($report['purchase_credit_memo_lines_over_invoiced'])->toHaveCount(1)
+        ->and($report['purchase_credit_memo_lines_over_invoiced'][0]['classification'])->toBe('returned_quantity_exceeds_received_quantity');
 });
 
 it('reports production output consumption value entry and open wip inconsistencies', function (): void {
