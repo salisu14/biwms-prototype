@@ -16,8 +16,9 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 
-#[Signature('biwms:finance-reconcile {--json : Output machine-readable JSON} {--details : Show detailed diagnostic rows}')]
+#[Signature('biwms:finance-reconcile {--json : Output machine-readable JSON} {--details : Show detailed diagnostic rows} {--export= : Write the JSON report to a file path}')]
 #[Description('Report BIWMS G/L and finance sub-ledger consistency issues.')]
 class BiwmsFinanceReconcile extends Command
 {
@@ -32,7 +33,12 @@ class BiwmsFinanceReconcile extends Command
             'vendor_ledger_payables_mismatches' => $this->vendorLedgerPayablesMismatches(),
             'bank_ledger_gl_mismatches' => $this->bankLedgerGlMismatches(),
             'inventory_value_gl_mismatches' => $this->inventoryValueGlMismatches(),
+            'missing_control_account_entries' => $this->missingControlAccountEntries(),
         ];
+
+        if ($exportPath = $this->option('export')) {
+            $this->exportReport($report, (string) $exportPath);
+        }
 
         if ($this->option('json')) {
             $this->line(json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -44,6 +50,9 @@ class BiwmsFinanceReconcile extends Command
 
         $this->info('BIWMS Finance Reconciliation');
         $this->line('Mode: report-only. No G/L or sub-ledger entries were changed.');
+        if ($exportPath) {
+            $this->line("Exported JSON report to {$exportPath}.");
+        }
         $this->newLine();
 
         $this->section('G/L debit/credit imbalances', $report['gl_debit_credit_imbalances'], $details, fn (array $entry): string => sprintf(
@@ -96,6 +105,17 @@ class BiwmsFinanceReconcile extends Command
             number_format($entry['difference'], 2, '.', ''),
         ));
 
+        $this->section('Missing control account entries', $report['missing_control_account_entries'], $details, fn (array $entry): string => sprintf(
+            '[%s] %s %s %s account=%s amount=%s source=%s',
+            $entry['severity'],
+            $entry['control_type'],
+            $entry['document_type'],
+            $entry['document_number'],
+            $entry['account_number'],
+            number_format($entry['amount'], 2, '.', ''),
+            $entry['source_hint'],
+        ));
+
         return self::SUCCESS;
     }
 
@@ -119,7 +139,7 @@ class BiwmsFinanceReconcile extends Command
                 'credit' => round((float) $entry->credit, 2),
                 'difference' => round((float) $entry->debit - (float) $entry->credit, 2),
                 ...$this->findingMetadata(
-                    classification: 'gl_debit_credit_imbalance',
+                    classification: 'gl_imbalance',
                     severity: 'critical',
                     suggestedRemediation: 'Review the transaction G/L entries and correct only through an approved journal or reversal; do not edit posted entries directly.'
                 ),
@@ -159,7 +179,7 @@ class BiwmsFinanceReconcile extends Command
                     'gl_balance' => round($glBalance, 2),
                     'difference' => $difference,
                     ...$this->findingMetadata(
-                        classification: 'customer_ledger_receivables_mismatch',
+                        classification: 'customer_ledger_gl_mismatch',
                         severity: 'critical',
                         suggestedRemediation: 'Trace customer ledger entries to the receivables control G/L entries by document number and posting date, then correct through approved posting/reversal paths.'
                     ),
@@ -201,7 +221,7 @@ class BiwmsFinanceReconcile extends Command
                     'gl_balance' => round($glBalance, 2),
                     'difference' => $difference,
                     ...$this->findingMetadata(
-                        classification: 'vendor_ledger_payables_mismatch',
+                        classification: 'vendor_ledger_gl_mismatch',
                         severity: 'critical',
                         suggestedRemediation: 'Trace vendor ledger entries to the payables control G/L entries by document number and posting date, then correct through approved posting/reversal paths.'
                     ),
@@ -272,7 +292,8 @@ class BiwmsFinanceReconcile extends Command
         }
 
         $subledgerBalance = (float) ValueEntry::query()
-            ->sum('cost_amount_actual');
+            ->selectRaw($this->inventoryValueEffectSql(alias: 'inventory_value_effect'))
+            ->value('inventory_value_effect');
 
         $glBalance = (float) GlEntry::query()
             ->whereIn('chart_of_account_id', $inventoryAccountIds->all())
@@ -298,11 +319,206 @@ class BiwmsFinanceReconcile extends Command
         ]];
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function missingControlAccountEntries(): array
+    {
+        return collect()
+            ->merge($this->bankGlEntriesMissingBankLedger())
+            ->merge($this->customerLedgerEntriesMissingReceivablesGl())
+            ->merge($this->vendorLedgerEntriesMissingPayablesGl())
+            ->merge($this->valueEntriesMissingInventoryGl())
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function bankGlEntriesMissingBankLedger(): array
+    {
+        return DB::table('gl_entries as gl')
+            ->join('bank_accounts as bank', 'bank.gl_account_id', '=', 'gl.chart_of_account_id')
+            ->join('chart_of_accounts as coa', 'coa.id', '=', 'gl.chart_of_account_id')
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('bank_account_ledger_entries as bale')
+                    ->whereColumn('bale.bank_account_id', 'bank.id')
+                    ->whereColumn('bale.document_no', 'gl.document_number')
+                    ->whereNull('bale.deleted_at');
+            })
+            ->groupBy('bank.id', 'bank.account_code', 'coa.account_number', 'gl.document_type', 'gl.document_number', 'gl.sourceable_type')
+            ->orderBy('gl.document_number')
+            ->limit(250)
+            ->get([
+                'bank.id as bank_account_id',
+                'bank.account_code as bank_account_code',
+                'coa.account_number',
+                'gl.document_type',
+                'gl.document_number',
+                'gl.sourceable_type',
+                DB::raw('COALESCE(SUM(gl.debit_amount - gl.credit_amount), 0) as amount'),
+            ])
+            ->map(fn ($entry): array => [
+                'control_type' => 'BANK',
+                'bank_account_id' => $entry->bank_account_id,
+                'bank_account_code' => $entry->bank_account_code,
+                'account_number' => $entry->account_number,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'amount' => round((float) $entry->amount, 2),
+                'source_hint' => $entry->sourceable_type ?: 'G/L entry',
+                ...$this->findingMetadata(
+                    classification: 'missing_control_account_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'This bank G/L control entry has no matching Bank Account Ledger Entry for the same bank account and document number. Review the posting path and correct only through an approved reversal/repost or controlled remediation plan.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function customerLedgerEntriesMissingReceivablesGl(): array
+    {
+        return DB::table('customer_ledger_entries as cle')
+            ->join('customer_posting_groups as cpg', 'cpg.id', '=', 'cle.customer_posting_group_id')
+            ->join('chart_of_accounts as coa', 'coa.id', '=', 'cpg.receivables_account_id')
+            ->where('cle.reversed', false)
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('gl_entries as gl')
+                    ->whereColumn('gl.chart_of_account_id', 'cpg.receivables_account_id')
+                    ->whereColumn('gl.document_number', 'cle.document_number');
+            })
+            ->groupBy('cle.document_type', 'cle.document_number', 'coa.account_number')
+            ->orderBy('cle.document_number')
+            ->limit(250)
+            ->get([
+                'cle.document_type',
+                'cle.document_number',
+                'coa.account_number',
+                DB::raw('COALESCE(SUM(cle.debit_amount - cle.credit_amount), 0) as amount'),
+            ])
+            ->map(fn ($entry): array => [
+                'control_type' => 'CUSTOMER',
+                'account_number' => $entry->account_number,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'amount' => round((float) $entry->amount, 2),
+                'source_hint' => 'Customer Ledger Entry',
+                ...$this->findingMetadata(
+                    classification: 'missing_control_account_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'This customer ledger entry has no matching receivables G/L control entry. Trace the source posting and correct through an approved repost/reversal path.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function vendorLedgerEntriesMissingPayablesGl(): array
+    {
+        return DB::table('vendor_ledger_entries as vle')
+            ->join('vendor_posting_groups as vpg', 'vpg.id', '=', 'vle.vendor_posting_group_id')
+            ->join('chart_of_accounts as coa', 'coa.id', '=', 'vpg.payables_account_id')
+            ->where('vle.reversed', false)
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('gl_entries as gl')
+                    ->whereColumn('gl.chart_of_account_id', 'vpg.payables_account_id')
+                    ->whereColumn('gl.document_number', 'vle.document_number');
+            })
+            ->groupBy('vle.document_type', 'vle.document_number', 'coa.account_number')
+            ->orderBy('vle.document_number')
+            ->limit(250)
+            ->get([
+                'vle.document_type',
+                'vle.document_number',
+                'coa.account_number',
+                DB::raw('COALESCE(SUM(vle.credit_amount - vle.debit_amount), 0) as amount'),
+            ])
+            ->map(fn ($entry): array => [
+                'control_type' => 'VENDOR',
+                'account_number' => $entry->account_number,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'amount' => round((float) $entry->amount, 2),
+                'source_hint' => 'Vendor Ledger Entry',
+                ...$this->findingMetadata(
+                    classification: 'missing_control_account_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'This vendor ledger entry has no matching payables G/L control entry. Trace the source posting and correct through an approved repost/reversal path.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function valueEntriesMissingInventoryGl(): array
+    {
+        $inventoryAccountIds = InventoryPostingSetup::query()
+            ->whereNotNull('inventory_account_id')
+            ->pluck('inventory_account_id')
+            ->unique()
+            ->values();
+
+        if ($inventoryAccountIds->isEmpty()) {
+            return [];
+        }
+
+        return DB::table('value_entries as ve')
+            ->whereNotNull('ve.document_no')
+            ->whereNotExists(function ($query) use ($inventoryAccountIds): void {
+                $query->selectRaw('1')
+                    ->from('gl_entries as gl')
+                    ->whereIn('gl.chart_of_account_id', $inventoryAccountIds->all())
+                    ->whereColumn('gl.document_number', 've.document_no');
+            })
+            ->groupBy('ve.document_type', 've.document_no')
+            ->orderBy('ve.document_no')
+            ->limit(250)
+            ->get([
+                've.document_type',
+                've.document_no as document_number',
+                DB::raw($this->inventoryValueEffectSql('ve', 'amount')),
+            ])
+            ->map(fn ($entry): array => [
+                'control_type' => 'INVENTORY',
+                'account_number' => 'INVENTORY_CONTROL_TOTAL',
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'amount' => round((float) $entry->amount, 2),
+                'source_hint' => 'Value Entry',
+                ...$this->findingMetadata(
+                    classification: 'missing_control_account_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'This Value Entry document has no matching inventory G/L control entry. Review item/value posting for the document before planning a controlled correction.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
     private function glDebitMinusCredit(int $chartOfAccountId): float
     {
         return (float) GlEntry::query()
             ->where('chart_of_account_id', $chartOfAccountId)
             ->sum(DB::raw('debit_amount - credit_amount'));
+    }
+
+    private function inventoryValueEffectSql(string $table = 'value_entries', string $alias = 'inventory_value_effect'): string
+    {
+        return "COALESCE(SUM(CASE WHEN {$table}.item_ledger_entry_type IN (2, 4, 6, 9) THEN -ABS({$table}.cost_amount_actual) ELSE {$table}.cost_amount_actual END), 0) as {$alias}";
     }
 
     private function glCreditMinusDebit(int $chartOfAccountId): float
@@ -338,5 +554,18 @@ class BiwmsFinanceReconcile extends Command
         }
 
         $this->newLine();
+    }
+
+    /**
+     * @param  array<string, array<int, array<string, mixed>>>  $report
+     */
+    private function exportReport(array $report, string $path): void
+    {
+        $absolutePath = str_starts_with($path, DIRECTORY_SEPARATOR)
+            ? $path
+            : base_path($path);
+
+        File::ensureDirectoryExists(dirname($absolutePath));
+        File::put($absolutePath, json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL);
     }
 }

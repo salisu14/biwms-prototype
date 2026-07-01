@@ -4,6 +4,8 @@ use App\Enums\AccountCategory;
 use App\Enums\BankAccountLedgerEntryStatus;
 use App\Enums\BankAccountLedgerEntryType;
 use App\Enums\IncomeBalanceType;
+use App\Enums\ItemType;
+use App\Enums\SalesOrderStatus;
 use App\Enums\SourceType;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
@@ -11,9 +13,22 @@ use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\CustomerPostingGroup;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralPostingSetup;
+use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
 use App\Models\InventoryPostingGroup;
 use App\Models\InventoryPostingSetup;
+use App\Models\Item;
+use App\Models\ItemLedgerEntry;
+use App\Models\Location;
+use App\Models\NumberSeries;
+use App\Models\NumberSeriesLine;
+use App\Models\Payment;
+use App\Models\Permission;
+use App\Models\SalesOrder;
+use App\Models\SalesOrderLine;
+use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\ValueEntry;
 use App\Models\Vendor;
@@ -21,9 +36,11 @@ use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
 use App\Services\Finance\BalanceSheetService;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PaymentService;
 use App\Services\IncomeStatementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
 
 uses(RefreshDatabase::class);
 
@@ -276,10 +293,257 @@ it('reports finance subledger to general ledger reconciliation mismatches', func
 
     $report = json_decode(trim(Artisan::output()), true);
 
-    expect($report['customer_ledger_receivables_mismatches'][0]['classification'])->toBe('customer_ledger_receivables_mismatch')
-        ->and($report['vendor_ledger_payables_mismatches'][0]['classification'])->toBe('vendor_ledger_payables_mismatch')
+    expect($report['customer_ledger_receivables_mismatches'][0]['classification'])->toBe('customer_ledger_gl_mismatch')
+        ->and($report['vendor_ledger_payables_mismatches'][0]['classification'])->toBe('vendor_ledger_gl_mismatch')
         ->and($report['bank_ledger_gl_mismatches'][0]['classification'])->toBe('bank_ledger_gl_mismatch')
-        ->and($report['inventory_value_gl_mismatches'][0]['classification'])->toBe('inventory_value_gl_mismatch');
+        ->and($report['inventory_value_gl_mismatches'][0]['classification'])->toBe('inventory_value_gl_mismatch')
+        ->and($report['customer_ledger_receivables_mismatches'][0]['severity'])->toBe('critical')
+        ->and($report['customer_ledger_receivables_mismatches'][0]['suggested_remediation'])->not->toBeEmpty();
+});
+
+it('exports finance reconcile diagnostics with severity and remediation', function (): void {
+    $bankGl = financeAccount('10400', 'Export Bank', AccountCategory::LIQUID_ASSET);
+    $offset = financeAccount('39998', 'Export Offset', AccountCategory::EQUITY);
+    BankAccount::factory()->create(['gl_account_id' => $bankGl->id]);
+
+    postGl('BANK-EXPORT-MISSING', 'PAYMENT', '2026-06-15', [
+        [$bankGl, 45, 0, 'Bank control without bank ledger'],
+        [$offset, 0, 45, 'Offset'],
+    ]);
+
+    $exportPath = 'storage/app/reports/finance-reconcile-test.json';
+    File::delete(base_path($exportPath));
+
+    expect(Artisan::call('biwms:finance-reconcile', [
+        '--details' => true,
+        '--export' => $exportPath,
+    ]))->toBe(0);
+
+    $report = json_decode(File::get(base_path($exportPath)), true);
+
+    expect($report['missing_control_account_entries'])->not->toBeEmpty()
+        ->and($report['missing_control_account_entries'][0]['classification'])->toBe('missing_control_account_entry')
+        ->and($report['missing_control_account_entries'][0]['severity'])->toBe('critical')
+        ->and($report['missing_control_account_entries'][0]['suggested_remediation'])->not->toBeEmpty();
+});
+
+it('keeps posted bank payment general ledger in agreement with bank ledger', function (): void {
+    financeEnsureBankLedgerNumberSeries();
+
+    $user = User::factory()->create();
+    financeGrantPaymentPostingPermission($user);
+
+    $bankGl = financeAccount('10500', 'Payment Bank', AccountCategory::LIQUID_ASSET);
+    $receivables = financeAccount('11210', 'Payment Receivables', AccountCategory::RECEIVABLE);
+    $customerPostingGroup = CustomerPostingGroup::factory()->create(['receivables_account_id' => $receivables->id]);
+    $customer = Customer::factory()->create(['customer_posting_group_id' => $customerPostingGroup->id]);
+    $bankAccount = BankAccount::factory()->receiptOnly()->create([
+        'gl_account_id' => $bankGl->id,
+        'current_balance' => 0,
+        'available_balance' => 0,
+    ]);
+
+    $payment = Payment::factory()->customerReceipt()->create([
+        'party_id' => $customer->id,
+        'party_name' => $customer->name,
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 325,
+        'payment_amount_lcy' => 325,
+        'applied_amount' => 0,
+        'unapplied_amount' => 325,
+        'status' => 'APPROVED',
+        'created_by' => $user->id,
+    ]);
+
+    app(PaymentService::class)->post($payment, $user->id);
+
+    expect(Artisan::call('biwms:finance-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect($report['bank_ledger_gl_mismatches'])->toBeEmpty()
+        ->and($report['missing_control_account_entries'])->toBeEmpty();
+});
+
+it('keeps inventory value entries in agreement with inventory general ledger after purchase and sale value movement', function (): void {
+    $inventory = financeAccount('13200', 'Reconcile Inventory', AccountCategory::INVENTORY);
+    $offset = financeAccount('39997', 'Inventory Offset', AccountCategory::EQUITY);
+    $inventoryPostingGroup = InventoryPostingGroup::query()->firstOrCreate(['code' => 'FIN-RECON'], ['description' => 'Finance Reconcile Inventory']);
+    InventoryPostingSetup::query()->create([
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
+        'inventory_account_id' => $inventory->id,
+    ]);
+
+    financeValueEntry('PURCHASE_INVOICE', 'PI-VALUE-OK', 100);
+    financeValueEntry('SALES_INVOICE', 'SI-VALUE-OK', -40);
+
+    postGl('PI-VALUE-OK', 'PURCHASE_INVOICE', '2026-06-20', [
+        [$inventory, 100, 0, 'Inventory purchase value'],
+        [$offset, 0, 100, 'Offset'],
+    ]);
+    postGl('SI-VALUE-OK', 'SALES_INVOICE', '2026-06-21', [
+        [$offset, 40, 0, 'COGS offset'],
+        [$inventory, 0, 40, 'Inventory sale value'],
+    ]);
+
+    expect(Artisan::call('biwms:finance-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect($report['inventory_value_gl_mismatches'])->toBeEmpty()
+        ->and($report['missing_control_account_entries'])->toBeEmpty();
+});
+
+it('keeps sales order ship and invoice inventory value movement in agreement with general ledger', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $receivablesAccount = financeAccount('11300', 'Sales Order Receivables', AccountCategory::RECEIVABLE);
+    $inventoryAccount = financeAccount('12300', 'Sales Order Inventory', AccountCategory::INVENTORY);
+    $revenueAccount = financeAccount('41300', 'Sales Order Revenue', AccountCategory::REVENUE);
+    $cogsAccount = financeAccount('51300', 'Sales Order COGS', AccountCategory::COGS);
+
+    $businessGroup = GeneralBusinessPostingGroup::query()->create([
+        'code' => 'SO-DOM',
+        'description' => 'Sales Order Domestic',
+        'blocked' => false,
+    ]);
+    $productGroup = GeneralProductPostingGroup::query()->create([
+        'code' => 'SO-FG',
+        'description' => 'Sales Order Finished Goods',
+        'blocked' => false,
+    ]);
+    $inventoryGroup = InventoryPostingGroup::query()->create([
+        'code' => 'SO-FG',
+        'description' => 'Sales Order Finished Goods',
+        'blocked' => false,
+    ]);
+    $customerPostingGroup = CustomerPostingGroup::query()->create([
+        'code' => 'SO-DOM',
+        'description' => 'Sales Order Customers',
+        'receivables_account_id' => $receivablesAccount->id,
+        'blocked' => false,
+    ]);
+    $location = Location::factory()->create();
+
+    InventoryPostingSetup::query()->create([
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'location_id' => $location->id,
+        'inventory_account_id' => $inventoryAccount->id,
+    ]);
+
+    GeneralPostingSetup::query()->create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'sales_account_id' => $revenueAccount->id,
+        'cogs_account_id' => $cogsAccount->id,
+        'blocked' => false,
+    ]);
+
+    $baseUom = UnitOfMeasure::query()->create([
+        'uom_code' => 'PCS',
+        'description' => 'Pieces',
+        'is_base_uom' => true,
+    ]);
+
+    $item = Item::query()->create([
+        'item_code' => 'SO-FG-001',
+        'description' => 'Sales Order Finished Good',
+        'item_type' => ItemType::FINISHED_GOOD,
+        'base_uom_id' => $baseUom->id,
+        'unit_price' => 100,
+        'unit_cost' => 10,
+        'inventory' => 5,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'location_id' => $location->id,
+    ]);
+
+    $customer = Customer::factory()->create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'customer_posting_group_id' => $customerPostingGroup->id,
+        'vat_bus_posting_group' => null,
+        'location_id' => $location->id,
+    ]);
+
+    financeEnsureSalesInvoiceNumberSeries();
+
+    $order = SalesOrder::query()->create([
+        'order_number' => 'SO-FIN-001',
+        'order_type' => 'SALES_ORDER',
+        'status' => SalesOrderStatus::APPROVED,
+        'customer_id' => $customer->id,
+        'customer_name' => $customer->name,
+        'customer_address' => $customer->address,
+        'ship_to_name' => $customer->name,
+        'ship_to_address' => $customer->address,
+        'order_date' => '2026-06-25',
+        'posting_date' => '2026-06-25',
+        'shipment_date' => '2026-06-25',
+        'general_business_posting_group_id' => $businessGroup->id,
+        'customer_posting_group_id' => $customerPostingGroup->id,
+        'location_id' => $location->id,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'created_by' => $user->id,
+    ]);
+
+    SalesOrderLine::query()->create([
+        'sales_order_id' => $order->id,
+        'line_number' => 10000,
+        'item_id' => $item->id,
+        'item_code' => $item->item_code,
+        'description' => $item->description,
+        'quantity' => 2,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => 2,
+        'unit_price' => 100,
+        'unit_cost' => 10,
+        'location_id' => $location->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+
+    $order->postShipment();
+    $postedInvoice = $order->fresh()->postInvoice();
+    $shipmentDocumentNo = "SS-{$order->order_number}";
+
+    $itemLedgerEntry = ItemLedgerEntry::query()
+        ->where('document_type', 'SALES_ORDER_SHIPMENT')
+        ->where('document_number', $shipmentDocumentNo)
+        ->firstOrFail();
+
+    expect(ValueEntry::query()
+        ->where('item_ledger_entry_no', $itemLedgerEntry->entry_number)
+        ->where('document_no', $shipmentDocumentNo)
+        ->where('cost_amount_actual', 20)
+        ->where('gl_posted', true)
+        ->exists())->toBeTrue();
+
+    expect(GlEntry::query()
+        ->where('document_type', 'SALES_ORDER_SHIPMENT')
+        ->where('document_number', $shipmentDocumentNo)
+        ->where('chart_of_account_id', $cogsAccount->id)
+        ->where('item_ledger_entry_id', $itemLedgerEntry->id)
+        ->sum('debit_amount'))->toBe('20.00')
+        ->and(GlEntry::query()
+            ->where('document_type', 'SALES_ORDER_SHIPMENT')
+            ->where('document_number', $shipmentDocumentNo)
+            ->where('chart_of_account_id', $inventoryAccount->id)
+            ->where('item_ledger_entry_id', $itemLedgerEntry->id)
+            ->sum('credit_amount'))->toBe('20.00')
+        ->and(GlEntry::query()
+            ->where('document_type', 'SALES_INVOICE')
+            ->where('document_number', $postedInvoice->document_number)
+            ->whereIn('chart_of_account_id', [$cogsAccount->id, $inventoryAccount->id])
+            ->exists())->toBeFalse();
+
+    expect(Artisan::call('biwms:finance-reconcile', ['--json' => true]))->toBe(0);
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect($report['inventory_value_gl_mismatches'])->toBeEmpty()
+        ->and($report['missing_control_account_entries'])->toBeEmpty();
 });
 
 function financeAccount(string $number, string $name, AccountCategory $category): ChartOfAccount
@@ -348,4 +612,97 @@ function financeTrialRow(array $trialBalance, string $accountNumber): array
 function financeLedgerSection(array $generalLedger, string $accountNumber): array
 {
     return collect($generalLedger['accounts'])->firstWhere('account_number', $accountNumber);
+}
+
+function financeGrantPaymentPostingPermission(User $user): void
+{
+    Permission::query()->firstOrCreate([
+        'name' => 'finance.payment.post',
+        'guard_name' => 'web',
+    ]);
+
+    $user->givePermissionTo('finance.payment.post');
+}
+
+function financeEnsureBankLedgerNumberSeries(): void
+{
+    $series = NumberSeries::query()->firstOrCreate(
+        ['code' => 'BANK-LEDGER'],
+        [
+            'description' => 'Bank Ledger Entries',
+            'prefix' => '',
+            'starting_number' => 1,
+            'ending_number' => null,
+            'current_number' => 0,
+            'year' => 2026,
+            'is_active' => true,
+            'allow_manual' => false,
+            'module' => 'finance',
+        ]
+    );
+
+    NumberSeriesLine::query()->firstOrCreate(
+        ['number_series_id' => $series->id, 'starting_date' => now()->startOfYear()->toDateString()],
+        [
+            'prefix' => '',
+            'suffix' => '',
+            'starting_no' => 0,
+            'ending_no' => null,
+            'increment_by' => 1,
+            'last_no_used' => 0,
+            'no_of_digits' => 6,
+            'blocked' => false,
+        ]
+    );
+}
+
+function financeEnsureSalesInvoiceNumberSeries(): void
+{
+    $series = NumberSeries::query()->firstOrCreate(
+        ['code' => 'S-INV'],
+        [
+            'description' => 'Sales Invoice',
+            'prefix' => 'SI-',
+            'starting_number' => 1,
+            'ending_number' => null,
+            'current_number' => 0,
+            'year' => 2026,
+            'is_active' => true,
+            'allow_manual' => false,
+            'module' => 'sales',
+        ]
+    );
+
+    NumberSeriesLine::query()->firstOrCreate(
+        ['number_series_id' => $series->id, 'starting_date' => now()->startOfYear()->toDateString()],
+        [
+            'prefix' => 'SI-',
+            'suffix' => '',
+            'starting_no' => 0,
+            'ending_no' => null,
+            'increment_by' => 1,
+            'last_no_used' => 0,
+            'no_of_digits' => 6,
+            'blocked' => false,
+        ]
+    );
+}
+
+function financeValueEntry(string $documentType, string $documentNumber, float $costAmount): ValueEntry
+{
+    return ValueEntry::query()->create([
+        'item_ledger_entry_no' => ((int) ValueEntry::query()->max('item_ledger_entry_no')) + 1,
+        'item_ledger_entry_type' => $costAmount >= 0 ? 1 : 2,
+        'item_no' => 'FIN-ITEM',
+        'location_code' => 'MAIN',
+        'posting_date' => '2026-06-20',
+        'document_type' => $documentType,
+        'document_no' => $documentNumber,
+        'description' => "Finance value {$documentNumber}",
+        'cost_amount_actual' => $costAmount,
+        'cost_amount_expected' => 0,
+        'quantity' => $costAmount >= 0 ? 1 : -1,
+        'invoiced_quantity' => $costAmount >= 0 ? 1 : -1,
+        'entry_type' => 'Direct Cost',
+    ]);
 }

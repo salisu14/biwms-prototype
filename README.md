@@ -228,6 +228,25 @@ Safe cleanup workflow:
 - Do not manually edit ledger history, delete entries, or insert replacement entries without finance approval, audit notes, and a tested rollback plan.
 - Do not add or run an automatic `--fix` command until the cleanup approach has been reviewed against production backup and audit requirements.
 
+### Finance Reconciliation
+
+Run the finance reconciliation report with:
+
+```bash
+php artisan biwms:finance-reconcile
+php artisan biwms:finance-reconcile --details
+php artisan biwms:finance-reconcile --details --export=storage/app/reports/finance-reconcile.json
+```
+
+The command is diagnostic-first and report-only. It compares G/L balances to bank, customer, vendor, and inventory value sub-ledgers, classifies each finding, assigns severity, and suggests manual remediation. It does not repair legacy data.
+
+Known legacy mismatch examples include:
+
+- `PETTY_CASH_VOUCHER TEMP-1758`: bank/cash G/L activity exists without a matching `BankAccountLedgerEntry`.
+- `SALES_ORDER_SHIPMENT SS-SO-2026-00001`: inventory Value Entry activity exists without matching inventory-control G/L.
+
+Rule for cleanup: fix posting paths first, then review old data with Finance before planning any manual correction. Do not auto-repair historical G/L or sub-ledger rows from reconcile output.
+
 ### Deployment Checklist
 
 Before production:
@@ -240,6 +259,7 @@ php artisan permission:cache-reset
 php artisan biwms:security-audit
 php artisan biwms:permissions-cleanup --dry-run
 php artisan biwms:health-check
+php artisan biwms:finance-reconcile
 php artisan biwms:inventory-reconcile
 php artisan test --compact
 
@@ -250,6 +270,7 @@ php artisan test --compact
 php artisan biwms:security-audit
 php artisan biwms:health-check
 php artisan biwms:permissions-cleanup --dry-run
+php artisan biwms:finance-reconcile
 php artisan biwms:inventory-reconcile
 ```
 
@@ -262,6 +283,7 @@ php artisan biwms:inventory-reconcile
 - Run `php artisan biwms:security-audit`.
 - Review `php artisan biwms:permissions-cleanup --dry-run` before any cleanup.
 - Run `php artisan biwms:health-check` and resolve critical failures.
+- Run `php artisan biwms:finance-reconcile` and review G/L to sub-ledger discrepancies before go-live.
 - Run `php artisan biwms:inventory-reconcile` and review inventory ledger/value discrepancies before go-live.
 - Run `php artisan test --compact`.
 - Confirm audit logging is enabled for security, posting, payroll, production, setup, and number-series changes.

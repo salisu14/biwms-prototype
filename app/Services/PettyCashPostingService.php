@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Enums\BankAccountLedgerEntryType;
 use App\Enums\PettyCashTransactionType;
 use App\Enums\PettyCashVoucherStatus;
 use App\Enums\SourceType;
+use App\Models\BankAccount;
+use App\Models\BankAccountLedgerEntry;
 use App\Models\GlEntry;
 use App\Models\PettyCashVoucher;
 use App\Models\User;
@@ -15,7 +18,9 @@ use RuntimeException;
 class PettyCashPostingService
 {
     public function __construct(
-        private readonly NumberSeriesService $numberSeriesService
+        private readonly NumberSeriesService $numberSeriesService,
+        private readonly BankAccountLedgerService $bankAccountLedgerService,
+        private readonly AuditTrailService $auditTrailService,
     ) {}
 
     public function postVoucher(PettyCashVoucher $voucher, int $userId): void
@@ -60,6 +65,8 @@ class PettyCashPostingService
                 userId: $userId,
             );
 
+            $bankLedgerEntry = $this->createBankLedgerEntryWhenCashAccountIsBank($voucher, $userId);
+
             foreach ($voucher->lines as $line) {
                 $this->createGlEntry(
                     accountId: (int) $line->expense_account_id,
@@ -79,6 +86,20 @@ class PettyCashPostingService
                 'posted_by_id' => $userId,
                 'posted_at' => now(),
             ]);
+
+            $this->auditTrailService->recordPosting(
+                auditable: $voucher,
+                userId: $userId,
+                documentType: 'PETTY_CASH_VOUCHER',
+                documentNo: $voucher->voucher_number,
+                metadata: [
+                    'petty_cash_fund_id' => $voucher->petty_cash_fund_id,
+                    'bank_ledger_entry_id' => $bankLedgerEntry?->id,
+                    'bank_account_id' => $bankLedgerEntry?->bank_account_id,
+                    'amount' => (float) $voucher->total_amount,
+                ],
+                description: "Posted petty cash voucher {$voucher->voucher_number}",
+            );
         });
     }
 
@@ -154,6 +175,45 @@ class PettyCashPostingService
             'shortcut_dimension_1_code' => $dimension1,
             'shortcut_dimension_2_code' => $dimension2,
             'user_id' => $userId,
+        ]);
+    }
+
+    private function createBankLedgerEntryWhenCashAccountIsBank(PettyCashVoucher $voucher, int $userId): ?BankAccountLedgerEntry
+    {
+        $bankAccount = BankAccount::query()
+            ->where('gl_account_id', $voucher->fund->chart_of_account_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $bankAccount) {
+            return null;
+        }
+
+        $existingEntry = BankAccountLedgerEntry::query()
+            ->where('bank_account_id', $bankAccount->id)
+            ->where('document_type', 'PETTY_CASH_VOUCHER')
+            ->where('document_no', $voucher->voucher_number)
+            ->where('source_type', PettyCashVoucher::class)
+            ->where('source_id', $voucher->id)
+            ->first();
+
+        if ($existingEntry) {
+            return $existingEntry;
+        }
+
+        return $this->bankAccountLedgerService->postPayment($bankAccount, [
+            'amount' => (float) $voucher->total_amount,
+            'posting_date' => $voucher->date,
+            'document_date' => $voucher->date,
+            'document_type' => 'PETTY_CASH_VOUCHER',
+            'document_no' => $voucher->voucher_number,
+            'description' => "Petty Cash Payment: {$voucher->purpose}",
+            'entry_type' => BankAccountLedgerEntryType::WITHDRAWAL,
+            'source_type' => PettyCashVoucher::class,
+            'source_id' => $voucher->id,
+            'source_no' => $voucher->voucher_number,
+            'user_id' => $userId,
+            'allow_overdraft' => true,
         ]);
     }
 
