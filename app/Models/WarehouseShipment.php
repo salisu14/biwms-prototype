@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Services\Inventory\StockMovementService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -81,19 +82,7 @@ class WarehouseShipment extends Model
     // Post the shipment (creates item ledger entries)
     public function post(): bool
     {
-        if (! $this->canPost()) {
-            return false;
-        }
-
-        // Implementation would:
-        // 1. Create negative item ledger entries
-        // 2. Reduce inventory
-        // 3. Update status
-
-        $this->update([
-            'status' => 'SHIPPED',
-            'posted_date' => now(),
-        ]);
+        app(StockMovementService::class)->postWarehouseShipment($this);
 
         return true;
     }

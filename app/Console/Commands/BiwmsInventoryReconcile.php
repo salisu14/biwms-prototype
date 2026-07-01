@@ -38,6 +38,9 @@ class BiwmsInventoryReconcile extends Command
         $postedPurchaseInvoicesMissingVendorLedger = $this->postedPurchaseInvoicesMissingVendorLedger();
         $salesCreditMemoLinesOverInvoiced = $this->salesCreditMemoLinesOverInvoiced();
         $purchaseCreditMemoLinesOverInvoiced = $this->purchaseCreditMemoLinesOverInvoiced();
+        $unbalancedTransferEntries = $this->unbalancedTransferEntries();
+        $duplicateWarehousePostings = $this->duplicateWarehousePostings();
+        $transferSourceDestinationMismatches = $this->transferSourceDestinationMismatches();
 
         $report = [
             'stock_mismatches' => $stockMismatches,
@@ -55,6 +58,9 @@ class BiwmsInventoryReconcile extends Command
             'posted_purchase_invoices_missing_vendor_ledger' => $postedPurchaseInvoicesMissingVendorLedger,
             'sales_credit_memo_lines_over_invoiced' => $salesCreditMemoLinesOverInvoiced,
             'purchase_credit_memo_lines_over_invoiced' => $purchaseCreditMemoLinesOverInvoiced,
+            'unbalanced_transfer_entries' => $unbalancedTransferEntries,
+            'duplicate_warehouse_postings' => $duplicateWarehousePostings,
+            'transfer_source_destination_mismatches' => $transferSourceDestinationMismatches,
         ];
 
         if ($exportPath = $this->option('export')) {
@@ -206,6 +212,33 @@ class BiwmsInventoryReconcile extends Command
             $line['item_id'],
             number_format($line['credited_quantity'], 4, '.', ''),
             number_format($line['invoiced_quantity'], 4, '.', ''),
+        ));
+        $this->section('Unbalanced transfer entries', $unbalancedTransferEntries, $details, fn (array $entry): string => sprintf(
+            '[%s] %s item=%s net=%s entries=%s',
+            $entry['severity'],
+            $entry['document_number'],
+            $entry['item_id'],
+            number_format($entry['net_quantity'], 4, '.', ''),
+            $entry['entry_count'],
+        ));
+        $this->section('Duplicate warehouse postings', $duplicateWarehousePostings, $details, fn (array $entry): string => sprintf(
+            '[%s] %s %s line=%s item=%s entries=%s quantity=%s',
+            $entry['severity'],
+            $entry['document_type'],
+            $entry['document_number'],
+            $entry['document_line_number'],
+            $entry['item_id'],
+            $entry['entry_count'],
+            number_format($entry['quantity'], 4, '.', ''),
+        ));
+        $this->section('Transfer source/destination mismatches', $transferSourceDestinationMismatches, $details, fn (array $entry): string => sprintf(
+            '[%s] %s item=%s locations=%s negative=%s positive=%s',
+            $entry['severity'],
+            $entry['document_number'],
+            $entry['item_id'],
+            $entry['location_count'],
+            number_format($entry['negative_quantity'], 4, '.', ''),
+            number_format($entry['positive_quantity'], 4, '.', ''),
         ));
 
         return self::SUCCESS;
@@ -554,6 +587,8 @@ class BiwmsInventoryReconcile extends Command
             ->merge($this->missingPostedPurchaseInvoiceLineEntries())
             ->merge($this->missingPostedSalesCreditMemoLineEntries())
             ->merge($this->missingPostedPurchaseCreditMemoLineEntries())
+            ->merge($this->missingWarehouseReceiptLineEntries())
+            ->merge($this->missingWarehouseShipmentLineEntries())
             ->values()
             ->all();
     }
@@ -731,6 +766,94 @@ class BiwmsInventoryReconcile extends Command
                     classification: 'return_document_missing_item_ledger_entry',
                     severity: 'critical',
                     suggestedRemediation: 'Review the posted purchase credit memo return line and create a controlled correction only after validating stock, vendor ledger, G/L payable reduction, and Value Entry impact.'
+                ),
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function missingWarehouseReceiptLineEntries(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('warehouse_receipt_lines')) {
+            return [];
+        }
+
+        return DB::table('warehouse_receipt_lines as lines')
+            ->join('warehouse_receipts as headers', 'headers.id', '=', 'lines.warehouse_receipt_id')
+            ->join('items', 'items.id', '=', 'lines.item_id')
+            ->whereNotNull('headers.posted_date')
+            ->whereIn('items.item_type', ItemType::inventoryTypes())
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('item_ledger_entries as ile')
+                    ->whereColumn('ile.document_number', 'headers.document_number')
+                    ->whereColumn('ile.document_line_number', 'lines.line_number')
+                    ->whereColumn('ile.item_id', 'lines.item_id')
+                    ->where('ile.document_type', 'WAREHOUSE_RECEIPT');
+            })
+            ->orderBy('headers.document_number')
+            ->limit(250)
+            ->get([
+                'headers.document_number',
+                'lines.id as line_id',
+                'lines.item_id',
+            ])
+            ->map(fn ($line): array => [
+                'document_type' => 'WAREHOUSE_RECEIPT',
+                'document_number' => $line->document_number,
+                'line_id' => $line->line_id,
+                'item_id' => $line->item_id,
+                'item_ledger_entry_id' => null,
+                ...$this->findingMetadata(
+                    classification: 'warehouse_receipt_missing_item_ledger_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the posted warehouse receipt and create a controlled ledger correction only after validating the source document, received quantity, and Value Entry.'
+                ),
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function missingWarehouseShipmentLineEntries(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('warehouse_shipment_lines')) {
+            return [];
+        }
+
+        return DB::table('warehouse_shipment_lines as lines')
+            ->join('warehouse_shipments as headers', 'headers.id', '=', 'lines.warehouse_shipment_id')
+            ->join('items', 'items.id', '=', 'lines.item_id')
+            ->whereNotNull('headers.posted_date')
+            ->whereIn('items.item_type', ItemType::inventoryTypes())
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('item_ledger_entries as ile')
+                    ->whereColumn('ile.document_number', 'headers.document_number')
+                    ->whereColumn('ile.document_line_number', 'lines.line_number')
+                    ->whereColumn('ile.item_id', 'lines.item_id')
+                    ->where('ile.document_type', 'WAREHOUSE_SHIPMENT');
+            })
+            ->orderBy('headers.document_number')
+            ->limit(250)
+            ->get([
+                'headers.document_number',
+                'lines.id as line_id',
+                'lines.item_id',
+            ])
+            ->map(fn ($line): array => [
+                'document_type' => 'WAREHOUSE_SHIPMENT',
+                'document_number' => $line->document_number,
+                'line_id' => $line->line_id,
+                'item_id' => $line->item_id,
+                'item_ledger_entry_id' => null,
+                ...$this->findingMetadata(
+                    classification: 'warehouse_shipment_missing_item_ledger_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the posted warehouse shipment and create a controlled ledger correction only after validating source shipment, stock availability, and Value Entry.'
                 ),
             ])
             ->all();
@@ -953,6 +1076,117 @@ class BiwmsInventoryReconcile extends Command
                     classification: 'returned_quantity_exceeds_received_quantity',
                     severity: 'critical',
                     suggestedRemediation: 'Review the purchase return/credit memo against the posted purchase invoice and receipt history. Reverse or correct excess returns through an approved correction path.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function unbalancedTransferEntries(): array
+    {
+        return DB::table('item_ledger_entries as ile')
+            ->where('ile.entry_type', 'Transfer')
+            ->whereNotNull('ile.document_number')
+            ->groupBy('ile.document_type', 'ile.document_number', 'ile.item_id')
+            ->havingRaw('ABS(COALESCE(SUM(ile.quantity), 0)) > 0.0001')
+            ->orderBy('ile.document_number')
+            ->limit(250)
+            ->get([
+                'ile.document_type',
+                'ile.document_number',
+                'ile.item_id',
+                DB::raw('COUNT(*) as entry_count'),
+                DB::raw('COALESCE(SUM(ile.quantity), 0) as net_quantity'),
+            ])
+            ->map(fn ($entry): array => [
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'item_id' => $entry->item_id,
+                'entry_count' => (int) $entry->entry_count,
+                'net_quantity' => round((float) $entry->net_quantity, 4),
+                ...$this->findingMetadata(
+                    classification: 'unbalanced_transfer_entries',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the transfer document and confirm one negative source entry and one positive destination entry exist for the same item and quantity before planning a controlled correction.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function duplicateWarehousePostings(): array
+    {
+        return DB::table('item_ledger_entries as ile')
+            ->whereIn('ile.document_type', ['WAREHOUSE_RECEIPT', 'WAREHOUSE_SHIPMENT'])
+            ->groupBy('ile.document_type', 'ile.document_number', 'ile.document_line_number', 'ile.item_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->orderBy('ile.document_number')
+            ->limit(250)
+            ->get([
+                'ile.document_type',
+                'ile.document_number',
+                'ile.document_line_number',
+                'ile.item_id',
+                DB::raw('COUNT(*) as entry_count'),
+                DB::raw('COALESCE(SUM(ile.quantity), 0) as quantity'),
+            ])
+            ->map(fn ($entry): array => [
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'document_line_number' => $entry->document_line_number,
+                'item_id' => $entry->item_id,
+                'entry_count' => (int) $entry->entry_count,
+                'quantity' => round((float) $entry->quantity, 4),
+                ...$this->findingMetadata(
+                    classification: 'duplicate_warehouse_posting',
+                    severity: 'critical',
+                    suggestedRemediation: 'Confirm whether the warehouse document was posted multiple times. Reverse duplicate stock impact through an approved inventory adjustment or controlled data repair plan.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function transferSourceDestinationMismatches(): array
+    {
+        return DB::table('item_ledger_entries as ile')
+            ->where('ile.entry_type', 'Transfer')
+            ->whereNotNull('ile.document_number')
+            ->groupBy('ile.document_type', 'ile.document_number', 'ile.item_id')
+            ->havingRaw('
+                COUNT(DISTINCT ile.location_id) < 2
+                OR ABS(COALESCE(SUM(CASE WHEN ile.quantity < 0 THEN ile.quantity ELSE 0 END), 0)) <> ABS(COALESCE(SUM(CASE WHEN ile.quantity > 0 THEN ile.quantity ELSE 0 END), 0))
+            ')
+            ->orderBy('ile.document_number')
+            ->limit(250)
+            ->get([
+                'ile.document_type',
+                'ile.document_number',
+                'ile.item_id',
+                DB::raw('COUNT(DISTINCT ile.location_id) as location_count'),
+                DB::raw('ABS(COALESCE(SUM(CASE WHEN ile.quantity < 0 THEN ile.quantity ELSE 0 END), 0)) as negative_quantity'),
+                DB::raw('ABS(COALESCE(SUM(CASE WHEN ile.quantity > 0 THEN ile.quantity ELSE 0 END), 0)) as positive_quantity'),
+            ])
+            ->map(fn ($entry): array => [
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'item_id' => $entry->item_id,
+                'location_count' => (int) $entry->location_count,
+                'negative_quantity' => round((float) $entry->negative_quantity, 4),
+                'positive_quantity' => round((float) $entry->positive_quantity, 4),
+                ...$this->findingMetadata(
+                    classification: 'transfer_source_destination_mismatch',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the transfer source and destination locations. A valid transfer must have matching outbound and inbound quantities for different locations.'
                 ),
             ])
             ->values()

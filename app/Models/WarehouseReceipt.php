@@ -5,6 +5,7 @@
 namespace App\Models;
 
 use App\Enums\WarehouseReceiptStatus;
+use App\Services\Inventory\StockMovementService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -77,17 +78,7 @@ class WarehouseReceipt extends Model
     // Post the receipt (creates item ledger entries)
     public function post(): bool
     {
-        if (! $this->canPost()) {
-            return false;
-        }
-
-        // Implementation would create item ledger entries
-        // and potentially G/L entries if using expected costing
-
-        $this->update([
-            'status' => 'RECEIVED',
-            'posted_date' => now(),
-        ]);
+        app(StockMovementService::class)->postWarehouseReceipt($this);
 
         return true;
     }
