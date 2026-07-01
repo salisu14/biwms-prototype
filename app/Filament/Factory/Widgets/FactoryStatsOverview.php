@@ -2,7 +2,7 @@
 
 namespace App\Filament\Factory\Widgets;
 
-use App\Models\Manufacturing\ProductionOrder;
+use App\Services\Dashboard\ManufacturingDashboardService;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -10,19 +10,24 @@ class FactoryStatsOverview extends BaseWidget
 {
     protected function getStats(): array
     {
+        $summary = app(ManufacturingDashboardService::class)->summary();
+
         return [
-            Stat::make('Released Orders', ProductionOrder::query()->where('status', 'RELEASED')->count())
-                ->description('Awaiting execution')
+            Stat::make('Open Orders', $summary['open_production_orders'])
+                ->description('Planned, released, or in progress')
                 ->color('warning'),
-            Stat::make('In Progress', ProductionOrder::query()->where('status', 'IN_PROGRESS')->count())
-                ->description('Currently on shop floor')
+            Stat::make('WIP Value', number_format((float) $summary['wip_value'], 2))
+                ->description('From production value entries')
                 ->color('info'),
-            Stat::make('Finished (MTD)', ProductionOrder::query()
-                ->where('status', 'FINISHED')
-                ->whereMonth('updated_at', now()->month)
-                ->count())
-                ->description('Completed this month')
+            Stat::make('Output Qty', number_format((float) $summary['output_quantity'], 4))
+                ->description('Output item ledger quantity')
                 ->color('success'),
+            Stat::make('Component Shortages', count($summary['component_shortages']))
+                ->description('Based on component demand vs ledger stock')
+                ->color(count($summary['component_shortages']) > 0 ? 'danger' : 'success'),
+            Stat::make('Production Variance', number_format((float) $summary['production_variance'], 2))
+                ->description('From value entry variance amounts')
+                ->color(abs((float) $summary['production_variance']) > 0.01 ? 'warning' : 'success'),
         ];
     }
 }
