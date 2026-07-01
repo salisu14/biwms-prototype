@@ -31,7 +31,8 @@ class BalanceSheetService
             return [
                 'account_no' => $account->account_number,
                 'description' => $account->name,
-                'account_type' => $account->account_type?->value ?? null,
+                'account_type' => $account->account_type?->value ?? $account->account_type,
+                'account_category' => $account->account_category?->value ?? $account->account_category,
                 'indentation' => $account->indentation ?? 0,
                 'bold' => (bool) ($account->bold || $account->isTotalAccount()),
                 'is_total_account' => (bool) $account->isTotalAccount(),
@@ -42,15 +43,24 @@ class BalanceSheetService
         $postingLines = $lines->filter(fn (array $line): bool => ! $line['is_total_account']);
 
         $totalAssets = $postingLines
-            ->filter(fn (array $line): bool => strtoupper((string) $line['account_type']) === AccountType::ASSET->value)
+            ->filter(fn (array $line): bool => in_array((string) $line['account_category'], [
+                'asset',
+                'liquid_asset',
+                'receivable',
+                'inventory',
+                'fixed_asset',
+            ], true))
             ->sum('amount');
 
         $totalLiabilities = $postingLines
-            ->filter(fn (array $line): bool => strtoupper((string) $line['account_type']) === AccountType::LIABILITY->value)
+            ->filter(fn (array $line): bool => in_array((string) $line['account_category'], [
+                'liability',
+                'payable',
+            ], true))
             ->sum('amount');
 
         $totalEquity = $postingLines
-            ->filter(fn (array $line): bool => strtoupper((string) $line['account_type']) === AccountType::EQUITY->value)
+            ->filter(fn (array $line): bool => (string) $line['account_category'] === 'equity')
             ->sum('amount');
 
         return [
@@ -144,6 +154,10 @@ class BalanceSheetService
     private function normalizeDisplayAmount(ChartOfAccount $account, float $rawBalance): float
     {
         $accountType = strtoupper((string) ($account->account_type?->value ?? $account->account_type));
+
+        if (in_array((string) ($account->account_category?->value ?? $account->account_category), ['liability', 'payable', 'equity'], true)) {
+            return $rawBalance * -1;
+        }
 
         if (in_array($accountType, [AccountType::LIABILITY->value, AccountType::EQUITY->value], true)) {
             return $rawBalance * -1;
