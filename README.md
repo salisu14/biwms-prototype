@@ -163,6 +163,29 @@ The command reports environment/debug status, HTTPS/session cookie posture, admi
 
 It returns a non-zero exit code for critical production failures such as `APP_DEBUG=true`, insecure session cookies, database outage, unwritable storage/logs, or security audit hard-check failures.
 
+### Pilot Readiness
+
+Before the 3-month client pilot, review the pilot setup guide:
+
+```text
+docs/pilot-setup.md
+```
+
+Run the report-only pilot readiness checklist with:
+
+```bash
+php artisan biwms:pilot-check
+```
+
+The command verifies company/business setup, chart of accounts, posting groups, number series, bank/cash accounts, inventory locations, Super Admin MFA, security audit availability, and reconciliation command availability. It does not create or repair data.
+
+Client feedback and release-note templates are available at:
+
+```text
+docs/client-feedback.md
+docs/release-notes-template.md
+```
+
 ## Inventory Ledger & Costing
 
 Inventory quantity should be ledger-driven. The item card `inventory` field may remain as a cached quantity for UI and performance, but `item_ledger_entries` is the source of truth for physical stock verification.
