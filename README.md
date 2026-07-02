@@ -169,6 +169,7 @@ Before the 3-month client pilot, review the pilot setup guide:
 
 ```text
 docs/pilot-setup.md
+docs/pilot-deployment-checklist.md
 ```
 
 Run the report-only pilot readiness checklist with:
