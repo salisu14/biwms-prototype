@@ -183,6 +183,7 @@ The command verifies company/business setup, chart of accounts, posting groups, 
 Client feedback and release-note templates are available at:
 
 ```text
+docs/architecture-decision-record.md
 docs/client-feedback.md
 docs/release-notes-template.md
 ```
