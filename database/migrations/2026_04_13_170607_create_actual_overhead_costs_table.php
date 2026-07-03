@@ -31,7 +31,7 @@ return new class extends Migration
             // Amounts
             $table->decimal('amount', 15, 4);
             $table->decimal('allocated_amount', 15, 4)->default(0); // Amount allocated to production
-            $table->decimal('remaining_amount', 15, 4)->virtualAs('amount - allocated_amount');
+            $table->decimal('remaining_amount', 15, 4)->default(0);
 
             // GL Account reference
             $table->foreignId('gl_account_id')->constrained('chart_of_accounts');

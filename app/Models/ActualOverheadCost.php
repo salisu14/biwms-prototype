@@ -29,6 +29,7 @@ class ActualOverheadCost extends Model
         'cost_type_code',
         'amount',
         'allocated_amount',
+        'remaining_amount',
         'gl_account_id',
         'gl_account_no',
         'document_type',
@@ -49,6 +50,7 @@ class ActualOverheadCost extends Model
         'variance_posted_at' => 'datetime',
         'amount' => 'decimal:4',
         'allocated_amount' => 'decimal:4',
+        'remaining_amount' => 'decimal:4',
     ];
 
     /**
@@ -71,6 +73,8 @@ class ActualOverheadCost extends Model
 
             $allocated = (float) ($cost->allocated_amount ?? 0);
             $amount = (float) ($cost->amount ?? 0);
+            $cost->remaining_amount = round($amount - $allocated, 4);
+
             if ($allocated <= 0.0001) {
                 $cost->status = 'unallocated';
             } elseif ($allocated + 0.0001 < $amount) {

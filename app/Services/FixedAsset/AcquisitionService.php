@@ -59,8 +59,10 @@ class AcquisitionService
                 documentNo: $this->numberSeriesService->getNextNo('FA-ACQ')
             );
 
-            $asset->increment('acquisition_cost', $additionalCost);
-            $asset->increment('book_value', $additionalCost);
+            $asset->forceFill([
+                'acquisition_cost' => (float) $asset->acquisition_cost + $additionalCost,
+                'book_value' => (float) $asset->book_value + $additionalCost,
+            ])->save();
         });
     }
 

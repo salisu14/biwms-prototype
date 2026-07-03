@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EmployeeAssignmentType;
+use App\Notifications\EmployeeAssignedNotification;
 use App\Services\DimensionService;
 use Database\Factories\EmployeeFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -61,15 +62,16 @@ class Employee extends Model
     {
         // If department was removed, delete all assignments
         if (empty($this->department_id)) {
-            \App\Models\DepartmentEmployee::where('employee_id', $this->id)->delete();
+            DepartmentEmployee::where('employee_id', $this->id)->delete();
 
             \Log::info("Cleared all department assignments for employee {$this->employee_number}");
+
             return;
         }
 
         // Create or update primary assignment
         try {
-            \App\Models\DepartmentEmployee::updateOrCreate(
+            DepartmentEmployee::updateOrCreate(
                 [
                     'employee_id' => $this->id,
                     'assignment_type' => 'primary', // Manage primary assignments automatically
@@ -87,7 +89,7 @@ class Employee extends Model
             \Log::info("Auto-synced: Employee {$this->employee_number} → Dept ID {$this->department_id}");
 
         } catch (\Exception $e) {
-            \Log::error("Failed to sync department assignment for employee {$this->id}: " . $e->getMessage());
+            \Log::error("Failed to sync department assignment for employee {$this->id}: ".$e->getMessage());
 
             // Don't throw - allow employee save to succeed even if assignment fails
             report($e);
@@ -105,11 +107,11 @@ class Employee extends Model
         // Determine action type
         if ($oldDeptId && $newDeptId) {
             $action = 'changed';
-            $previousDepartment = \App\Models\Department::find($oldDeptId);
-        } elseif (!$oldDeptId && $newDeptId) {
+            $previousDepartment = Department::find($oldDeptId);
+        } elseif (! $oldDeptId && $newDeptId) {
             $action = 'assigned';
             $previousDepartment = null;
-        } elseif ($oldDeptId && !$newDeptId) {
+        } elseif ($oldDeptId && ! $newDeptId) {
             $action = 'removed';
             $previousDepartment = null;
         } else {
@@ -118,7 +120,7 @@ class Employee extends Model
 
         // Get current department
         $department = $this->department;
-        if (!$department) {
+        if (! $department) {
             return;
         }
 
@@ -127,7 +129,7 @@ class Employee extends Model
             $manager = $department->manager;
 
             if ($manager->user) { // Only notify if manager has user account
-                $manager->user->notify(new \App\Notifications\EmployeeAssignedNotification(
+                $manager->user->notify(new EmployeeAssignedNotification(
                     employee: $this,
                     department: $department,
                     action: $action,
@@ -147,7 +149,7 @@ class Employee extends Model
                 $oldManager = $previousDepartment->manager;
 
                 if ($oldManager?->user) {
-                    $oldManager->user->notify(new \App\Notifications\EmployeeAssignedNotification(
+                    $oldManager->user->notify(new EmployeeAssignedNotification(
                         employee: $this,
                         department: $previousDepartment, // Their perspective
                         action: 'removed',
@@ -163,6 +165,8 @@ class Employee extends Model
     protected static function booted(): void
     {
         static::saving(function ($employee) {
+            $employee->full_name = trim("{$employee->first_name} {$employee->last_name}");
+
             if ($employee->assignment_type === EmployeeAssignmentType::Corporate) {
                 $employee->business_code = null;
                 $employee->factory_code = null;

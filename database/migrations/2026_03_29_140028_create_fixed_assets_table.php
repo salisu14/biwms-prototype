@@ -1,10 +1,16 @@
 <?php
 
+use App\Enums\DepreciationCalculationMethod;
+use App\Enums\DepreciationMethod;
+use App\Enums\FAPostingType;
+use App\Enums\FAStatus;
+use App\Enums\FixedAssetType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
@@ -22,8 +28,8 @@ return new class extends Migration {
             $table->boolean('is_default')->default(false);
 
             // Logic Methods
-            $table->enum('default_depreciation_method', array_column(\App\Enums\DepreciationMethod::cases(), 'value'))->default('straight_line');
-            $table->enum('default_calculation_method', array_column(\App\Enums\DepreciationCalculationMethod::cases(), 'value'))->default('straight_line');
+            $table->enum('default_depreciation_method', array_column(DepreciationMethod::cases(), 'value'))->default('straight_line');
+            $table->enum('default_calculation_method', array_column(DepreciationCalculationMethod::cases(), 'value'))->default('straight_line');
 
             // Accounting Integration
             $table->boolean('integrate_with_gl')->default(true);
@@ -53,7 +59,7 @@ return new class extends Migration {
             $table->string('search_description', 100)->nullable();
 
             // Classification
-            $table->enum('fa_type', array_column(\App\Enums\FixedAssetType::cases(), 'value'))->default('fixed_asset');
+            $table->enum('fa_type', array_column(FixedAssetType::cases(), 'value'))->default('fixed_asset');
             $table->foreignId('fa_class_id')->nullable()->constrained('fa_classes')->nullOnDelete();
             $table->foreignId('fa_subclass_id')->nullable()->constrained('fa_subclasses')->nullOnDelete();
             $table->foreignId('fa_location_id')->nullable()->constrained('fa_locations')->nullOnDelete();
@@ -82,7 +88,7 @@ return new class extends Migration {
             $table->string('acquisition_invoice_no', 50)->nullable();
 
             // Depreciation setup
-            $table->enum('depreciation_method', array_column(\App\Enums\DepreciationMethod::cases(), 'value'))->default('straight_line');
+            $table->enum('depreciation_method', array_column(DepreciationMethod::cases(), 'value'))->default('straight_line');
             $table->decimal('depreciation_rate', 7, 4)->nullable(); // Percentage
             $table->integer('useful_life_years')->nullable();
             $table->integer('useful_life_months')->nullable();
@@ -94,12 +100,12 @@ return new class extends Migration {
             $table->decimal('units_produced_to_date', 15, 4)->default(0);
 
             // Declining balance specific
-            $table->enum('declining_balance_calc', array_column(\App\Enums\DepreciationCalculationMethod::cases(), 'value'))->nullable();
+            $table->enum('declining_balance_calc', array_column(DepreciationCalculationMethod::cases(), 'value'))->nullable();
 
             // Current values (denormalized for performance, recalculated periodically)
             $table->decimal('book_value', 15, 4)->default(0);
             $table->decimal('accumulated_depreciation', 15, 4)->default(0);
-            $table->decimal('net_book_value', 15, 4)->virtualAs('book_value - accumulated_depreciation');
+            $table->decimal('net_book_value', 15, 4)->default(0);
 
             // Revaluation
             $table->decimal('last_revaluation_amount', 15, 4)->nullable();
@@ -112,7 +118,7 @@ return new class extends Migration {
             $table->string('insurance_policy_no', 50)->nullable();
 
             // Status
-            $table->enum('status', array_column(\App\Enums\FAStatus::cases(), 'value'))->default('new');
+            $table->enum('status', array_column(FAStatus::cases(), 'value'))->default('new');
             $table->boolean('blocked')->default(false);
             $table->text('blocked_reason')->nullable();
 
@@ -149,7 +155,7 @@ return new class extends Migration {
             $table->unique(['fixed_asset_id', 'depreciation_book_id', 'entry_no'], 'fa_ledger_unique_entry');
 
             // Posting type
-            $table->enum('fa_posting_type', array_column(\App\Enums\FAPostingType::cases(), 'value'));
+            $table->enum('fa_posting_type', array_column(FAPostingType::cases(), 'value'));
 
             // Document references
             $table->string('document_type', 50)->nullable();
@@ -242,7 +248,6 @@ return new class extends Migration {
 
             $table->unique(['template_id', 'name']);
         });
-
 
         // FA Insurance Coverage
         Schema::create('fa_insurance_policies', function (Blueprint $table) {

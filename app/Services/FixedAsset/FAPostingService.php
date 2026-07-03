@@ -75,12 +75,16 @@ class FAPostingService
             ]);
 
             if ($postingType === FAPostingType::DEPRECIATION) {
-                $asset->increment('accumulated_depreciation', $amount);
+                $asset->forceFill([
+                    'accumulated_depreciation' => (float) $asset->accumulated_depreciation + $amount,
+                ])->save();
             }
 
             if ($postingType === FAPostingType::ACQUISITION) {
-                $asset->increment('acquisition_cost', $amount);
-                $asset->increment('book_value', $amount);
+                $asset->forceFill([
+                    'acquisition_cost' => (float) $asset->acquisition_cost + $amount,
+                    'book_value' => (float) $asset->book_value + $amount,
+                ])->save();
             }
 
             FixedAssetPosted::dispatch($entry);

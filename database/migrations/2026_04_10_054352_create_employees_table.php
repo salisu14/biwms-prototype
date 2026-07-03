@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
@@ -15,7 +16,7 @@ return new class extends Migration {
             $table->string('employee_number', 20)->unique();
             $table->string('first_name');
             $table->string('last_name');
-            $table->string('full_name')->virtualAs('first_name || \' \' || last_name');
+            $table->string('full_name');
             $table->string('email')->nullable()->unique();
             $table->string('phone')->nullable();
             $table->string('job_title')->nullable();
@@ -34,7 +35,6 @@ return new class extends Migration {
                 ->nullable()
                 ->constrained('payroll_posting_groups')
                 ->nullOnDelete();
-
 
             $table->string('assignment_type')->default('corporate')->after('job_title')->index();
 

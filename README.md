@@ -287,16 +287,6 @@ php artisan biwms:health-check
 php artisan biwms:finance-reconcile
 php artisan biwms:inventory-reconcile
 php artisan test --compact
-
-
---
-vendor/bin/pint --dirty --format agent
-php artisan test --compact
-php artisan biwms:security-audit
-php artisan biwms:health-check
-php artisan biwms:permissions-cleanup --dry-run
-php artisan biwms:finance-reconcile
-php artisan biwms:inventory-reconcile
 ```
 
 ### Production Readiness Checklist

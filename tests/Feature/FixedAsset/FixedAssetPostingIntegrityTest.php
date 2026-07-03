@@ -22,9 +22,66 @@ use App\Services\FixedAsset\DisposalService;
 use App\Services\FixedAsset\FAPostingService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
 
 uses(RefreshDatabase::class);
+
+test('fixed assets schema stores net book value as a normal decimal column', function () {
+    expect(Schema::hasColumn('fixed_assets', 'net_book_value'))->toBeTrue();
+
+    $columnType = Schema::getColumnType('fixed_assets', 'net_book_value');
+    expect($columnType)->toBeIn(['decimal', 'numeric']);
+
+    if (DB::getDriverName() === 'pgsql') {
+        $column = DB::selectOne(
+            'select is_generated from information_schema.columns where table_schema = current_schema() and table_name = ? and column_name = ?',
+            ['fixed_assets', 'net_book_value']
+        );
+
+        expect($column?->is_generated)->toBe('NEVER');
+    }
+
+    if (DB::getDriverName() === 'sqlite') {
+        $column = collect(DB::select('pragma table_xinfo(fixed_assets)'))
+            ->firstWhere('name', 'net_book_value');
+
+        expect((int) ($column->hidden ?? 0))->toBe(0);
+    }
+});
+
+test('migrations do not use database generated column helpers', function () {
+    $helpers = ['virtual'.'As(', 'stored'.'As(', 'generated'.'As('];
+
+    $generatedColumnHelpers = collect(glob(database_path('migrations/*.php')))
+        ->map(fn (string $path): string => file_get_contents($path) ?: '')
+        ->filter(fn (string $contents): bool => collect($helpers)->contains(
+            fn (string $helper): bool => str_contains($contents, $helper)
+        ));
+
+    expect($generatedColumnHelpers)->toBeEmpty();
+});
+
+test('fixed asset net book value is recalculated before save', function () {
+    $fixture = fixedAssetPostingFixture();
+
+    $asset = fixedAssetForPosting($fixture, [
+        'fa_no' => 'FA-NBV-001',
+        'acquisition_cost' => 5000,
+        'book_value' => 5000,
+        'accumulated_depreciation' => 1250,
+    ]);
+
+    expect((float) DB::table('fixed_assets')->where('id', $asset->id)->value('net_book_value'))->toBe(3750.0);
+
+    $asset->forceFill([
+        'book_value' => 6200,
+        'accumulated_depreciation' => 1700,
+    ])->save();
+
+    expect((float) DB::table('fixed_assets')->where('id', $asset->id)->value('net_book_value'))->toBe(4500.0);
+});
 
 test('fixed asset acquisition creates ledger, balanced gl, and updates asset atomically', function () {
     Event::fake([FixedAssetPosted::class]);
@@ -52,6 +109,7 @@ test('fixed asset acquisition creates ledger, balanced gl, and updates asset ato
     expect($asset->fresh()->status)->toBe(FAStatus::ACTIVE)
         ->and((float) $asset->fresh()->acquisition_cost)->toBe(10000.0)
         ->and((float) $asset->fresh()->book_value)->toBe(10000.0)
+        ->and((float) DB::table('fixed_assets')->where('id', $asset->id)->value('net_book_value'))->toBe(10000.0)
         ->and(FALedgerEntry::query()->where('fixed_asset_id', $asset->id)->where('fa_posting_type', FAPostingType::ACQUISITION)->exists())->toBeTrue()
         ->and(round((float) $glEntries->sum('debit_amount'), 2))->toBe(10000.0)
         ->and(round((float) $glEntries->sum('credit_amount'), 2))->toBe(10000.0);
@@ -78,6 +136,7 @@ test('fixed asset depreciation creates ledger and balanced gl, updates accumulat
     $glEntries = GlEntry::query()->where('document_number', 'FA-DEP-202606')->get();
 
     expect((float) $asset->fresh()->accumulated_depreciation)->toBe(1000.0)
+        ->and((float) DB::table('fixed_assets')->where('id', $asset->id)->value('net_book_value'))->toBe(11000.0)
         ->and(FALedgerEntry::query()->where('fixed_asset_id', $asset->id)->where('fa_posting_type', FAPostingType::DEPRECIATION)->exists())->toBeTrue()
         ->and(round((float) $glEntries->sum('debit_amount'), 2))->toBe(1000.0)
         ->and(round((float) $glEntries->sum('credit_amount'), 2))->toBe(1000.0);
@@ -129,6 +188,7 @@ test('fixed asset disposal clears cost and depreciation, posts proceeds and gain
 
     expect($asset->fresh()->status)->toBe(FAStatus::DISPOSED)
         ->and((float) $asset->fresh()->book_value)->toBe(0.0)
+        ->and((float) DB::table('fixed_assets')->where('id', $asset->id)->value('net_book_value'))->toBe(0.0)
         ->and((float) $asset->fresh()->disposal_gain_loss)->toBe(100.0)
         ->and(FALedgerEntry::query()->where('fixed_asset_id', $asset->id)->where('fa_posting_type', FAPostingType::DISPOSAL)->exists())->toBeTrue()
         ->and(round((float) $glEntries->sum('debit_amount'), 2))->toBe(1100.0)

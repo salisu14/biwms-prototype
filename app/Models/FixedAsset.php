@@ -57,6 +57,7 @@ class FixedAsset extends Model
         'declining_balance_calc',
         'book_value',
         'accumulated_depreciation',
+        'net_book_value',
         'last_revaluation_amount',
         'last_revaluation_date',
         'revaluation_reserve',
@@ -92,6 +93,7 @@ class FixedAsset extends Model
         'salvage_value' => 'decimal:4',
         'book_value' => 'decimal:4',
         'accumulated_depreciation' => 'decimal:4',
+        'net_book_value' => 'decimal:4',
         'revaluation_reserve' => 'decimal:4',
         'insurance_value' => 'decimal:4',
         'disposal_proceeds' => 'decimal:4',
@@ -116,6 +118,8 @@ class FixedAsset extends Model
             if (Auth::check()) {
                 $asset->modified_by = Auth::id();
             }
+
+            $asset->recalculateNetBookValue();
         });
     }
 
@@ -186,6 +190,17 @@ class FixedAsset extends Model
     public function getNetBookValueAttribute(): float
     {
         return (float) $this->book_value - (float) $this->accumulated_depreciation;
+    }
+
+    public function recalculateNetBookValue(): self
+    {
+        $this->attributes['net_book_value'] = round(
+            (float) ($this->attributes['book_value'] ?? $this->book_value ?? 0)
+            - (float) ($this->attributes['accumulated_depreciation'] ?? $this->accumulated_depreciation ?? 0),
+            4
+        );
+
+        return $this;
     }
 
     public function getRemainingLifeMonthsAttribute(): ?float

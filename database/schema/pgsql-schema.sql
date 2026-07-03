@@ -151,7 +151,7 @@ CREATE TABLE public.actual_overhead_costs (
     cost_type_code character varying(20),
     amount numeric(15,4) NOT NULL,
     allocated_amount numeric(15,4) DEFAULT '0'::numeric NOT NULL,
-    remaining_amount numeric(15,4) GENERATED ALWAYS AS ((amount - allocated_amount)) NOT NULL,
+    remaining_amount numeric(15,4) DEFAULT '0'::numeric NOT NULL,
     gl_account_id bigint NOT NULL,
     gl_account_no character varying(50) NOT NULL,
     document_type character varying(50),
@@ -2919,7 +2919,7 @@ CREATE TABLE public.employees (
     employee_number character varying(20) NOT NULL,
     first_name character varying(255) NOT NULL,
     last_name character varying(255) NOT NULL,
-    full_name character varying(255) GENERATED ALWAYS AS ((((first_name)::text || ' '::text) || (last_name)::text)) NOT NULL,
+    full_name character varying(255) NOT NULL,
     email character varying(255),
     phone character varying(255),
     job_title character varying(255),
@@ -3883,7 +3883,7 @@ CREATE TABLE public.fixed_assets (
     declining_balance_calc character varying(255),
     book_value numeric(15,4) DEFAULT '0'::numeric NOT NULL,
     accumulated_depreciation numeric(15,4) DEFAULT '0'::numeric NOT NULL,
-    net_book_value numeric(15,4) GENERATED ALWAYS AS ((book_value - accumulated_depreciation)) NOT NULL,
+    net_book_value numeric(15,4) DEFAULT '0'::numeric NOT NULL,
     last_revaluation_amount numeric(15,4),
     last_revaluation_date date,
     revaluation_reserve numeric(15,4) DEFAULT '0'::numeric NOT NULL,
@@ -26206,4 +26206,3 @@ SELECT pg_catalog.setval('public.migrations_id_seq', 253, true);
 --
 
 \unrestrict mNdqFj6JjFpZNndkvFa1VCDQdPDMKkpl2Pvm4SJRFdKpe5vhNpVU53ReY5fRE48
-
