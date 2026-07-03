@@ -48,6 +48,7 @@ class UsersTableSeeder extends Seeder
             [
                 'first_name' => $firstName,
                 'last_name' => $lastName,
+                'full_name' => trim("{$firstName} {$lastName}"),
                 'email' => $this->emailForRole($role->name),
                 'phone' => '+234800000'.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT),
                 'job_title' => $this->titleForRole($role->name),

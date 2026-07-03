@@ -244,6 +244,7 @@ class FixedAssetSampleSeeder extends Seeder
                     'units_produced_to_date' => 0,
                     'book_value' => $assetData['book_value'],
                     'accumulated_depreciation' => $assetData['accumulated_depreciation'],
+                    'net_book_value' => (float) $assetData['book_value'] - (float) $assetData['accumulated_depreciation'],
                     'status' => $assetData['status'] ?? FAStatus::ACTIVE,
                     'blocked' => false,
                     'disposal_date' => $assetData['disposal_date'] ?? null,

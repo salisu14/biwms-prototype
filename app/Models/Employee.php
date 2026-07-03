@@ -22,6 +22,7 @@ class Employee extends Model
         'employee_number',
         'first_name',
         'last_name',
+        'full_name',
         'email',
         'phone',
         'job_title',
