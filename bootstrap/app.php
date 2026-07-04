@@ -11,6 +11,7 @@ use App\Http\Middleware\EnsureSuperAdminTwoFactorIsVerified;
 use App\Http\Middleware\EnsureWarehouseRole;
 use App\Services\AuditTrailService;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -38,6 +39,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (AuthenticationException $exception, Request $request) {
+            if ($request->is('admin/two-factor/*')) {
+                return redirect()->guest('/admin/login');
+            }
+
+            return null;
+        });
+
         $exceptions->render(function (Throwable $exception, Request $request) {
             $statusCode = $exception instanceof AuthorizationException
                 ? 403

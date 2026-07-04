@@ -22,9 +22,16 @@ use App\Http\Controllers\WaybillController;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::redirect('/', '/login');
+Route::view('/login', 'auth.login-selector')->name('login');
+Route::redirect('/login/finance', '/finance/login');
+Route::redirect('/login/factory', '/factory/login');
+Route::redirect('/login/sales', '/sales/login');
+Route::redirect('/login/procurement', '/procurement/login');
+Route::redirect('/login/hr', '/hr/login');
+Route::redirect('/login/project', '/project/login');
+Route::redirect('/login/service', '/service/login');
+Route::redirect('/login/warehouse', '/warehouse/login');
 
 Route::middleware(['web', 'auth'])->group(function (): void {
     Route::get('/admin/two-factor/setup', [SuperAdminTwoFactorSetupController::class, 'create'])

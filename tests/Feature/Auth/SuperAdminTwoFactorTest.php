@@ -30,6 +30,52 @@ it('requires Super Admin to set up two factor authentication before panel access
     expect(AuditTrail::query()->where('action', 'two_factor_setup_required')->exists())->toBeTrue();
 });
 
+it('redirects root to the neutral login selector', function (): void {
+    $this->get('/')
+        ->assertRedirect('/login');
+
+    $this->get('/login')
+        ->assertSuccessful()
+        ->assertSee('Select the workspace')
+        ->assertSee('Admin')
+        ->assertSee('Finance')
+        ->assertSee('Factory')
+        ->assertSee('Sales')
+        ->assertSee('Procurement')
+        ->assertSee('HR')
+        ->assertSee('Project')
+        ->assertSee('Service')
+        ->assertSee('Warehouse');
+
+    expect(route('login', absolute: false))->toBe('/login');
+});
+
+it('keeps panel login entry points available for guests', function (): void {
+    $this->get('/login/finance')->assertRedirect('/finance/login');
+    $this->get('/login/factory')->assertRedirect('/factory/login');
+    $this->get('/login/sales')->assertRedirect('/sales/login');
+    $this->get('/login/procurement')->assertRedirect('/procurement/login');
+    $this->get('/login/hr')->assertRedirect('/hr/login');
+    $this->get('/login/project')->assertRedirect('/project/login');
+    $this->get('/login/service')->assertRedirect('/service/login');
+    $this->get('/login/warehouse')->assertRedirect('/warehouse/login');
+
+    $this->get('/finance/login')->assertSuccessful();
+    $this->get('/factory/login')->assertSuccessful();
+    $this->get('/sales/login')->assertSuccessful();
+    $this->get('/procurement/login')->assertSuccessful();
+    $this->get('/hr/login')->assertSuccessful();
+    $this->get('/project/login')->assertSuccessful();
+    $this->get('/service/login')->assertSuccessful();
+    $this->get('/warehouse/login')->assertSuccessful();
+    $this->get('/admin/login')->assertSuccessful();
+});
+
+it('redirects guest MFA setup requests to the Filament admin login', function (): void {
+    $this->get('/admin/two-factor/setup')
+        ->assertRedirect('/admin/login');
+});
+
 it('enables Super Admin TOTP with hashed recovery codes and audits the event', function (): void {
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
