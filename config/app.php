@@ -15,6 +15,10 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    'version' => env('APP_VERSION', '0.1.0'),
+
+    'logo_path' => env('APP_LOGO_PATH', 'assets/logo.svg'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment
