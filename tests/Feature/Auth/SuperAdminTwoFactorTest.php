@@ -45,7 +45,8 @@ it('redirects root to the neutral login selector', function (): void {
         ->assertSee('HR')
         ->assertSee('Project')
         ->assertSee('Service')
-        ->assertSee('Warehouse');
+        ->assertSee('Warehouse')
+        ->assertSee('Enterprise Resource Planning Portal');
 
     expect(route('login', absolute: false))->toBe('/login');
 });
