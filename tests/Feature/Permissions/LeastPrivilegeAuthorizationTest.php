@@ -114,20 +114,22 @@ it('returns 404 for restricted Filament URLs and allows authorized role URLs', f
         ->assertSuccessful();
 });
 
-it('mounts role edit permissions with a bounded query count for large permission sets', function (): void {
+it('mounts role edit without rendering every permission in large permission sets', function (): void {
     $securityAdmin = User::factory()->create();
     $securityAdmin->givePermissionTo('role_permission.manage');
 
     $role = Role::query()->create(['name' => 'large-permission-role']);
 
     $now = now();
-    $bulkPermissions = collect(range(1, 1500))
-        ->map(fn (int $index): array => [
-            'name' => 'factory.synthetic_resource_'.$index.'.view',
-            'guard_name' => 'web',
-            'created_at' => $now,
-            'updated_at' => $now,
-        ])
+    $bulkPermissions = collect(['finance', 'factory', 'sales'])
+        ->flatMap(fn (string $module): array => collect(range(1, 581))
+            ->map(fn (int $index): array => [
+                'name' => "{$module}.synthetic_resource_{$index}.view",
+                'guard_name' => 'web',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])
+            ->all())
         ->all();
 
     Permission::query()->insert($bulkPermissions);
@@ -140,11 +142,47 @@ it('mounts role edit permissions with a bounded query count for large permission
         $queryCount++;
     });
 
+    $component = Livewire::actingAs($securityAdmin)
+        ->test(ManageRoles::class)
+        ->mountTableAction('edit', $role);
+
+    $html = $component->html(stripInitialData: true);
+
+    expect($queryCount)->toBeLessThan(80)
+        ->and(strlen($html))->toBeLessThan(1_000_000)
+        ->and($html)->not->toContain('finance.synthetic_resource_580.view')
+        ->and($html)->not->toContain('factory.synthetic_resource_580.view')
+        ->and($html)->not->toContain('sales.synthetic_resource_580.view');
+});
+
+it('loads only the active role permission module', function (): void {
+    $securityAdmin = User::factory()->create();
+    $securityAdmin->givePermissionTo('role_permission.manage');
+
+    $role = Role::query()->create(['name' => 'module-switch-role']);
+
+    $financePermission = Permission::query()->create([
+        'name' => 'finance.lazy_probe.view',
+        'guard_name' => 'web',
+    ]);
+    $factoryPermission = Permission::query()->create([
+        'name' => 'factory.lazy_probe.view',
+        'guard_name' => 'web',
+    ]);
+
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    RoleResource::clearPermissionCatalog();
+
     Livewire::actingAs($securityAdmin)
         ->test(ManageRoles::class)
         ->mountTableAction('edit', $role);
 
-    expect($queryCount)->toBeLessThan(80);
+    expect(RoleResource::activeModulePermissionDescriptions('finance'))
+        ->toContain($financePermission->name)
+        ->not->toContain($factoryPermission->name)
+        ->and(RoleResource::activeModulePermissionDescriptions('manufacturing'))
+        ->toContain($factoryPermission->name)
+        ->not->toContain($financePermission->name);
 });
 
 it('syncs role permissions from grouped edit form state', function (): void {
@@ -162,10 +200,9 @@ it('syncs role permissions from grouped edit form state', function (): void {
         ->callTableAction('edit', $role, data: [
             'name' => 'edited-role',
             'guard_name' => 'web',
-            'permission_groups' => [
-                'finance' => [$financePermission->id],
-                'sales' => [$salesPermission->id],
-            ],
+            'selected_permission_ids' => [$financePermission->id],
+            'active_permission_module' => 'sales',
+            'active_module_permission_ids' => [$salesPermission->id],
             SensitiveActionPasswordConfirmation::FIELD => 'password',
         ])
         ->assertHasNoTableActionErrors();

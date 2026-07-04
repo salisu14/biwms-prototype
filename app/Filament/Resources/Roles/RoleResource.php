@@ -16,6 +16,9 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
@@ -23,6 +26,8 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -30,6 +35,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\HtmlString;
 
 class RoleResource extends Resource
 {
@@ -72,11 +78,63 @@ class RoleResource extends Resource
                 ->columns(2),
 
             Section::make('Permissions')
-                ->description('Permissions are grouped by module to keep role editing responsive in large installations.')
+                ->description('Select a module to load and edit only that module’s permissions.')
                 ->schema([
-                    Tabs::make('Permission Modules')
-                        ->tabs(static::permissionFormTabs())
-                        ->persistTab(),
+                    Hidden::make('selected_permission_ids')
+                        ->default([])
+                        ->dehydrated(),
+
+                    Grid::make(2)
+                        ->schema([
+                            Select::make('active_permission_module')
+                                ->label('Permission module')
+                                ->options(static::permissionModuleOptions())
+                                ->default(static::defaultPermissionModuleKey())
+                                ->live()
+                                ->afterStateUpdated(function (Set $set, Get $get, ?string $state): void {
+                                    $set(
+                                        'active_module_permission_ids',
+                                        static::activeModuleSelectedPermissionIds(
+                                            (array) $get('selected_permission_ids'),
+                                            $state ?: static::defaultPermissionModuleKey()
+                                        )
+                                    );
+                                })
+                                ->helperText('Only the selected module is rendered to keep the edit payload small.'),
+
+                            Placeholder::make('module_permission_counts')
+                                ->label('Selected permissions')
+                                ->content(fn (Get $get): HtmlString => static::modulePermissionCountsHtml((array) $get('selected_permission_ids'))),
+                        ]),
+
+                    CheckboxList::make('active_module_permission_ids')
+                        ->label(fn (Get $get): string => static::permissionModuleLabel((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())))
+                        ->options(fn (Get $get): array => static::activeModulePermissionOptions((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())))
+                        ->descriptions(fn (Get $get): array => static::activeModulePermissionDescriptions((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())))
+                        ->columns(3)
+                        ->bulkToggleable()
+                        ->allowHtml()
+                        ->searchable()
+                        ->live()
+                        ->afterStateHydrated(function (Set $set, Get $get): void {
+                            $set(
+                                'active_module_permission_ids',
+                                static::activeModuleSelectedPermissionIds(
+                                    (array) $get('selected_permission_ids'),
+                                    (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())
+                                )
+                            );
+                        })
+                        ->afterStateUpdated(function (Set $set, Get $get, mixed $state): void {
+                            $set(
+                                'selected_permission_ids',
+                                static::mergeActiveModulePermissionSelection(
+                                    (array) $get('selected_permission_ids'),
+                                    is_array($state) ? $state : [],
+                                    (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())
+                                )
+                            );
+                        }),
                 ])
                 ->columnSpanFull(),
 
@@ -338,9 +396,18 @@ class RoleResource extends Resource
      */
     public static function formDataForRole(Role $role): array
     {
+        $selectedPermissionIds = $role->permissions()
+            ->pluck('permissions.id')
+            ->map(fn ($permissionId): int => (int) $permissionId)
+            ->values()
+            ->all();
+        $activeModuleKey = static::defaultPermissionModuleKey();
+
         return [
             ...Arr::only($role->attributesToArray(), ['name', 'guard_name']),
-            'permission_groups' => static::permissionGroupStateForRole($role),
+            'selected_permission_ids' => $selectedPermissionIds,
+            'active_permission_module' => $activeModuleKey,
+            'active_module_permission_ids' => static::activeModuleSelectedPermissionIds($selectedPermissionIds, $activeModuleKey),
         ];
     }
 
@@ -385,8 +452,12 @@ class RoleResource extends Resource
      */
     public static function selectedPermissionNamesFromData(array $data): array
     {
-        $selectedPermissionIds = collect($data['permission_groups'] ?? [])
-            ->flatMap(fn ($permissionIds): array => is_array($permissionIds) ? $permissionIds : [])
+        $selectedPermissionIds = collect(
+            array_key_exists('active_module_permission_ids', $data)
+                ? static::activeModulePermissionIdsFromData($data)
+                : ($data['selected_permission_ids'] ?? [])
+        )
+            ->merge(static::selectedPermissionIdsFromLegacyGroups($data))
             ->map(fn ($permissionId): int => (int) $permissionId)
             ->unique()
             ->values();
@@ -405,33 +476,160 @@ class RoleResource extends Resource
     }
 
     /**
-     * @return array<int, Tab>
+     * @param  array<string, mixed>  $data
+     * @return array<int, int>
      */
-    protected static function permissionFormTabs(): array
+    protected static function selectedPermissionIdsFromLegacyGroups(array $data): array
     {
-        return static::permissionCatalog()
-            ->groupBy('group')
-            ->map(function (Collection $permissions, string $group): Tab {
-                $groupKey = (string) $permissions->first()['group_key'];
-
-                return Tab::make($group)
-                    ->schema([
-                        CheckboxList::make("permission_groups.{$groupKey}")
-                            ->label($group)
-                            ->options($permissions->mapWithKeys(fn (array $permission): array => [
-                                $permission['id'] => $permission['label'],
-                            ])->all())
-                            ->descriptions($permissions->mapWithKeys(fn (array $permission): array => [
-                                $permission['id'] => $permission['description'],
-                            ])->all())
-                            ->columns(3)
-                            ->bulkToggleable()
-                            ->allowHtml()
-                            ->searchable(),
-                    ]);
-            })
+        return collect($data['permission_groups'] ?? [])
+            ->flatMap(fn ($permissionIds): array => is_array($permissionIds) ? $permissionIds : [])
+            ->map(fn ($permissionId): int => (int) $permissionId)
+            ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<int, int>
+     */
+    protected static function activeModulePermissionIdsFromData(array $data): array
+    {
+        if (! array_key_exists('active_module_permission_ids', $data)) {
+            return [];
+        }
+
+        return static::mergeActiveModulePermissionSelection(
+            (array) ($data['selected_permission_ids'] ?? []),
+            (array) $data['active_module_permission_ids'],
+            (string) ($data['active_permission_module'] ?? static::defaultPermissionModuleKey())
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function permissionModuleOptions(): array
+    {
+        return static::permissionCatalog()
+            ->groupBy('group_key')
+            ->map(fn (Collection $permissions): string => static::permissionModuleOptionLabel($permissions))
+            ->all();
+    }
+
+    public static function defaultPermissionModuleKey(): string
+    {
+        return (string) (static::permissionCatalog()->first()['group_key'] ?? 'system_setup');
+    }
+
+    public static function permissionModuleLabel(string $moduleKey): string
+    {
+        $permission = static::permissionCatalog()
+            ->first(fn (array $permission): bool => $permission['group_key'] === $moduleKey);
+
+        return $permission['group'] ?? str($moduleKey)->replace('_', ' ')->headline()->toString();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function activeModulePermissionOptions(string $moduleKey): array
+    {
+        return static::permissionsForModule($moduleKey)
+            ->mapWithKeys(fn (array $permission): array => [
+                $permission['id'] => $permission['label'],
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function activeModulePermissionDescriptions(string $moduleKey): array
+    {
+        return static::permissionsForModule($moduleKey)
+            ->mapWithKeys(fn (array $permission): array => [
+                $permission['id'] => $permission['description'],
+            ])
+            ->all();
+    }
+
+    /**
+     * @param  array<int, mixed>  $selectedPermissionIds
+     * @return array<int, int>
+     */
+    public static function activeModuleSelectedPermissionIds(array $selectedPermissionIds, string $moduleKey): array
+    {
+        $selectedPermissionIdLookup = array_flip(array_map('intval', $selectedPermissionIds));
+
+        return static::permissionsForModule($moduleKey)
+            ->pluck('id')
+            ->map(fn ($permissionId): int => (int) $permissionId)
+            ->filter(fn (int $permissionId): bool => isset($selectedPermissionIdLookup[$permissionId]))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, mixed>  $currentSelectedPermissionIds
+     * @param  array<int, mixed>  $activeModuleSelectedPermissionIds
+     * @return array<int, int>
+     */
+    public static function mergeActiveModulePermissionSelection(
+        array $currentSelectedPermissionIds,
+        array $activeModuleSelectedPermissionIds,
+        string $moduleKey
+    ): array {
+        $activeModulePermissionIdLookup = array_flip(static::permissionsForModule($moduleKey)
+            ->pluck('id')
+            ->map(fn ($permissionId): int => (int) $permissionId)
+            ->all());
+
+        return collect($currentSelectedPermissionIds)
+            ->map(fn ($permissionId): int => (int) $permissionId)
+            ->reject(fn (int $permissionId): bool => isset($activeModulePermissionIdLookup[$permissionId]))
+            ->merge(collect($activeModuleSelectedPermissionIds)->map(fn ($permissionId): int => (int) $permissionId))
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, mixed>  $selectedPermissionIds
+     */
+    protected static function modulePermissionCountsHtml(array $selectedPermissionIds): HtmlString
+    {
+        $selectedPermissionIdLookup = array_flip(array_map('intval', $selectedPermissionIds));
+
+        $html = static::permissionCatalog()
+            ->groupBy('group_key')
+            ->map(function (Collection $permissions) use ($selectedPermissionIdLookup): string {
+                $selectedCount = $permissions
+                    ->pluck('id')
+                    ->filter(fn ($permissionId): bool => isset($selectedPermissionIdLookup[(int) $permissionId]))
+                    ->count();
+
+                return e($permissions->first()['group']).': '.$selectedCount.'/'.$permissions->count();
+            })
+            ->implode(' · ');
+
+        return new HtmlString('<span class="text-sm text-gray-600 dark:text-gray-300">'.$html.'</span>');
+    }
+
+    protected static function permissionModuleOptionLabel(Collection $permissions): string
+    {
+        return $permissions->first()['group'].' ('.$permissions->count().')';
+    }
+
+    /**
+     * @return Collection<int, array{id: int, name: string, group: string, group_key: string, label: string, description: string}>
+     */
+    public static function permissionsForModule(string $moduleKey): Collection
+    {
+        return static::permissionCatalog()
+            ->filter(fn (array $permission): bool => $permission['group_key'] === $moduleKey)
+            ->values();
     }
 
     /**
