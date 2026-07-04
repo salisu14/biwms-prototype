@@ -8,16 +8,21 @@ use App\Filament\Resources\ChartOfAccounts\ChartOfAccountResource;
 use App\Filament\Resources\NumberSeries\NumberSeriesResource;
 use App\Filament\Resources\ProductionBoms\ProductionBomResource;
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
+use App\Filament\Resources\Roles\Pages\ManageRoles;
 use App\Filament\Resources\Roles\RoleResource;
 use App\Filament\Resources\Users\UserResource;
 use App\Models\AuditTrail;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Policies\ProductionOrderPolicy;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Database\Seeders\PermissionsTableSeeder;
 use Database\Seeders\RolePermissionSetSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
 
 uses(RefreshDatabase::class);
@@ -107,6 +112,70 @@ it('returns 404 for restricted Filament URLs and allows authorized role URLs', f
     $this->actingAs($securityAdmin)
         ->get('/admin/roles')
         ->assertSuccessful();
+});
+
+it('mounts role edit permissions with a bounded query count for large permission sets', function (): void {
+    $securityAdmin = User::factory()->create();
+    $securityAdmin->givePermissionTo('role_permission.manage');
+
+    $role = Role::query()->create(['name' => 'large-permission-role']);
+
+    $now = now();
+    $bulkPermissions = collect(range(1, 1500))
+        ->map(fn (int $index): array => [
+            'name' => 'factory.synthetic_resource_'.$index.'.view',
+            'guard_name' => 'web',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])
+        ->all();
+
+    Permission::query()->insert($bulkPermissions);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    RoleResource::clearPermissionCatalog();
+
+    $queryCount = 0;
+
+    DB::listen(function () use (&$queryCount): void {
+        $queryCount++;
+    });
+
+    Livewire::actingAs($securityAdmin)
+        ->test(ManageRoles::class)
+        ->mountTableAction('edit', $role);
+
+    expect($queryCount)->toBeLessThan(80);
+});
+
+it('syncs role permissions from grouped edit form state', function (): void {
+    $securityAdmin = User::factory()->create();
+    $securityAdmin->givePermissionTo('role_permission.manage');
+
+    $role = Role::query()->create(['name' => 'editable-role']);
+    $financePermission = Permission::query()->where('name', 'finance.payment.view_any')->firstOrFail();
+    $salesPermission = Permission::query()->where('name', 'sales.sales_order.view_any')->firstOrFail();
+
+    RoleResource::clearPermissionCatalog();
+
+    Livewire::actingAs($securityAdmin)
+        ->test(ManageRoles::class)
+        ->callTableAction('edit', $role, data: [
+            'name' => 'edited-role',
+            'guard_name' => 'web',
+            'permission_groups' => [
+                'finance' => [$financePermission->id],
+                'sales' => [$salesPermission->id],
+            ],
+            SensitiveActionPasswordConfirmation::FIELD => 'password',
+        ])
+        ->assertHasNoTableActionErrors();
+
+    expect($role->fresh()->name)->toBe('edited-role')
+        ->and($role->fresh()->permissions->pluck('name')->all())
+        ->toEqualCanonicalizing([
+            'finance.payment.view_any',
+            'sales.sales_order.view_any',
+        ]);
 });
 
 it('protects sensitive posting actions with backend policies', function (): void {

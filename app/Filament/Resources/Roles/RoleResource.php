@@ -10,6 +10,7 @@ use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use BackedEnum;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -27,9 +28,16 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 
 class RoleResource extends Resource
 {
+    /**
+     * @var Collection<int, array{id: int, name: string, group: string, group_key: string, label: string, description: string}>|null
+     */
+    protected static ?Collection $permissionCatalog = null;
+
     public static function permissionModule(): string
     {
         return 'admin';
@@ -64,18 +72,11 @@ class RoleResource extends Resource
                 ->columns(2),
 
             Section::make('Permissions')
-                ->description('Use search to find permissions. Dangerous permissions are marked.')
+                ->description('Permissions are grouped by module to keep role editing responsive in large installations.')
                 ->schema([
-                    CheckboxList::make('permissions')
-                        ->label('')
-                        ->relationship('permissions', 'name')
-                        ->options(static::permissionOptions())
-                        ->descriptions(static::permissionDescriptions())
-                        ->columns(4)
-                        ->bulkToggleable()
-                        ->allowHtml()
-                        ->searchable()
-                        ->helperText('Only one permission selector is used to avoid invalid selections across grouped tabs.'),
+                    Tabs::make('Permission Modules')
+                        ->tabs(static::permissionFormTabs())
+                        ->persistTab(),
                 ])
                 ->columnSpanFull(),
 
@@ -142,7 +143,7 @@ class RoleResource extends Resource
             ->recordActions([
                 ActionGroup::make([
                     ViewAction::make(),
-                    EditAction::make()
+                    static::configureEditAction(EditAction::make())
                         ->modalWidth(width: 'full'),
                     DeleteAction::make(),
                 ]),
@@ -152,6 +153,28 @@ class RoleResource extends Resource
                     DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    public static function configureCreateAction(CreateAction $action): CreateAction
+    {
+        return $action
+            ->modalWidth(width: 'full')
+            ->using(function (array $data): Role {
+                $role = Role::query()->create(static::roleAttributesFromData($data));
+                $role->syncPermissions(static::selectedPermissionNamesFromData($data));
+
+                return $role;
+            });
+    }
+
+    public static function configureEditAction(EditAction $action): EditAction
+    {
+        return $action
+            ->fillForm(fn (Role $record): array => static::formDataForRole($record))
+            ->using(function (Role $record, array $data): void {
+                $record->update(static::roleAttributesFromData($data));
+                $record->syncPermissions(static::selectedPermissionNamesFromData($data));
+            });
     }
 
     public static function getPages(): array
@@ -286,12 +309,9 @@ class RoleResource extends Resource
      */
     public static function permissionOptions(): array
     {
-        return Permission::query()
-            ->where('guard_name', 'web')
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->mapWithKeys(fn (Permission $permission): array => [
-                $permission->id => static::permissionLabelFor($permission->name),
+        return static::permissionCatalog()
+            ->mapWithKeys(fn (array $permission): array => [
+                $permission['id'] => $permission['label'],
             ])
             ->all();
     }
@@ -301,15 +321,148 @@ class RoleResource extends Resource
      */
     public static function permissionDescriptions(): array
     {
-        return Permission::query()
-            ->where('guard_name', 'web')
-            ->get(['id', 'name'])
-            ->mapWithKeys(fn (Permission $permission): array => [
-                $permission->id => static::isDangerousPermission($permission->name)
-                    ? 'Dangerous permission. Grant only to trusted administrators.'
-                    : $permission->name,
+        return static::permissionCatalog()
+            ->mapWithKeys(fn (array $permission): array => [
+                $permission['id'] => $permission['description'],
             ])
             ->all();
+    }
+
+    public static function clearPermissionCatalog(): void
+    {
+        static::$permissionCatalog = null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function formDataForRole(Role $role): array
+    {
+        return [
+            ...Arr::only($role->attributesToArray(), ['name', 'guard_name']),
+            'permission_groups' => static::permissionGroupStateForRole($role),
+        ];
+    }
+
+    /**
+     * @return array<string, array<int, int>>
+     */
+    public static function permissionGroupStateForRole(Role $role): array
+    {
+        $rolePermissionIds = $role->permissions()
+            ->pluck('permissions.id')
+            ->map(fn ($permissionId): int => (int) $permissionId)
+            ->all();
+
+        $rolePermissionIdLookup = array_flip($rolePermissionIds);
+
+        return static::permissionCatalog()
+            ->groupBy('group_key')
+            ->map(fn (Collection $permissions): array => $permissions
+                ->pluck('id')
+                ->map(fn ($permissionId): int => (int) $permissionId)
+                ->filter(fn (int $permissionId): bool => isset($rolePermissionIdLookup[$permissionId]))
+                ->values()
+                ->all())
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{name: string, guard_name: string}
+     */
+    public static function roleAttributesFromData(array $data): array
+    {
+        return [
+            'name' => (string) $data['name'],
+            'guard_name' => (string) ($data['guard_name'] ?? 'web'),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<int, string>
+     */
+    public static function selectedPermissionNamesFromData(array $data): array
+    {
+        $selectedPermissionIds = collect($data['permission_groups'] ?? [])
+            ->flatMap(fn ($permissionIds): array => is_array($permissionIds) ? $permissionIds : [])
+            ->map(fn ($permissionId): int => (int) $permissionId)
+            ->unique()
+            ->values();
+
+        if ($selectedPermissionIds->isEmpty()) {
+            return [];
+        }
+
+        $selectedPermissionIdLookup = array_flip($selectedPermissionIds->all());
+
+        return static::permissionCatalog()
+            ->filter(fn (array $permission): bool => isset($selectedPermissionIdLookup[$permission['id']]))
+            ->pluck('name')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, Tab>
+     */
+    protected static function permissionFormTabs(): array
+    {
+        return static::permissionCatalog()
+            ->groupBy('group')
+            ->map(function (Collection $permissions, string $group): Tab {
+                $groupKey = (string) $permissions->first()['group_key'];
+
+                return Tab::make($group)
+                    ->schema([
+                        CheckboxList::make("permission_groups.{$groupKey}")
+                            ->label($group)
+                            ->options($permissions->mapWithKeys(fn (array $permission): array => [
+                                $permission['id'] => $permission['label'],
+                            ])->all())
+                            ->descriptions($permissions->mapWithKeys(fn (array $permission): array => [
+                                $permission['id'] => $permission['description'],
+                            ])->all())
+                            ->columns(3)
+                            ->bulkToggleable()
+                            ->allowHtml()
+                            ->searchable(),
+                    ]);
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return Collection<int, array{id: int, name: string, group: string, group_key: string, label: string, description: string}>
+     */
+    protected static function permissionCatalog(): Collection
+    {
+        if (static::$permissionCatalog instanceof Collection) {
+            return static::$permissionCatalog;
+        }
+
+        static::$permissionCatalog = Permission::query()
+            ->where('guard_name', 'web')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(function (Permission $permission): array {
+                $group = static::permissionGroupFor($permission->name);
+
+                return [
+                    'id' => (int) $permission->id,
+                    'name' => $permission->name,
+                    'group' => $group,
+                    'group_key' => str($group)->slug('_')->toString(),
+                    'label' => static::permissionLabelFor($permission->name),
+                    'description' => static::isDangerousPermission($permission->name)
+                        ? 'Dangerous permission. Grant only to trusted administrators.'
+                        : $permission->name,
+                ];
+            });
+
+        return static::$permissionCatalog;
     }
 
     public static function permissionGroupFor(string $permission): string

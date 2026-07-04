@@ -13,7 +13,7 @@ class ManageRoles extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            RoleResource::configureCreateAction(CreateAction::make()),
         ];
     }
 }
