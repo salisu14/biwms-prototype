@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Services\AuditTrailService;
 use App\Services\Auth\SuperAdminTwoFactorService;
 use Illuminate\Contracts\View\View;
@@ -13,6 +14,7 @@ class SuperAdminTwoFactorSetupController extends Controller
 {
     public function create(Request $request, SuperAdminTwoFactorService $twoFactorService): View
     {
+        $user = $request->user();
         $secret = $request->session()->get('super_admin_2fa_setup_secret');
 
         if (! is_string($secret) || $secret === '') {
@@ -20,9 +22,11 @@ class SuperAdminTwoFactorSetupController extends Controller
             $request->session()->put('super_admin_2fa_setup_secret', $secret);
         }
 
+        abort_unless($user instanceof User, 404);
+
         return view('auth.two-factor.setup', [
             'action' => route('admin.two-factor.setup.store'),
-            'secret' => $secret,
+            ...$this->setupViewData($twoFactorService, $user, $secret),
         ]);
     }
 
@@ -31,12 +35,15 @@ class SuperAdminTwoFactorSetupController extends Controller
         SuperAdminTwoFactorService $twoFactorService,
         AuditTrailService $auditTrailService
     ): View|Response {
-        $request->validate(['code' => ['required', 'string']]);
+        $request->validate([
+            'password' => ['required', 'current_password'],
+            'code' => ['required', 'string'],
+        ]);
 
         $user = $request->user();
         $secret = $request->session()->get('super_admin_2fa_setup_secret');
 
-        abort_unless($user && is_string($secret), 404);
+        abort_unless($user instanceof User && is_string($secret), 404);
 
         if (! $twoFactorService->verifyCode($secret, (string) $request->input('code'))) {
             $auditTrailService->recordGeneric(
@@ -49,7 +56,7 @@ class SuperAdminTwoFactorSetupController extends Controller
 
             return response()->view('auth.two-factor.setup', [
                 'action' => route('admin.two-factor.setup.store'),
-                'secret' => $secret,
+                ...$this->setupViewData($twoFactorService, $user, $secret),
                 'errorMessage' => 'The code was not valid. Try the current authenticator code.',
             ], 422);
         }
@@ -73,5 +80,20 @@ class SuperAdminTwoFactorSetupController extends Controller
             'codes' => $plainRecoveryCodes,
             'continueUrl' => $request->session()->pull('url.intended', '/admin'),
         ]);
+    }
+
+    /**
+     * @return array{secret: string, issuer: string, otpauthUri: string, qrCodeSvg: string}
+     */
+    private function setupViewData(SuperAdminTwoFactorService $twoFactorService, User $user, string $secret): array
+    {
+        $otpauthUri = $twoFactorService->otpauthUri($user, $secret);
+
+        return [
+            'secret' => $secret,
+            'issuer' => (string) config('app.name', 'BIWMS'),
+            'otpauthUri' => $otpauthUri,
+            'qrCodeSvg' => $twoFactorService->qrCodeSvg($otpauthUri),
+        ];
     }
 }

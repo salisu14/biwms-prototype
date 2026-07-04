@@ -4,6 +4,10 @@ namespace App\Services\Auth;
 
 use App\Models\User;
 use App\Services\AuditTrailService;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -45,6 +49,31 @@ class SuperAdminTwoFactorService
     public function currentCode(string $secret, ?int $timestamp = null): string
     {
         return $this->codeForCounter($secret, intdiv($timestamp ?? time(), self::PERIOD_SECONDS));
+    }
+
+    public function otpauthUri(User $user, string $secret): string
+    {
+        $issuer = (string) config('app.name', 'BIWMS');
+        $accountName = $user->email ?: $user->name;
+        $label = rawurlencode($issuer).':'.rawurlencode($accountName);
+
+        return 'otpauth://totp/'.$label.'?'.http_build_query([
+            'secret' => $secret,
+            'issuer' => $issuer,
+            'algorithm' => 'SHA1',
+            'digits' => self::CODE_LENGTH,
+            'period' => self::PERIOD_SECONDS,
+        ], '', '&', PHP_QUERY_RFC3986);
+    }
+
+    public function qrCodeSvg(string $otpauthUri): string
+    {
+        $renderer = new ImageRenderer(
+            new RendererStyle(220),
+            new SvgImageBackEnd
+        );
+
+        return (new Writer($renderer))->writeString($otpauthUri);
     }
 
     public function verifyCode(string $secret, string $code, ?int $timestamp = null): bool

@@ -38,14 +38,22 @@ it('enables Super Admin TOTP with hashed recovery codes and audits the event', f
     $this->actingAs($superAdmin)
         ->get('/admin/two-factor/setup')
         ->assertSuccessful()
-        ->assertSee('TOTP Secret');
+        ->assertSee('<svg', false)
+        ->assertSee('Manual Secret')
+        ->assertSee('otpauth://totp/', false);
 
     $secret = session('super_admin_2fa_setup_secret');
     $code = $service->currentCode($secret);
 
-    $this->post(route('admin.two-factor.setup.store'), ['code' => $code])
+    $this->post(route('admin.two-factor.setup.store'), [
+        'password' => 'password',
+        'code' => $code,
+    ])
         ->assertSuccessful()
-        ->assertSee('Recovery Codes');
+        ->assertSee('Recovery Codes')
+        ->assertSee('Copy')
+        ->assertSee('Download')
+        ->assertSee('Print');
 
     $superAdmin->refresh();
 
@@ -53,6 +61,96 @@ it('enables Super Admin TOTP with hashed recovery codes and audits the event', f
         ->and($superAdmin->two_factor_recovery_codes)->toHaveCount(8)
         ->and(Hash::needsRehash($superAdmin->two_factor_recovery_codes[0]))->toBeFalse()
         ->and(AuditTrail::query()->where('action', 'two_factor_enabled')->exists())->toBeTrue();
+});
+
+it('generates an RFC 6238 otpauth URI and QR code', function (): void {
+    config(['app.name' => 'BIWMS Pilot']);
+
+    $user = User::factory()->create(['email' => 'pilot.admin@example.com']);
+    $service = app(SuperAdminTwoFactorService::class);
+    $secret = $service->generateSecret();
+
+    $uri = $service->otpauthUri($user, $secret);
+    parse_str((string) parse_url($uri, PHP_URL_QUERY), $query);
+
+    expect($uri)->toStartWith('otpauth://totp/BIWMS%20Pilot:pilot.admin%40example.com')
+        ->and($query['secret'])->toBe($secret)
+        ->and($query['issuer'])->toBe('BIWMS Pilot')
+        ->and($query['algorithm'])->toBe('SHA1')
+        ->and($query['digits'])->toBe('6')
+        ->and($query['period'])->toBe('30')
+        ->and($service->qrCodeSvg($uri))->toContain('<svg');
+});
+
+it('rejects invalid TOTP setup codes without enabling MFA', function (): void {
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $service = app(SuperAdminTwoFactorService::class);
+
+    $this->actingAs($superAdmin)
+        ->get(route('admin.two-factor.setup.create'))
+        ->assertSuccessful();
+
+    $secret = session('super_admin_2fa_setup_secret');
+    $invalidCode = str_pad((string) (((int) $service->currentCode($secret) + 1) % 1000000), 6, '0', STR_PAD_LEFT);
+
+    $this->post(route('admin.two-factor.setup.store'), [
+        'password' => 'password',
+        'code' => $invalidCode,
+    ])
+        ->assertStatus(422)
+        ->assertSee('The code was not valid');
+
+    expect($superAdmin->fresh()->hasConfirmedTwoFactorAuthentication())->toBeFalse()
+        ->and(AuditTrail::query()->where('action', 'two_factor_setup_failed')->exists())->toBeTrue();
+});
+
+it('requires current password before enabling MFA', function (): void {
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $service = app(SuperAdminTwoFactorService::class);
+
+    $this->actingAs($superAdmin)
+        ->get(route('admin.two-factor.setup.create'))
+        ->assertSuccessful();
+
+    $secret = session('super_admin_2fa_setup_secret');
+
+    $this->from(route('admin.two-factor.setup.create'))
+        ->post(route('admin.two-factor.setup.store'), [
+            'code' => $service->currentCode($secret),
+        ])
+        ->assertRedirect(route('admin.two-factor.setup.create'))
+        ->assertSessionHasErrors('password');
+
+    expect($superAdmin->fresh()->hasConfirmedTwoFactorAuthentication())->toBeFalse();
+});
+
+it('requires password confirmation before regenerating the authenticator secret', function (): void {
+    $user = User::factory()->create();
+    $service = app(SuperAdminTwoFactorService::class);
+
+    $user->forceFill([
+        'two_factor_secret' => $service->generateSecret(),
+        'two_factor_recovery_codes' => $service->hashRecoveryCodes(['ABCDE-FGHIJ-KLMNO']),
+        'two_factor_confirmed_at' => now(),
+    ])->save();
+
+    $this->actingAs($user)
+        ->from(route('admin.two-factor.manage'))
+        ->post(route('admin.two-factor.reset-authenticator'))
+        ->assertRedirect(route('admin.two-factor.manage'))
+        ->assertSessionHasErrors('password');
+
+    expect($user->fresh()->hasConfirmedTwoFactorAuthentication())->toBeTrue();
+
+    $this->post(route('admin.two-factor.reset-authenticator'), [
+        'password' => 'password',
+    ])
+        ->assertRedirect(route('admin.two-factor.setup.create'));
+
+    expect($user->fresh()->hasConfirmedTwoFactorAuthentication())->toBeFalse()
+        ->and(AuditTrail::query()->where('action', 'two_factor_reset')->exists())->toBeTrue();
 });
 
 it('requires and accepts a successful Super Admin two factor challenge', function (): void {

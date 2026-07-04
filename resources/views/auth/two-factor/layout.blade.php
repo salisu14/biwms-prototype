@@ -70,6 +70,10 @@
             font: inherit;
         }
 
+        form label:not(:first-child) {
+            margin-top: 14px;
+        }
+
         button,
         .button {
             display: inline-flex;
@@ -105,6 +109,21 @@
             margin-bottom: 18px;
             overflow-wrap: anywhere;
             font-size: 15px;
+        }
+
+        .qr-code {
+            display: grid;
+            place-items: center;
+            margin: 18px 0;
+        }
+
+        .qr-code svg {
+            width: min(100%, 220px);
+            height: auto;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: white;
+            padding: 12px;
         }
 
         code {
@@ -180,9 +199,22 @@
 
         .actions {
             display: flex;
+            flex-wrap: wrap;
             gap: 12px;
             align-items: center;
             margin-top: 18px;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
 
         .stack {
