@@ -41,7 +41,7 @@ use Illuminate\Support\HtmlString;
 class RoleResource extends Resource
 {
     /**
-     * @var Collection<int, array{id: int, name: string, group: string, group_key: string, label: string, description: string}>|null
+     * @var Collection<int, array{id: int, name: string, group: string, group_key: string, resource: string, resource_key: string, action: string, label: string, description: string}>|null
      */
     protected static ?Collection $permissionCatalog = null;
 
@@ -85,7 +85,7 @@ class RoleResource extends Resource
                         ->default([])
                         ->dehydrated(),
 
-                    Grid::make(2)
+                    Grid::make(3)
                         ->schema([
                             Select::make('active_permission_module')
                                 ->label('Permission module')
@@ -93,46 +93,119 @@ class RoleResource extends Resource
                                 ->default(static::defaultPermissionModuleKey())
                                 ->live()
                                 ->afterStateUpdated(function (Set $set, Get $get, ?string $state): void {
+                                    $moduleKey = $state ?: static::defaultPermissionModuleKey();
+                                    $resourceGroupKey = static::defaultPermissionResourceGroupKey($moduleKey);
+
+                                    $set('active_permission_search', null);
+                                    $set('active_permission_resource_group', $resourceGroupKey);
                                     $set(
-                                        'active_module_permission_ids',
-                                        static::activeModuleSelectedPermissionIds(
+                                        'active_group_permission_ids',
+                                        static::activeGroupSelectedPermissionIds(
                                             (array) $get('selected_permission_ids'),
-                                            $state ?: static::defaultPermissionModuleKey()
+                                            $moduleKey,
+                                            $resourceGroupKey
                                         )
                                     );
                                 })
-                                ->helperText('Only the selected module is rendered to keep the edit payload small.'),
+                                ->helperText('Only one module is loaded at a time.'),
 
-                            Placeholder::make('module_permission_counts')
-                                ->label('Selected permissions')
-                                ->content(fn (Get $get): HtmlString => static::modulePermissionCountsHtml((array) $get('selected_permission_ids'))),
+                            TextInput::make('active_permission_search')
+                                ->label('Search')
+                                ->placeholder('Find resources or permissions')
+                                ->live(debounce: 500)
+                                ->afterStateUpdated(function (Set $set, Get $get, ?string $state): void {
+                                    $moduleKey = (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey());
+                                    $resourceGroupKey = static::defaultPermissionResourceGroupKey($moduleKey, $state);
+
+                                    $set('active_permission_resource_group', $resourceGroupKey);
+                                    $set(
+                                        'active_group_permission_ids',
+                                        static::activeGroupSelectedPermissionIds(
+                                            (array) $get('selected_permission_ids'),
+                                            $moduleKey,
+                                            $resourceGroupKey,
+                                            $state
+                                        )
+                                    );
+                                }),
+
+                            Select::make('active_permission_resource_group')
+                                ->label('Resource group')
+                                ->options(fn (Get $get): array => static::permissionResourceGroupOptions(
+                                    (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey()),
+                                    $get('active_permission_search') === null ? null : (string) $get('active_permission_search')
+                                ))
+                                ->default(fn (Get $get): string => static::defaultPermissionResourceGroupKey(
+                                    (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey()),
+                                    $get('active_permission_search') === null ? null : (string) $get('active_permission_search')
+                                ))
+                                ->live()
+                                ->afterStateUpdated(function (Set $set, Get $get, ?string $state): void {
+                                    $moduleKey = (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey());
+                                    $resourceGroupKey = $state ?: static::defaultPermissionResourceGroupKey($moduleKey);
+
+                                    $set(
+                                        'active_group_permission_ids',
+                                        static::activeGroupSelectedPermissionIds(
+                                            (array) $get('selected_permission_ids'),
+                                            $moduleKey,
+                                            $resourceGroupKey,
+                                            $get('active_permission_search') === null ? null : (string) $get('active_permission_search')
+                                        )
+                                    );
+                                })
+                                ->helperText('Large modules are split by resource.'),
                         ]),
 
-                    CheckboxList::make('active_module_permission_ids')
-                        ->label(fn (Get $get): string => static::permissionModuleLabel((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())))
-                        ->options(fn (Get $get): array => static::activeModulePermissionOptions((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())))
-                        ->descriptions(fn (Get $get): array => static::activeModulePermissionDescriptions((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())))
+                    Placeholder::make('module_permission_counts')
+                        ->label('Selected permissions')
+                        ->content(fn (Get $get): HtmlString => static::modulePermissionCountsHtml((array) $get('selected_permission_ids'))),
+
+                    CheckboxList::make('active_group_permission_ids')
+                        ->label(fn (Get $get): string => static::permissionResourceGroupLabel(
+                            (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey()),
+                            (string) ($get('active_permission_resource_group') ?: static::defaultPermissionResourceGroupKey((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())))
+                        ))
+                        ->options(fn (Get $get): array => static::activeGroupPermissionOptions(
+                            (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey()),
+                            (string) ($get('active_permission_resource_group') ?: static::defaultPermissionResourceGroupKey((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey()))),
+                            $get('active_permission_search') === null ? null : (string) $get('active_permission_search')
+                        ))
+                        ->descriptions(fn (Get $get): array => static::activeGroupPermissionDescriptions(
+                            (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey()),
+                            (string) ($get('active_permission_resource_group') ?: static::defaultPermissionResourceGroupKey((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey()))),
+                            $get('active_permission_search') === null ? null : (string) $get('active_permission_search')
+                        ))
                         ->columns(3)
                         ->bulkToggleable()
                         ->allowHtml()
-                        ->searchable()
                         ->live()
                         ->afterStateHydrated(function (Set $set, Get $get): void {
+                            $moduleKey = (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey());
+                            $resourceGroupKey = (string) ($get('active_permission_resource_group') ?: static::defaultPermissionResourceGroupKey($moduleKey));
+
                             $set(
-                                'active_module_permission_ids',
-                                static::activeModuleSelectedPermissionIds(
+                                'active_group_permission_ids',
+                                static::activeGroupSelectedPermissionIds(
                                     (array) $get('selected_permission_ids'),
-                                    (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())
+                                    $moduleKey,
+                                    $resourceGroupKey,
+                                    $get('active_permission_search') === null ? null : (string) $get('active_permission_search')
                                 )
                             );
                         })
                         ->afterStateUpdated(function (Set $set, Get $get, mixed $state): void {
+                            $moduleKey = (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey());
+                            $resourceGroupKey = (string) ($get('active_permission_resource_group') ?: static::defaultPermissionResourceGroupKey($moduleKey));
+
                             $set(
                                 'selected_permission_ids',
-                                static::mergeActiveModulePermissionSelection(
+                                static::mergeActiveGroupPermissionSelection(
                                     (array) $get('selected_permission_ids'),
                                     is_array($state) ? $state : [],
-                                    (string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey())
+                                    $moduleKey,
+                                    $resourceGroupKey,
+                                    $get('active_permission_search') === null ? null : (string) $get('active_permission_search')
                                 )
                             );
                         }),
@@ -418,7 +491,13 @@ class RoleResource extends Resource
                 ...Arr::only($role->attributesToArray(), ['name', 'guard_name']),
                 'selected_permission_ids' => $selectedPermissionIds,
                 'active_permission_module' => $activeModuleKey,
-                'active_module_permission_ids' => static::activeModuleSelectedPermissionIds($selectedPermissionIds, $activeModuleKey),
+                'active_permission_search' => null,
+                'active_permission_resource_group' => static::defaultPermissionResourceGroupKey($activeModuleKey),
+                'active_group_permission_ids' => static::activeGroupSelectedPermissionIds(
+                    $selectedPermissionIds,
+                    $activeModuleKey,
+                    static::defaultPermissionResourceGroupKey($activeModuleKey)
+                ),
             ];
         });
     }
@@ -466,8 +545,8 @@ class RoleResource extends Resource
     {
         return RoleEditProfiler::measure('selected_permission_names_from_data', function () use ($data): array {
             $selectedPermissionIds = collect(
-                array_key_exists('active_module_permission_ids', $data)
-                    ? static::activeModulePermissionIdsFromData($data)
+                array_key_exists('active_group_permission_ids', $data)
+                    ? static::activeGroupPermissionIdsFromData($data)
                     : ($data['selected_permission_ids'] ?? [])
             )
                 ->merge(static::selectedPermissionIdsFromLegacyGroups($data))
@@ -515,16 +594,20 @@ class RoleResource extends Resource
      * @param  array<string, mixed>  $data
      * @return array<int, int>
      */
-    protected static function activeModulePermissionIdsFromData(array $data): array
+    protected static function activeGroupPermissionIdsFromData(array $data): array
     {
-        if (! array_key_exists('active_module_permission_ids', $data)) {
+        if (! array_key_exists('active_group_permission_ids', $data)) {
             return [];
         }
 
-        return static::mergeActiveModulePermissionSelection(
+        $moduleKey = (string) ($data['active_permission_module'] ?? static::defaultPermissionModuleKey());
+
+        return static::mergeActiveGroupPermissionSelection(
             (array) ($data['selected_permission_ids'] ?? []),
-            (array) $data['active_module_permission_ids'],
-            (string) ($data['active_permission_module'] ?? static::defaultPermissionModuleKey())
+            (array) $data['active_group_permission_ids'],
+            $moduleKey,
+            (string) ($data['active_permission_resource_group'] ?? static::defaultPermissionResourceGroupKey($moduleKey)),
+            $data['active_permission_search'] ?? null
         );
     }
 
@@ -557,8 +640,16 @@ class RoleResource extends Resource
      */
     public static function activeModulePermissionOptions(string $moduleKey): array
     {
-        return RoleEditProfiler::measure("active_module_permission_options:{$moduleKey}", function () use ($moduleKey): array {
-            $permissions = static::permissionsForModule($moduleKey);
+        return static::activeGroupPermissionOptions($moduleKey, static::defaultPermissionResourceGroupKey($moduleKey));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function activeGroupPermissionOptions(string $moduleKey, string $resourceGroupKey, ?string $search = null): array
+    {
+        return RoleEditProfiler::measure("active_group_permission_options:{$moduleKey}:{$resourceGroupKey}", function () use ($moduleKey, $resourceGroupKey, $search): array {
+            $permissions = static::permissionsForResourceGroup($moduleKey, $resourceGroupKey, $search);
 
             $options = $permissions
                 ->mapWithKeys(fn (array $permission): array => [
@@ -568,6 +659,7 @@ class RoleResource extends Resource
 
             RoleEditProfiler::mark('active_module', [
                 'module' => $moduleKey,
+                'resource_group' => $resourceGroupKey,
                 'permission_count' => $permissions->count(),
                 'options_json_bytes' => strlen(json_encode($options) ?: '[]'),
             ]);
@@ -581,7 +673,15 @@ class RoleResource extends Resource
      */
     public static function activeModulePermissionDescriptions(string $moduleKey): array
     {
-        return RoleEditProfiler::measure("active_module_permission_descriptions:{$moduleKey}", fn (): array => static::permissionsForModule($moduleKey)
+        return static::activeGroupPermissionDescriptions($moduleKey, static::defaultPermissionResourceGroupKey($moduleKey));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function activeGroupPermissionDescriptions(string $moduleKey, string $resourceGroupKey, ?string $search = null): array
+    {
+        return RoleEditProfiler::measure("active_group_permission_descriptions:{$moduleKey}:{$resourceGroupKey}", fn (): array => static::permissionsForResourceGroup($moduleKey, $resourceGroupKey, $search)
             ->mapWithKeys(fn (array $permission): array => [
                 $permission['id'] => $permission['description'],
             ])
@@ -594,10 +694,23 @@ class RoleResource extends Resource
      */
     public static function activeModuleSelectedPermissionIds(array $selectedPermissionIds, string $moduleKey): array
     {
-        return RoleEditProfiler::measure("active_module_selected_permission_ids:{$moduleKey}", function () use ($selectedPermissionIds, $moduleKey): array {
+        return static::activeGroupSelectedPermissionIds(
+            $selectedPermissionIds,
+            $moduleKey,
+            static::defaultPermissionResourceGroupKey($moduleKey)
+        );
+    }
+
+    /**
+     * @param  array<int, mixed>  $selectedPermissionIds
+     * @return array<int, int>
+     */
+    public static function activeGroupSelectedPermissionIds(array $selectedPermissionIds, string $moduleKey, string $resourceGroupKey, ?string $search = null): array
+    {
+        return RoleEditProfiler::measure("active_group_selected_permission_ids:{$moduleKey}:{$resourceGroupKey}", function () use ($selectedPermissionIds, $moduleKey, $resourceGroupKey, $search): array {
             $selectedPermissionIdLookup = array_flip(array_map('intval', $selectedPermissionIds));
 
-            return static::permissionsForModule($moduleKey)
+            return static::permissionsForResourceGroup($moduleKey, $resourceGroupKey, $search)
                 ->pluck('id')
                 ->map(fn ($permissionId): int => (int) $permissionId)
                 ->filter(fn (int $permissionId): bool => isset($selectedPermissionIdLookup[$permissionId]))
@@ -616,15 +729,35 @@ class RoleResource extends Resource
         array $activeModuleSelectedPermissionIds,
         string $moduleKey
     ): array {
-        $activeModulePermissionIdLookup = array_flip(static::permissionsForModule($moduleKey)
+        return static::mergeActiveGroupPermissionSelection(
+            $currentSelectedPermissionIds,
+            $activeModuleSelectedPermissionIds,
+            $moduleKey,
+            static::defaultPermissionResourceGroupKey($moduleKey)
+        );
+    }
+
+    /**
+     * @param  array<int, mixed>  $currentSelectedPermissionIds
+     * @param  array<int, mixed>  $activeGroupSelectedPermissionIds
+     * @return array<int, int>
+     */
+    public static function mergeActiveGroupPermissionSelection(
+        array $currentSelectedPermissionIds,
+        array $activeGroupSelectedPermissionIds,
+        string $moduleKey,
+        string $resourceGroupKey,
+        ?string $search = null
+    ): array {
+        $activeGroupPermissionIdLookup = array_flip(static::permissionsForResourceGroup($moduleKey, $resourceGroupKey, $search)
             ->pluck('id')
             ->map(fn ($permissionId): int => (int) $permissionId)
             ->all());
 
         return collect($currentSelectedPermissionIds)
             ->map(fn ($permissionId): int => (int) $permissionId)
-            ->reject(fn (int $permissionId): bool => isset($activeModulePermissionIdLookup[$permissionId]))
-            ->merge(collect($activeModuleSelectedPermissionIds)->map(fn ($permissionId): int => (int) $permissionId))
+            ->reject(fn (int $permissionId): bool => isset($activeGroupPermissionIdLookup[$permissionId]))
+            ->merge(collect($activeGroupSelectedPermissionIds)->map(fn ($permissionId): int => (int) $permissionId))
             ->unique()
             ->sort()
             ->values()
@@ -661,7 +794,7 @@ class RoleResource extends Resource
     }
 
     /**
-     * @return Collection<int, array{id: int, name: string, group: string, group_key: string, label: string, description: string}>
+     * @return Collection<int, array{id: int, name: string, group: string, group_key: string, resource: string, resource_key: string, action: string, label: string, description: string}>
      */
     public static function permissionsForModule(string $moduleKey): Collection
     {
@@ -671,7 +804,67 @@ class RoleResource extends Resource
     }
 
     /**
-     * @return Collection<int, array{id: int, name: string, group: string, group_key: string, label: string, description: string}>
+     * @return array<string, string>
+     */
+    public static function permissionResourceGroupOptions(string $moduleKey, ?string $search = null): array
+    {
+        return static::permissionsForModule($moduleKey)
+            ->filter(fn (array $permission): bool => static::permissionMatchesSearch($permission, $search))
+            ->groupBy('resource_key')
+            ->map(fn (Collection $permissions): string => static::permissionResourceGroupOptionLabel($permissions))
+            ->all();
+    }
+
+    public static function defaultPermissionResourceGroupKey(string $moduleKey, ?string $search = null): string
+    {
+        $resourceGroupOptions = static::permissionResourceGroupOptions($moduleKey, $search);
+
+        return (string) array_key_first($resourceGroupOptions)
+            ?: (string) (static::permissionsForModule($moduleKey)->first()['resource_key'] ?? 'general');
+    }
+
+    public static function permissionResourceGroupLabel(string $moduleKey, string $resourceGroupKey): string
+    {
+        $permission = static::permissionsForModule($moduleKey)
+            ->first(fn (array $permission): bool => $permission['resource_key'] === $resourceGroupKey);
+
+        return $permission['resource'] ?? str($resourceGroupKey)->replace('_', ' ')->headline()->toString();
+    }
+
+    /**
+     * @return Collection<int, array{id: int, name: string, group: string, group_key: string, resource: string, resource_key: string, action: string, label: string, description: string}>
+     */
+    public static function permissionsForResourceGroup(string $moduleKey, string $resourceGroupKey, ?string $search = null): Collection
+    {
+        return static::permissionsForModule($moduleKey)
+            ->filter(fn (array $permission): bool => $permission['resource_key'] === $resourceGroupKey)
+            ->filter(fn (array $permission): bool => static::permissionMatchesSearch($permission, $search))
+            ->values();
+    }
+
+    protected static function permissionResourceGroupOptionLabel(Collection $permissions): string
+    {
+        return $permissions->first()['resource'].' ('.$permissions->count().')';
+    }
+
+    /**
+     * @param  array{id: int, name: string, group: string, group_key: string, resource: string, resource_key: string, action: string, label: string, description: string}  $permission
+     */
+    protected static function permissionMatchesSearch(array $permission, ?string $search): bool
+    {
+        $search = strtolower(trim((string) $search));
+
+        if ($search === '') {
+            return true;
+        }
+
+        return str_contains(strtolower($permission['name']), $search)
+            || str_contains(strtolower($permission['resource']), $search)
+            || str_contains(strtolower($permission['action']), $search);
+    }
+
+    /**
+     * @return Collection<int, array{id: int, name: string, group: string, group_key: string, resource: string, resource_key: string, action: string, label: string, description: string}>
      */
     protected static function permissionCatalog(): Collection
     {
@@ -686,12 +879,17 @@ class RoleResource extends Resource
                 ->get(['id', 'name'])
                 ->map(function (Permission $permission): array {
                     $group = static::permissionGroupFor($permission->name);
+                    $resourceKey = static::permissionResourceKeyFor($permission->name);
+                    $action = static::permissionActionFor($permission->name);
 
                     return [
                         'id' => (int) $permission->id,
                         'name' => $permission->name,
                         'group' => $group,
                         'group_key' => str($group)->slug('_')->toString(),
+                        'resource' => str($resourceKey)->replace('_', ' ')->headline()->toString(),
+                        'resource_key' => $resourceKey,
+                        'action' => $action,
                         'label' => static::permissionLabelFor($permission->name),
                         'description' => static::isDangerousPermission($permission->name)
                             ? 'Dangerous permission. Grant only to trusted administrators.'
@@ -703,6 +901,10 @@ class RoleResource extends Resource
                 'permission_count' => $permissions->count(),
                 'module_count' => $permissions->pluck('group_key')->unique()->count(),
                 'module_counts' => $permissions->groupBy('group_key')->map->count()->all(),
+                'largest_resource_group_count' => $permissions
+                    ->groupBy(fn (array $permission): string => $permission['group_key'].':'.$permission['resource_key'])
+                    ->map->count()
+                    ->max(),
             ]);
 
             return $permissions;
@@ -730,6 +932,50 @@ class RoleResource extends Resource
             || str_contains($permission, 'permission') => 'Security',
             default => 'System Setup',
         };
+    }
+
+    public static function permissionResourceKeyFor(string $permission): string
+    {
+        $segments = static::permissionNameSegments($permission);
+
+        if (count($segments) >= 3 && in_array($segments[0], [
+            'admin',
+            'audit_trail',
+            'factory',
+            'finance',
+            'fixed_asset',
+            'hr',
+            'payroll',
+            'procurement',
+            'sales',
+            'warehouse',
+        ], true)) {
+            return $segments[1];
+        }
+
+        if (count($segments) >= 2) {
+            return implode('_', array_slice($segments, 0, -1));
+        }
+
+        return $segments[0] ?? 'general';
+    }
+
+    public static function permissionActionFor(string $permission): string
+    {
+        $segments = static::permissionNameSegments($permission);
+
+        return end($segments) ?: 'manage';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected static function permissionNameSegments(string $permission): array
+    {
+        return array_values(array_filter(
+            explode('.', str_replace(':', '.', $permission)),
+            fn (string $segment): bool => $segment !== ''
+        ));
     }
 
     public static function permissionLabelFor(string $permission): string

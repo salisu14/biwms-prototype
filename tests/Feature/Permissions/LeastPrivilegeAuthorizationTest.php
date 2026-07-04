@@ -155,6 +155,41 @@ it('mounts role edit without rendering every permission in large permission sets
         ->and($html)->not->toContain('sales.synthetic_resource_580.view');
 });
 
+it('splits large system setup modules by resource group instead of rendering every permission', function (): void {
+    $securityAdmin = User::factory()->create();
+    $securityAdmin->givePermissionTo('role_permission.manage');
+
+    $role = Role::query()->create(['name' => 'large-system-setup-role']);
+
+    $now = now();
+    $bulkPermissions = collect(range(1, 51))
+        ->flatMap(fn (int $resourceIndex): array => collect(range(1, 10))
+            ->map(fn (int $actionIndex): array => [
+                'name' => sprintf('aaa_resource_%02d.action_%02d', $resourceIndex, $actionIndex),
+                'guard_name' => 'web',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])
+            ->all())
+        ->all();
+
+    Permission::query()->insert($bulkPermissions);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    RoleResource::clearPermissionCatalog();
+
+    $component = Livewire::actingAs($securityAdmin)
+        ->test(ManageRoles::class)
+        ->mountTableAction('edit', $role);
+
+    $html = $component->html(stripInitialData: true);
+
+    expect(RoleResource::permissionsForModule('system_setup')->count())->toBeGreaterThanOrEqual(510)
+        ->and(RoleResource::activeGroupPermissionOptions('system_setup', 'aaa_resource_01'))->toHaveCount(10)
+        ->and(strlen($html))->toBeLessThan(300_000)
+        ->and($html)->not->toContain('aaa_resource_02.action_01')
+        ->and($html)->not->toContain('aaa_resource_51.action_10');
+});
+
 it('loads only the active role permission module', function (): void {
     $securityAdmin = User::factory()->create();
     $securityAdmin->givePermissionTo('role_permission.manage');
@@ -177,12 +212,65 @@ it('loads only the active role permission module', function (): void {
         ->test(ManageRoles::class)
         ->mountTableAction('edit', $role);
 
-    expect(RoleResource::activeModulePermissionDescriptions('finance'))
+    expect(RoleResource::activeGroupPermissionDescriptions('finance', 'lazy_probe'))
         ->toContain($financePermission->name)
         ->not->toContain($factoryPermission->name)
-        ->and(RoleResource::activeModulePermissionDescriptions('manufacturing'))
+        ->and(RoleResource::activeGroupPermissionDescriptions('manufacturing', 'lazy_probe'))
         ->toContain($factoryPermission->name)
         ->not->toContain($financePermission->name);
+});
+
+it('filters resource groups by permission search', function (): void {
+    Permission::query()->create([
+        'name' => 'alpha_config.view',
+        'guard_name' => 'web',
+    ]);
+    Permission::query()->create([
+        'name' => 'beta_gateway.view',
+        'guard_name' => 'web',
+    ]);
+
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    RoleResource::clearPermissionCatalog();
+
+    expect(RoleResource::permissionResourceGroupOptions('system_setup', 'gateway'))
+        ->toHaveKey('beta_gateway')
+        ->not->toHaveKey('alpha_config')
+        ->and(RoleResource::activeGroupPermissionOptions('system_setup', 'beta_gateway', 'gateway'))
+        ->toHaveCount(1);
+});
+
+it('preserves selections across role permission resource groups', function (): void {
+    $firstPermission = Permission::query()->create([
+        'name' => 'alpha_config.view',
+        'guard_name' => 'web',
+    ]);
+    $secondPermission = Permission::query()->create([
+        'name' => 'beta_gateway.update',
+        'guard_name' => 'web',
+    ]);
+
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    RoleResource::clearPermissionCatalog();
+
+    $selectedPermissionIds = RoleResource::mergeActiveGroupPermissionSelection(
+        [],
+        [$firstPermission->id],
+        'system_setup',
+        'alpha_config'
+    );
+
+    $selectedPermissionIds = RoleResource::mergeActiveGroupPermissionSelection(
+        $selectedPermissionIds,
+        [$secondPermission->id],
+        'system_setup',
+        'beta_gateway'
+    );
+
+    expect($selectedPermissionIds)->toEqualCanonicalizing([
+        $firstPermission->id,
+        $secondPermission->id,
+    ]);
 });
 
 it('syncs role permissions from grouped edit form state', function (): void {
@@ -202,7 +290,8 @@ it('syncs role permissions from grouped edit form state', function (): void {
             'guard_name' => 'web',
             'selected_permission_ids' => [$financePermission->id],
             'active_permission_module' => 'sales',
-            'active_module_permission_ids' => [$salesPermission->id],
+            'active_permission_resource_group' => 'sales_order',
+            'active_group_permission_ids' => [$salesPermission->id],
             SensitiveActionPasswordConfirmation::FIELD => 'password',
         ])
         ->assertHasNoTableActionErrors();
