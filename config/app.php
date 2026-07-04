@@ -19,6 +19,8 @@ return [
 
     'logo_path' => env('APP_LOGO_PATH', 'assets/logo.svg'),
 
+    'role_edit_profile' => (bool) env('ROLE_EDIT_PROFILE', false),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

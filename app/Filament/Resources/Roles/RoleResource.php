@@ -7,6 +7,7 @@ use App\Filament\Resources\Roles\Pages\ViewRole;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
+use App\Support\RoleEditProfiler;
 use BackedEnum;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -62,7 +63,7 @@ class RoleResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return $schema->components([
+        return RoleEditProfiler::measure('role_resource_form_schema_construction', fn (): Schema => $schema->components([
             Section::make('Role Details')
                 ->schema([
                     TextInput::make('name')
@@ -144,7 +145,7 @@ class RoleResource extends Resource
                     SensitiveActionPasswordConfirmation::passwordField(),
                 ])
                 ->columnSpanFull(),
-        ]);
+        ]));
     }
 
     public static function canAccess(): bool
@@ -230,8 +231,10 @@ class RoleResource extends Resource
         return $action
             ->fillForm(fn (Role $record): array => static::formDataForRole($record))
             ->using(function (Role $record, array $data): void {
-                $record->update(static::roleAttributesFromData($data));
-                $record->syncPermissions(static::selectedPermissionNamesFromData($data));
+                RoleEditProfiler::measure('role_edit_save', function () use ($record, $data): void {
+                    $record->update(static::roleAttributesFromData($data));
+                    $record->syncPermissions(static::selectedPermissionNamesFromData($data));
+                });
             });
     }
 
@@ -396,19 +399,28 @@ class RoleResource extends Resource
      */
     public static function formDataForRole(Role $role): array
     {
-        $selectedPermissionIds = $role->permissions()
-            ->pluck('permissions.id')
-            ->map(fn ($permissionId): int => (int) $permissionId)
-            ->values()
-            ->all();
-        $activeModuleKey = static::defaultPermissionModuleKey();
+        return RoleEditProfiler::measure('role_selected_permissions_hydration', function () use ($role): array {
+            $selectedPermissionIds = $role->permissions()
+                ->pluck('permissions.id')
+                ->map(fn ($permissionId): int => (int) $permissionId)
+                ->values()
+                ->all();
+            $activeModuleKey = static::defaultPermissionModuleKey();
 
-        return [
-            ...Arr::only($role->attributesToArray(), ['name', 'guard_name']),
-            'selected_permission_ids' => $selectedPermissionIds,
-            'active_permission_module' => $activeModuleKey,
-            'active_module_permission_ids' => static::activeModuleSelectedPermissionIds($selectedPermissionIds, $activeModuleKey),
-        ];
+            RoleEditProfiler::mark('role_hydration', [
+                'role_id' => $role->id,
+                'selected_permission_count' => count($selectedPermissionIds),
+                'selected_permission_ids_json_bytes' => strlen(json_encode($selectedPermissionIds) ?: '[]'),
+                'active_module' => $activeModuleKey,
+            ]);
+
+            return [
+                ...Arr::only($role->attributesToArray(), ['name', 'guard_name']),
+                'selected_permission_ids' => $selectedPermissionIds,
+                'active_permission_module' => $activeModuleKey,
+                'active_module_permission_ids' => static::activeModuleSelectedPermissionIds($selectedPermissionIds, $activeModuleKey),
+            ];
+        });
     }
 
     /**
@@ -452,27 +464,37 @@ class RoleResource extends Resource
      */
     public static function selectedPermissionNamesFromData(array $data): array
     {
-        $selectedPermissionIds = collect(
-            array_key_exists('active_module_permission_ids', $data)
-                ? static::activeModulePermissionIdsFromData($data)
-                : ($data['selected_permission_ids'] ?? [])
-        )
-            ->merge(static::selectedPermissionIdsFromLegacyGroups($data))
-            ->map(fn ($permissionId): int => (int) $permissionId)
-            ->unique()
-            ->values();
+        return RoleEditProfiler::measure('selected_permission_names_from_data', function () use ($data): array {
+            $selectedPermissionIds = collect(
+                array_key_exists('active_module_permission_ids', $data)
+                    ? static::activeModulePermissionIdsFromData($data)
+                    : ($data['selected_permission_ids'] ?? [])
+            )
+                ->merge(static::selectedPermissionIdsFromLegacyGroups($data))
+                ->map(fn ($permissionId): int => (int) $permissionId)
+                ->unique()
+                ->values();
 
-        if ($selectedPermissionIds->isEmpty()) {
-            return [];
-        }
+            if ($selectedPermissionIds->isEmpty()) {
+                RoleEditProfiler::mark('save_selection', ['selected_permission_count' => 0]);
 
-        $selectedPermissionIdLookup = array_flip($selectedPermissionIds->all());
+                return [];
+            }
 
-        return static::permissionCatalog()
-            ->filter(fn (array $permission): bool => isset($selectedPermissionIdLookup[$permission['id']]))
-            ->pluck('name')
-            ->values()
-            ->all();
+            $selectedPermissionIdLookup = array_flip($selectedPermissionIds->all());
+
+            $permissionNames = static::permissionCatalog()
+                ->filter(fn (array $permission): bool => isset($selectedPermissionIdLookup[$permission['id']]))
+                ->pluck('name')
+                ->values()
+                ->all();
+
+            RoleEditProfiler::mark('save_selection', [
+                'selected_permission_count' => count($permissionNames),
+            ]);
+
+            return $permissionNames;
+        });
     }
 
     /**
@@ -511,10 +533,10 @@ class RoleResource extends Resource
      */
     public static function permissionModuleOptions(): array
     {
-        return static::permissionCatalog()
+        return RoleEditProfiler::measure('permission_module_options', fn (): array => static::permissionCatalog()
             ->groupBy('group_key')
             ->map(fn (Collection $permissions): string => static::permissionModuleOptionLabel($permissions))
-            ->all();
+            ->all());
     }
 
     public static function defaultPermissionModuleKey(): string
@@ -535,11 +557,23 @@ class RoleResource extends Resource
      */
     public static function activeModulePermissionOptions(string $moduleKey): array
     {
-        return static::permissionsForModule($moduleKey)
-            ->mapWithKeys(fn (array $permission): array => [
-                $permission['id'] => $permission['label'],
-            ])
-            ->all();
+        return RoleEditProfiler::measure("active_module_permission_options:{$moduleKey}", function () use ($moduleKey): array {
+            $permissions = static::permissionsForModule($moduleKey);
+
+            $options = $permissions
+                ->mapWithKeys(fn (array $permission): array => [
+                    $permission['id'] => $permission['label'],
+                ])
+                ->all();
+
+            RoleEditProfiler::mark('active_module', [
+                'module' => $moduleKey,
+                'permission_count' => $permissions->count(),
+                'options_json_bytes' => strlen(json_encode($options) ?: '[]'),
+            ]);
+
+            return $options;
+        });
     }
 
     /**
@@ -547,11 +581,11 @@ class RoleResource extends Resource
      */
     public static function activeModulePermissionDescriptions(string $moduleKey): array
     {
-        return static::permissionsForModule($moduleKey)
+        return RoleEditProfiler::measure("active_module_permission_descriptions:{$moduleKey}", fn (): array => static::permissionsForModule($moduleKey)
             ->mapWithKeys(fn (array $permission): array => [
                 $permission['id'] => $permission['description'],
             ])
-            ->all();
+            ->all());
     }
 
     /**
@@ -560,14 +594,16 @@ class RoleResource extends Resource
      */
     public static function activeModuleSelectedPermissionIds(array $selectedPermissionIds, string $moduleKey): array
     {
-        $selectedPermissionIdLookup = array_flip(array_map('intval', $selectedPermissionIds));
+        return RoleEditProfiler::measure("active_module_selected_permission_ids:{$moduleKey}", function () use ($selectedPermissionIds, $moduleKey): array {
+            $selectedPermissionIdLookup = array_flip(array_map('intval', $selectedPermissionIds));
 
-        return static::permissionsForModule($moduleKey)
-            ->pluck('id')
-            ->map(fn ($permissionId): int => (int) $permissionId)
-            ->filter(fn (int $permissionId): bool => isset($selectedPermissionIdLookup[$permissionId]))
-            ->values()
-            ->all();
+            return static::permissionsForModule($moduleKey)
+                ->pluck('id')
+                ->map(fn ($permissionId): int => (int) $permissionId)
+                ->filter(fn (int $permissionId): bool => isset($selectedPermissionIdLookup[$permissionId]))
+                ->values()
+                ->all();
+        });
     }
 
     /**
@@ -600,21 +636,23 @@ class RoleResource extends Resource
      */
     protected static function modulePermissionCountsHtml(array $selectedPermissionIds): HtmlString
     {
-        $selectedPermissionIdLookup = array_flip(array_map('intval', $selectedPermissionIds));
+        return RoleEditProfiler::measure('module_permission_counts_html', function () use ($selectedPermissionIds): HtmlString {
+            $selectedPermissionIdLookup = array_flip(array_map('intval', $selectedPermissionIds));
 
-        $html = static::permissionCatalog()
-            ->groupBy('group_key')
-            ->map(function (Collection $permissions) use ($selectedPermissionIdLookup): string {
-                $selectedCount = $permissions
-                    ->pluck('id')
-                    ->filter(fn ($permissionId): bool => isset($selectedPermissionIdLookup[(int) $permissionId]))
-                    ->count();
+            $html = static::permissionCatalog()
+                ->groupBy('group_key')
+                ->map(function (Collection $permissions) use ($selectedPermissionIdLookup): string {
+                    $selectedCount = $permissions
+                        ->pluck('id')
+                        ->filter(fn ($permissionId): bool => isset($selectedPermissionIdLookup[(int) $permissionId]))
+                        ->count();
 
-                return e($permissions->first()['group']).': '.$selectedCount.'/'.$permissions->count();
-            })
-            ->implode(' · ');
+                    return e($permissions->first()['group']).': '.$selectedCount.'/'.$permissions->count();
+                })
+                ->implode(' · ');
 
-        return new HtmlString('<span class="text-sm text-gray-600 dark:text-gray-300">'.$html.'</span>');
+            return new HtmlString('<span class="text-sm text-gray-600 dark:text-gray-300">'.$html.'</span>');
+        });
     }
 
     protected static function permissionModuleOptionLabel(Collection $permissions): string
@@ -641,24 +679,34 @@ class RoleResource extends Resource
             return static::$permissionCatalog;
         }
 
-        static::$permissionCatalog = Permission::query()
-            ->where('guard_name', 'web')
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->map(function (Permission $permission): array {
-                $group = static::permissionGroupFor($permission->name);
+        static::$permissionCatalog = RoleEditProfiler::measure('permission_catalog_load', function (): Collection {
+            $permissions = Permission::query()
+                ->where('guard_name', 'web')
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(function (Permission $permission): array {
+                    $group = static::permissionGroupFor($permission->name);
 
-                return [
-                    'id' => (int) $permission->id,
-                    'name' => $permission->name,
-                    'group' => $group,
-                    'group_key' => str($group)->slug('_')->toString(),
-                    'label' => static::permissionLabelFor($permission->name),
-                    'description' => static::isDangerousPermission($permission->name)
-                        ? 'Dangerous permission. Grant only to trusted administrators.'
-                        : $permission->name,
-                ];
-            });
+                    return [
+                        'id' => (int) $permission->id,
+                        'name' => $permission->name,
+                        'group' => $group,
+                        'group_key' => str($group)->slug('_')->toString(),
+                        'label' => static::permissionLabelFor($permission->name),
+                        'description' => static::isDangerousPermission($permission->name)
+                            ? 'Dangerous permission. Grant only to trusted administrators.'
+                            : $permission->name,
+                    ];
+                });
+
+            RoleEditProfiler::mark('permission_catalog', [
+                'permission_count' => $permissions->count(),
+                'module_count' => $permissions->pluck('group_key')->unique()->count(),
+                'module_counts' => $permissions->groupBy('group_key')->map->count()->all(),
+            ]);
+
+            return $permissions;
+        });
 
         return static::$permissionCatalog;
     }

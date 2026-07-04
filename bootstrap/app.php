@@ -9,6 +9,7 @@ use App\Http\Middleware\EnsureSalesRole;
 use App\Http\Middleware\EnsureServiceRole;
 use App\Http\Middleware\EnsureSuperAdminTwoFactorIsVerified;
 use App\Http\Middleware\EnsureWarehouseRole;
+use App\Http\Middleware\ProfileRoleEditRequests;
 use App\Services\AuditTrailService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -26,6 +27,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(ProfileRoleEditRequests::class);
+
         $middleware->alias([
             'factory' => EnsureFactoryRole::class,
             'finance' => EnsureFinanceRole::class,
