@@ -10,6 +10,7 @@ use App\Services\Auth\SuperAdminTwoFactorService;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -93,7 +94,8 @@ class UserSecurity extends Page implements HasTable
             TextColumn::make('roles.name')
                 ->label('Roles')
                 ->badge()
-                ->separator(', '),
+                ->separator(', ')
+                ->toggleable(isToggledHiddenByDefault: true),
 
             TextColumn::make('employee_status')
                 ->label('Employee')
@@ -105,7 +107,8 @@ class UserSecurity extends Page implements HasTable
                     'Active' => 'success',
                     'Inactive' => 'danger',
                     default => 'gray',
-                }),
+                })
+                ->toggleable(isToggledHiddenByDefault: true),
 
             TextColumn::make('two_factor_status')
                 ->label('2FA')
@@ -119,196 +122,200 @@ class UserSecurity extends Page implements HasTable
                 ->label('Required')
                 ->state(fn (User $record): string => $record->requiresTwoFactor() ? 'Yes' : 'No')
                 ->badge()
-                ->color(fn (string $state): string => $state === 'Yes' ? 'warning' : 'gray'),
+                ->color(fn (string $state): string => $state === 'Yes' ? 'warning' : 'gray')
+                ->toggleable(isToggledHiddenByDefault: true),
 
             TextColumn::make('two_factor_last_challenged_at')
                 ->label('Last Challenge')
                 ->dateTime('M j, Y g:i A')
-                ->placeholder('—'),
+                ->placeholder('—')
+                ->toggleable(isToggledHiddenByDefault: true),
         ];
     }
 
     protected function getTableActions(): array
     {
         return [
-            Action::make('require_two_factor')
-                ->label('Require 2FA')
-                ->icon('heroicon-m-shield-exclamation')
-                ->visible(fn (User $record): bool => $this->canManageUserSecurity() && ! $record->requiresTwoFactor())
-                ->requiresConfirmation()
-                ->action(function (User $record): void {
-                    $record->forceFill([
-                        'two_factor_required' => true,
-                    ])->save();
+            ActionGroup::make([
+                Action::make('require_two_factor')
+                    ->label('Require 2FA')
+                    ->icon('heroicon-m-shield-exclamation')
+                    ->visible(fn (User $record): bool => $this->canManageUserSecurity() && ! $record->requiresTwoFactor())
+                    ->requiresConfirmation()
+                    ->action(function (User $record): void {
+                        $record->forceFill([
+                            'two_factor_required' => true,
+                        ])->save();
 
-                    app(AuditTrailService::class)->recordGeneric(
-                        eventType: 'security',
-                        action: 'two_factor_required',
-                        auditable: $record,
-                        userId: auth()->id(),
-                        description: "Required 2FA for user {$record->email}",
-                    );
+                        app(AuditTrailService::class)->recordGeneric(
+                            eventType: 'security',
+                            action: 'two_factor_required',
+                            auditable: $record,
+                            userId: auth()->id(),
+                            description: "Required 2FA for user {$record->email}",
+                        );
 
-                    Notification::make()
-                        ->title('2FA Required')
-                        ->success()
-                        ->send();
-                }),
-
-            Action::make('force_reset')
-                ->label('Force Reset')
-                ->icon('heroicon-m-arrow-path')
-                ->color('warning')
-                ->visible(fn (): bool => $this->canManageUserSecurity())
-                ->requiresConfirmation()
-                ->action(function (User $record): void {
-                    app(SuperAdminTwoFactorService::class)->forceReset($record, auth()->id());
-
-                    if ($record->is(auth()->user())) {
-                        session()->forget([
-                            'super_admin_2fa_setup_secret',
-                            'two_factor_passed_at',
-                            'super_admin_2fa_passed_at',
-                        ]);
-                    }
-
-                    app(AuditTrailService::class)->recordGeneric(
-                        eventType: 'security',
-                        action: 'two_factor_admin_reset',
-                        auditable: $record,
-                        userId: auth()->id(),
-                        description: "Forced 2FA reset for user {$record->email}",
-                    );
-
-                    Notification::make()
-                        ->title('Authenticator Reset')
-                        ->success()
-                        ->send();
-                }),
-
-            Action::make('disable_two_factor')
-                ->label('Disable 2FA')
-                ->icon('heroicon-m-x-circle')
-                ->color('danger')
-                ->visible(fn (User $record): bool => $this->canManageUserSecurity()
-                    && $record->hasConfirmedTwoFactorAuthentication()
-                    && ! $record->requiresTwoFactor())
-                ->form(SensitiveActionPasswordConfirmation::schemaWithPasswordConfirmation([
-                    TextInput::make('confirmation')
-                        ->label('Type the user email to confirm')
-                        ->required()
-                        ->email(),
-                ]))
-                ->action(function (User $record, array $data): void {
-                    if ((string) ($data['confirmation'] ?? '') !== $record->email) {
-                        throw ValidationException::withMessages([
-                            'mountedActions.0.data.confirmation' => 'The email does not match the selected user.',
-                        ]);
-                    }
-
-                    if ($record->requiresTwoFactor()) {
                         Notification::make()
-                            ->title('Cannot disable 2FA')
-                            ->body('2FA is required for this account.')
-                            ->danger()
+                            ->title('2FA Required')
+                            ->success()
                             ->send();
+                    }),
 
-                        return;
-                    }
+                Action::make('force_reset')
+                    ->label('Force Reset')
+                    ->icon('heroicon-m-arrow-path')
+                    ->color('warning')
+                    ->visible(fn (): bool => $this->canManageUserSecurity())
+                    ->requiresConfirmation()
+                    ->action(function (User $record): void {
+                        app(SuperAdminTwoFactorService::class)->forceReset($record, auth()->id());
 
-                    app(SuperAdminTwoFactorService::class)->disable($record, auth()->id());
+                        if ($record->is(auth()->user())) {
+                            session()->forget([
+                                'super_admin_2fa_setup_secret',
+                                'two_factor_passed_at',
+                                'super_admin_2fa_passed_at',
+                            ]);
+                        }
 
-                    if ($record->is(auth()->user())) {
-                        session()->forget([
-                            'two_factor_passed_at',
-                            'super_admin_2fa_passed_at',
-                        ]);
-                    }
+                        app(AuditTrailService::class)->recordGeneric(
+                            eventType: 'security',
+                            action: 'two_factor_admin_reset',
+                            auditable: $record,
+                            userId: auth()->id(),
+                            description: "Forced 2FA reset for user {$record->email}",
+                        );
 
-                    app(AuditTrailService::class)->recordGeneric(
-                        eventType: 'security',
-                        action: 'two_factor_disabled',
-                        auditable: $record,
-                        userId: auth()->id(),
-                        description: "Disabled 2FA for user {$record->email}",
-                    );
+                        Notification::make()
+                            ->title('Authenticator Reset')
+                            ->success()
+                            ->send();
+                    }),
 
-                    Notification::make()
-                        ->title('2FA Disabled')
-                        ->success()
-                        ->send();
-                }),
+                Action::make('disable_two_factor')
+                    ->label('Disable 2FA')
+                    ->icon('heroicon-m-x-circle')
+                    ->color('danger')
+                    ->visible(fn (User $record): bool => $this->canManageUserSecurity()
+                        && $record->hasConfirmedTwoFactorAuthentication()
+                        && ! $record->requiresTwoFactor())
+                    ->form(SensitiveActionPasswordConfirmation::schemaWithPasswordConfirmation([
+                        TextInput::make('confirmation')
+                            ->label('Type the user email to confirm')
+                            ->required()
+                            ->email(),
+                    ]))
+                    ->action(function (User $record, array $data): void {
+                        if ((string) ($data['confirmation'] ?? '') !== $record->email) {
+                            throw ValidationException::withMessages([
+                                'mountedActions.0.data.confirmation' => 'The email does not match the selected user.',
+                            ]);
+                        }
 
-            Action::make('regenerate_codes')
-                ->label('Recovery Codes')
-                ->icon('heroicon-m-key')
-                ->color('gray')
-                ->visible(fn (User $record): bool => $this->canManageUserSecurity()
-                    && $record->hasConfirmedTwoFactorAuthentication())
-                ->requiresConfirmation()
-                ->action(function (User $record): void {
-                    $codes = app(SuperAdminTwoFactorService::class)
-                        ->regenerateRecoveryCodes($record);
+                        if ($record->requiresTwoFactor()) {
+                            Notification::make()
+                                ->title('Cannot disable 2FA')
+                                ->body('2FA is required for this account.')
+                                ->danger()
+                                ->send();
 
-                    $this->generatedRecoveryCodes = $codes;
-                    $this->generatedRecoveryCodesFor = $record->email;
+                            return;
+                        }
 
-                    app(AuditTrailService::class)->recordGeneric(
-                        eventType: 'security',
-                        action: 'two_factor_recovery_codes_regenerated',
-                        auditable: $record,
-                        userId: auth()->id(),
-                        description: "Regenerated 2FA recovery codes for user {$record->email}",
-                        metadata: ['recovery_code_count' => count($codes)],
-                    );
+                        app(SuperAdminTwoFactorService::class)->disable($record, auth()->id());
 
-                    Notification::make()
-                        ->title('Recovery Codes Regenerated')
-                        ->body('New recovery codes are shown below the table. Copy them now; they will not be shown again after you leave this page.')
-                        ->success()
-                        ->send();
-                }),
+                        if ($record->is(auth()->user())) {
+                            session()->forget([
+                                'two_factor_passed_at',
+                                'super_admin_2fa_passed_at',
+                            ]);
+                        }
 
-            Action::make('clear_session')
-                ->label('Clear Session')
-                ->icon('heroicon-m-arrow-right-on-rectangle')
-                ->color('gray')
-                ->visible(fn (): bool => $this->canManageUserSecurity())
-                ->requiresConfirmation()
-                ->action(function (User $record): void {
-                    $databaseSessionDriver = config('session.driver') === 'database';
-                    $deletedSessions = 0;
+                        app(AuditTrailService::class)->recordGeneric(
+                            eventType: 'security',
+                            action: 'two_factor_disabled',
+                            auditable: $record,
+                            userId: auth()->id(),
+                            description: "Disabled 2FA for user {$record->email}",
+                        );
 
-                    if ($databaseSessionDriver) {
-                        $deletedSessions = DB::table(config('session.table', 'sessions'))
-                            ->where('user_id', $record->id)
-                            ->delete();
-                    }
+                        Notification::make()
+                            ->title('2FA Disabled')
+                            ->success()
+                            ->send();
+                    }),
 
-                    if ($record->is(auth()->user())) {
-                        session()->forget([
-                            'two_factor_passed_at',
-                            'super_admin_2fa_passed_at',
-                        ]);
-                    }
+                Action::make('regenerate_codes')
+                    ->label('Recovery Codes')
+                    ->icon('heroicon-m-key')
+                    ->color('gray')
+                    ->visible(fn (User $record): bool => $this->canManageUserSecurity()
+                        && $record->hasConfirmedTwoFactorAuthentication())
+                    ->requiresConfirmation()
+                    ->action(function (User $record): void {
+                        $codes = app(SuperAdminTwoFactorService::class)
+                            ->regenerateRecoveryCodes($record);
 
-                    app(AuditTrailService::class)->recordGeneric(
-                        eventType: 'security',
-                        action: 'two_factor_session_cleared',
-                        auditable: $record,
-                        userId: auth()->id(),
-                        description: "Cleared 2FA/session state for user {$record->email}",
-                        metadata: [
-                            'database_session_driver' => $databaseSessionDriver,
-                            'deleted_sessions' => $deletedSessions,
-                        ],
-                    );
+                        $this->generatedRecoveryCodes = $codes;
+                        $this->generatedRecoveryCodesFor = $record->email;
 
-                    Notification::make()
-                        ->title($databaseSessionDriver ? 'Sessions Cleared' : 'Current 2FA State Cleared')
-                        ->success()
-                        ->send();
-                }),
+                        app(AuditTrailService::class)->recordGeneric(
+                            eventType: 'security',
+                            action: 'two_factor_recovery_codes_regenerated',
+                            auditable: $record,
+                            userId: auth()->id(),
+                            description: "Regenerated 2FA recovery codes for user {$record->email}",
+                            metadata: ['recovery_code_count' => count($codes)],
+                        );
+
+                        Notification::make()
+                            ->title('Recovery Codes Regenerated')
+                            ->body('New recovery codes are shown below the table. Copy them now; they will not be shown again after you leave this page.')
+                            ->success()
+                            ->send();
+                    }),
+
+                Action::make('clear_session')
+                    ->label('Clear Session')
+                    ->icon('heroicon-m-arrow-right-on-rectangle')
+                    ->color('gray')
+                    ->visible(fn (): bool => $this->canManageUserSecurity())
+                    ->requiresConfirmation()
+                    ->action(function (User $record): void {
+                        $databaseSessionDriver = config('session.driver') === 'database';
+                        $deletedSessions = 0;
+
+                        if ($databaseSessionDriver) {
+                            $deletedSessions = DB::table(config('session.table', 'sessions'))
+                                ->where('user_id', $record->id)
+                                ->delete();
+                        }
+
+                        if ($record->is(auth()->user())) {
+                            session()->forget([
+                                'two_factor_passed_at',
+                                'super_admin_2fa_passed_at',
+                            ]);
+                        }
+
+                        app(AuditTrailService::class)->recordGeneric(
+                            eventType: 'security',
+                            action: 'two_factor_session_cleared',
+                            auditable: $record,
+                            userId: auth()->id(),
+                            description: "Cleared 2FA/session state for user {$record->email}",
+                            metadata: [
+                                'database_session_driver' => $databaseSessionDriver,
+                                'deleted_sessions' => $deletedSessions,
+                            ],
+                        );
+
+                        Notification::make()
+                            ->title($databaseSessionDriver ? 'Sessions Cleared' : 'Current 2FA State Cleared')
+                            ->success()
+                            ->send();
+                    }),
+            ]),
         ];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Filament\Sales\Resources\SalesOrders\Tables;
 
 use App\Models\SalesOrder;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -31,7 +32,8 @@ class SalesOrdersTable
                     ->sortable(),
                 TextColumn::make('requested_delivery_date')
                     ->date()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('total_amount')
                     ->money('NGN')
                     ->sortable(),
@@ -70,22 +72,24 @@ class SalesOrdersTable
                     }),
             ])
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
-                Action::make('release')
-                    ->action(function (SalesOrder $record) {
-                        $record->update(['status' => 'released']);
-                    })
-                    ->requiresConfirmation()
-                    ->visible(fn (SalesOrder $record) => in_array((string) $record->status->value, ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'], true))
-                    ->color('warning')
-                    ->icon('heroicon-m-arrow-up-on-square'),
+                ActionGroup::make([
+                    ViewAction::make(),
+                    EditAction::make(),
+                    Action::make('release')
+                        ->action(function (SalesOrder $record) {
+                            $record->update(['status' => 'released']);
+                        })
+                        ->requiresConfirmation()
+                        ->visible(fn (SalesOrder $record) => in_array((string) $record->status->value, ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'], true))
+                        ->color('warning')
+                        ->icon('heroicon-m-arrow-up-on-square'),
 
-                Action::make('create_invoice')
-                    ->url(fn (SalesOrder $record) => route('filament.sales.resources.sales-invoices.create', ['sales_order_id' => $record->id]))
-                    ->visible(fn (SalesOrder $record) => in_array((string) $record->status->value, ['SHIPPED', 'PARTIALLY_INVOICED'], true))
-                    ->color('success')
-                    ->icon('heroicon-m-document-text'),
+                    Action::make('create_invoice')
+                        ->url(fn (SalesOrder $record) => route('filament.sales.resources.sales-invoices.create', ['sales_order_id' => $record->id]))
+                        ->visible(fn (SalesOrder $record) => in_array((string) $record->status->value, ['SHIPPED', 'PARTIALLY_INVOICED'], true))
+                        ->color('success')
+                        ->icon('heroicon-m-document-text'),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

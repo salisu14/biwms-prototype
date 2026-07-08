@@ -33,7 +33,11 @@ class PurchaseInvoiceForm
                     ->tabs([
                         Tab::make('General')
                             ->schema([
-                                Grid::make(3)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                    'xl' => 3,
+                                ])->schema([
                                     static::makeSystemGeneratedTextInput(
                                         'document_number',
                                         'Invoice Number',
@@ -160,7 +164,10 @@ class PurchaseInvoiceForm
 
                         Tab::make('Addresses')
                             ->schema([
-                                Grid::make(2)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ])->schema([
                                     Section::make('Buy-from Address')
                                         ->schema([
                                             TextInput::make('vendor_address')
@@ -191,7 +198,11 @@ class PurchaseInvoiceForm
 
                         Tab::make('Audit & Posting')
                             ->schema([
-                                Grid::make(3)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                    'xl' => 3,
+                                ])->schema([
                                     Toggle::make('posted')
                                         ->disabled(),
                                     DateTimePicker::make('posted_at')

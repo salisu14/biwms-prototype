@@ -30,7 +30,11 @@ class ProductionOrderForm
                 Section::make('General Information')
                     ->description('Primary document identification and status.')
                     ->icon('heroicon-m-document-text')
-                    ->columns(3)
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 3,
+                    ])
                     ->schema([
                         static::makeSystemGeneratedTextInput(
                             'document_number',
@@ -102,7 +106,11 @@ class ProductionOrderForm
 
                 Section::make('Quantities & Unit of Measure')
                     ->icon('heroicon-m-beaker')
-                    ->columns(3)
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 3,
+                    ])
                     ->schema([
                         TextInput::make('quantity')
                             ->numeric()
@@ -180,9 +188,15 @@ class ProductionOrderForm
                 Section::make('BOM & Routing Configuration')
                     ->description('Technical structure and versioning.')
                     ->icon('heroicon-m-wrench-screwdriver')
-                    ->columns(2)
+                    ->columns([
+                        'default' => 1,
+                        'lg' => 2,
+                    ])
                     ->schema([
-                        Grid::make(2)->schema([
+                        Grid::make([
+                            'default' => 1,
+                            'md' => 2,
+                        ])->schema([
                             Select::make('production_bom_id')
                                 ->label('Production BOM')
                                 ->relationship('productionBom', 'description')
@@ -205,7 +219,10 @@ class ProductionOrderForm
                                 ->live(),
                         ]),
 
-                        Grid::make(2)->schema([
+                        Grid::make([
+                            'default' => 1,
+                            'md' => 2,
+                        ])->schema([
                             Select::make('routing_id')
                                 ->label('Routing')
                                 ->relationship('routing', 'description')
@@ -248,14 +265,20 @@ class ProductionOrderForm
 
                 Section::make('Scheduling & Warehouse')
                     ->icon('heroicon-m-calendar-days')
-                    ->columns(2)
+                    ->columns([
+                        'default' => 1,
+                        'lg' => 2,
+                    ])
                     ->schema([
                         DatePicker::make('due_date')
                             ->required()
                             ->native(false)
                             ->default(now()->addDays(7)),
 
-                        Grid::make(2)->schema([
+                        Grid::make([
+                            'default' => 1,
+                            'md' => 2,
+                        ])->schema([
                             DateTimePicker::make('starting_date_time')
                                 ->label('Starting')
                                 ->native(false),
@@ -277,7 +300,10 @@ class ProductionOrderForm
 
                 Section::make('Costing & Posting')
                     ->icon('heroicon-m-banknotes')
-                    ->columns(2)
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ])
                     ->schema([
                         Select::make('costing_method')
                             ->options([
@@ -324,7 +350,10 @@ class ProductionOrderForm
 
                 Section::make('Dimensions & Planning')
                     ->icon('heroicon-m-tag')
-                    ->columns(2)
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ])
                     ->collapsed()
                     ->schema([
                         TextInput::make('shortcut_dimension_1_code')->label('Department'),

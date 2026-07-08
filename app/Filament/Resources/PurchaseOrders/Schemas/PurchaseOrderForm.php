@@ -27,7 +27,11 @@ class PurchaseOrderForm
                 Section::make('Order Header')
                     ->description('Define the type, vendor, and general order information.')
                     ->schema([
-                        Grid::make(3)->schema([
+                        Grid::make([
+                            'default' => 1,
+                            'md' => 2,
+                            'xl' => 3,
+                        ])->schema([
                             Select::make('order_type')
                                 ->label('Order Type')
                                 ->options(PurchaseOrderType::options())
@@ -105,7 +109,11 @@ class PurchaseOrderForm
 
                 Section::make('Dates & Terms')
                     ->schema([
-                        Grid::make(4)->schema([
+                        Grid::make([
+                            'default' => 1,
+                            'md' => 2,
+                            'xl' => 4,
+                        ])->schema([
                             DatePicker::make('due_date')
                                 ->label('Due Date')
                                 ->native(false),
@@ -127,7 +135,10 @@ class PurchaseOrderForm
                 Section::make('Financials')
                     ->description('Summary of order totals. Values are often calculated from individual line items.')
                     ->schema([
-                        Grid::make(3)->schema([
+                        Grid::make([
+                            'default' => 1,
+                            'md' => 3,
+                        ])->schema([
                             TextInput::make('total_amount')
                                 ->label('Total Excl. VAT')
                                 ->required()
@@ -173,7 +184,10 @@ class PurchaseOrderForm
 
                 Section::make('Approval Information')
                     ->schema([
-                        Grid::make(2)->schema([
+                        Grid::make([
+                            'default' => 1,
+                            'md' => 2,
+                        ])->schema([
                             Select::make('approved_by')
                                 ->label('Approved By')
                                 ->relationship('approver', 'name')

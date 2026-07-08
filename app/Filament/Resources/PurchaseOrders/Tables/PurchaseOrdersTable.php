@@ -67,7 +67,7 @@ class PurchaseOrdersTable
 
                         return $enum?->color() ?? 'gray';
                     })
-                    ->toggleable(isToggledHiddenByDefault: false),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 // FIXED: Same pattern for status
                 TextColumn::make('status')
@@ -105,7 +105,8 @@ class PurchaseOrdersTable
                 TextColumn::make('order_date')
                     ->label('Order Date')
                     ->date()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('grand_total')
                     ->label('Total')
@@ -192,7 +193,11 @@ class PurchaseOrdersTable
                                             ->default(0)
                                             ->required(),
                                     ])
-                                    ->columns(7)
+                                    ->columns([
+                                        'default' => 1,
+                                        'md' => 2,
+                                        'xl' => 7,
+                                    ])
                                     ->addable(false)
                                     ->deletable(false)
                                     ->reorderable(false),

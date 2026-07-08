@@ -51,7 +51,10 @@ class SalesOrderForm
                             ->required()
                             ->disabled(fn ($operation) => $operation === 'create'),
                     ])
-                    ->columns(2),
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ]),
 
                 Section::make('Lines')
                     ->schema([
@@ -92,7 +95,11 @@ class SalesOrderForm
                                     ->disabled()
                                     ->dehydrated(),
                             ])
-                            ->columns(4)
+                            ->columns([
+                                'default' => 1,
+                                'md' => 2,
+                                'xl' => 4,
+                            ])
                             ->addActionLabel('Add Line')
                             ->reorderable()
                             ->collapsible(),

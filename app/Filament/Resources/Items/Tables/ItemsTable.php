@@ -36,19 +36,20 @@ class ItemsTable
                     ->label('SKU')
                     ->searchable()
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('primaryCategory.category_name')
                     ->label('Scope')
                     ->searchable()
                     ->sortable()
-                    ->toggleable()
+                    ->toggleable(isToggledHiddenByDefault: true)
                     ->description(fn ($record): string => $record->primaryCategory?->category_code ?? ''),
 
                 TextColumn::make('description')
                     ->label('Description')
                     ->searchable(['description', 'description_2'])
                     ->limit(40)
-                    ->tooltip(fn ($record) => $record->description_2 ?? $record->description),
+                    ->tooltip(fn ($record) => $record->description_2 ?? $record->description)
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('item_type')
                     ->label('Attribute')
@@ -67,14 +68,14 @@ class ItemsTable
                     ->alignRight()
                     ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.$record->base_unit_of_measure)
                     ->color('warning')
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('qty_on_purchase_order')
                     ->label('On Purchase Order')
                     ->alignRight()
                     ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.$record->base_unit_of_measure)
                     ->color('info')
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('available_to_promise')
                     ->label('Available')
@@ -107,13 +108,14 @@ class ItemsTable
                 TextColumn::make('uoms.uom_code')
                     ->label('Base UoM')
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('unit_price')
                     ->label('Price')
                     ->money(fn ($record) => $record->currency?->code ?? 'NGN', locale: 'ng')
                     ->alignRight()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('unit_cost')
                     ->label('Cost')
@@ -134,7 +136,7 @@ class ItemsTable
                 TextColumn::make('location.name')
                     ->label('Default Location')
                     ->placeholder('N/A')
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('is_active')
                     ->label('Status')
@@ -168,10 +170,10 @@ class ItemsTable
                     ->label('Is Blocked'),
             ])
             ->recordActions([
-               ActionGroup::make([
-                   ViewAction::make(),
-                   EditAction::make(),
-               ])
+                ActionGroup::make([
+                    ViewAction::make(),
+                    EditAction::make(),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

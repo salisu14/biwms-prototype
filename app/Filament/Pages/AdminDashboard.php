@@ -81,6 +81,10 @@ class AdminDashboard extends BaseDashboard
                     ->searchable()
                     ->preload()
                     ->placeholder('All Factories'),
+            ])
+            ->columns([
+                'default' => 1,
+                'md' => 3,
             ]);
     }
 }

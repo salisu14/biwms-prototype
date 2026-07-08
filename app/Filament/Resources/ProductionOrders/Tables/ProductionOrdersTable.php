@@ -38,7 +38,8 @@ class ProductionOrdersTable
                     }),
 
                 TextColumn::make('item.description')
-                    ->searchable(),
+                    ->searchable()
+                    ->limit(32),
 
                 TextColumn::make('quantity')
                     ->state(fn ($record): float => $record->quantityInOrderUom())
@@ -46,15 +47,18 @@ class ProductionOrdersTable
                     ->suffix(fn ($record): string => ' '.$record->orderUomCode()),
 
                 TextColumn::make('due_date')
-                    ->date(),
+                    ->date()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('total_actual_cost')
                     ->money('NGN')
-                    ->label('Actual Cost'),
+                    ->label('Actual Cost')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('created_at')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('status')

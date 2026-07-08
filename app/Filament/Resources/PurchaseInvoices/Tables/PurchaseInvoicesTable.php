@@ -6,6 +6,7 @@ use App\Enums\ApprovalStatus;
 use App\Models\PurchaseInvoice;
 use App\Services\Purchase\PurchaseInvoiceService;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -36,11 +37,13 @@ class PurchaseInvoicesTable
                         : ''),
                 TextColumn::make('posting_date')
                     ->date()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('due_date')
                     ->date()
                     ->sortable()
-                    ->color(fn ($record) => $record->is_overdue ? 'danger' : null),
+                    ->color(fn ($record) => $record->is_overdue ? 'danger' : null)
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('grand_total')
                     ->label('Total')
                     ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
@@ -84,41 +87,43 @@ class PurchaseInvoicesTable
                     ->relationship('location', 'name'),
             ])
             ->recordActions([
-                Action::make('approve')
-                    ->label('Approve')
-                    ->icon('heroicon-o-check')
-                    ->color('success')
-                    ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::PENDING)
-                    ->action(fn ($record) => $record instanceof PurchaseInvoice ? $record->update([
-                        'status' => ApprovalStatus::APPROVED,
-                        'approved_by' => auth()->id(),
-                        'approved_at' => now(),
-                    ]) : null),
-                Action::make('reject')
-                    ->label('Reject')
-                    ->icon('heroicon-o-x-mark')
-                    ->color('danger')
-                    ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::PENDING)
-                    ->action(fn ($record) => $record instanceof PurchaseInvoice ? $record->update([
-                        'status' => ApprovalStatus::REJECTED,
-                        'rejected_by' => auth()->id(),
-                        'rejected_at' => now(),
-                    ]) : null),
-                Action::make('post')
-                    ->label('Post')
-                    ->icon('heroicon-o-check-badge')
-                    ->color('primary')
-                    ->requiresConfirmation()
-                    ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::APPROVED)
-                    ->action(function ($record, PurchaseInvoiceService $purchaseInvoiceService) {
-                        if (! $record instanceof PurchaseInvoice) {
-                            return;
-                        }
+                ActionGroup::make([
+                    Action::make('approve')
+                        ->label('Approve')
+                        ->icon('heroicon-o-check')
+                        ->color('success')
+                        ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::PENDING)
+                        ->action(fn ($record) => $record instanceof PurchaseInvoice ? $record->update([
+                            'status' => ApprovalStatus::APPROVED,
+                            'approved_by' => auth()->id(),
+                            'approved_at' => now(),
+                        ]) : null),
+                    Action::make('reject')
+                        ->label('Reject')
+                        ->icon('heroicon-o-x-mark')
+                        ->color('danger')
+                        ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::PENDING)
+                        ->action(fn ($record) => $record instanceof PurchaseInvoice ? $record->update([
+                            'status' => ApprovalStatus::REJECTED,
+                            'rejected_by' => auth()->id(),
+                            'rejected_at' => now(),
+                        ]) : null),
+                    Action::make('post')
+                        ->label('Post')
+                        ->icon('heroicon-o-check-badge')
+                        ->color('primary')
+                        ->requiresConfirmation()
+                        ->visible(fn ($record): bool => $record instanceof PurchaseInvoice && $record->status === ApprovalStatus::APPROVED)
+                        ->action(function ($record, PurchaseInvoiceService $purchaseInvoiceService) {
+                            if (! $record instanceof PurchaseInvoice) {
+                                return;
+                            }
 
-                        $purchaseInvoiceService->post($record);
-                    }),
-                ViewAction::make()->visible(fn ($record): bool => method_exists($record, 'isPosted') ? ! $record->isPosted() : true),
-                EditAction::make()->visible(fn ($record): bool => method_exists($record, 'isPosted') ? ! $record->isPosted() : false),
+                            $purchaseInvoiceService->post($record);
+                        }),
+                    ViewAction::make()->visible(fn ($record): bool => method_exists($record, 'isPosted') ? ! $record->isPosted() : true),
+                    EditAction::make()->visible(fn ($record): bool => method_exists($record, 'isPosted') ? ! $record->isPosted() : false),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

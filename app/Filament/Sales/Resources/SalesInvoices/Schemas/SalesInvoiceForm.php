@@ -57,7 +57,10 @@ class SalesInvoiceForm
                             ->required()
                             ->disabled(),
                     ])
-                    ->columns(2),
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ]),
 
                 Section::make('Invoice Lines')
                     ->schema([
@@ -85,7 +88,11 @@ class SalesInvoiceForm
                                     ->disabled()
                                     ->dehydrated(),
                             ])
-                            ->columns(4)
+                            ->columns([
+                                'default' => 1,
+                                'md' => 2,
+                                'xl' => 4,
+                            ])
                             ->addActionLabel('Add Line')
                             ->reorderable()
                             ->collapsible(),
@@ -123,7 +130,11 @@ class SalesInvoiceForm
                             ->disabled()
                             ->dehydrated(),
                     ])
-                    ->columns(3),
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 3,
+                    ]),
             ]);
     }
 }

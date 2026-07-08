@@ -7,6 +7,7 @@ use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\PostedSalesInvoice;
 use App\Services\Print\PostedSalesInvoicePrintService;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Number;
@@ -43,7 +44,8 @@ class PostedSalesInvoicesTable
                 TextColumn::make('posted_at')
                     ->label('Posted Date')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('status')
                     ->badge()
@@ -59,52 +61,54 @@ class PostedSalesInvoicesTable
                 'record' => $record->id,
             ]))
             ->recordActions([
-                Action::make('viewPosted')
-                    ->label('View')
-                    ->icon('heroicon-o-eye')
-                    ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('view', $record) === true)
-                    ->url(fn (PostedSalesInvoice $record): string => SalesInvoiceResource::getUrl('view-posted', [
-                        'record' => $record->id,
-                    ])),
+                ActionGroup::make([
+                    Action::make('viewPosted')
+                        ->label('View')
+                        ->icon('heroicon-o-eye')
+                        ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('view', $record) === true)
+                        ->url(fn (PostedSalesInvoice $record): string => SalesInvoiceResource::getUrl('view-posted', [
+                            'record' => $record->id,
+                        ])),
 
-                Action::make('printPostedInvoice')
-                    ->label('Print')
-                    ->icon('heroicon-o-printer')
-                    ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('print', $record) === true)
-                    ->action(fn (PostedSalesInvoice $record) => static::downloadPdf($record)),
+                    Action::make('printPostedInvoice')
+                        ->label('Print')
+                        ->icon('heroicon-o-printer')
+                        ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('print', $record) === true)
+                        ->action(fn (PostedSalesInvoice $record) => static::downloadPdf($record)),
 
-                Action::make('downloadPostedInvoice')
-                    ->label('Download')
-                    ->icon('heroicon-o-arrow-down-tray')
-                    ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('print', $record) === true)
-                    ->action(fn (PostedSalesInvoice $record) => static::downloadPdf($record)),
+                    Action::make('downloadPostedInvoice')
+                        ->label('Download')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('print', $record) === true)
+                        ->action(fn (PostedSalesInvoice $record) => static::downloadPdf($record)),
 
-                Action::make('exportPostedInvoice')
-                    ->label('Export')
-                    ->icon('heroicon-o-document-arrow-down')
-                    ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('export', $record) === true)
-                    ->action(fn (PostedSalesInvoice $record) => response()->streamDownload(function () use ($record): void {
-                        $handle = fopen('php://output', 'w');
-                        fputcsv($handle, ['Document No.', 'Customer', 'Posting Date', 'Currency', 'Grand Total', 'Remaining Amount']);
-                        fputcsv($handle, [
-                            $record->document_number,
-                            $record->customer_name,
-                            optional($record->posting_date)->toDateString(),
-                            $record->currency_code,
-                            (float) $record->grand_total,
-                            (float) $record->remaining_amount,
-                        ]);
-                        fclose($handle);
-                    }, $record->document_number.'.csv')),
+                    Action::make('exportPostedInvoice')
+                        ->label('Export')
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('export', $record) === true)
+                        ->action(fn (PostedSalesInvoice $record) => response()->streamDownload(function () use ($record): void {
+                            $handle = fopen('php://output', 'w');
+                            fputcsv($handle, ['Document No.', 'Customer', 'Posting Date', 'Currency', 'Grand Total', 'Remaining Amount']);
+                            fputcsv($handle, [
+                                $record->document_number,
+                                $record->customer_name,
+                                optional($record->posting_date)->toDateString(),
+                                $record->currency_code,
+                                (float) $record->grand_total,
+                                (float) $record->remaining_amount,
+                            ]);
+                            fclose($handle);
+                        }, $record->document_number.'.csv')),
 
-                Action::make('viewSubledger')
-                    ->label('Subledger')
-                    ->icon('heroicon-o-book-open')
-                    ->color('gray')
-                    ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('view', $record) === true)
-                    ->url(fn (PostedSalesInvoice $record): string => CustomerSubledgerSummary::getUrl([
-                        'customerId' => $record->customer_id,
-                    ])),
+                    Action::make('viewSubledger')
+                        ->label('Subledger')
+                        ->icon('heroicon-o-book-open')
+                        ->color('gray')
+                        ->visible(fn (PostedSalesInvoice $record): bool => auth()->user()?->can('view', $record) === true)
+                        ->url(fn (PostedSalesInvoice $record): string => CustomerSubledgerSummary::getUrl([
+                            'customerId' => $record->customer_id,
+                        ])),
+                ]),
             ])
             ->toolbarActions([]);
     }

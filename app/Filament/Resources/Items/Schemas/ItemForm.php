@@ -46,7 +46,10 @@ class ItemForm
                         Tabs\Tab::make('General')
                             ->icon('heroicon-o-information-circle')
                             ->schema([
-                                Grid::make(2)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ])->schema([
                                     TextInput::make('item_code')
                                         ->label('Item Code')
                                         ->required()
@@ -98,7 +101,11 @@ class ItemForm
                                         ->columnSpanFull(),
                                 ]),
 
-                                Grid::make(3)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                    'xl' => 3,
+                                ])->schema([
                                     Select::make('inventory_method')
                                         ->label('Inventory Method')
                                         ->options(InventoryMethod::class)
@@ -163,7 +170,11 @@ class ItemForm
                         Tabs\Tab::make('Pricing & Costing')
                             ->icon('heroicon-o-currency-dollar')
                             ->schema([
-                                Grid::make(3)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                    'xl' => 3,
+                                ])->schema([
                                     TextInput::make('unit_price')
                                         ->label('Sales Price (Base)')
                                         ->numeric()
@@ -241,7 +252,10 @@ class ItemForm
                                                     ->label('Primary')
                                                     ->inline(false),
                                             ])
-                                            ->columns(2)
+                                            ->columns([
+                                                'default' => 1,
+                                                'md' => 2,
+                                            ])
                                             ->itemLabel(fn (array $state): ?string => isset($state['category_id']) ? Category::find($state['category_id'])?->category_name : 'New Category'),
                                     ]),
 
@@ -251,7 +265,11 @@ class ItemForm
                                         Repeater::make('uomAssignments')
                                             ->relationship('uomAssignments')
                                             ->schema([
-                                                Grid::make(4)->schema([
+                                                Grid::make([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                    'xl' => 4,
+                                                ])->schema([
                                                     Select::make('uom_id')
                                                         ->label('UOM')
                                                         ->relationship('uom', 'uom_code')
@@ -279,7 +297,10 @@ class ItemForm
                                         Repeater::make('vendorItems')
                                             ->relationship('vendorItems')
                                             ->schema([
-                                                Grid::make(2)->schema([
+                                                Grid::make([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                ])->schema([
                                                     Select::make('vendor_id')
                                                         ->label('Vendor')
                                                         ->relationship('vendor', 'vendor_name')
@@ -298,7 +319,11 @@ class ItemForm
                                                         ->columnSpanFull(),
                                                 ]),
 
-                                                Grid::make(3)->schema([
+                                                Grid::make([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                    'xl' => 3,
+                                                ])->schema([
                                                     TextInput::make('unit_cost')
                                                         ->label('Purchase Price')
                                                         ->numeric()
@@ -328,7 +353,11 @@ class ItemForm
                                                         ->required(),
                                                 ]),
 
-                                                Grid::make(3)->schema([
+                                                Grid::make([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                    'xl' => 3,
+                                                ])->schema([
                                                     TextInput::make('lead_time_days')
                                                         ->label('Lead Time (Days)')
                                                         ->numeric()
@@ -357,7 +386,11 @@ class ItemForm
                         Tabs\Tab::make('Inventory & Logistics')
                             ->icon('heroicon-o-cube')
                             ->schema([
-                                Grid::make(3)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                    'xl' => 3,
+                                ])->schema([
                                     TextInput::make('inventory')
                                         ->label('Initial Inventory')
                                         ->required()
@@ -405,14 +438,20 @@ class ItemForm
                                         TextInput::make('weight')->numeric()->suffix('kg')->step(0.0001),
                                         TextInput::make('volume')->numeric()->suffix('m³')->step(0.0001),
                                         TextInput::make('shelf_no')->label('Shelf Reference'),
-                                    ])->columns(3),
+                                    ])->columns([
+                                        'default' => 1,
+                                        'md' => 3,
+                                    ]),
                             ]),
 
                         // --- POSTING & VAT TAB ---
                         Tabs\Tab::make('Posting & VAT')
                             ->icon('heroicon-o-arrows-right-left')
                             ->schema([
-                                Grid::make(2)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ])->schema([
                                     Select::make('general_product_posting_group_id')
                                         ->label('Gen. Prod. Posting Group')
                                         ->relationship('generalProductPostingGroup', 'description')
@@ -444,7 +483,10 @@ class ItemForm
                         Tabs\Tab::make('Status')
                             ->icon('heroicon-o-cog-6-tooth')
                             ->schema([
-                                Grid::make(2)->schema([
+                                Grid::make([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ])->schema([
                                     Toggle::make('is_active')
                                         ->label('Active Status')
                                         ->default(true)

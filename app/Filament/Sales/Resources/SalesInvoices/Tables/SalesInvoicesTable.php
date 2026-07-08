@@ -4,6 +4,7 @@ namespace App\Filament\Sales\Resources\SalesInvoices\Tables;
 
 use App\Models\SalesInvoice;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -34,7 +35,8 @@ class SalesInvoicesTable
                 TextColumn::make('due_date')
                     ->date()
                     ->sortable()
-                    ->color(fn ($state) => $state < now() ? 'danger' : null),
+                    ->color(fn ($state) => $state < now() ? 'danger' : null)
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('total_amount')
                     ->money('USD')
                     ->sortable(),
@@ -63,32 +65,34 @@ class SalesInvoicesTable
                     ->query(fn ($query) => $query->where('due_date', '<', now())->where('status', '!=', 'paid')),
             ])
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
-                Action::make('record_payment')
-                    ->schema([
-                        TextInput::make('amount')
-                            ->numeric()
-                            ->required()
-                            ->prefix('$'),
-                        DatePicker::make('payment_date')
-                            ->default(now())
-                            ->required(),
-                        Select::make('payment_method')
-                            ->options([
-                                'cash' => 'Cash',
-                                'bank_transfer' => 'Bank Transfer',
-                                'check' => 'Check',
-                                'credit_card' => 'Credit Card',
-                            ])
-                            ->required(),
-                    ])
-                    ->action(function (SalesInvoice $record, array $data) {
-                        $record->recordPayment($data['amount'], $data['payment_date'], $data['payment_method']);
-                    })
-                    ->visible(fn (SalesInvoice $record) => in_array($record->status, ['open', 'partially_paid', 'overdue']))
-                    ->color('success')
-                    ->icon('heroicon-m-banknotes'),
+                ActionGroup::make([
+                    ViewAction::make(),
+                    EditAction::make(),
+                    Action::make('record_payment')
+                        ->schema([
+                            TextInput::make('amount')
+                                ->numeric()
+                                ->required()
+                                ->prefix('$'),
+                            DatePicker::make('payment_date')
+                                ->default(now())
+                                ->required(),
+                            Select::make('payment_method')
+                                ->options([
+                                    'cash' => 'Cash',
+                                    'bank_transfer' => 'Bank Transfer',
+                                    'check' => 'Check',
+                                    'credit_card' => 'Credit Card',
+                                ])
+                                ->required(),
+                        ])
+                        ->action(function (SalesInvoice $record, array $data) {
+                            $record->recordPayment($data['amount'], $data['payment_date'], $data['payment_method']);
+                        })
+                        ->visible(fn (SalesInvoice $record) => in_array($record->status, ['open', 'partially_paid', 'overdue']))
+                        ->color('success')
+                        ->icon('heroicon-m-banknotes'),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

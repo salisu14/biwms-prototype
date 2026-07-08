@@ -76,7 +76,10 @@ class RoleResource extends Resource
                         ->required()
                         ->columnSpan(1),
                 ])
-                ->columns(2),
+                ->columns([
+                    'default' => 1,
+                    'md' => 2,
+                ]),
 
             Section::make('Permissions')
                 ->description('Select a module to load and edit only that module’s permissions.')
@@ -85,7 +88,11 @@ class RoleResource extends Resource
                         ->default([])
                         ->dehydrated(),
 
-                    Grid::make(3)
+                    Grid::make([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 3,
+                    ])
                         ->schema([
                             Select::make('active_permission_module')
                                 ->label('Permission module')
@@ -176,7 +183,11 @@ class RoleResource extends Resource
                             (string) ($get('active_permission_resource_group') ?: static::defaultPermissionResourceGroupKey((string) ($get('active_permission_module') ?: static::defaultPermissionModuleKey()))),
                             $get('active_permission_search') === null ? null : (string) $get('active_permission_search')
                         ))
-                        ->columns(3)
+                        ->columns([
+                            'default' => 1,
+                            'md' => 2,
+                            'xl' => 3,
+                        ])
                         ->bulkToggleable()
                         ->allowHtml()
                         ->live()
