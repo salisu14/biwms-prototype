@@ -69,7 +69,7 @@ class ProductionBomInfolist
 
                         TextEntry::make('item.unit_cost')
                             ->label('Item Standard Cost')
-                            ->money()
+                            ->money('NGN')
                             ->placeholder('-'),
                     ]),
 

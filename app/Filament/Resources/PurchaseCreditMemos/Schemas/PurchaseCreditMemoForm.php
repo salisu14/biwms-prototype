@@ -14,6 +14,7 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -313,12 +314,12 @@ class PurchaseCreditMemoForm
                     ->schema([
                         Section::make('Status & Dates')
                             ->schema([
-                                Placeholder::make('status')
-                                    ->content(fn ($record) => $record?->status?->getLabel() ?? 'Draft'),
+                                TextEntry::make('status')
+                                    ->state(fn ($record) => $record?->status?->getLabel() ?? 'Draft'),
 
-                                Placeholder::make('rejection_reason')
+                                TextEntry::make('rejection_reason')
                                     ->label('Rejection Reason')
-                                    ->content(fn ($record) => $record?->rejection_reason)
+                                    ->state(fn ($record) => $record?->rejection_reason)
                                     ->visible(fn ($record) => $record?->status === ApprovalStatus::REJECTED),
 
                                 DatePicker::make('posting_date')
