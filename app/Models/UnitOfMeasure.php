@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'uom_code',
     'description',
+    'conversion_factor',
     'is_base_uom',        // Is this a base unit (cannot be deleted)
     'uom_category',       // WEIGHT, VOLUME, LENGTH, PIECE, etc.
 ])]
