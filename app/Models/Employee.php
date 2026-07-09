@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use App\Enums\EmployeeAssignmentType;
@@ -25,6 +27,7 @@ class Employee extends Model
         'full_name',
         'email',
         'phone',
+        'photo_path',
         'job_title',
         'assignment_type',
         'employee_posting_group_id',
@@ -34,11 +37,22 @@ class Employee extends Model
         'department_code',
         'department_id',
         'is_active',
+        'id_card_number',
+        'id_card_issue_date',
+        'id_card_expiry_date',
+        'id_card_status',
+        'id_card_token',
     ];
 
     protected $casts = [
         'assignment_type' => EmployeeAssignmentType::class,
         'is_active' => 'boolean',
+        'id_card_issue_date' => 'date',
+        'id_card_expiry_date' => 'date',
+    ];
+
+    protected $hidden = [
+        'id_card_token',
     ];
 
     /**

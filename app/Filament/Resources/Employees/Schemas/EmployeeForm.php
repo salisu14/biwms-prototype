@@ -6,6 +6,7 @@ use App\Enums\EmployeeAssignmentType;
 use App\Models\Business;
 use App\Models\Employee;
 use App\Models\Factory;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -62,6 +63,14 @@ class EmployeeForm
                         ->tel()
                         ->unique(ignoreRecord: true)
                         ->maxLength(255),
+                    FileUpload::make('photo_path')
+                        ->label('Employee Photo')
+                        ->image()
+                        ->disk('public')
+                        ->directory('employee-photos')
+                        ->visibility('public')
+                        ->imageEditor()
+                        ->maxSize(2048),
                 ])->columns(2),
 
             Section::make('Organizational Assignment')

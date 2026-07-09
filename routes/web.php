@@ -12,6 +12,7 @@ use App\Http\Controllers\ExpenseReportExportController;
 use App\Http\Controllers\FixedAssetLedgerEntriesPrintController;
 use App\Http\Controllers\FixedAssetListPrintController;
 use App\Http\Controllers\GroupSummaryPrintController;
+use App\Http\Controllers\Hr\EmployeeIdCardController;
 use App\Http\Controllers\ItemLedgerSummaryPrintController;
 use App\Http\Controllers\PhysicalInventoryJournalPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
@@ -32,6 +33,9 @@ Route::redirect('/login/hr', '/hr/login');
 Route::redirect('/login/project', '/project/login');
 Route::redirect('/login/service', '/service/login');
 Route::redirect('/login/warehouse', '/warehouse/login');
+
+Route::get('/employee-card/verify/{token}', [EmployeeIdCardController::class, 'verify'])
+    ->name('employee-card.verify');
 
 Route::middleware(['web', 'auth'])->group(function (): void {
     Route::get('/admin/two-factor/setup', [SuperAdminTwoFactorSetupController::class, 'create'])
@@ -66,6 +70,17 @@ Route::middleware(['web', 'auth'])->group(function (): void {
 
     Route::redirect('/super-admin/two-factor/setup', '/admin/two-factor/setup');
     Route::redirect('/super-admin/two-factor/challenge', '/admin/two-factor/challenge');
+});
+
+Route::middleware(['web', 'auth'])->group(function (): void {
+    Route::get('/admin/employees/{employee}/id-card/preview', [EmployeeIdCardController::class, 'preview'])
+        ->name('employees.id-card.preview');
+    Route::get('/admin/employees/{employee}/id-card/print', [EmployeeIdCardController::class, 'print'])
+        ->name('employees.id-card.print');
+    Route::get('/admin/employees/{employee}/id-card/download', [EmployeeIdCardController::class, 'download'])
+        ->name('employees.id-card.download');
+    Route::get('/admin/employees/id-cards/download', [EmployeeIdCardController::class, 'bulkDownload'])
+        ->name('employees.id-card.bulk-download');
 });
 
 Route::get('/admin/sales-shipments/{shipment}/waybill', [WaybillController::class, 'print'])

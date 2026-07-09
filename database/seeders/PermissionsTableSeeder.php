@@ -113,6 +113,7 @@ class PermissionsTableSeeder extends Seeder
 
             // HR
             'hr.employee.view_any', 'hr.employee.view', 'hr.employee.create', 'hr.employee.update', 'hr.employee.delete',
+            'hr.employee_id_card.view', 'hr.employee_id_card.generate', 'hr.employee_id_card.download', 'hr.employee_id_card.regenerate', 'hr.employee_id_card.verify',
             'hr.attendance.view_any', 'hr.attendance.view', 'hr.attendance.create', 'hr.attendance.update', 'hr.attendance.delete',
             'hr.attendance.approve', 'hr.attendance.reject', 'hr.attendance.clock',
             'hr.payroll_period.view_any', 'hr.payroll_period.view', 'hr.payroll_period.create', 'hr.payroll_period.update', 'hr.payroll_period.delete',
