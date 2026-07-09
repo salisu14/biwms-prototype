@@ -62,7 +62,7 @@ class RoutingsTable
 
                 TextColumn::make('cost_rollup')
                     ->label('Cost Rollup')
-                    ->money('USD')
+                    ->money('NGN')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 

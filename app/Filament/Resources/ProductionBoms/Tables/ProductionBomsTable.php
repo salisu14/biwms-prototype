@@ -49,7 +49,7 @@ class ProductionBomsTable
                     ->alignCenter(),
 
                 TextColumn::make('cost_rollup')
-                    ->money('USD')
+                    ->money('NGN')
                     ->label('Rollup Cost'),
 
                 TextColumn::make('starting_date')

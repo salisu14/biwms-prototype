@@ -90,7 +90,7 @@ class RoutingForm
                             ->label('Cost Rollup')
                             ->required()
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->step(0.01)
                             ->helperText('Total estimated cost to run this routing.'),
                     ])

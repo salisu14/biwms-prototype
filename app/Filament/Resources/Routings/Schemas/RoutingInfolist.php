@@ -65,7 +65,7 @@ class RoutingInfolist
                     ->schema([
                         TextEntry::make('cost_rollup')
                             ->label('Cost Rollup')
-                            ->money('USD'),
+                            ->money('NGN'),
 
                         TextEntry::make('starting_date')
                             ->label('Valid From')

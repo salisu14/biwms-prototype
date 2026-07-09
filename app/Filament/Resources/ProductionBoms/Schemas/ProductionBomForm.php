@@ -86,7 +86,7 @@ class ProductionBomForm
                                 TextInput::make('cost_rollup')
                                     ->label('Last Rollup Cost')
                                     ->numeric()
-                                    ->prefix('$')
+                                    ->prefix('₦')
                                     ->disabled()
                                     ->placeholder('0.0000'),
                             ]),

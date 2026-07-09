@@ -173,7 +173,7 @@ class RoutingLinesRelationManager extends RelationManager
                         TextInput::make('direct_unit_cost')
                             ->label('Direct Unit Cost')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->helperText('Pulled automatically from selected Work/Machine center.'),
 
                         TextInput::make('indirect_cost_percent')
@@ -185,7 +185,7 @@ class RoutingLinesRelationManager extends RelationManager
                         TextInput::make('overhead_rate')
                             ->label('Overhead Rate')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->helperText('Pulled automatically from selected Work/Machine center.'),
 
                         TextInput::make('scrap_factor_percent')
@@ -202,7 +202,7 @@ class RoutingLinesRelationManager extends RelationManager
                         TextInput::make('subcontracting_cost')
                             ->label('Subcon. Cost')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('₦')
                             ->columnSpanFull(),
                     ]),
             ]);
@@ -239,7 +239,7 @@ class RoutingLinesRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('direct_unit_cost')
                     ->label('Cost')
-                    ->money('USD')
+                    ->money('NGN')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('scrap_factor_percent')

@@ -64,7 +64,7 @@ class ProductionBomInfolist
                     ->schema([
                         TextEntry::make('cost_rollup')
                             ->label('Cost Rollup')
-                            ->money('money')
+                            ->money('NGN')
                             ->placeholder('-'),
 
                         TextEntry::make('item.unit_cost')
