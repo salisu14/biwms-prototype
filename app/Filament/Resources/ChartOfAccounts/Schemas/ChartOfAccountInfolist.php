@@ -9,7 +9,6 @@ use BackedEnum;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
@@ -27,21 +26,15 @@ class ChartOfAccountInfolist
     {
         return Grid::make([
             'default' => 1,
-            'lg' => 2,
+            'xl' => 2,
         ])->schema([
-            self::makeAccountOverviewColumn(),
-            self::makePostingAndReportingColumn(),
-        ]);
-    }
-
-    // ==================== COLUMN 1: ACCOUNT OVERVIEW ====================
-
-    private static function makeAccountOverviewColumn(): Group
-    {
-        return Group::make([
             self::makeGeneralInformationSection(),
+            self::makePostingGroupsSection(),
             self::makeHierarchySection(),
+            self::makePostingControlsSection(),
             self::makeFinancialStatusSection(),
+            self::makeReportingLayoutSection(),
+            self::makeSystemDetailsSection(),
         ]);
     }
 
@@ -177,18 +170,6 @@ class ChartOfAccountInfolist
             ->fontFamily('mono')
             ->copyable()
             ->visible(fn ($record) => ! empty($record?->totaling));
-    }
-
-    // ==================== COLUMN 2: POSTING, REPORTING & SYSTEM DETAILS ====================
-
-    private static function makePostingAndReportingColumn(): Group
-    {
-        return Group::make([
-            self::makePostingGroupsSection(),
-            self::makePostingControlsSection(),
-            self::makeReportingLayoutSection(),
-            self::makeSystemDetailsSection(),
-        ]);
     }
 
     private static function makePostingGroupsSection(): Section
@@ -425,8 +406,13 @@ class ChartOfAccountInfolist
         return Section::make('Financial Status')
             ->icon('heroicon-o-currency-dollar')
             ->schema([
-                self::makeBalanceEntry(),
-                self::makeBalanceAtDateEntry(),
+                Grid::make([
+                    'default' => 1,
+                    'md' => 2,
+                ])->schema([
+                    self::makeBalanceEntry(),
+                    self::makeBalanceAtDateEntry(),
+                ]),
                 self::makeAccountStatusAlert(),
             ]);
     }
@@ -480,6 +466,7 @@ class ChartOfAccountInfolist
         return Section::make('System Information')
             ->icon('heroicon-o-information-circle')
             ->collapsed()
+            ->columnSpanFull()
             ->schema([
                 Grid::make([
                     'default' => 1,
