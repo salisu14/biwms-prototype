@@ -1,10 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\ChartOfAccounts;
 
 use App\Filament\Resources\ChartOfAccounts\Pages\CreateChartOfAccount;
 use App\Filament\Resources\ChartOfAccounts\Pages\EditChartOfAccount;
 use App\Filament\Resources\ChartOfAccounts\Pages\ListChartOfAccounts;
+use App\Filament\Resources\ChartOfAccounts\Pages\ViewChartOfAccount;
 use App\Filament\Resources\ChartOfAccounts\Schemas\ChartOfAccountForm;
 use App\Filament\Resources\ChartOfAccounts\Schemas\ChartOfAccountInfolist;
 use App\Filament\Resources\ChartOfAccounts\Tables\ChartOfAccountsTable;
@@ -64,6 +67,11 @@ class ChartOfAccountResource extends Resource
         return static::canAccess();
     }
 
+    public static function canView(Model $record): bool
+    {
+        return static::canAccess();
+    }
+
     public static function canEdit(Model $record): bool
     {
         return static::canAccess();
@@ -86,6 +94,7 @@ class ChartOfAccountResource extends Resource
         return [
             'index' => ListChartOfAccounts::route('/'),
             'create' => CreateChartOfAccount::route('/create'),
+            'view' => ViewChartOfAccount::route('/{record}'),
             'edit' => EditChartOfAccount::route('/{record}/edit'),
         ];
     }
