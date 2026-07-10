@@ -233,6 +233,21 @@
             width: 108px;
         }
 
+        .qr img {
+            display: inline-block;
+            height: 108px;
+            vertical-align: middle;
+            width: 108px;
+        }
+
+        .qr-placeholder {
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 108px;
+            text-align: center;
+        }
+
         @media print {
             body {
                 background: #ffffff;
@@ -258,6 +273,7 @@
             ->implode('');
         $logoSrc = array_key_exists('logoSrc', $card) ? $card['logoSrc'] : ($card['logoUrl'] ?? null);
         $photoSrc = array_key_exists('photoSrc', $card) ? $card['photoSrc'] : ($card['photoUrl'] ?? null);
+        $qrPdfSrc = array_key_exists('qrPdfSrc', $card) ? $card['qrPdfSrc'] : null;
     @endphp
     <main class="sheet">
         <section class="card" aria-label="Employee ID card">
@@ -338,7 +354,13 @@
                             </td>
                             <td class="footer-qr-cell">
                                 <div class="qr" aria-label="Signed employee ID verification QR code">
-                                    {!! $card['qrSvg'] !!}
+                                    @if ($qrPdfSrc)
+                                        <img src="{{ $qrPdfSrc }}" alt="Signed employee ID verification QR code">
+                                    @elseif (array_key_exists('qrPdfSrc', $card))
+                                        <div class="qr-placeholder">QR unavailable</div>
+                                    @else
+                                        {!! $card['qrSvg'] !!}
+                                    @endif
                                 </div>
                             </td>
                         </tr>

@@ -7,6 +7,7 @@ namespace App\Services\Hr;
 use App\Models\CompanyInformation;
 use App\Models\Employee;
 use App\Services\AuditTrailService;
+use BaconQrCode\Renderer\GDLibRenderer;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
@@ -87,12 +88,28 @@ class EmployeeIdCardService
 
     public function qrSvg(Employee $employee, int $size = 180): string
     {
+        return $this->renderQrSvg($this->qrPayload($employee), $size);
+    }
+
+    public function renderQrSvg(string $payload, int $size = 180): string
+    {
         $renderer = new ImageRenderer(
             new RendererStyle($size),
             new SvgImageBackEnd,
         );
 
-        return (new Writer($renderer))->writeString($this->qrPayload($employee));
+        return (new Writer($renderer))->writeString($payload);
+    }
+
+    public function renderQrPngDataUri(string $payload, int $size = 180): ?string
+    {
+        try {
+            $png = (new Writer(new GDLibRenderer($size)))->writeString($payload);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return 'data:image/png;base64,'.base64_encode($png);
     }
 
     /**
@@ -104,16 +121,18 @@ class EmployeeIdCardService
         $company = $this->companyInformation();
         $photoUrl = $this->publicStorageUrl($issuedEmployee->photo_path);
         $logoUrl = $company->logo_url;
+        $qrPayload = $this->qrPayload($issuedEmployee);
 
         return [
             'employee' => $issuedEmployee,
             'company' => $company,
-            'qrSvg' => $this->qrSvg($issuedEmployee),
+            'qrSvg' => $this->renderQrSvg($qrPayload),
             'verificationUrl' => route('employee-card.verify', ['token' => $issuedEmployee->id_card_token]),
             'photoUrl' => $photoUrl,
             'logoUrl' => $logoUrl,
             'photoSrc' => $forPdf ? $this->resolveEmployeePhotoForPdf($issuedEmployee) : $photoUrl,
             'logoSrc' => $forPdf ? $this->resolveCompanyLogoForPdf($company) : $logoUrl,
+            ...($forPdf ? ['qrPdfSrc' => $this->renderQrPngDataUri($qrPayload)] : []),
         ];
     }
 

@@ -192,6 +192,88 @@ it('embeds employee photo and company logo as data URIs for PDF rendering', func
         ->and($card['logoSrc'])->toStartWith('data:image/png;base64,');
 });
 
+it('uses a PNG data URI QR source for PDF rendering while preserving the signed payload', function (): void {
+    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'employee_number' => 'EMP-4104',
+    ]));
+
+    $service = app(EmployeeIdCardService::class);
+    $card = $service->cardViewData($employee, forPdf: true);
+    $payload = $service->qrPayload($employee);
+
+    [$employeeNumber, $cardNumber, $token, $signature] = explode('|', $payload);
+    $payloadWithoutSignature = implode('|', [$employeeNumber, $cardNumber, $token]);
+
+    expect($card['qrPdfSrc'])->toStartWith('data:image/png;base64,')
+        ->and($card['qrSvg'])->toContain('<svg')
+        ->and($payload)->not->toContain($employee->email ?? 'not-present')
+        ->and($signature)->toBe(hash_hmac('sha256', $payloadWithoutSignature, (string) config('app.key')));
+
+    $html = view('hr.employee-id-card', [
+        'cards' => [$card],
+        'print' => false,
+    ])->render();
+
+    expect($html)->toContain('data:image/png;base64,')
+        ->and($html)->toContain('<img src="data:image/png;base64,')
+        ->and($html)->not->toContain('<svg');
+});
+
+it('keeps preview and print rendering QR as inline SVG', function (): void {
+    $user = hrIdCardUserWithPermissions(['hr.employee_id_card.view']);
+    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'employee_number' => 'EMP-4204',
+    ]));
+
+    $this->actingAs($user)
+        ->get(route('employees.id-card.preview', $employee))
+        ->assertSuccessful()
+        ->assertSee('<svg', false)
+        ->assertDontSee('data:image/png;base64,', false);
+
+    $this->actingAs($user)
+        ->get(route('employees.id-card.print', $employee))
+        ->assertSuccessful()
+        ->assertSee('<svg', false)
+        ->assertDontSee('data:image/png;base64,', false);
+});
+
+it('falls back cleanly when PDF QR generation is unavailable', function (): void {
+    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'first_name' => 'Qr',
+        'last_name' => 'Fallback',
+    ]));
+
+    expect(app(EmployeeIdCardService::class)->renderQrPngDataUri(''))->toBeNull();
+
+    $card = app(EmployeeIdCardService::class)->cardViewData($employee, forPdf: true);
+    $card['qrPdfSrc'] = null;
+
+    $html = view('hr.employee-id-card', [
+        'cards' => [$card],
+        'print' => false,
+    ])->render();
+
+    expect($html)->toContain('QR unavailable')
+        ->and($html)->not->toContain('<svg');
+});
+
+it('PDF download builds the card with a PNG QR image source', function (): void {
+    $user = hrIdCardUserWithPermissions(['hr.employee_id_card.download']);
+    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'employee_number' => 'EMP-4304',
+    ]));
+
+    $card = app(EmployeeIdCardService::class)->cardViewData($employee, forPdf: true);
+
+    expect($card['qrPdfSrc'])->toStartWith('data:image/png;base64,');
+
+    $this->actingAs($user)
+        ->get(route('employees.id-card.download', $employee))
+        ->assertSuccessful()
+        ->assertHeader('content-type', 'application/pdf');
+});
+
 it('keeps preview and print on normal storage URLs for employee photos', function (): void {
     Storage::fake('public');
     Storage::disk('public')->put('employee-photos/preview.png', hrIdCardPng());
