@@ -240,6 +240,21 @@ class Employee extends Model
         return $this->hasMany(EmployeePayslip::class);
     }
 
+    public function leaveRequests(): HasMany
+    {
+        return $this->hasMany(LeaveRequest::class);
+    }
+
+    public function leaveEntitlements(): HasMany
+    {
+        return $this->hasMany(EmployeeLeaveEntitlement::class);
+    }
+
+    public function leaveLedgerEntries(): HasMany
+    {
+        return $this->hasMany(EmployeeLeaveLedgerEntry::class);
+    }
+
     /**
      * The posting group assigned to this employee.
      */

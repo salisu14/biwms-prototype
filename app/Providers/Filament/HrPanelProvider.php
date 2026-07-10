@@ -3,6 +3,10 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Hr\Widgets\HrStatsOverview;
+use App\Filament\Pages\Hr\LeaveApprovalsPage;
+use App\Filament\Pages\Hr\LeaveCalendarPage;
+use App\Filament\Pages\Hr\MyLeaveBalancesPage;
+use App\Filament\Pages\Hr\MyLeaveRequestsPage;
 use App\Filament\Pages\MyAttendance;
 use App\Filament\Resources\AttendanceLedgerEntries\AttendanceLedgerEntryResource;
 use App\Filament\Resources\EmployeeIdCardHistories\EmployeeIdCardHistoryResource;
@@ -10,9 +14,14 @@ use App\Filament\Resources\EmployeeIdCardPrintBatches\EmployeeIdCardPrintBatchRe
 use App\Filament\Resources\EmployeeIdCards\EmployeeIdCardResource;
 use App\Filament\Resources\EmployeeIdCardTemplates\EmployeeIdCardTemplateResource;
 use App\Filament\Resources\EmployeeIdCardVerificationLogs\EmployeeIdCardVerificationLogResource;
+use App\Filament\Resources\EmployeeLeaveEntitlements\EmployeeLeaveEntitlementResource;
+use App\Filament\Resources\EmployeeLeaveLedgerEntries\EmployeeLeaveLedgerEntryResource;
 use App\Filament\Resources\EmployeePayslipHistories\EmployeePayslipHistoryResource;
 use App\Filament\Resources\EmployeePayslips\EmployeePayslipResource;
 use App\Filament\Resources\Employees\EmployeeResource;
+use App\Filament\Resources\LeavePolicies\LeavePolicyResource;
+use App\Filament\Resources\LeaveRequests\LeaveRequestResource;
+use App\Filament\Resources\LeaveTypes\LeaveTypeResource;
 use App\Filament\Resources\PayCodes\PayCodeResource;
 use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
 use App\Filament\Resources\PayrollPeriods\PayrollPeriodResource;
@@ -76,6 +85,11 @@ class HrPanelProvider extends PanelProvider
                 EmployeeIdCardHistoryResource::class,
                 EmployeeIdCardVerificationLogResource::class,
                 AttendanceLedgerEntryResource::class,
+                LeaveTypeResource::class,
+                LeavePolicyResource::class,
+                EmployeeLeaveEntitlementResource::class,
+                LeaveRequestResource::class,
+                EmployeeLeaveLedgerEntryResource::class,
                 PayrollDocumentResource::class,
                 EmployeePayslipResource::class,
                 EmployeePayslipHistoryResource::class,
@@ -86,6 +100,10 @@ class HrPanelProvider extends PanelProvider
             ->pages([
                 Dashboard::class,
                 MyAttendance::class,
+                MyLeaveRequestsPage::class,
+                MyLeaveBalancesPage::class,
+                LeaveApprovalsPage::class,
+                LeaveCalendarPage::class,
             ])
             ->widgets([
                 HrStatsOverview::class,
@@ -95,6 +113,7 @@ class HrPanelProvider extends PanelProvider
                 'Human Resources',
                 'Employee Identity',
                 'Payroll',
+                'Leave Management',
             ])
             ->middleware([
                 EncryptCookies::class,

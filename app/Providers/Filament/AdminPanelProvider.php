@@ -20,8 +20,13 @@ use App\Filament\Resources\EmployeeIdCardPrintBatches\EmployeeIdCardPrintBatchRe
 use App\Filament\Resources\EmployeeIdCards\EmployeeIdCardResource;
 use App\Filament\Resources\EmployeeIdCardTemplates\EmployeeIdCardTemplateResource;
 use App\Filament\Resources\EmployeeIdCardVerificationLogs\EmployeeIdCardVerificationLogResource;
+use App\Filament\Resources\EmployeeLeaveEntitlements\EmployeeLeaveEntitlementResource;
+use App\Filament\Resources\EmployeeLeaveLedgerEntries\EmployeeLeaveLedgerEntryResource;
 use App\Filament\Resources\EmployeePayslipHistories\EmployeePayslipHistoryResource;
 use App\Filament\Resources\EmployeePayslips\EmployeePayslipResource;
+use App\Filament\Resources\LeavePolicies\LeavePolicyResource;
+use App\Filament\Resources\LeaveRequests\LeaveRequestResource;
+use App\Filament\Resources\LeaveTypes\LeaveTypeResource;
 use App\Filament\Resources\MaintenanceContractAssets\MaintenanceContractAssetResource;
 use App\Filament\Resources\MaintenanceContractBillings\MaintenanceContractBillingResource;
 use App\Filament\Resources\MaintenanceContracts\MaintenanceContractResource;
@@ -788,6 +793,31 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-clock')
                                         ->url('/admin/attendance-ledger-entries')
                                         ->isActiveWhen(fn () => request()->is('admin/attendance-ledger-entries*')),
+
+                                    NavigationItem::make('Leave Types')
+                                        ->icon('heroicon-o-rectangle-stack')
+                                        ->url(LeaveTypeResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/leave-types*')),
+
+                                    NavigationItem::make('Leave Policies')
+                                        ->icon('heroicon-o-clipboard-document-list')
+                                        ->url(LeavePolicyResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/leave-policies*')),
+
+                                    NavigationItem::make('Leave Entitlements')
+                                        ->icon('heroicon-o-banknotes')
+                                        ->url(EmployeeLeaveEntitlementResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-leave-entitlements*')),
+
+                                    NavigationItem::make('Leave Requests')
+                                        ->icon('heroicon-o-calendar-days')
+                                        ->url(LeaveRequestResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/leave-requests*')),
+
+                                    NavigationItem::make('Leave Ledger')
+                                        ->icon('heroicon-o-book-open')
+                                        ->url(EmployeeLeaveLedgerEntryResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-leave-ledger-entries*')),
 
                                     NavigationItem::make('Pay Codes')
                                         ->icon('heroicon-o-banknotes')

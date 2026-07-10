@@ -37,6 +37,7 @@ class DatabaseSeeder extends Seeder
             PayrollPostingGroupSeeder::class,
             PayrollSetupSeeder::class,
             PayrollPeriodSeeder::class,
+            LeaveTypeSeeder::class,
             PermissionsTableSeeder::class,
             RolesTableSeeder::class,
             UsersTableSeeder::class,

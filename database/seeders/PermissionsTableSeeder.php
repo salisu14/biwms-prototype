@@ -124,6 +124,12 @@ class PermissionsTableSeeder extends Seeder
             'hr.employee_payslip.view_any', 'hr.employee_payslip.view', 'hr.employee_payslip.create', 'hr.employee_payslip.update', 'hr.employee_payslip.delete',
             'hr.employee_payslip.generate', 'hr.employee_payslip.download', 'hr.employee_payslip.print', 'hr.employee_payslip.revoke', 'hr.employee_payslip.regenerate', 'hr.employee_payslip.export',
             'hr.employee_payslip_history.view_any', 'hr.employee_payslip_history.view',
+            'hr.leave_request.submit', 'hr.leave_request.cancel',
+            'hr.leave_approval.approve', 'hr.leave_approval.reject',
+            'hr.leave_balance.view',
+            'hr.leave_ledger.view_any', 'hr.leave_ledger.view',
+            'hr.leave_adjustment.post',
+            'hr.leave_calendar.view',
             'hr.payroll_posting_group.view_any', 'hr.payroll_posting_group.view', 'hr.payroll_posting_group.create', 'hr.payroll_posting_group.update', 'hr.payroll_posting_group.delete',
             'hr.pay_code.view_any', 'hr.pay_code.view', 'hr.pay_code.create', 'hr.pay_code.update', 'hr.pay_code.delete',
 
