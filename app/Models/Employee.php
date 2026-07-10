@@ -223,6 +223,18 @@ class Employee extends Model
         return $this->user()->exists();
     }
 
+    public function idCards(): HasMany
+    {
+        return $this->hasMany(EmployeeIdCard::class);
+    }
+
+    public function activeIdCard(): HasOne
+    {
+        return $this->hasOne(EmployeeIdCard::class)
+            ->where('status', EmployeeIdCard::STATUS_ACTIVE)
+            ->latestOfMany();
+    }
+
     /**
      * The posting group assigned to this employee.
      */

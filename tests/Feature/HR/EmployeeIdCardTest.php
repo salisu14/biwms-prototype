@@ -6,6 +6,7 @@ use App\Filament\Resources\Employees\Pages\ListEmployees;
 use App\Models\Business;
 use App\Models\CompanyInformation;
 use App\Models\Employee;
+use App\Models\EmployeeIdCard;
 use App\Models\User;
 use App\Services\Hr\EmployeeIdCardService;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
@@ -63,43 +64,43 @@ it('issues an employee ID card number and token', function (): void {
         'employee_number' => 'EMP-1001',
     ]);
 
-    $issuedEmployee = app(EmployeeIdCardService::class)->issueCard($employee);
+    $issuedCard = app(EmployeeIdCardService::class)->issueCard($employee);
 
-    expect($issuedEmployee->id_card_number)->toStartWith('ID-EMP-1001-')
-        ->and($issuedEmployee->id_card_token)->not->toBeNull()
-        ->and($issuedEmployee->id_card_status)->toBe(EmployeeIdCardService::ACTIVE_STATUS)
-        ->and($issuedEmployee->id_card_issue_date)->not->toBeNull()
-        ->and($issuedEmployee->id_card_expiry_date)->not->toBeNull();
+    expect($issuedCard->card_number)->toStartWith('ID-EMP-1001-')
+        ->and($issuedCard->token)->not->toBeNull()
+        ->and($issuedCard->status)->toBe(EmployeeIdCardService::ACTIVE_STATUS)
+        ->and($issuedCard->issue_date)->not->toBeNull()
+        ->and($issuedCard->expiry_date)->not->toBeNull();
 
     $this->assertDatabaseHas('audit_trails', [
         'event_type' => 'hr_id_card',
         'action' => 'card_generated',
-        'auditable_type' => Employee::class,
-        'auditable_id' => $issuedEmployee->id,
+        'auditable_type' => EmployeeIdCard::class,
+        'auditable_id' => $issuedCard->id,
     ]);
 });
 
 it('builds a signed QR payload without sensitive employee data', function (): void {
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $card = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'employee_number' => 'EMP-2002',
         'email' => 'private.employee@example.com',
         'phone' => '+2348012345678',
     ]));
 
-    $payload = app(EmployeeIdCardService::class)->qrPayload($employee);
+    $payload = app(EmployeeIdCardService::class)->qrPayload($card);
     [$employeeNumber, $cardNumber, $token, $signature] = explode('|', $payload);
     $payloadWithoutSignature = implode('|', [$employeeNumber, $cardNumber, $token]);
 
     expect($employeeNumber)->toBe('EMP-2002')
-        ->and($cardNumber)->toBe($employee->id_card_number)
-        ->and($token)->toBe($employee->id_card_token)
+        ->and($cardNumber)->toBe($card->card_number)
+        ->and($token)->toBe($card->token)
         ->and($signature)->toBe(hash_hmac('sha256', $payloadWithoutSignature, (string) config('app.key')))
         ->and($payload)->not->toContain('private.employee@example.com')
         ->and($payload)->not->toContain('+2348012345678');
 });
 
 it('shows only safe data on the verification endpoint', function (): void {
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $card = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'employee_number' => 'EMP-3003',
         'first_name' => 'Ada',
         'last_name' => 'Lovelace',
@@ -109,7 +110,7 @@ it('shows only safe data on the verification endpoint', function (): void {
         'department_code' => 'HR',
     ]));
 
-    $this->get(route('employee-card.verify', $employee->id_card_token))
+    $this->get(route('employee-card.verify', $card->token))
         ->assertSuccessful()
         ->assertSee('Active card')
         ->assertSee('Ada Lovelace')
@@ -124,29 +125,29 @@ it('shows only safe data on the verification endpoint', function (): void {
     $this->assertDatabaseHas('audit_trails', [
         'event_type' => 'hr_id_card',
         'action' => 'card_verified',
-        'auditable_type' => Employee::class,
-        'auditable_id' => $employee->id,
+        'auditable_type' => EmployeeIdCard::class,
+        'auditable_id' => $card->id,
     ]);
 });
 
 it('does not verify expired or revoked cards as active', function (): void {
-    $expiredEmployee = app(EmployeeIdCardService::class)->issueCard(
+    $expiredCard = app(EmployeeIdCardService::class)->issueCard(
         Employee::factory()->create(['first_name' => 'Expired', 'last_name' => 'Employee']),
         now()->subYears(3),
         now()->subDay()
     );
 
-    $this->get(route('employee-card.verify', $expiredEmployee->id_card_token))
+    $this->get(route('employee-card.verify', $expiredCard->token))
         ->assertNotFound()
         ->assertSee('Not active')
         ->assertDontSee('Expired Employee');
 
-    $revokedEmployee = app(EmployeeIdCardService::class)->issueCard(
+    $revokedCard = app(EmployeeIdCardService::class)->issueCard(
         Employee::factory()->create(['first_name' => 'Revoked', 'last_name' => 'Employee'])
     );
-    $revokedEmployee->update(['id_card_status' => 'revoked']);
+    $revokedCard->update(['id_card_status' => 'revoked']);
 
-    $this->get(route('employee-card.verify', $revokedEmployee->id_card_token))
+    $this->get(route('employee-card.verify', $revokedCard->token))
         ->assertNotFound()
         ->assertSee('Not active')
         ->assertDontSee('Revoked Employee');
@@ -154,20 +155,20 @@ it('does not verify expired or revoked cards as active', function (): void {
 
 it('downloads a PDF for authorized users', function (): void {
     $user = hrIdCardUserWithPermissions(['hr.employee_id_card.download']);
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $card = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'employee_number' => 'EMP-4004',
     ]));
 
     $this->actingAs($user)
-        ->get(route('employees.id-card.download', $employee))
+        ->get(route('employees.id-card.download', $card->employee))
         ->assertSuccessful()
         ->assertHeader('content-type', 'application/pdf');
 
     $this->assertDatabaseHas('audit_trails', [
         'event_type' => 'hr_id_card',
         'action' => 'card_downloaded',
-        'auditable_type' => Employee::class,
-        'auditable_id' => $employee->id,
+        'auditable_type' => EmployeeIdCard::class,
+        'auditable_id' => $card->id,
     ]);
 });
 
@@ -182,31 +183,31 @@ it('embeds employee photo and company logo as data URIs for PDF rendering', func
         ->forceFill(['company_name' => 'BIFLI Pilot Company', 'logo_path' => 'company/logos/logo.png'])
         ->save();
 
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $cardRecord = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'photo_path' => 'employee-photos/employee.png',
     ]));
 
-    $card = app(EmployeeIdCardService::class)->cardViewData($employee, forPdf: true);
+    $card = app(EmployeeIdCardService::class)->cardViewData($cardRecord, forPdf: true);
 
     expect($card['photoSrc'])->toStartWith('data:image/png;base64,')
         ->and($card['logoSrc'])->toStartWith('data:image/png;base64,');
 });
 
 it('uses a PNG data URI QR source for PDF rendering while preserving the signed payload', function (): void {
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $employeeCard = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'employee_number' => 'EMP-4104',
     ]));
 
     $service = app(EmployeeIdCardService::class);
-    $card = $service->cardViewData($employee, forPdf: true);
-    $payload = $service->qrPayload($employee);
+    $card = $service->cardViewData($employeeCard, forPdf: true);
+    $payload = $service->qrPayload($employeeCard);
 
     [$employeeNumber, $cardNumber, $token, $signature] = explode('|', $payload);
     $payloadWithoutSignature = implode('|', [$employeeNumber, $cardNumber, $token]);
 
     expect($card['qrPdfSrc'])->toStartWith('data:image/png;base64,')
         ->and($card['qrSvg'])->toContain('<svg')
-        ->and($payload)->not->toContain($employee->email ?? 'not-present')
+        ->and($payload)->not->toContain($employeeCard->employee?->email ?? 'not-present')
         ->and($signature)->toBe(hash_hmac('sha256', $payloadWithoutSignature, (string) config('app.key')));
 
     $html = view('hr.employee-id-card', [
@@ -221,32 +222,32 @@ it('uses a PNG data URI QR source for PDF rendering while preserving the signed 
 
 it('keeps preview and print rendering QR as inline SVG', function (): void {
     $user = hrIdCardUserWithPermissions(['hr.employee_id_card.view']);
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $card = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'employee_number' => 'EMP-4204',
     ]));
 
     $this->actingAs($user)
-        ->get(route('employees.id-card.preview', $employee))
+        ->get(route('employees.id-card.preview', $card->employee))
         ->assertSuccessful()
         ->assertSee('<svg', false)
         ->assertDontSee('data:image/png;base64,', false);
 
     $this->actingAs($user)
-        ->get(route('employees.id-card.print', $employee))
+        ->get(route('employees.id-card.print', $card->employee))
         ->assertSuccessful()
         ->assertSee('<svg', false)
         ->assertDontSee('data:image/png;base64,', false);
 });
 
 it('falls back cleanly when PDF QR generation is unavailable', function (): void {
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $employeeCard = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'first_name' => 'Qr',
         'last_name' => 'Fallback',
     ]));
 
     expect(app(EmployeeIdCardService::class)->renderQrPngDataUri(''))->toBeNull();
 
-    $card = app(EmployeeIdCardService::class)->cardViewData($employee, forPdf: true);
+    $card = app(EmployeeIdCardService::class)->cardViewData($employeeCard, forPdf: true);
     $card['qrPdfSrc'] = null;
 
     $html = view('hr.employee-id-card', [
@@ -260,16 +261,16 @@ it('falls back cleanly when PDF QR generation is unavailable', function (): void
 
 it('PDF download builds the card with a PNG QR image source', function (): void {
     $user = hrIdCardUserWithPermissions(['hr.employee_id_card.download']);
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $cardRecord = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'employee_number' => 'EMP-4304',
     ]));
 
-    $card = app(EmployeeIdCardService::class)->cardViewData($employee, forPdf: true);
+    $card = app(EmployeeIdCardService::class)->cardViewData($cardRecord, forPdf: true);
 
     expect($card['qrPdfSrc'])->toStartWith('data:image/png;base64,');
 
     $this->actingAs($user)
-        ->get(route('employees.id-card.download', $employee))
+        ->get(route('employees.id-card.download', $cardRecord->employee))
         ->assertSuccessful()
         ->assertHeader('content-type', 'application/pdf');
 });
@@ -279,17 +280,17 @@ it('keeps preview and print on normal storage URLs for employee photos', functio
     Storage::disk('public')->put('employee-photos/preview.png', hrIdCardPng());
 
     $user = hrIdCardUserWithPermissions(['hr.employee_id_card.view']);
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $card = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'photo_path' => 'employee-photos/preview.png',
     ]));
 
     $this->actingAs($user)
-        ->get(route('employees.id-card.preview', $employee))
+        ->get(route('employees.id-card.preview', $card->employee))
         ->assertSuccessful()
         ->assertSee('/storage/employee-photos/preview.png', false);
 
     $this->actingAs($user)
-        ->get(route('employees.id-card.print', $employee))
+        ->get(route('employees.id-card.print', $card->employee))
         ->assertSuccessful()
         ->assertSee('/storage/employee-photos/preview.png', false);
 });
@@ -298,20 +299,20 @@ it('falls back cleanly when employee photo is missing or unreadable for PDF', fu
     Storage::fake('public');
     Storage::disk('public')->put('employee-photos/not-an-image.txt', 'not an image');
 
-    $missingPhotoEmployee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $missingPhotoCard = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'first_name' => 'Missing',
         'last_name' => 'Photo',
         'photo_path' => 'employee-photos/missing.png',
     ]));
 
-    $invalidPhotoEmployee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $invalidPhotoCard = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'first_name' => 'Invalid',
         'last_name' => 'Photo',
         'photo_path' => 'employee-photos/not-an-image.txt',
     ]));
 
-    $missingCard = app(EmployeeIdCardService::class)->cardViewData($missingPhotoEmployee, forPdf: true);
-    $invalidCard = app(EmployeeIdCardService::class)->cardViewData($invalidPhotoEmployee, forPdf: true);
+    $missingCard = app(EmployeeIdCardService::class)->cardViewData($missingPhotoCard, forPdf: true);
+    $invalidCard = app(EmployeeIdCardService::class)->cardViewData($invalidPhotoCard, forPdf: true);
 
     expect($missingCard['photoSrc'])->toBeNull()
         ->and($invalidCard['photoSrc'])->toBeNull();
@@ -327,14 +328,14 @@ it('falls back cleanly when employee photo is missing or unreadable for PDF', fu
 
 it('renders preview and print from the same PDF-safe card layout', function (): void {
     $user = hrIdCardUserWithPermissions(['hr.employee_id_card.view']);
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+    $card = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
         'employee_number' => 'EMP-4504',
         'first_name' => 'Layout',
         'last_name' => 'Match',
     ]));
 
     $preview = $this->actingAs($user)
-        ->get(route('employees.id-card.preview', $employee))
+        ->get(route('employees.id-card.preview', $card->employee))
         ->assertSuccessful()
         ->assertSee('card-header')
         ->assertSee('identity-table')
@@ -345,7 +346,7 @@ it('renders preview and print from the same PDF-safe card layout', function (): 
         ->getContent();
 
     $print = $this->actingAs($user)
-        ->get(route('employees.id-card.print', $employee))
+        ->get(route('employees.id-card.print', $card->employee))
         ->assertSuccessful()
         ->assertSee('card-header')
         ->assertSee('identity-table')
@@ -365,8 +366,9 @@ it('requires password confirmation before regenerating an ID card', function ():
         'hr.employee_id_card.regenerate',
     ]);
 
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create());
-    $originalToken = $employee->id_card_token;
+    $employee = Employee::factory()->create();
+    $card = app(EmployeeIdCardService::class)->issueCard($employee);
+    $originalToken = $card->token;
 
     Livewire::actingAs($user)
         ->test(ListEmployees::class)
@@ -387,14 +389,15 @@ it('requires password confirmation before regenerating an ID card', function ():
     $this->assertDatabaseHas('audit_trails', [
         'event_type' => 'hr_id_card',
         'action' => 'card_regenerated',
-        'auditable_type' => Employee::class,
-        'auditable_id' => $employee->id,
+        'auditable_type' => EmployeeIdCard::class,
+        'auditable_id' => $employee->fresh()->activeIdCard->id,
     ]);
 });
 
 it('blocks unauthorized users from generating and downloading ID cards', function (): void {
     $user = hrIdCardUserWithPermissions(['hr.employee.view_any']);
-    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create());
+    $employee = Employee::factory()->create();
+    app(EmployeeIdCardService::class)->issueCard($employee);
 
     Livewire::actingAs($user)
         ->test(ListEmployees::class)

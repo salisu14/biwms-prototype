@@ -264,6 +264,8 @@
     @php
         /** @var \App\Models\Employee $employee */
         $employee = $card['employee'];
+        /** @var \App\Models\EmployeeIdCard|null $idCard */
+        $idCard = $card['card'] ?? null;
         /** @var \App\Models\CompanyInformation $company */
         $company = $card['company'];
         $employeeInitials = collect(explode(' ', (string) $employee->full_name))
@@ -325,21 +327,21 @@
                         <tr>
                             <td>
                                 <div class="label">Card No.</div>
-                                <div class="value">{{ $employee->id_card_number }}</div>
+                                <div class="value">{{ $idCard?->card_number ?? $employee->id_card_number }}</div>
                             </td>
                             <td>
                                 <div class="label">Status</div>
-                                <div class="value">{{ str($employee->id_card_status ?? 'active')->headline() }}</div>
+                                <div class="value">{{ str($idCard?->status ?? $employee->id_card_status ?? 'active')->headline() }}</div>
                             </td>
                         </tr>
                         <tr>
                             <td>
                                 <div class="label">Issue Date</div>
-                                <div class="value">{{ $employee->id_card_issue_date?->format('M j, Y') ?? '—' }}</div>
+                                <div class="value">{{ ($idCard?->issue_date ?? $employee->id_card_issue_date)?->format('M j, Y') ?? '—' }}</div>
                             </td>
                             <td>
                                 <div class="label">Expiry Date</div>
-                                <div class="value">{{ $employee->id_card_expiry_date?->format('M j, Y') ?? '—' }}</div>
+                                <div class="value">{{ ($idCard?->expiry_date ?? $employee->id_card_expiry_date)?->format('M j, Y') ?? '—' }}</div>
                             </td>
                         </tr>
                     </table>

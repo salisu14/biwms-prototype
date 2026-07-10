@@ -5,6 +5,11 @@ namespace App\Providers\Filament;
 use App\Filament\Hr\Widgets\HrStatsOverview;
 use App\Filament\Pages\MyAttendance;
 use App\Filament\Resources\AttendanceLedgerEntries\AttendanceLedgerEntryResource;
+use App\Filament\Resources\EmployeeIdCardHistories\EmployeeIdCardHistoryResource;
+use App\Filament\Resources\EmployeeIdCardPrintBatches\EmployeeIdCardPrintBatchResource;
+use App\Filament\Resources\EmployeeIdCards\EmployeeIdCardResource;
+use App\Filament\Resources\EmployeeIdCardTemplates\EmployeeIdCardTemplateResource;
+use App\Filament\Resources\EmployeeIdCardVerificationLogs\EmployeeIdCardVerificationLogResource;
 use App\Filament\Resources\Employees\EmployeeResource;
 use App\Filament\Resources\PayCodes\PayCodeResource;
 use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
@@ -47,7 +52,7 @@ class HrPanelProvider extends PanelProvider
             ->favicon(asset('favicon.ico'))
             ->renderHook(
                 PanelsRenderHook::STYLES_AFTER,
-                fn(): string => <<<'HTML'
+                fn (): string => <<<'HTML'
                     <style>
                         html:not(.dark) .fi-body,
                         html:not(.dark) body {
@@ -63,6 +68,11 @@ class HrPanelProvider extends PanelProvider
             )
             ->resources([
                 EmployeeResource::class,
+                EmployeeIdCardResource::class,
+                EmployeeIdCardTemplateResource::class,
+                EmployeeIdCardPrintBatchResource::class,
+                EmployeeIdCardHistoryResource::class,
+                EmployeeIdCardVerificationLogResource::class,
                 AttendanceLedgerEntryResource::class,
                 PayrollDocumentResource::class,
                 PayrollPeriodResource::class,
@@ -79,6 +89,7 @@ class HrPanelProvider extends PanelProvider
             ])
             ->navigationGroups([
                 'Human Resources',
+                'Employee Identity',
                 'Payroll',
             ])
             ->middleware([

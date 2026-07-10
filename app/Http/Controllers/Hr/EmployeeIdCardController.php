@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Hr;
 
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
+use App\Models\EmployeeIdCard;
 use App\Services\AuditTrailService;
 use App\Services\Hr\EmployeeIdCardService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -22,10 +23,11 @@ class EmployeeIdCardController extends Controller
     public function preview(Employee $employee): Response
     {
         abort_unless(auth()->user()?->can('hr.employee_id_card.view'), 403);
-        abort_unless($this->hasIssuedCard($employee), 404);
+        $card = $this->idCardService->activeCardForEmployee($employee);
+        abort_unless($card, 404);
 
         return response()->view('hr.employee-id-card', [
-            'cards' => [$this->idCardService->cardViewData($employee)],
+            'cards' => [$this->idCardService->cardViewData($card)],
             'print' => false,
         ]);
     }
@@ -33,10 +35,13 @@ class EmployeeIdCardController extends Controller
     public function print(Employee $employee): Response
     {
         abort_unless(auth()->user()?->can('hr.employee_id_card.view'), 403);
-        abort_unless($this->hasIssuedCard($employee), 404);
+        $card = $this->idCardService->activeCardForEmployee($employee);
+        abort_unless($card, 404);
+
+        $this->idCardService->markPrinted($card);
 
         return response()->view('hr.employee-id-card', [
-            'cards' => [$this->idCardService->cardViewData($employee)],
+            'cards' => [$this->idCardService->cardViewData($card)],
             'print' => true,
         ]);
     }
@@ -44,20 +49,22 @@ class EmployeeIdCardController extends Controller
     public function download(Employee $employee)
     {
         abort_unless(auth()->user()?->can('hr.employee_id_card.download'), 403);
-        abort_unless($this->hasIssuedCard($employee), 404);
+        $card = $this->idCardService->activeCardForEmployee($employee);
+        abort_unless($card, 404);
 
-        $cardData = $this->idCardService->cardViewData($employee, forPdf: true);
+        $card = $this->idCardService->markPrinted($card);
+        $cardData = $this->idCardService->cardViewData($card, forPdf: true);
 
         $this->auditTrailService->recordGeneric(
             eventType: 'hr_id_card',
             action: 'card_downloaded',
-            auditable: $cardData['employee'],
+            auditable: $card,
             documentType: 'EMPLOYEE_ID_CARD',
-            documentNo: $cardData['employee']->id_card_number,
-            description: "Downloaded employee ID card for {$cardData['employee']->employee_number}.",
+            documentNo: $card->card_number,
+            description: "Downloaded employee ID card for {$card->employee?->employee_number}.",
             metadata: [
-                'employee_number' => $cardData['employee']->employee_number,
-                'id_card_number' => $cardData['employee']->id_card_number,
+                'employee_number' => $card->employee?->employee_number,
+                'card_number' => $card->card_number,
             ],
         );
 
@@ -92,22 +99,26 @@ class EmployeeIdCardController extends Controller
 
         abort_if($employees->isEmpty(), 404);
 
-        $cards = $this->idCardService->cardViewDataForEmployees($employees, forPdf: true);
+        $issuedCards = $employees->map(fn (Employee $employee) => $this->idCardService->ensureIssued($employee));
+        $batch = $this->idCardService->createPrintBatch($issuedCards);
+        $cards = $this->idCardService->cardViewDataForEmployees($issuedCards, forPdf: true);
 
         foreach ($cards as $card) {
-            /** @var Employee $employee */
-            $employee = $card['employee'];
+            /** @var EmployeeIdCard $idCard */
+            $idCard = $card['card'];
+            $this->idCardService->markPrinted($idCard);
 
             $this->auditTrailService->recordGeneric(
                 eventType: 'hr_id_card',
                 action: 'card_downloaded',
-                auditable: $employee,
+                auditable: $idCard,
                 documentType: 'EMPLOYEE_ID_CARD',
-                documentNo: $employee->id_card_number,
-                description: "Downloaded employee ID card for {$employee->employee_number}.",
+                documentNo: $idCard->card_number,
+                description: "Downloaded employee ID card for {$idCard->employee?->employee_number}.",
                 metadata: [
-                    'employee_number' => $employee->employee_number,
-                    'id_card_number' => $employee->id_card_number,
+                    'employee_number' => $idCard->employee?->employee_number,
+                    'card_number' => $idCard->card_number,
+                    'batch_number' => $batch->batch_number,
                     'bulk' => true,
                 ],
             );
@@ -123,12 +134,9 @@ class EmployeeIdCardController extends Controller
 
     public function verify(string $token): Response
     {
-        $employee = Employee::query()
-            ->with('department')
-            ->where('id_card_token', $token)
-            ->first();
+        $card = $this->idCardService->verifyCardToken($token);
 
-        if ($employee === null || ! $this->idCardService->isVerifiable($employee)) {
+        if ($card === null) {
             return response()->view('hr.employee-card-verify', [
                 'employee' => null,
                 'company' => $this->idCardService->companyInformation(),
@@ -137,23 +145,25 @@ class EmployeeIdCardController extends Controller
             ], 404);
         }
 
+        $employee = $card->employee;
+
         $this->auditTrailService->recordGeneric(
             eventType: 'hr_id_card',
             action: 'card_verified',
-            auditable: $employee,
+            auditable: $card,
             documentType: 'EMPLOYEE_ID_CARD',
-            documentNo: $employee->id_card_number,
+            documentNo: $card->card_number,
             description: "Verified employee ID card for {$employee->employee_number}.",
             metadata: [
                 'employee_number' => $employee->employee_number,
-                'id_card_number' => $employee->id_card_number,
+                'card_number' => $card->card_number,
             ],
         );
 
         return response()->view('hr.employee-card-verify', [
             'employee' => $employee,
             'company' => $this->idCardService->companyInformation(),
-            'photoUrl' => $this->idCardService->cardViewData($employee)['photoUrl'],
+            'photoUrl' => $this->idCardService->cardViewData($card)['photoUrl'],
             'isValid' => true,
         ]);
     }
@@ -164,10 +174,5 @@ class EmployeeIdCardController extends Controller
             ->slug()
             ->append('-id-card.pdf')
             ->toString();
-    }
-
-    private function hasIssuedCard(Employee $employee): bool
-    {
-        return filled($employee->id_card_number) && filled($employee->id_card_token);
     }
 }

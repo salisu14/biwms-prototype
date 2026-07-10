@@ -152,7 +152,7 @@ class EmployeesTable
                             ->color('warning')
                             ->visible(fn (Employee $record): bool => filled($record->id_card_token) && auth()->user()?->can('hr.employee_id_card.regenerate'))
                             ->action(function (Employee $record): void {
-                                app(EmployeeIdCardService::class)->issueCard($record);
+                                app(EmployeeIdCardService::class)->replaceCard($record, 'Regenerated from employee shortcut.');
 
                                 Notification::make()
                                     ->title('Employee ID card regenerated')
