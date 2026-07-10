@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Employees\Tables;
 
+use App\Filament\Resources\EmployeePayslips\EmployeePayslipResource;
 use App\Models\Employee;
 use App\Services\Hr\EmployeeIdCardService;
 use App\Services\HR\EmployeeOnboardingService;
@@ -160,6 +161,11 @@ class EmployeesTable
                                     ->send();
                             })
                     ),
+                    Action::make('viewPayslips')
+                        ->label('View Payslips')
+                        ->icon('heroicon-o-document-currency-dollar')
+                        ->url(fn (): string => EmployeePayslipResource::getUrl())
+                        ->visible(fn (Employee $record): bool => $record->payslips()->exists() && auth()->user()?->can('hr.employee_payslip.view_any')),
                     DeleteAction::make(),
                 ]),
             ])

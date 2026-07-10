@@ -13,6 +13,7 @@ use App\Http\Controllers\FixedAssetLedgerEntriesPrintController;
 use App\Http\Controllers\FixedAssetListPrintController;
 use App\Http\Controllers\GroupSummaryPrintController;
 use App\Http\Controllers\Hr\EmployeeIdCardController;
+use App\Http\Controllers\Hr\EmployeePayslipController;
 use App\Http\Controllers\ItemLedgerSummaryPrintController;
 use App\Http\Controllers\PhysicalInventoryJournalPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
@@ -81,6 +82,15 @@ Route::middleware(['web', 'auth'])->group(function (): void {
         ->name('employees.id-card.download');
     Route::get('/admin/employees/id-cards/download', [EmployeeIdCardController::class, 'bulkDownload'])
         ->name('employees.id-card.bulk-download');
+
+    Route::get('/admin/employee-payslips/{payslipId}/preview', [EmployeePayslipController::class, 'preview'])
+        ->name('employee-payslips.preview');
+    Route::get('/admin/employee-payslips/{payslipId}/print', [EmployeePayslipController::class, 'print'])
+        ->name('employee-payslips.print');
+    Route::get('/admin/employee-payslips/{payslipId}/download', [EmployeePayslipController::class, 'download'])
+        ->name('employee-payslips.download');
+    Route::get('/admin/employee-payslips/download', [EmployeePayslipController::class, 'bulkDownload'])
+        ->name('employee-payslips.bulk-download');
 });
 
 Route::get('/admin/sales-shipments/{shipment}/waybill', [WaybillController::class, 'print'])

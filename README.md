@@ -171,6 +171,7 @@ Before the 3-month client pilot, review the pilot setup guide:
 docs/pilot-setup.md
 docs/pilot-deployment-checklist.md
 docs/pilot-go-live-checklist.md
+docs/hr-employee-payslips.md
 ```
 
 Run the report-only pilot readiness checklist with:

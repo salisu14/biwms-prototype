@@ -235,6 +235,11 @@ class Employee extends Model
             ->latestOfMany();
     }
 
+    public function payslips(): HasMany
+    {
+        return $this->hasMany(EmployeePayslip::class);
+    }
+
     /**
      * The posting group assigned to this employee.
      */

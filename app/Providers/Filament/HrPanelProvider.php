@@ -10,6 +10,8 @@ use App\Filament\Resources\EmployeeIdCardPrintBatches\EmployeeIdCardPrintBatchRe
 use App\Filament\Resources\EmployeeIdCards\EmployeeIdCardResource;
 use App\Filament\Resources\EmployeeIdCardTemplates\EmployeeIdCardTemplateResource;
 use App\Filament\Resources\EmployeeIdCardVerificationLogs\EmployeeIdCardVerificationLogResource;
+use App\Filament\Resources\EmployeePayslipHistories\EmployeePayslipHistoryResource;
+use App\Filament\Resources\EmployeePayslips\EmployeePayslipResource;
 use App\Filament\Resources\Employees\EmployeeResource;
 use App\Filament\Resources\PayCodes\PayCodeResource;
 use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
@@ -75,6 +77,8 @@ class HrPanelProvider extends PanelProvider
                 EmployeeIdCardVerificationLogResource::class,
                 AttendanceLedgerEntryResource::class,
                 PayrollDocumentResource::class,
+                EmployeePayslipResource::class,
+                EmployeePayslipHistoryResource::class,
                 PayrollPeriodResource::class,
                 PayrollPostingGroupResource::class,
                 PayCodeResource::class,
