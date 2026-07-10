@@ -15,7 +15,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            CategorySeeder::class,
+            //            CategorySeeder::class,
             LocationSeeder::class,
             UnitOfMeasureSeeder::class,
             ChartOfAccountSeeder::class,
@@ -30,9 +30,9 @@ class DatabaseSeeder extends Seeder
             GeneralPostingSetupSeeder::class,
             VendorPostingGroupSeeder::class,
             CustomerPostingGroupSeeder::class,
-            CustomerSeeder::class,
+            //            CustomerSeeder::class,
             ItemSeeder::class,
-            VendorSeeder::class,
+            //            VendorSeeder::class,
             NumberSeriesSeeder::class,
             PayrollPostingGroupSeeder::class,
             PayrollSetupSeeder::class,
@@ -45,10 +45,10 @@ class DatabaseSeeder extends Seeder
             FAPostingGroupSeeder::class,
             DepreciationBookSeeder::class,
             FAClassSeeder::class,
-            FixedAssetSampleSeeder::class,
-            BalanceSheetAccountScheduleSeeder::class,
-            ProfitAndLossAccountScheduleSeeder::class,
-            CashFlowStatementAccountScheduleSeeder::class,
+            //            FixedAssetSampleSeeder::class,
+            //            BalanceSheetAccountScheduleSeeder::class,
+            //            ProfitAndLossAccountScheduleSeeder::class,
+            //            CashFlowStatementAccountScheduleSeeder::class,
         ]);
     }
 }
