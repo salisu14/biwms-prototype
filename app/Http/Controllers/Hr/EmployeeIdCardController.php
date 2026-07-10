@@ -46,7 +46,7 @@ class EmployeeIdCardController extends Controller
         abort_unless(auth()->user()?->can('hr.employee_id_card.download'), 403);
         abort_unless($this->hasIssuedCard($employee), 404);
 
-        $cardData = $this->idCardService->cardViewData($employee);
+        $cardData = $this->idCardService->cardViewData($employee, forPdf: true);
 
         $this->auditTrailService->recordGeneric(
             eventType: 'hr_id_card',
@@ -92,7 +92,7 @@ class EmployeeIdCardController extends Controller
 
         abort_if($employees->isEmpty(), 404);
 
-        $cards = $this->idCardService->cardViewDataForEmployees($employees);
+        $cards = $this->idCardService->cardViewDataForEmployees($employees, forPdf: true);
 
         foreach ($cards as $card) {
             /** @var Employee $employee */

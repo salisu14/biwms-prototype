@@ -11,6 +11,7 @@ use App\Services\Hr\EmployeeIdCardService;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Database\Seeders\PermissionsTableSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -50,6 +51,11 @@ function hrIdCardUserWithPermissions(array $permissions): User
     $user->assignRole($role);
 
     return $user;
+}
+
+function hrIdCardPng(): string
+{
+    return base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=') ?: '';
 }
 
 it('issues an employee ID card number and token', function (): void {
@@ -163,6 +169,112 @@ it('downloads a PDF for authorized users', function (): void {
         'auditable_type' => Employee::class,
         'auditable_id' => $employee->id,
     ]);
+});
+
+it('embeds employee photo and company logo as data URIs for PDF rendering', function (): void {
+    Storage::fake('public');
+
+    Storage::disk('public')->put('employee-photos/employee.png', hrIdCardPng());
+    Storage::disk('public')->put('company/logos/logo.png', hrIdCardPng());
+
+    app(EmployeeIdCardService::class)
+        ->companyInformation()
+        ->forceFill(['company_name' => 'BIFLI Pilot Company', 'logo_path' => 'company/logos/logo.png'])
+        ->save();
+
+    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'photo_path' => 'employee-photos/employee.png',
+    ]));
+
+    $card = app(EmployeeIdCardService::class)->cardViewData($employee, forPdf: true);
+
+    expect($card['photoSrc'])->toStartWith('data:image/png;base64,')
+        ->and($card['logoSrc'])->toStartWith('data:image/png;base64,');
+});
+
+it('keeps preview and print on normal storage URLs for employee photos', function (): void {
+    Storage::fake('public');
+    Storage::disk('public')->put('employee-photos/preview.png', hrIdCardPng());
+
+    $user = hrIdCardUserWithPermissions(['hr.employee_id_card.view']);
+    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'photo_path' => 'employee-photos/preview.png',
+    ]));
+
+    $this->actingAs($user)
+        ->get(route('employees.id-card.preview', $employee))
+        ->assertSuccessful()
+        ->assertSee('/storage/employee-photos/preview.png', false);
+
+    $this->actingAs($user)
+        ->get(route('employees.id-card.print', $employee))
+        ->assertSuccessful()
+        ->assertSee('/storage/employee-photos/preview.png', false);
+});
+
+it('falls back cleanly when employee photo is missing or unreadable for PDF', function (): void {
+    Storage::fake('public');
+    Storage::disk('public')->put('employee-photos/not-an-image.txt', 'not an image');
+
+    $missingPhotoEmployee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'first_name' => 'Missing',
+        'last_name' => 'Photo',
+        'photo_path' => 'employee-photos/missing.png',
+    ]));
+
+    $invalidPhotoEmployee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'first_name' => 'Invalid',
+        'last_name' => 'Photo',
+        'photo_path' => 'employee-photos/not-an-image.txt',
+    ]));
+
+    $missingCard = app(EmployeeIdCardService::class)->cardViewData($missingPhotoEmployee, forPdf: true);
+    $invalidCard = app(EmployeeIdCardService::class)->cardViewData($invalidPhotoEmployee, forPdf: true);
+
+    expect($missingCard['photoSrc'])->toBeNull()
+        ->and($invalidCard['photoSrc'])->toBeNull();
+
+    $html = view('hr.employee-id-card', [
+        'cards' => [$missingCard, $invalidCard],
+        'print' => false,
+    ])->render();
+
+    expect($html)->toContain('MP')
+        ->and($html)->toContain('IP');
+});
+
+it('renders preview and print from the same PDF-safe card layout', function (): void {
+    $user = hrIdCardUserWithPermissions(['hr.employee_id_card.view']);
+    $employee = app(EmployeeIdCardService::class)->issueCard(Employee::factory()->create([
+        'employee_number' => 'EMP-4504',
+        'first_name' => 'Layout',
+        'last_name' => 'Match',
+    ]));
+
+    $preview = $this->actingAs($user)
+        ->get(route('employees.id-card.preview', $employee))
+        ->assertSuccessful()
+        ->assertSee('card-header')
+        ->assertSee('identity-table')
+        ->assertSee('details-table')
+        ->assertSee('footer-table')
+        ->assertDontSee('display: flex', false)
+        ->assertDontSee('display: grid', false)
+        ->getContent();
+
+    $print = $this->actingAs($user)
+        ->get(route('employees.id-card.print', $employee))
+        ->assertSuccessful()
+        ->assertSee('card-header')
+        ->assertSee('identity-table')
+        ->assertSee('details-table')
+        ->assertSee('footer-table')
+        ->assertDontSee('display: flex', false)
+        ->assertDontSee('display: grid', false)
+        ->getContent();
+
+    expect($preview)->toContain('Layout Match')
+        ->and($print)->toContain('Layout Match');
 });
 
 it('requires password confirmation before regenerating an ID card', function (): void {

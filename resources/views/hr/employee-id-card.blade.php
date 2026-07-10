@@ -14,20 +14,18 @@
         }
 
         body {
-            margin: 0;
             background: #eef2f7;
             color: #0f172a;
             font-family: DejaVu Sans, Arial, sans-serif;
             font-size: 13px;
+            margin: 0;
         }
 
         .sheet {
-            align-items: center;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
             page-break-after: always;
-            padding: 24px;
+            padding: 24px 0;
+            text-align: center;
+            width: 100%;
         }
 
         .sheet:last-child {
@@ -39,38 +37,47 @@
             border: 1px solid #d7dee9;
             border-radius: 18px;
             box-shadow: 0 18px 45px rgba(15, 23, 42, 0.15);
+            display: inline-block;
             overflow: hidden;
+            text-align: left;
             width: 430px;
         }
 
-        .header {
-            background: linear-gradient(135deg, #0f172a, #334155);
+        .card-header {
+            background: #172033;
             color: #ffffff;
             padding: 20px 22px;
         }
 
-        .company {
-            align-items: center;
-            display: flex;
-            gap: 14px;
+        .company-table,
+        .identity-table,
+        .details-table,
+        .footer-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .company-logo-cell {
+            vertical-align: middle;
+            width: 72px;
         }
 
         .logo {
-            align-items: center;
-            background: rgba(255, 255, 255, 0.14);
-            border: 1px solid rgba(255, 255, 255, 0.28);
+            background: #334155;
+            border: 1px solid #64748b;
             border-radius: 12px;
-            display: flex;
+            color: #ffffff;
             height: 58px;
-            justify-content: center;
+            line-height: 58px;
             overflow: hidden;
+            text-align: center;
             width: 58px;
         }
 
         .logo img {
-            max-height: 100%;
-            max-width: 100%;
-            object-fit: contain;
+            max-height: 58px;
+            max-width: 58px;
+            vertical-align: middle;
         }
 
         .logo-placeholder {
@@ -92,39 +99,41 @@
             text-transform: uppercase;
         }
 
-        .body {
+        .card-body {
             padding: 22px;
         }
 
-        .identity {
-            align-items: center;
-            display: grid;
-            gap: 18px;
-            grid-template-columns: 120px 1fr;
+        .photo-cell {
+            padding-right: 18px;
+            vertical-align: top;
+            width: 138px;
         }
 
         .photo {
-            align-items: center;
             background: #f1f5f9;
             border: 1px solid #d7dee9;
             border-radius: 16px;
-            display: flex;
+            color: #64748b;
             height: 142px;
-            justify-content: center;
+            line-height: 142px;
             overflow: hidden;
+            text-align: center;
             width: 120px;
         }
 
         .photo img {
-            height: 100%;
+            height: 142px;
             object-fit: cover;
-            width: 100%;
+            width: 120px;
         }
 
         .photo-placeholder {
-            color: #64748b;
             font-size: 32px;
             font-weight: 800;
+        }
+
+        .identity-cell {
+            vertical-align: middle;
         }
 
         .employee-name {
@@ -154,11 +163,14 @@
 
         .details {
             border-top: 1px solid #e2e8f0;
-            display: grid;
-            gap: 12px;
-            grid-template-columns: 1fr 1fr;
             margin-top: 20px;
             padding-top: 18px;
+        }
+
+        .details-table td {
+            padding-bottom: 12px;
+            vertical-align: top;
+            width: 50%;
         }
 
         .label {
@@ -176,13 +188,19 @@
         }
 
         .footer {
-            align-items: center;
             border-top: 1px solid #e2e8f0;
-            display: grid;
-            gap: 18px;
-            grid-template-columns: 1fr 126px;
-            margin-top: 20px;
+            margin-top: 8px;
             padding-top: 18px;
+        }
+
+        .footer-info-cell {
+            padding-right: 18px;
+            vertical-align: middle;
+        }
+
+        .footer-qr-cell {
+            vertical-align: middle;
+            width: 126px;
         }
 
         .authorized {
@@ -197,21 +215,21 @@
             font-size: 10px;
             line-height: 1.45;
             overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .qr {
-            align-items: center;
             background: #ffffff;
             border: 1px solid #d7dee9;
             border-radius: 12px;
-            display: flex;
-            justify-content: center;
             padding: 8px;
+            text-align: center;
         }
 
         .qr svg {
-            display: block;
+            display: inline-block;
             height: 108px;
+            vertical-align: middle;
             width: 108px;
         }
 
@@ -221,12 +239,7 @@
             }
 
             .sheet {
-                min-height: auto;
                 padding: 0;
-            }
-
-            .card {
-                box-shadow: none;
             }
         }
     </style>
@@ -243,72 +256,93 @@
             ->map(fn (string $part): string => mb_substr($part, 0, 1))
             ->take(2)
             ->implode('');
+        $logoSrc = array_key_exists('logoSrc', $card) ? $card['logoSrc'] : ($card['logoUrl'] ?? null);
+        $photoSrc = array_key_exists('photoSrc', $card) ? $card['photoSrc'] : ($card['photoUrl'] ?? null);
     @endphp
     <main class="sheet">
         <section class="card" aria-label="Employee ID card">
-            <header class="header">
-                <div class="company">
-                    <div class="logo">
-                        @if ($card['logoUrl'])
-                            <img src="{{ $card['logoUrl'] }}" alt="{{ $company->company_name }} logo">
-                        @else
-                            <span class="logo-placeholder">{{ mb_substr($company->company_name ?? config('app.name', 'BIWMS'), 0, 1) }}</span>
-                        @endif
-                    </div>
-                    <div>
-                        <div class="company-name">{{ $company->company_name ?? config('app.name', 'BIWMS') }}</div>
-                        <div class="subtitle">Employee Identity Card</div>
-                    </div>
-                </div>
+            <header class="card-header">
+                <table class="company-table" role="presentation">
+                    <tr>
+                        <td class="company-logo-cell">
+                            <div class="logo">
+                                @if ($logoSrc)
+                                    <img src="{{ $logoSrc }}" alt="{{ $company->company_name }} logo">
+                                @else
+                                    <span class="logo-placeholder">{{ mb_substr($company->company_name ?? config('app.name', 'BIWMS'), 0, 1) }}</span>
+                                @endif
+                            </div>
+                        </td>
+                        <td>
+                            <div class="company-name">{{ $company->company_name ?? config('app.name', 'BIWMS') }}</div>
+                            <div class="subtitle">Employee Identity Card</div>
+                        </td>
+                    </tr>
+                </table>
             </header>
 
-            <div class="body">
-                <div class="identity">
-                    <div class="photo">
-                        @if ($card['photoUrl'])
-                            <img src="{{ $card['photoUrl'] }}" alt="{{ $employee->full_name }} photo">
-                        @else
-                            <span class="photo-placeholder">{{ $employeeInitials ?: 'ID' }}</span>
-                        @endif
-                    </div>
-
-                    <div>
-                        <div class="employee-name">{{ $employee->full_name }}</div>
-                        <div class="employee-meta">
-                            <div>{{ $employee->job_title ?: 'Staff Member' }}</div>
-                            <div>{{ $employee->department?->name ?? $employee->department_code ?? 'No department assigned' }}</div>
-                        </div>
-                        <div class="number-pill">{{ $employee->employee_number }}</div>
-                    </div>
-                </div>
+            <div class="card-body">
+                <table class="identity-table" role="presentation">
+                    <tr>
+                        <td class="photo-cell">
+                            <div class="photo">
+                                @if ($photoSrc)
+                                    <img src="{{ $photoSrc }}" alt="{{ $employee->full_name }} photo">
+                                @else
+                                    <span class="photo-placeholder">{{ $employeeInitials ?: 'ID' }}</span>
+                                @endif
+                            </div>
+                        </td>
+                        <td class="identity-cell">
+                            <div class="employee-name">{{ $employee->full_name }}</div>
+                            <div class="employee-meta">
+                                <div>{{ $employee->job_title ?: 'Staff Member' }}</div>
+                                <div>{{ $employee->department?->name ?? $employee->department_code ?? 'No department assigned' }}</div>
+                            </div>
+                            <div class="number-pill">{{ $employee->employee_number }}</div>
+                        </td>
+                    </tr>
+                </table>
 
                 <div class="details">
-                    <div>
-                        <div class="label">Card No.</div>
-                        <div class="value">{{ $employee->id_card_number }}</div>
-                    </div>
-                    <div>
-                        <div class="label">Status</div>
-                        <div class="value">{{ str($employee->id_card_status ?? 'active')->headline() }}</div>
-                    </div>
-                    <div>
-                        <div class="label">Issue Date</div>
-                        <div class="value">{{ $employee->id_card_issue_date?->format('M j, Y') ?? '—' }}</div>
-                    </div>
-                    <div>
-                        <div class="label">Expiry Date</div>
-                        <div class="value">{{ $employee->id_card_expiry_date?->format('M j, Y') ?? '—' }}</div>
-                    </div>
+                    <table class="details-table" role="presentation">
+                        <tr>
+                            <td>
+                                <div class="label">Card No.</div>
+                                <div class="value">{{ $employee->id_card_number }}</div>
+                            </td>
+                            <td>
+                                <div class="label">Status</div>
+                                <div class="value">{{ str($employee->id_card_status ?? 'active')->headline() }}</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="label">Issue Date</div>
+                                <div class="value">{{ $employee->id_card_issue_date?->format('M j, Y') ?? '—' }}</div>
+                            </td>
+                            <td>
+                                <div class="label">Expiry Date</div>
+                                <div class="value">{{ $employee->id_card_expiry_date?->format('M j, Y') ?? '—' }}</div>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
 
                 <div class="footer">
-                    <div>
-                        <div class="authorized">Authorized Employee</div>
-                        <div class="verify-url">{{ $card['verificationUrl'] }}</div>
-                    </div>
-                    <div class="qr" aria-label="Signed employee ID verification QR code">
-                        {!! $card['qrSvg'] !!}
-                    </div>
+                    <table class="footer-table" role="presentation">
+                        <tr>
+                            <td class="footer-info-cell">
+                                <div class="authorized">Authorized Employee</div>
+                                <div class="verify-url">{{ $card['verificationUrl'] }}</div>
+                            </td>
+                            <td class="footer-qr-cell">
+                                <div class="qr" aria-label="Signed employee ID verification QR code">
+                                    {!! $card['qrSvg'] !!}
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
             </div>
         </section>

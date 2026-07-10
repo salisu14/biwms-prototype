@@ -13,6 +13,7 @@ use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -97,18 +98,22 @@ class EmployeeIdCardService
     /**
      * @return array<string, mixed>
      */
-    public function cardViewData(Employee $employee): array
+    public function cardViewData(Employee $employee, bool $forPdf = false): array
     {
         $issuedEmployee = $employee->loadMissing('department');
         $company = $this->companyInformation();
+        $photoUrl = $this->publicStorageUrl($issuedEmployee->photo_path);
+        $logoUrl = $company->logo_url;
 
         return [
             'employee' => $issuedEmployee,
             'company' => $company,
             'qrSvg' => $this->qrSvg($issuedEmployee),
             'verificationUrl' => route('employee-card.verify', ['token' => $issuedEmployee->id_card_token]),
-            'photoUrl' => $this->publicStorageUrl($issuedEmployee->photo_path),
-            'logoUrl' => $company->logo_url,
+            'photoUrl' => $photoUrl,
+            'logoUrl' => $logoUrl,
+            'photoSrc' => $forPdf ? $this->resolveEmployeePhotoForPdf($issuedEmployee) : $photoUrl,
+            'logoSrc' => $forPdf ? $this->resolveCompanyLogoForPdf($company) : $logoUrl,
         ];
     }
 
@@ -116,15 +121,46 @@ class EmployeeIdCardService
      * @param  iterable<Employee>  $employees
      * @return array<int, array<string, mixed>>
      */
-    public function cardViewDataForEmployees(iterable $employees): array
+    public function cardViewDataForEmployees(iterable $employees, bool $forPdf = false): array
     {
         $cards = [];
 
         foreach ($employees as $employee) {
-            $cards[] = $this->cardViewData($this->ensureIssued($employee));
+            $cards[] = $this->cardViewData($this->ensureIssued($employee), $forPdf);
         }
 
         return $cards;
+    }
+
+    public function resolveEmployeePhotoForPdf(Employee $employee): ?string
+    {
+        return $this->imageDataUriFromStoragePath($employee->photo_path, ['public']);
+    }
+
+    public function resolveCompanyLogoForPdf(?CompanyInformation $company = null): ?string
+    {
+        $company ??= $this->companyInformation();
+
+        $logoPaths = collect([
+            $company->logo_path,
+            CompanyInformation::query()
+                ->whereNull('business_id')
+                ->whereNotNull('logo_path')
+                ->value('logo_path'),
+            CompanyInformation::query()
+                ->whereNotNull('logo_path')
+                ->value('logo_path'),
+        ])->filter();
+
+        foreach ($logoPaths as $logoPath) {
+            $dataUri = $this->imageDataUriFromStoragePath((string) $logoPath, ['public']);
+
+            if ($dataUri !== null) {
+                return $dataUri;
+            }
+        }
+
+        return null;
     }
 
     public function isVerifiable(Employee $employee): bool
@@ -188,6 +224,106 @@ class EmployeeIdCardService
             return $path;
         }
 
-        return Storage::url($path);
+        $normalizedPath = $this->normalizeStoragePath($path);
+
+        return $normalizedPath !== null ? Storage::disk('public')->url($normalizedPath) : null;
+    }
+
+    /**
+     * @param  array<int, string>  $preferredDisks
+     */
+    private function imageDataUriFromStoragePath(?string $path, array $preferredDisks = []): ?string
+    {
+        $normalizedPath = $this->normalizeStoragePath($path);
+        if ($normalizedPath === null) {
+            return null;
+        }
+
+        foreach ($this->storageDisks($preferredDisks) as $disk) {
+            $absolutePath = $this->safeAbsolutePathForDisk($disk, $normalizedPath);
+            if ($absolutePath === null || ! is_file($absolutePath) || ! is_readable($absolutePath)) {
+                continue;
+            }
+
+            $mimeType = File::mimeType($absolutePath);
+            if (! in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+                continue;
+            }
+
+            $contents = file_get_contents($absolutePath);
+            if ($contents === false) {
+                continue;
+            }
+
+            return 'data:'.$mimeType.';base64,'.base64_encode($contents);
+        }
+
+        return null;
+    }
+
+    private function normalizeStoragePath(?string $path): ?string
+    {
+        if (blank($path)) {
+            return null;
+        }
+
+        $path = str_replace('\\', '/', trim((string) $path));
+
+        if ($path === '' || Str::startsWith($path, ['http://', 'https://', '/', '../', './'])) {
+            return null;
+        }
+
+        $path = preg_replace('#^storage/#', '', $path) ?? $path;
+        $path = preg_replace('#^public/#', '', $path) ?? $path;
+        $path = ltrim($path, '/');
+
+        if ($path === '' || str_contains($path, '..')) {
+            return null;
+        }
+
+        return $path;
+    }
+
+    /**
+     * @param  array<int, string>  $preferredDisks
+     * @return array<int, string>
+     */
+    private function storageDisks(array $preferredDisks): array
+    {
+        return collect([
+            ...$preferredDisks,
+            config('filesystems.default'),
+            'public',
+        ])
+            ->filter(fn (mixed $disk): bool => is_string($disk) && $disk !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function safeAbsolutePathForDisk(string $disk, string $path): ?string
+    {
+        $diskConfig = config("filesystems.disks.{$disk}");
+        if (($diskConfig['driver'] ?? null) !== 'local') {
+            return null;
+        }
+
+        try {
+            if (! Storage::disk($disk)->exists($path)) {
+                return null;
+            }
+
+            $root = realpath(Storage::disk($disk)->path(''));
+            $absolutePath = realpath(Storage::disk($disk)->path($path));
+            $rootPrefix = $root !== false ? rtrim($root, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR : false;
+
+            if ($rootPrefix === false || $absolutePath === false || ! Str::startsWith($absolutePath, $rootPrefix)) {
+                return null;
+            }
+
+            return $absolutePath;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
