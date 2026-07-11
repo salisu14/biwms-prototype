@@ -20,6 +20,7 @@ class PayrollLine extends Model
         'posted_to_g_l',
         'posted_at',
         'gl_entry_id',
+        'attendance_payroll_review_batch_line_id',
     ];
 
     protected $casts = [
@@ -49,5 +50,10 @@ class PayrollLine extends Model
     public function glEntry(): BelongsTo
     {
         return $this->belongsTo(GlEntry::class, 'gl_entry_id');
+    }
+
+    public function attendancePayrollReviewBatchLine(): BelongsTo
+    {
+        return $this->belongsTo(AttendancePayrollReviewBatchLine::class);
     }
 }

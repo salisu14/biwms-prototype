@@ -99,7 +99,10 @@ class AttendancePayrollPostingService
                 ],
             );
 
-            return compact('postedLines', 'skippedLines');
+            return [
+                'posted_lines' => $postedLines,
+                'skipped_lines' => $skippedLines,
+            ];
         });
     }
 
@@ -192,8 +195,8 @@ class AttendancePayrollPostingService
             return PayCodeType::EARNING->getLabel();
         }
 
-        if ($rule->impact_type === AttendancePayrollRule::IMPACT_INFO) {
-            return PayCodeType::INFORMATIONAL->getLabel() ?? 'Benefit';
+        if ($rule->impact_type === AttendancePayrollRule::IMPACT_INFORMATIONAL) {
+            return PayCodeType::BENEFIT->getLabel() ?? 'Benefit';
         }
 
         return PayCodeType::DEDUCTION->getLabel();

@@ -28,6 +28,7 @@ class AttendanceReviewPeriodService
 
             $period = AttendanceReviewPeriod::query()->create([
                 ...$data,
+                'name' => $data['name'] ?? $data['code'],
                 'status' => $data['status'] ?? AttendanceReviewPeriod::STATUS_OPEN,
                 'opened_by' => $user->id,
                 'opened_at' => now(),

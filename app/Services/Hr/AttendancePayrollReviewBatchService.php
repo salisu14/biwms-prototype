@@ -12,7 +12,6 @@ use App\Models\AttendanceReviewPeriod;
 use App\Models\PayrollPeriod;
 use App\Models\User;
 use App\Services\AuditTrailService;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -113,7 +112,7 @@ class AttendancePayrollReviewBatchService
                 'status' => AttendancePayrollReviewBatch::STATUS_APPROVED,
                 'reviewed_by' => $user->id,
                 'reviewed_at' => now(),
-                'total_approved_amount' => (float) $locked->lines()->sum(DB::raw('COALESCE(approved_amount, suggested_amount, 0)')),
+                'total_approved_amount' => (float) $locked->lines()->get()->sum(fn (AttendancePayrollReviewBatchLine $line): float => (float) ($line->approved_amount ?? $line->suggested_amount ?? 0)),
             ])->save();
 
             $this->auditTrailService->recordGeneric('attendance_payroll', 'batch_approved', $locked, userId: $user->id);
@@ -244,8 +243,8 @@ class AttendancePayrollReviewBatchService
             ->where('attendance_issue_type', $item->issue_type)
             ->whereDate('effective_from', '<=', $item->attendanceDay?->attendance_date ?? now())
             ->where(function ($query) use ($item): void {
-                $query->whereNull('effective_until')
-                    ->orWhereDate('effective_until', '>=', $item->attendanceDay?->attendance_date ?? now());
+                $query->whereNull('effective_to')
+                    ->orWhereDate('effective_to', '>=', $item->attendanceDay?->attendance_date ?? now());
             })
             ->orderByDesc('effective_from')
             ->first();

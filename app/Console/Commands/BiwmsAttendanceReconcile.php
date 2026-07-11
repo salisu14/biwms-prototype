@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Models\AttendancePayrollReviewBatch;
+use App\Models\AttendancePayrollReviewBatchLine;
+use App\Models\AttendanceReviewItem;
+use App\Models\AttendanceReviewPeriod;
 use App\Models\EmployeeAttendanceDay;
 use App\Models\EmployeeAttendanceEvent;
 use App\Models\EmployeeIdCardVerificationLog;
 use App\Models\EmployeeWorkScheduleAssignment;
 use App\Models\LeaveRequest;
 use App\Models\OvertimeApproval;
+use App\Models\PayrollLine;
 use Carbon\CarbonPeriod;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -75,6 +80,14 @@ class BiwmsAttendanceReconcile extends Command
             ...$this->invalidCardFindings(),
             ...$this->approvedOvertimeMismatchFindings(),
             ...$this->payrollReviewFlagMismatchFindings(),
+            ...$this->lockedDayDriftFindings(),
+            ...$this->postLockEventFindings(),
+            ...$this->unresolvedBlockingExceptionFindings(),
+            ...$this->missingPayrollBatchFindings(),
+            ...$this->duplicateActivePayrollBatchFindings(),
+            ...$this->approvedOvertimeOmittedFromBatchFindings(),
+            ...$this->unreviewedUnpaidAbsenceBatchFindings(),
+            ...$this->postedBatchLineWithoutPayrollLineFindings(),
         ];
     }
 
@@ -285,5 +298,201 @@ class BiwmsAttendanceReconcile extends Command
                 ['attendance_day_id' => $day->id],
             ))
             ->all();
+    }
+
+    private function lockedDayDriftFindings(): array
+    {
+        if (! Schema::hasColumn('employee_attendance_days', 'locked_snapshot_hash')) {
+            return [];
+        }
+
+        return EmployeeAttendanceDay::query()
+            ->with('employee')
+            ->whereNotNull('locked_by_review_period_id')
+            ->whereNotNull('locked_snapshot_hash')
+            ->limit(500)
+            ->get()
+            ->filter(fn (EmployeeAttendanceDay $day): bool => $day->locked_snapshot_hash !== $this->snapshotHash($day))
+            ->map(fn (EmployeeAttendanceDay $day): array => $this->finding(
+                'locked_attendance_day_changed',
+                'critical',
+                "Locked attendance summary for {$day->employee?->employee_number} on {$day->attendance_date?->toDateString()} no longer matches its lock snapshot.",
+                'Do not overwrite locked summaries silently. Reopen the period, review the exception, and regenerate payroll review data if needed.',
+                ['attendance_day_id' => $day->id, 'review_period_id' => $day->locked_by_review_period_id],
+            ))
+            ->values()
+            ->all();
+    }
+
+    private function postLockEventFindings(): array
+    {
+        if (! Schema::hasColumn('employee_attendance_days', 'locked_at')) {
+            return [];
+        }
+
+        return EmployeeAttendanceDay::query()
+            ->with('employee')
+            ->whereNotNull('locked_at')
+            ->limit(500)
+            ->get()
+            ->filter(function (EmployeeAttendanceDay $day): bool {
+                $latestEventAt = EmployeeAttendanceEvent::query()
+                    ->where('employee_id', $day->employee_id)
+                    ->whereDate('attendance_date', $day->attendance_date)
+                    ->max('created_at');
+
+                return $latestEventAt !== null && Carbon::parse($latestEventAt)->gt($day->locked_at);
+            })
+            ->map(fn (EmployeeAttendanceDay $day): array => $this->finding(
+                'event_after_attendance_lock',
+                'critical',
+                "Attendance event was recorded after lock for {$day->employee?->employee_number} on {$day->attendance_date?->toDateString()}.",
+                'Create or review the post-lock attendance exception. Do not recalculate the locked summary without reopening the period.',
+                ['attendance_day_id' => $day->id, 'review_period_id' => $day->locked_by_review_period_id],
+            ))
+            ->values()
+            ->all();
+    }
+
+    private function unresolvedBlockingExceptionFindings(): array
+    {
+        if (! Schema::hasTable('attendance_review_items')) {
+            return [];
+        }
+
+        return AttendanceReviewItem::query()
+            ->with('period')
+            ->where('severity', 'critical')
+            ->whereNotIn('review_status', [AttendanceReviewItem::STATUS_RESOLVED, AttendanceReviewItem::STATUS_WAIVED])
+            ->whereHas('period', fn ($query) => $query->whereIn('status', [AttendanceReviewPeriod::STATUS_APPROVED, AttendanceReviewPeriod::STATUS_LOCKED, AttendanceReviewPeriod::STATUS_EXPORTED]))
+            ->limit(500)
+            ->get()
+            ->map(fn (AttendanceReviewItem $item): array => $this->finding(
+                'unresolved_exception_in_approved_period',
+                'critical',
+                "Approved/locked period {$item->period?->code} has unresolved critical exception {$item->issue_type}.",
+                'Reopen the period or resolve/waive the exception before payroll review/export.',
+                ['review_item_id' => $item->id, 'review_period_id' => $item->attendance_review_period_id],
+            ))
+            ->all();
+    }
+
+    private function missingPayrollBatchFindings(): array
+    {
+        if (! Schema::hasTable('attendance_payroll_review_batches')) {
+            return [];
+        }
+
+        return AttendanceReviewPeriod::query()
+            ->whereIn('status', [AttendanceReviewPeriod::STATUS_APPROVED, AttendanceReviewPeriod::STATUS_LOCKED, AttendanceReviewPeriod::STATUS_EXPORTED])
+            ->whereDoesntHave('payrollBatches', fn ($query) => $query->whereNotIn('status', [AttendancePayrollReviewBatch::STATUS_CANCELLED, AttendancePayrollReviewBatch::STATUS_REVERSED]))
+            ->limit(500)
+            ->get()
+            ->map(fn (AttendanceReviewPeriod $period): array => $this->finding(
+                'approved_period_without_payroll_batch',
+                'warning',
+                "Attendance review period {$period->code} is {$period->status} but has no active payroll review batch.",
+                'Generate a payroll review batch when the approved attendance period should feed payroll adjustments.',
+                ['review_period_id' => $period->id],
+            ))
+            ->all();
+    }
+
+    private function duplicateActivePayrollBatchFindings(): array
+    {
+        if (! Schema::hasTable('attendance_payroll_review_batches')) {
+            return [];
+        }
+
+        return AttendancePayrollReviewBatch::query()
+            ->selectRaw('attendance_review_period_id, payroll_period_id, COUNT(*) as batch_count')
+            ->whereNotIn('status', [AttendancePayrollReviewBatch::STATUS_CANCELLED, AttendancePayrollReviewBatch::STATUS_REVERSED])
+            ->groupBy('attendance_review_period_id', 'payroll_period_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->get()
+            ->map(fn ($row): array => $this->finding(
+                'duplicate_active_payroll_batch',
+                'critical',
+                "Attendance review period {$row->attendance_review_period_id} has duplicate active payroll batches.",
+                'Cancel the duplicate batch and keep only the reviewed batch before payroll posting.',
+                ['review_period_id' => $row->attendance_review_period_id, 'payroll_period_id' => $row->payroll_period_id],
+            ))
+            ->all();
+    }
+
+    private function approvedOvertimeOmittedFromBatchFindings(): array
+    {
+        if (! Schema::hasTable('attendance_payroll_review_batch_lines')) {
+            return [];
+        }
+
+        return AttendanceReviewItem::query()
+            ->where('issue_type', AttendanceReviewItem::ISSUE_APPROVED_OVERTIME)
+            ->whereIn('review_status', [AttendanceReviewItem::STATUS_RESOLVED, AttendanceReviewItem::STATUS_WAIVED])
+            ->limit(500)
+            ->get()
+            ->filter(fn (AttendanceReviewItem $item): bool => ! AttendancePayrollReviewBatchLine::query()
+                ->where('attendance_review_item_id', $item->id)
+                ->exists())
+            ->map(fn (AttendanceReviewItem $item): array => $this->finding(
+                'approved_overtime_missing_from_batch',
+                'warning',
+                "Resolved approved overtime review item {$item->id} is not present in a payroll review batch.",
+                'Regenerate the attendance payroll review batch for the period.',
+                ['review_item_id' => $item->id],
+            ))
+            ->all();
+    }
+
+    private function unreviewedUnpaidAbsenceBatchFindings(): array
+    {
+        if (! Schema::hasTable('attendance_payroll_review_batch_lines')) {
+            return [];
+        }
+
+        return AttendancePayrollReviewBatchLine::query()
+            ->with('reviewItem')
+            ->where('line_type', AttendanceReviewItem::ISSUE_UNPAID_ABSENCE)
+            ->whereHas('reviewItem', fn ($query) => $query->whereNotIn('review_status', [AttendanceReviewItem::STATUS_RESOLVED, AttendanceReviewItem::STATUS_WAIVED]))
+            ->limit(500)
+            ->get()
+            ->map(fn (AttendancePayrollReviewBatchLine $line): array => $this->finding(
+                'unreviewed_unpaid_absence_in_batch',
+                'critical',
+                "Unpaid absence payroll batch line {$line->id} is linked to an unresolved review item.",
+                'Remove/regenerate the batch line after HR resolves or waives the unpaid absence exception.',
+                ['batch_line_id' => $line->id, 'review_item_id' => $line->attendance_review_item_id],
+            ))
+            ->all();
+    }
+
+    private function postedBatchLineWithoutPayrollLineFindings(): array
+    {
+        if (! Schema::hasTable('attendance_payroll_review_batch_lines') || ! Schema::hasColumn('payroll_lines', 'attendance_payroll_review_batch_line_id')) {
+            return [];
+        }
+
+        return AttendancePayrollReviewBatchLine::query()
+            ->where('status', AttendancePayrollReviewBatchLine::STATUS_POSTED)
+            ->limit(500)
+            ->get()
+            ->filter(fn (AttendancePayrollReviewBatchLine $line): bool => ! PayrollLine::query()->where('attendance_payroll_review_batch_line_id', $line->id)->exists())
+            ->map(fn (AttendancePayrollReviewBatchLine $line): array => $this->finding(
+                'posted_batch_line_without_payroll_line',
+                'critical',
+                "Posted attendance payroll batch line {$line->id} has no linked payroll line.",
+                'Review the batch audit log and repost or reverse through the controlled payroll posting service.',
+                ['batch_line_id' => $line->id],
+            ))
+            ->values()
+            ->all();
+    }
+
+    private function snapshotHash(EmployeeAttendanceDay $day): string
+    {
+        return hash('sha256', json_encode($day->only([
+            'status', 'worked_minutes', 'late_minutes', 'early_departure_minutes',
+            'overtime_minutes', 'missing_clock_out', 'payroll_review_required',
+        ]), JSON_THROW_ON_ERROR));
     }
 }

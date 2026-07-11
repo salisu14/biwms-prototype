@@ -34,6 +34,10 @@ return new class extends Migration
             $table->foreignId('reversed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('reversed_at')->nullable();
             $table->text('reversal_reason')->nullable();
+            $table->unsignedInteger('total_overtime_minutes')->default(0);
+            $table->unsignedInteger('total_unpaid_minutes')->default(0);
+            $table->decimal('total_suggested_amount', 15, 4)->default(0);
+            $table->decimal('total_approved_amount', 15, 4)->default(0);
             $table->text('notes')->nullable();
             $table->timestamps();
 

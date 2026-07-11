@@ -174,6 +174,7 @@ docs/pilot-go-live-checklist.md
 docs/hr-employee-payslips.md
 docs/hr-leave-management.md
 docs/hr-time-attendance.md
+docs/hr-attendance-review-payroll-integration.md
 ```
 
 Run the report-only pilot readiness checklist with:

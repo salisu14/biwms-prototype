@@ -7,6 +7,7 @@ namespace App\Services\Hr;
 use App\Models\AttendanceReviewItem;
 use App\Models\AttendanceReviewPeriod;
 use App\Models\EmployeeAttendanceDay;
+use App\Models\EmployeeAttendanceEvent;
 use App\Models\OvertimeApproval;
 use App\Models\User;
 use App\Services\AuditTrailService;
@@ -87,10 +88,14 @@ class AttendanceExceptionReviewService
             $issues[] = $this->issue(AttendanceReviewItem::ISSUE_HALF_DAY_LEAVE_VARIANCE, 'warning', $day);
         }
 
-        if ($day->calculation_notes['event_count'] ?? 0) {
-            if (collect($day->calculation_notes)->contains('correction')) {
-                $issues[] = $this->issue(AttendanceReviewItem::ISSUE_ATTENDANCE_CORRECTION, 'warning', $day);
-            }
+        $hasCorrectionEvent = EmployeeAttendanceEvent::query()
+            ->where('employee_id', $day->employee_id)
+            ->whereDate('attendance_date', $day->attendance_date)
+            ->whereIn('event_type', [EmployeeAttendanceEvent::TYPE_CORRECTION_CLOCK_IN, EmployeeAttendanceEvent::TYPE_CORRECTION_CLOCK_OUT])
+            ->exists();
+
+        if ($hasCorrectionEvent) {
+            $issues[] = $this->issue(AttendanceReviewItem::ISSUE_ATTENDANCE_CORRECTION, 'warning', $day);
         }
 
         return $issues;
@@ -109,6 +114,7 @@ class AttendanceExceptionReviewService
             'early_departure_minutes' => $day->early_departure_minutes,
             'overtime_minutes' => $day->overtime_minutes,
             'missing_clock_out' => $day->missing_clock_out,
+            'expected_minutes' => $this->expectedMinutes($day),
             ...$extra,
         ];
 
@@ -118,6 +124,15 @@ class AttendanceExceptionReviewService
             'original_values' => $values,
             'source_hash' => hash('sha256', json_encode($values, JSON_THROW_ON_ERROR)),
         ];
+    }
+
+    private function expectedMinutes(EmployeeAttendanceDay $day): int
+    {
+        if ($day->scheduled_start_at === null || $day->scheduled_end_at === null) {
+            return 480;
+        }
+
+        return (int) max(0, $day->scheduled_start_at->diffInMinutes($day->scheduled_end_at) - (int) $day->break_minutes);
     }
 
     /**

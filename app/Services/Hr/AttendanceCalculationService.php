@@ -6,6 +6,7 @@ namespace App\Services\Hr;
 
 use App\Models\AttendanceCorrectionRequest;
 use App\Models\AttendanceLedgerEntry;
+use App\Models\AttendanceReviewItem;
 use App\Models\Employee;
 use App\Models\EmployeeAttendanceDay;
 use App\Models\EmployeeAttendanceEvent;
@@ -379,21 +380,21 @@ class AttendanceCalculationService
             ->whereDate('attendance_date', $day->attendance_date)
             ->max('created_at');
 
-        if ($latestEventAt === null || ($day->locked_at !== null && Carbon::parse($latestEventAt)->lte($day->locked_at))) {
+        if ($latestEventAt === null || ($day->locked_at !== null && Carbon::parse($latestEventAt)->lt($day->locked_at))) {
             return;
         }
 
-        \App\Models\AttendanceReviewItem::query()->updateOrCreate(
+        AttendanceReviewItem::query()->updateOrCreate(
             [
                 'attendance_review_period_id' => $day->locked_by_review_period_id,
                 'employee_attendance_day_id' => $day->id,
-                'issue_type' => \App\Models\AttendanceReviewItem::ISSUE_MANUAL_OVERRIDE,
+                'issue_type' => AttendanceReviewItem::ISSUE_MANUAL_OVERRIDE,
             ],
             [
                 'employee_id' => $day->employee_id,
                 'attendance_date' => $day->attendance_date,
                 'severity' => 'critical',
-                'review_status' => \App\Models\AttendanceReviewItem::STATUS_PENDING,
+                'review_status' => AttendanceReviewItem::STATUS_PENDING,
                 'original_values' => [
                     'locked_at' => $day->locked_at?->toIso8601String(),
                     'latest_event_created_at' => Carbon::parse($latestEventAt)->toIso8601String(),

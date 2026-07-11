@@ -70,6 +70,26 @@ class Employee extends Model
         ]);
     }
 
+    public function attendanceEvents(): HasMany
+    {
+        return $this->hasMany(EmployeeAttendanceEvent::class);
+    }
+
+    public function attendanceDays(): HasMany
+    {
+        return $this->hasMany(EmployeeAttendanceDay::class);
+    }
+
+    public function attendanceLedgerEntries(): HasMany
+    {
+        return $this->hasMany(AttendanceLedgerEntry::class);
+    }
+
+    public function workScheduleAssignments(): HasMany
+    {
+        return $this->hasMany(EmployeeWorkScheduleAssignment::class);
+    }
+
     /**
      * Auto-sync department assignment when department_id changes.
      */

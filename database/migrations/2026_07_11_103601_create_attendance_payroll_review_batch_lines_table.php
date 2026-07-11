@@ -23,6 +23,7 @@ return new class extends Migration
             $table->string('line_type')->index();
             $table->unsignedInteger('quantity_minutes')->nullable();
             $table->decimal('quantity_days', 8, 4)->nullable();
+            $table->decimal('rate', 15, 4)->nullable();
             $table->decimal('suggested_amount', 15, 4)->nullable();
             $table->decimal('approved_amount', 15, 4)->nullable();
             $table->string('currency', 10)->nullable();
