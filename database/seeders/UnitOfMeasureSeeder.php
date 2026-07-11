@@ -19,12 +19,12 @@ class UnitOfMeasureSeeder extends Seeder
                 'conversion_factor' => 1.000000,
                 'is_base_uom' => true,
             ],
-            //            [
-            //                'uom_code' => 'EA',
-            //                'description' => 'Each',
-            //                'conversion_factor' => 1.000000,
-            //                'is_base_uom' => true,
-            //            ],
+            [
+                'uom_code' => 'EA',
+                'description' => 'Each',
+                'conversion_factor' => 1.000000,
+                'is_base_uom' => true,
+            ],
             [
                 'uom_code' => 'KG',
                 'description' => 'Kilogram',
@@ -49,6 +49,74 @@ class UnitOfMeasureSeeder extends Seeder
                 'conversion_factor' => 1.000000,
                 'is_base_uom' => true,
             ],
+            [
+                'uom_code' => 'GAL',
+                'description' => 'Gallon',
+                'conversion_factor' => 1.000000,
+                'is_base_uom' => true,
+            ],
+
+            // Derived units (is_base_uom = false, with conversion factors)
+            [
+                'uom_code' => 'DZ',
+                'description' => 'Dozen',
+                'conversion_factor' => 12.000000,
+                'is_base_uom' => false,
+            ],
+            [
+                'uom_code' => 'PK',
+                'description' => 'Pack',
+                'conversion_factor' => 12.000000,
+                'is_base_uom' => false,
+            ],
+            [
+                'uom_code' => 'CT',
+                'description' => 'Carton',
+                'conversion_factor' => 288.000000,
+                'is_base_uom' => false,
+            ],
+            [
+                'uom_code' => 'BG',
+                'description' => 'Bag',
+                'conversion_factor' => 25.00,
+                'is_base_uom' => false,
+            ],
+            [
+                'uom_code' => 'TON',
+                'description' => 'Metric Ton',
+                'conversion_factor' => 1000000.00,
+                'is_base_uom' => false,
+            ],
+            [
+                'uom_code' => 'MG',
+                'description' => 'Milligram',
+                'conversion_factor' => 0.001000,
+                'is_base_uom' => false,
+            ],
+            [
+                'uom_code' => 'CUP',
+                'description' => 'Cup',
+                'conversion_factor' => 0.236588,
+                'is_base_uom' => false,
+            ],
+            //            [
+            //                'uom_code' => 'GRS',
+            //                'description' => 'Gross (144)',
+            //                'conversion_factor' => 144.000000,
+            //                'is_base_uom' => false,
+            //            ],
+            //            [
+            //                'uom_code' => 'BX',
+            //                'description' => 'Box',
+            //                'conversion_factor' => 24.000000,
+            //                'is_base_uom' => false,
+            //            ],
+            //            [
+            //                'uom_code' => 'CS',
+            //                'description' => 'Case',
+            //                'conversion_factor' => 48.000000,
+            //                'is_base_uom' => false,
+            //            ],
             //            [
             //                'uom_code' => 'M',
             //                'description' => 'Meter',
@@ -91,50 +159,6 @@ class UnitOfMeasureSeeder extends Seeder
             //                'conversion_factor' => 1.000000,
             //                'is_base_uom' => true,
             //            ],
-            [
-                'uom_code' => 'GAL',
-                'description' => 'Gallon',
-                'conversion_factor' => 1.000000,
-                'is_base_uom' => true,
-            ],
-
-            // Derived units (is_base_uom = false, with conversion factors)
-            [
-                'uom_code' => 'DZ',
-                'description' => 'Dozen',
-                'conversion_factor' => 12.000000,
-                'is_base_uom' => false,
-            ],
-            //            [
-            //                'uom_code' => 'GRS',
-            //                'description' => 'Gross (144)',
-            //                'conversion_factor' => 144.000000,
-            //                'is_base_uom' => false,
-            //            ],
-            //            [
-            //                'uom_code' => 'BX',
-            //                'description' => 'Box',
-            //                'conversion_factor' => 24.000000,
-            //                'is_base_uom' => false,
-            //            ],
-            //            [
-            //                'uom_code' => 'CS',
-            //                'description' => 'Case',
-            //                'conversion_factor' => 48.000000,
-            //                'is_base_uom' => false,
-            //            ],
-            [
-                'uom_code' => 'PK',
-                'description' => 'Pack',
-                'conversion_factor' => 12.000000,
-                'is_base_uom' => false,
-            ],
-            [
-                'uom_code' => 'CT',
-                'description' => 'Carton',
-                'conversion_factor' => 288.000000,
-                'is_base_uom' => true,
-            ],
             //            [
             //                'uom_code' => 'RL',
             //                'description' => 'Roll',
@@ -159,36 +183,18 @@ class UnitOfMeasureSeeder extends Seeder
             //                'conversion_factor' => 2.000000,
             //                'is_base_uom' => false,
             //            ],
-            [
-                'uom_code' => 'BG',
-                'description' => 'Bag',
-                'conversion_factor' => 25.000000,
-                'is_base_uom' => false,
-            ],
             //            [
             //                'uom_code' => 'DR',
             //                'description' => 'Drum',
             //                'conversion_factor' => 55.000000,
             //                'is_base_uom' => false,
             //            ],
-            [
-                'uom_code' => 'PLT',
-                'description' => 'Pallet',
-                'conversion_factor' => 480.000000,
-                'is_base_uom' => false,
-            ],
-            //            [
-            //                'uom_code' => 'TON',
-            //                'description' => 'Metric Ton',
-            //                'conversion_factor' => 1000.000000,
-            //                'is_base_uom' => false,
-            //            ],
-            //            [
-            //                'uom_code' => 'MG',
-            //                'description' => 'Milligram',
-            //                'conversion_factor' => 0.001000,
-            //                'is_base_uom' => false,
-            //            ],
+//            [
+//                'uom_code' => 'PLT',
+//                'description' => 'Pallet',
+//                'conversion_factor' => 480.000000,
+//                'is_base_uom' => false,
+//            ],
             //            [
             //                'uom_code' => 'KM',
             //                'description' => 'Kilometer',
@@ -197,7 +203,7 @@ class UnitOfMeasureSeeder extends Seeder
             //            ],
             //            [
             //                'uom_code' => 'YD',
-            //                'description' => 'Yard',
+            //                'description' => 'Yard'
             //                'conversion_factor' => 0.914400,
             //                'is_base_uom' => false,
             //            ],
@@ -225,12 +231,6 @@ class UnitOfMeasureSeeder extends Seeder
             //                'conversion_factor' => 0.473176,
             //                'is_base_uom' => false,
             //            ],
-            [
-                'uom_code' => 'CUP',
-                'description' => 'Cup',
-                'conversion_factor' => 0.236588,
-                'is_base_uom' => false,
-            ],
             //            [
             //                'uom_code' => 'TSP',
             //                'description' => 'Teaspoon',
@@ -259,8 +259,8 @@ class UnitOfMeasureSeeder extends Seeder
         }
 
         $this->command->info('Unit of Measures seeded successfully!');
-        $this->command->info('Total: '.count($uoms).' UOMs');
-        $this->command->info('Base UOMs: '.collect($uoms)->where('is_base_uom', true)->count());
-        $this->command->info('Derived UOMs: '.collect($uoms)->where('is_base_uom', false)->count());
+        $this->command->info('Total: ' . count($uoms) . ' UOMs');
+        $this->command->info('Base UOMs: ' . collect($uoms)->where('is_base_uom', true)->count());
+        $this->command->info('Derived UOMs: ' . collect($uoms)->where('is_base_uom', false)->count());
     }
 }
