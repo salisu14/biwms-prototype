@@ -10,8 +10,6 @@ use App\Models\AttendanceReviewItem;
 use App\Models\Employee;
 use App\Models\EmployeeAttendanceDay;
 use App\Models\EmployeeAttendanceEvent;
-use App\Models\EmployeeShift;
-use App\Models\EmployeeWorkScheduleAssignment;
 use App\Models\LeaveHoliday;
 use App\Models\LeaveRequest;
 use App\Models\OvertimeApproval;
@@ -25,6 +23,7 @@ class AttendanceCalculationService
 {
     public function __construct(
         private readonly AuditTrailService $auditTrailService,
+        private readonly WorkforceScheduleResolverService $scheduleResolver,
     ) {}
 
     public function recalculate(Employee $employee, CarbonInterface|string $attendanceDate, bool $force = false): EmployeeAttendanceDay
@@ -45,9 +44,10 @@ class AttendanceCalculationService
                 return $existingDay->fresh(['employee', 'shift', 'ledgerEntry']);
             }
 
-            $schedule = $this->scheduleFor($lockedEmployee, $date);
-            $shift = $schedule?->shift;
-            [$scheduledStartAt, $scheduledEndAt] = $this->scheduledBounds($shift, $date);
+            $schedule = $this->scheduleResolver->resolve($lockedEmployee, $date);
+            $shift = $schedule['shift'];
+            $scheduledStartAt = $schedule['expected_start_at'];
+            $scheduledEndAt = $schedule['expected_end_at'];
             $leaveContext = $this->approvedLeaveContext($lockedEmployee, $date);
             [$scheduledStartAt, $scheduledEndAt] = $this->adjustScheduleForPartialLeave($scheduledStartAt, $scheduledEndAt, $leaveContext);
             $events = EmployeeAttendanceEvent::query()
@@ -75,7 +75,7 @@ class AttendanceCalculationService
             $onLeave = $leaveContext['fraction'] > 0.0;
             $missingClockOut = $firstClockInAt !== null && $lastClockOutAt === null;
 
-            $breakMinutes = $shift?->break_minutes ?? 0;
+            $breakMinutes = $schedule['break_minutes'];
             $workedMinutes = $firstClockInAt && $lastClockOutAt
                 ? (int) max(0, $firstClockInAt->diffInMinutes($lastClockOutAt) - $breakMinutes)
                 : 0;
@@ -106,6 +106,9 @@ class AttendanceCalculationService
                 ['employee_id' => $lockedEmployee->id, 'attendance_date' => $date->toDateString()],
                 [
                     'employee_shift_id' => $shift?->id,
+                    'workforce_roster_assignment_id' => $schedule['assignment']?->id,
+                    'schedule_source' => $schedule['source'],
+                    'schedule_version' => $schedule['version'],
                     'scheduled_start_at' => $scheduledStartAt,
                     'scheduled_end_at' => $scheduledEndAt,
                     'first_clock_in_at' => $firstClockInAt,
@@ -127,6 +130,8 @@ class AttendanceCalculationService
                         'approved_overtime_minutes' => $approvedOvertimeMinutes,
                         'leave_fraction' => $leaveContext['fraction'],
                         'leave_parts' => $leaveContext['parts'],
+                        'schedule_source' => $schedule['source'],
+                        'schedule_conflicts' => $schedule['conflicts'],
                         'uses_existing_attendance_ledger' => true,
                     ],
                     'calculated_at' => now(),
@@ -187,40 +192,6 @@ class AttendanceCalculationService
 
             return $this->recalculate($request->employee, $request->attendance_date);
         });
-    }
-
-    private function scheduleFor(Employee $employee, Carbon $date): ?EmployeeWorkScheduleAssignment
-    {
-        return EmployeeWorkScheduleAssignment::query()
-            ->with('shift')
-            ->where('employee_id', $employee->id)
-            ->where('is_active', true)
-            ->whereDate('effective_from', '<=', $date->toDateString())
-            ->where(function ($query) use ($date): void {
-                $query->whereNull('effective_until')
-                    ->orWhereDate('effective_until', '>=', $date->toDateString());
-            })
-            ->orderByDesc('effective_from')
-            ->first();
-    }
-
-    /**
-     * @return array{0: Carbon|null, 1: Carbon|null}
-     */
-    private function scheduledBounds(?EmployeeShift $shift, Carbon $date): array
-    {
-        if ($shift === null) {
-            return [null, null];
-        }
-
-        $start = Carbon::parse($date->toDateString().' '.$shift->start_time);
-        $end = Carbon::parse($date->toDateString().' '.$shift->end_time);
-
-        if ($shift->crosses_midnight || $end->lessThanOrEqualTo($start)) {
-            $end->addDay();
-        }
-
-        return [$start, $end];
     }
 
     /**

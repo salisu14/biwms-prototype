@@ -1,0 +1,18 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Policies;
+
+class WorkforceStaffingRequirementPolicy extends AbstractPermissionPolicy
+{
+    protected function permissionPrefix(): string
+    {
+        return 'hr.workforce_staffing_requirement';
+    }
+
+    protected function legacyKey(): string
+    {
+        return 'workforce_staffing_requirement';
+    }
+}

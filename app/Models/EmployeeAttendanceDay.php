@@ -27,6 +27,9 @@ class EmployeeAttendanceDay extends Model
         'employee_id',
         'employee_shift_id',
         'attendance_ledger_entry_id',
+        'workforce_roster_assignment_id',
+        'schedule_source',
+        'schedule_version',
         'locked_by_review_period_id',
         'locked_at',
         'locked_snapshot_hash',
@@ -90,6 +93,11 @@ class EmployeeAttendanceDay extends Model
     public function lockedByReviewPeriod(): BelongsTo
     {
         return $this->belongsTo(AttendanceReviewPeriod::class, 'locked_by_review_period_id');
+    }
+
+    public function workforceRosterAssignment(): BelongsTo
+    {
+        return $this->belongsTo(WorkforceRosterAssignment::class);
     }
 
     public function isLocked(): bool
