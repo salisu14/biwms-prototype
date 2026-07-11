@@ -3,12 +3,20 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Hr\Widgets\HrStatsOverview;
+use App\Filament\Pages\Hr\AttendanceClockPage;
+use App\Filament\Pages\Hr\AttendanceDashboardPage;
+use App\Filament\Pages\Hr\AttendanceReportsPage;
 use App\Filament\Pages\Hr\LeaveApprovalsPage;
 use App\Filament\Pages\Hr\LeaveCalendarPage;
 use App\Filament\Pages\Hr\MyLeaveBalancesPage;
 use App\Filament\Pages\Hr\MyLeaveRequestsPage;
 use App\Filament\Pages\MyAttendance;
+use App\Filament\Resources\AttendanceCorrectionRequests\AttendanceCorrectionRequestResource;
+use App\Filament\Resources\AttendanceDevices\AttendanceDeviceResource;
 use App\Filament\Resources\AttendanceLedgerEntries\AttendanceLedgerEntryResource;
+use App\Filament\Resources\AttendanceLocations\AttendanceLocationResource;
+use App\Filament\Resources\EmployeeAttendanceDays\EmployeeAttendanceDayResource;
+use App\Filament\Resources\EmployeeAttendanceEvents\EmployeeAttendanceEventResource;
 use App\Filament\Resources\EmployeeIdCardHistories\EmployeeIdCardHistoryResource;
 use App\Filament\Resources\EmployeeIdCardPrintBatches\EmployeeIdCardPrintBatchResource;
 use App\Filament\Resources\EmployeeIdCards\EmployeeIdCardResource;
@@ -19,9 +27,12 @@ use App\Filament\Resources\EmployeeLeaveLedgerEntries\EmployeeLeaveLedgerEntryRe
 use App\Filament\Resources\EmployeePayslipHistories\EmployeePayslipHistoryResource;
 use App\Filament\Resources\EmployeePayslips\EmployeePayslipResource;
 use App\Filament\Resources\Employees\EmployeeResource;
+use App\Filament\Resources\EmployeeShifts\EmployeeShiftResource;
+use App\Filament\Resources\EmployeeWorkScheduleAssignments\EmployeeWorkScheduleAssignmentResource;
 use App\Filament\Resources\LeavePolicies\LeavePolicyResource;
 use App\Filament\Resources\LeaveRequests\LeaveRequestResource;
 use App\Filament\Resources\LeaveTypes\LeaveTypeResource;
+use App\Filament\Resources\OvertimeApprovals\OvertimeApprovalResource;
 use App\Filament\Resources\PayCodes\PayCodeResource;
 use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
 use App\Filament\Resources\PayrollPeriods\PayrollPeriodResource;
@@ -84,6 +95,14 @@ class HrPanelProvider extends PanelProvider
                 EmployeeIdCardPrintBatchResource::class,
                 EmployeeIdCardHistoryResource::class,
                 EmployeeIdCardVerificationLogResource::class,
+                AttendanceLocationResource::class,
+                AttendanceDeviceResource::class,
+                EmployeeShiftResource::class,
+                EmployeeWorkScheduleAssignmentResource::class,
+                EmployeeAttendanceDayResource::class,
+                AttendanceCorrectionRequestResource::class,
+                OvertimeApprovalResource::class,
+                EmployeeAttendanceEventResource::class,
                 AttendanceLedgerEntryResource::class,
                 LeaveTypeResource::class,
                 LeavePolicyResource::class,
@@ -99,7 +118,10 @@ class HrPanelProvider extends PanelProvider
             ])
             ->pages([
                 Dashboard::class,
+                AttendanceDashboardPage::class,
+                AttendanceClockPage::class,
                 MyAttendance::class,
+                AttendanceReportsPage::class,
                 MyLeaveRequestsPage::class,
                 MyLeaveBalancesPage::class,
                 LeaveApprovalsPage::class,
@@ -112,6 +134,7 @@ class HrPanelProvider extends PanelProvider
             ->navigationGroups([
                 'Human Resources',
                 'Employee Identity',
+                'Time & Attendance',
                 'Payroll',
                 'Leave Management',
             ])

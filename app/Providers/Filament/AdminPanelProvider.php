@@ -15,6 +15,11 @@ use App\Filament\Pages\FiscalYearManagement;
 use App\Filament\Pages\PurchaseHistory;
 use App\Filament\Pages\SalesHistory;
 use App\Filament\Pages\UserSecurity;
+use App\Filament\Resources\AttendanceCorrectionRequests\AttendanceCorrectionRequestResource;
+use App\Filament\Resources\AttendanceDevices\AttendanceDeviceResource;
+use App\Filament\Resources\AttendanceLocations\AttendanceLocationResource;
+use App\Filament\Resources\EmployeeAttendanceDays\EmployeeAttendanceDayResource;
+use App\Filament\Resources\EmployeeAttendanceEvents\EmployeeAttendanceEventResource;
 use App\Filament\Resources\EmployeeIdCardHistories\EmployeeIdCardHistoryResource;
 use App\Filament\Resources\EmployeeIdCardPrintBatches\EmployeeIdCardPrintBatchResource;
 use App\Filament\Resources\EmployeeIdCards\EmployeeIdCardResource;
@@ -24,6 +29,8 @@ use App\Filament\Resources\EmployeeLeaveEntitlements\EmployeeLeaveEntitlementRes
 use App\Filament\Resources\EmployeeLeaveLedgerEntries\EmployeeLeaveLedgerEntryResource;
 use App\Filament\Resources\EmployeePayslipHistories\EmployeePayslipHistoryResource;
 use App\Filament\Resources\EmployeePayslips\EmployeePayslipResource;
+use App\Filament\Resources\EmployeeShifts\EmployeeShiftResource;
+use App\Filament\Resources\EmployeeWorkScheduleAssignments\EmployeeWorkScheduleAssignmentResource;
 use App\Filament\Resources\LeavePolicies\LeavePolicyResource;
 use App\Filament\Resources\LeaveRequests\LeaveRequestResource;
 use App\Filament\Resources\LeaveTypes\LeaveTypeResource;
@@ -31,6 +38,7 @@ use App\Filament\Resources\MaintenanceContractAssets\MaintenanceContractAssetRes
 use App\Filament\Resources\MaintenanceContractBillings\MaintenanceContractBillingResource;
 use App\Filament\Resources\MaintenanceContracts\MaintenanceContractResource;
 use App\Filament\Resources\MaintenanceContractSchedules\MaintenanceContractScheduleResource;
+use App\Filament\Resources\OvertimeApprovals\OvertimeApprovalResource;
 use App\Http\Middleware\AddSecurityHeaders;
 use App\Http\Middleware\EnforceAdminAbsoluteSessionLifetime;
 use App\Http\Middleware\EnforceAdminIdleTimeout;
@@ -789,36 +797,6 @@ class AdminPanelProvider extends PanelProvider
                                         ->url('/admin/employee-promotion-histories')
                                         ->isActiveWhen(fn () => request()->is('admin/employee-promotion-histories*')),
 
-                                    NavigationItem::make('Employee Attendances')
-                                        ->icon('heroicon-o-clock')
-                                        ->url('/admin/attendance-ledger-entries')
-                                        ->isActiveWhen(fn () => request()->is('admin/attendance-ledger-entries*')),
-
-                                    NavigationItem::make('Leave Types')
-                                        ->icon('heroicon-o-rectangle-stack')
-                                        ->url(LeaveTypeResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/leave-types*')),
-
-                                    NavigationItem::make('Leave Policies')
-                                        ->icon('heroicon-o-clipboard-document-list')
-                                        ->url(LeavePolicyResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/leave-policies*')),
-
-                                    NavigationItem::make('Leave Entitlements')
-                                        ->icon('heroicon-o-banknotes')
-                                        ->url(EmployeeLeaveEntitlementResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-leave-entitlements*')),
-
-                                    NavigationItem::make('Leave Requests')
-                                        ->icon('heroicon-o-calendar-days')
-                                        ->url(LeaveRequestResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/leave-requests*')),
-
-                                    NavigationItem::make('Leave Ledger')
-                                        ->icon('heroicon-o-book-open')
-                                        ->url(EmployeeLeaveLedgerEntryResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-leave-ledger-entries*')),
-
                                     NavigationItem::make('Pay Codes')
                                         ->icon('heroicon-o-banknotes')
                                         ->url('/admin/pay-codes')
@@ -878,6 +856,83 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-square-2-stack')
                                         ->url('/admin/social-security-tiers')
                                         ->isActiveWhen(fn () => request()->is('admin/social-security-tiers*')),
+                                ])
+                        )
+                        ->group(
+                            NavigationGroup::make('Leave & Attendance')
+//                            ->icon('heroicon-o-cog-6-tooth')
+                                ->items([
+                                    // Leave Management
+                                    NavigationItem::make('Leave Types')
+                                        ->icon('heroicon-o-rectangle-stack')
+                                        ->url(LeaveTypeResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/leave-types*')),
+
+                                    NavigationItem::make('Leave Policies')
+                                        ->icon('heroicon-o-clipboard-document-list')
+                                        ->url(LeavePolicyResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/leave-policies*')),
+
+                                    NavigationItem::make('Leave Entitlements')
+                                        ->icon('heroicon-o-banknotes')
+                                        ->url(EmployeeLeaveEntitlementResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-leave-entitlements*')),
+
+                                    NavigationItem::make('Leave Requests')
+                                        ->icon('heroicon-o-calendar-days')
+                                        ->url(LeaveRequestResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/leave-requests*')),
+
+                                    NavigationItem::make('Leave Ledger')
+                                        ->icon('heroicon-o-book-open')
+                                        ->url(EmployeeLeaveLedgerEntryResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-leave-ledger-entries*')),
+
+                                    // Attendance Management
+                                    NavigationItem::make('Employee Attendances')
+                                        ->icon('heroicon-o-clock')
+                                        ->url('/admin/attendance-ledger-entries')
+                                        ->isActiveWhen(fn () => request()->is('admin/attendance-ledger-entries*')),
+
+                                    NavigationItem::make('Attendance Locations')
+                                        ->icon('heroicon-o-building-storefront')
+                                        ->url(AttendanceLocationResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/attendance-locations*')),
+
+                                    NavigationItem::make('Attendance Devices')
+                                        ->icon('heroicon-o-building-office')
+                                        ->url(AttendanceDeviceResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/attendance-devices*')),
+
+                                    NavigationItem::make('Employee Shifts')
+                                        ->icon('heroicon-o-user-group')
+                                        ->url(EmployeeShiftResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-shifts*')),
+
+                                    NavigationItem::make('Employee Work Schedule Assignments')
+                                        ->icon('heroicon-o-user-group')
+                                        ->url(EmployeeWorkScheduleAssignmentResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-work-schedule-assignments*')),
+
+                                    NavigationItem::make('Employee Attendance Days')
+                                        ->icon('heroicon-o-user-group')
+                                        ->url(EmployeeAttendanceDayResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-attendance-days*')),
+
+                                    NavigationItem::make('Attendance Correct Reports')
+                                        ->icon('heroicon-o-user-group')
+                                        ->url(AttendanceCorrectionRequestResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/attendance-correction-requests*')),
+
+                                    NavigationItem::make('Overtime Approvals')
+                                        ->icon('heroicon-o-user-group')
+                                        ->url(OvertimeApprovalResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/overtime-approvals*')),
+
+                                    NavigationItem::make('Employee Attendance Events')
+                                        ->icon('heroicon-o-user-group')
+                                        ->url(EmployeeAttendanceEventResource::getUrl())
+                                        ->isActiveWhen(fn () => request()->is('admin/employee-attendance-events*')),
                                 ])
                         )
 

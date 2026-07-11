@@ -1,8 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Pages;
 
 use App\Models\AttendanceLedgerEntry;
+use App\Models\EmployeeAttendanceEvent;
+use App\Services\Hr\AttendanceClockService;
+use App\Services\Hr\EmployeeIdCardService;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Carbon;
@@ -26,67 +31,46 @@ class MyAttendance extends Page
         return auth()->check() && auth()->user()?->employee_id !== null;
     }
 
-    public function clockIn(): void
+    public function clockIn(AttendanceClockService $clockService, EmployeeIdCardService $cardService): void
     {
-        $employeeId = auth()->user()?->employee_id;
+        $employee = auth()->user()?->employee;
 
-        if (! $employeeId) {
+        if (! $employee) {
             Notification::make()->danger()->title('No linked employee')->body('Your account must be linked to an employee profile.')->send();
+
             return;
         }
 
-        $today = Carbon::today();
+        try {
+            $card = $cardService->ensureIssued($employee);
+            $clockService->clockWithCardToken($card->token, EmployeeAttendanceEvent::TYPE_CLOCK_IN, actor: auth()->user(), source: 'my_attendance');
+        } catch (\Throwable $exception) {
+            Notification::make()->danger()->title('Clock-in rejected')->body($exception->getMessage())->send();
 
-        $entry = AttendanceLedgerEntry::query()->firstOrCreate(
-            ['employee_id' => $employeeId, 'attendance_date' => $today],
-            ['created_by' => auth()->id(), 'status' => 'OPEN']
-        );
-
-        if ($entry->clock_out_at) {
-            Notification::make()->danger()->title('Day already closed')->body('You have already clocked out for today.')->send();
             return;
         }
-
-        if ($entry->clock_in_at) {
-            Notification::make()->warning()->title('Already clocked in')->body('You have already clocked in for today.')->send();
-            return;
-        }
-
-        $entry->update(['clock_in_at' => now()]);
 
         Notification::make()->success()->title('Clocked in')->body('Your start time has been recorded.')->send();
     }
 
-    public function clockOut(): void
+    public function clockOut(AttendanceClockService $clockService, EmployeeIdCardService $cardService): void
     {
-        $employeeId = auth()->user()?->employee_id;
+        $employee = auth()->user()?->employee;
 
-        if (! $employeeId) {
+        if (! $employee) {
             Notification::make()->danger()->title('No linked employee')->body('Your account must be linked to an employee profile.')->send();
+
             return;
         }
 
-        $entry = AttendanceLedgerEntry::query()
-            ->where('employee_id', $employeeId)
-            ->whereDate('attendance_date', Carbon::today())
-            ->first();
+        try {
+            $card = $cardService->ensureIssued($employee);
+            $clockService->clockWithCardToken($card->token, EmployeeAttendanceEvent::TYPE_CLOCK_OUT, actor: auth()->user(), source: 'my_attendance');
+        } catch (\Throwable $exception) {
+            Notification::make()->danger()->title('Clock-out rejected')->body($exception->getMessage())->send();
 
-        if (! $entry || ! $entry->clock_in_at) {
-            Notification::make()->warning()->title('Clock in first')->body('No active attendance session found for today.')->send();
             return;
         }
-
-        if ($entry->clock_out_at) {
-            Notification::make()->warning()->title('Already clocked out')->body('Your end time for today is already recorded.')->send();
-            return;
-        }
-
-        if ($entry->status !== 'OPEN') {
-            Notification::make()->warning()->title('Cannot edit attendance')->body('This attendance entry is already finalized by HR.')->send();
-            return;
-        }
-
-        $entry->update(['clock_out_at' => now()]);
 
         Notification::make()->success()->title('Clocked out')->body('Your end time has been recorded.')->send();
     }

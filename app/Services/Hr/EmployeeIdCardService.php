@@ -230,7 +230,7 @@ class EmployeeIdCardService
     public function verifyCardToken(string $token): ?EmployeeIdCard
     {
         $card = $this->cardForToken($token);
-        $result = $card?->isActive() === true ? 'active' : 'invalid';
+        $result = $this->isVerifiable($card) ? 'active' : 'invalid';
 
         EmployeeIdCardVerificationLog::query()->create([
             'card_id' => $card?->id,
@@ -240,7 +240,7 @@ class EmployeeIdCardService
             'user_agent' => request()?->userAgent(),
         ]);
 
-        if (! $card?->isActive()) {
+        if (! $this->isVerifiable($card)) {
             return null;
         }
 
@@ -371,13 +371,18 @@ class EmployeeIdCardService
         return null;
     }
 
-    public function isVerifiable(EmployeeIdCard|Employee $cardOrEmployee): bool
+    public function isVerifiable(EmployeeIdCard|Employee|null $cardOrEmployee): bool
     {
+        if ($cardOrEmployee === null) {
+            return false;
+        }
+
         $card = $cardOrEmployee instanceof EmployeeIdCard
             ? $cardOrEmployee
             : $this->activeCardForEmployee($cardOrEmployee);
 
-        return $card?->isActive() === true;
+        return $card?->isActive() === true
+            && $card->employee?->is_active === true;
     }
 
     public function signatureFor(string $payloadWithoutSignature): string

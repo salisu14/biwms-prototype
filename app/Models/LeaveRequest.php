@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Hr\AttendanceCalculationService;
+use Carbon\CarbonPeriod;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -25,6 +27,11 @@ class LeaveRequest extends Model
     public const STATUS_POSTED = 'posted';
 
     public const STATUS_COMPLETED = 'completed';
+
+    /**
+     * @var array<int|string, array{employee_id: int|null, start_date: mixed, end_date: mixed, status: mixed}>
+     */
+    private static array $attendanceOriginalRanges = [];
 
     protected $fillable = [
         'business_id',
@@ -69,6 +76,60 @@ class LeaveRequest extends Model
         'rejected_at' => 'datetime',
         'cancelled_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::updating(function (LeaveRequest $request): void {
+            if ($request->isDirty(['employee_id', 'start_date', 'end_date', 'status', 'start_part', 'end_part'])) {
+                self::$attendanceOriginalRanges[$request->getKey()] = [
+                    'employee_id' => $request->getOriginal('employee_id'),
+                    'start_date' => $request->getOriginal('start_date'),
+                    'end_date' => $request->getOriginal('end_date'),
+                    'status' => $request->getOriginal('status'),
+                ];
+            }
+        });
+
+        static::saved(function (LeaveRequest $request): void {
+            if (self::attendanceRelevantStatus($request->status)) {
+                self::recalculateAttendanceRange($request->employee_id, $request->start_date, $request->end_date);
+            }
+
+            $previous = self::$attendanceOriginalRanges[$request->getKey()] ?? null;
+            unset(self::$attendanceOriginalRanges[$request->getKey()]);
+
+            if ($previous !== null && self::attendanceRelevantStatus($previous['status'])) {
+                self::recalculateAttendanceRange($previous['employee_id'], $previous['start_date'], $previous['end_date']);
+            }
+        });
+
+        static::deleted(function (LeaveRequest $request): void {
+            if (self::attendanceRelevantStatus($request->status)) {
+                self::recalculateAttendanceRange($request->employee_id, $request->start_date, $request->end_date);
+            }
+        });
+    }
+
+    private static function attendanceRelevantStatus(mixed $status): bool
+    {
+        return in_array($status, [self::STATUS_APPROVED, self::STATUS_POSTED, self::STATUS_COMPLETED], true);
+    }
+
+    private static function recalculateAttendanceRange(mixed $employeeId, mixed $startDate, mixed $endDate): void
+    {
+        if ($employeeId === null || $startDate === null || $endDate === null) {
+            return;
+        }
+
+        $employee = Employee::query()->find($employeeId);
+        if ($employee === null) {
+            return;
+        }
+
+        foreach (CarbonPeriod::create($startDate, $endDate) as $date) {
+            app(AttendanceCalculationService::class)->recalculate($employee, $date);
+        }
+    }
 
     public function business(): BelongsTo
     {
