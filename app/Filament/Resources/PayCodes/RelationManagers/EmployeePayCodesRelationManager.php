@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\PayCodes\RelationManagers;
 
 use App\Enums\CalculationMethod;
 use App\Filament\Resources\PayCodes\PayCodeResource;
+use App\Models\Employee;
 use App\Models\PayCode;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -39,9 +42,9 @@ class EmployeePayCodesRelationManager extends RelationManager
                         ->searchable()
                         ->preload()
                         // Only required if we are NOT on the Employee resource
-                        ->required(fn () => ! ($this->getOwnerRecord() instanceof \App\Models\Employee))
+                        ->required(fn () => ! ($this->getOwnerRecord() instanceof Employee))
                         // Hide this field if we are already inside the Employee edit page
-                        ->hidden(fn () => $this->getOwnerRecord() instanceof \App\Models\Employee)
+                        ->hidden(fn () => $this->getOwnerRecord() instanceof Employee)
                         // Prevent sending a null value that might overwrite the automatic association
                         ->dehydrated(fn ($state) => filled($state)),
 
@@ -54,7 +57,9 @@ class EmployeePayCodesRelationManager extends RelationManager
                         ->required()
                         ->reactive()
                         ->afterStateUpdated(function ($state, callable $set) {
-                            if (!$state) return;
+                            if (! $state) {
+                                return;
+                            }
                             $payCode = PayCode::find($state);
                             if ($payCode) {
                                 $set('amount', $payCode->default_amount);
@@ -115,14 +120,20 @@ class EmployeePayCodesRelationManager extends RelationManager
                 TextColumn::make('effective_date')
                     ->label('Validity')
                     ->state(function ($record) {
-                        if (!$record || !$record->effective_date) return null;
-                        return $record->effective_date->format('M d, Y') . ($record->end_date ? ' to ' . $record->end_date->format('M d, Y') : ' (Ongoing)');
+                        if (! $record || ! $record->effective_date) {
+                            return null;
+                        }
+
+                        return $record->effective_date->format('M d, Y').($record->end_date ? ' to '.$record->end_date->format('M d, Y') : ' (Ongoing)');
                     }),
 
                 TextColumn::make('status')
                     ->badge()
                     ->state(function ($record) {
-                        if (!$record || !$record->effective_date) return null;
+                        if (! $record || ! $record->effective_date) {
+                            return null;
+                        }
+
                         return now()->between($record->effective_date, $record->end_date ?? now()->addYear()) ? 'Active' : 'Inactive';
                     })
                     ->color(fn ($state) => $state === 'Active' ? 'success' : 'gray'),

@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\PayrollPeriods\Schemas;
 
 use App\Enums\PayrollPeriodStatus;
+use Carbon\Carbon;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
@@ -24,7 +27,7 @@ class PayrollPeriodForm
                             ->required()
                             ->native(false)
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set) => $set('end_date', \Carbon\Carbon::parse($state)->endOfMonth()->toDateString())),
+                            ->afterStateUpdated(fn ($state, callable $set) => $set('end_date', Carbon::parse($state)->endOfMonth()->toDateString())),
 
                         DatePicker::make('end_date')
                             ->label('End Date')

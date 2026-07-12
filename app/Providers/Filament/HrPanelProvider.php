@@ -11,12 +11,20 @@ use App\Filament\Pages\Hr\LeaveCalendarPage;
 use App\Filament\Pages\Hr\MyLeaveBalancesPage;
 use App\Filament\Pages\Hr\MyLeaveRequestsPage;
 use App\Filament\Pages\MyAttendance;
+use App\Filament\Pages\RecruitmentDashboard;
+use App\Filament\Pages\RecruitmentReports;
 use App\Filament\Resources\AttendanceCorrectionRequests\AttendanceCorrectionRequestResource;
 use App\Filament\Resources\AttendanceDevices\AttendanceDeviceResource;
 use App\Filament\Resources\AttendanceLedgerEntries\AttendanceLedgerEntryResource;
 use App\Filament\Resources\AttendanceLocations\AttendanceLocationResource;
+use App\Filament\Resources\AttendancePayrollReviewBatches\AttendancePayrollReviewBatchResource;
+use App\Filament\Resources\AttendancePayrollReviewBatchLines\AttendancePayrollReviewBatchLineResource;
+use App\Filament\Resources\AttendancePayrollRules\AttendancePayrollRuleResource;
+use App\Filament\Resources\AttendanceReviewItems\AttendanceReviewItemResource;
+use App\Filament\Resources\AttendanceReviewPeriods\AttendanceReviewPeriodResource;
 use App\Filament\Resources\EmployeeAttendanceDays\EmployeeAttendanceDayResource;
 use App\Filament\Resources\EmployeeAttendanceEvents\EmployeeAttendanceEventResource;
+use App\Filament\Resources\EmployeeConfirmationDecisions\EmployeeConfirmationDecisionResource;
 use App\Filament\Resources\EmployeeIdCardHistories\EmployeeIdCardHistoryResource;
 use App\Filament\Resources\EmployeeIdCardPrintBatches\EmployeeIdCardPrintBatchResource;
 use App\Filament\Resources\EmployeeIdCards\EmployeeIdCardResource;
@@ -37,6 +45,50 @@ use App\Filament\Resources\PayCodes\PayCodeResource;
 use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
 use App\Filament\Resources\PayrollPeriods\PayrollPeriodResource;
 use App\Filament\Resources\PayrollPostingGroups\PayrollPostingGroupResource;
+use App\Filament\Resources\PerformanceAppraisalCycles\PerformanceAppraisalCycleResource;
+use App\Filament\Resources\PerformanceAppraisalDisputes\PerformanceAppraisalDisputeResource;
+use App\Filament\Resources\PerformanceAppraisalHistories\PerformanceAppraisalHistoryResource;
+use App\Filament\Resources\PerformanceAppraisalModerationSessions\PerformanceAppraisalModerationSessionResource;
+use App\Filament\Resources\PerformanceAppraisalRecommendations\PerformanceAppraisalRecommendationResource;
+use App\Filament\Resources\PerformanceAppraisals\PerformanceAppraisalResource;
+use App\Filament\Resources\PerformanceAppraisalTemplates\PerformanceAppraisalTemplateResource;
+use App\Filament\Resources\PerformanceCompetencies\PerformanceCompetencyResource;
+use App\Filament\Resources\PerformanceCompetencyFrameworks\PerformanceCompetencyFrameworkResource;
+use App\Filament\Resources\PerformanceDevelopmentPlans\PerformanceDevelopmentPlanResource;
+use App\Filament\Resources\PerformanceGoalPlans\PerformanceGoalPlanResource;
+use App\Filament\Resources\PerformanceGoals\PerformanceGoalResource;
+use App\Filament\Resources\PerformanceImprovementPlans\PerformanceImprovementPlanResource;
+use App\Filament\Resources\PerformancePositionCompetencies\PerformancePositionCompetencyResource;
+use App\Filament\Resources\PerformanceProbationReviews\PerformanceProbationReviewResource;
+use App\Filament\Resources\PerformanceRatingScales\PerformanceRatingScaleResource;
+use App\Filament\Resources\RecruitmentApplications\RecruitmentApplicationResource;
+use App\Filament\Resources\RecruitmentApplicationScreenings\RecruitmentApplicationScreeningResource;
+use App\Filament\Resources\RecruitmentAssessments\RecruitmentAssessmentResource;
+use App\Filament\Resources\RecruitmentCandidates\RecruitmentCandidateResource;
+use App\Filament\Resources\RecruitmentHistories\RecruitmentHistoryResource;
+use App\Filament\Resources\RecruitmentInterviewPanels\RecruitmentInterviewPanelResource;
+use App\Filament\Resources\RecruitmentInterviews\RecruitmentInterviewResource;
+use App\Filament\Resources\RecruitmentInterviewScorecardTemplates\RecruitmentInterviewScorecardTemplateResource;
+use App\Filament\Resources\RecruitmentJobPostings\RecruitmentJobPostingResource;
+use App\Filament\Resources\RecruitmentOffers\RecruitmentOfferResource;
+use App\Filament\Resources\RecruitmentOnboardingPlans\RecruitmentOnboardingPlanResource;
+use App\Filament\Resources\RecruitmentOnboardingTasks\RecruitmentOnboardingTaskResource;
+use App\Filament\Resources\RecruitmentOnboardingTemplates\RecruitmentOnboardingTemplateResource;
+use App\Filament\Resources\RecruitmentPreEmploymentChecks\RecruitmentPreEmploymentCheckResource;
+use App\Filament\Resources\RecruitmentRequisitions\RecruitmentRequisitionResource;
+use App\Filament\Resources\RecruitmentScreeningTemplates\RecruitmentScreeningTemplateResource;
+use App\Filament\Resources\RecruitmentSelectionReviews\RecruitmentSelectionReviewResource;
+use App\Filament\Resources\RecruitmentVacancies\RecruitmentVacancyResource;
+use App\Filament\Resources\WorkforceRosterAssignments\WorkforceRosterAssignmentResource;
+use App\Filament\Resources\WorkforceRosterHistories\WorkforceRosterHistoryResource;
+use App\Filament\Resources\WorkforceRosterPeriods\WorkforceRosterPeriodResource;
+use App\Filament\Resources\WorkforceRosterRoles\WorkforceRosterRoleResource;
+use App\Filament\Resources\WorkforceRotationAssignments\WorkforceRotationAssignmentResource;
+use App\Filament\Resources\WorkforceRotationTemplates\WorkforceRotationTemplateResource;
+use App\Filament\Resources\WorkforceSchedulingRules\WorkforceSchedulingRuleResource;
+use App\Filament\Resources\WorkforceShiftReplacements\WorkforceShiftReplacementResource;
+use App\Filament\Resources\WorkforceShiftSwapRequests\WorkforceShiftSwapRequestResource;
+use App\Filament\Resources\WorkforceStaffingRequirements\WorkforceStaffingRequirementResource;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -104,11 +156,61 @@ class HrPanelProvider extends PanelProvider
                 OvertimeApprovalResource::class,
                 EmployeeAttendanceEventResource::class,
                 AttendanceLedgerEntryResource::class,
+                AttendancePayrollReviewBatchLineResource::class,
+                AttendancePayrollReviewBatchResource::class,
+                AttendancePayrollRuleResource::class,
+                AttendanceReviewItemResource::class,
+                AttendanceReviewPeriodResource::class,
                 LeaveTypeResource::class,
                 LeavePolicyResource::class,
                 EmployeeLeaveEntitlementResource::class,
                 LeaveRequestResource::class,
                 EmployeeLeaveLedgerEntryResource::class,
+                WorkforceRosterAssignmentResource::class,
+                WorkforceRosterHistoryResource::class,
+                WorkforceRosterPeriodResource::class,
+                WorkforceRosterRoleResource::class,
+                WorkforceRotationAssignmentResource::class,
+                WorkforceRotationTemplateResource::class,
+                WorkforceSchedulingRuleResource::class,
+                WorkforceShiftReplacementResource::class,
+                WorkforceShiftSwapRequestResource::class,
+                WorkforceStaffingRequirementResource::class,
+                PerformanceAppraisalCycleResource::class,
+                PerformanceAppraisalDisputeResource::class,
+                PerformanceAppraisalHistoryResource::class,
+                PerformanceAppraisalModerationSessionResource::class,
+                PerformanceAppraisalRecommendationResource::class,
+                PerformanceAppraisalResource::class,
+                PerformanceAppraisalTemplateResource::class,
+                PerformanceCompetencyResource::class,
+                PerformanceCompetencyFrameworkResource::class,
+                PerformanceDevelopmentPlanResource::class,
+                PerformanceGoalPlanResource::class,
+                PerformanceGoalResource::class,
+                PerformanceImprovementPlanResource::class,
+                PerformancePositionCompetencyResource::class,
+                PerformanceProbationReviewResource::class,
+                PerformanceRatingScaleResource::class,
+                RecruitmentApplicationScreeningResource::class,
+                RecruitmentApplicationResource::class,
+                RecruitmentAssessmentResource::class,
+                RecruitmentCandidateResource::class,
+                RecruitmentHistoryResource::class,
+                RecruitmentInterviewPanelResource::class,
+                RecruitmentInterviewScorecardTemplateResource::class,
+                RecruitmentInterviewResource::class,
+                RecruitmentJobPostingResource::class,
+                RecruitmentOfferResource::class,
+                RecruitmentOnboardingPlanResource::class,
+                RecruitmentOnboardingTaskResource::class,
+                RecruitmentOnboardingTemplateResource::class,
+                RecruitmentPreEmploymentCheckResource::class,
+                RecruitmentRequisitionResource::class,
+                RecruitmentScreeningTemplateResource::class,
+                RecruitmentSelectionReviewResource::class,
+                RecruitmentVacancyResource::class,
+                EmployeeConfirmationDecisionResource::class,
                 PayrollDocumentResource::class,
                 EmployeePayslipResource::class,
                 EmployeePayslipHistoryResource::class,
@@ -126,6 +228,8 @@ class HrPanelProvider extends PanelProvider
                 MyLeaveBalancesPage::class,
                 LeaveApprovalsPage::class,
                 LeaveCalendarPage::class,
+                RecruitmentDashboard::class,
+                RecruitmentReports::class,
             ])
             ->widgets([
                 HrStatsOverview::class,
@@ -134,9 +238,13 @@ class HrPanelProvider extends PanelProvider
             ->navigationGroups([
                 'Human Resources',
                 'Employee Identity',
-                'Time & Attendance',
-                'Payroll',
                 'Leave Management',
+                'Time & Attendance',
+                'Attendance Review',
+                'Workforce Scheduling',
+                'Performance Management',
+                'Recruitment & Onboarding',
+                'Payroll',
             ])
             ->middleware([
                 EncryptCookies::class,

@@ -56,7 +56,7 @@ class WorkforceRotationTemplateResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\DaysRelationManager::class,
         ];
     }
 

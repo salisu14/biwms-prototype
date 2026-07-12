@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Manufacturing\WorkCenter;
+use App\Models\Manufacturing\WorkCenterGroup;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -48,6 +50,26 @@ class WorkforceRotationAssignment extends Model
                 throw new \RuntimeException('Only one active primary rotation can apply to an employee/date.');
             }
         });
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'attendance_location_id');
+    }
+
+    public function workCenter(): BelongsTo
+    {
+        return $this->belongsTo(WorkCenter::class, 'work_center_id');
+    }
+
+    public function AttendanceLocation(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'attendance_location_id');
+    }
+
+    public function workCenterGroup(): BelongsTo
+    {
+        return $this->belongsTo(WorkCenterGroup::class, 'work_center_group_id');
     }
 
     public function template(): BelongsTo

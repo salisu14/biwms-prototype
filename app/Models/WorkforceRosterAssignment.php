@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Manufacturing\WorkCenter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -11,50 +12,70 @@ use Illuminate\Support\Carbon;
 
 class WorkforceRosterAssignment extends Model
 {
-    public const TYPE_REGULAR = 'regular';
+    public const string TYPE_REGULAR = 'regular';
 
-    public const TYPE_ROTATION = 'rotation';
+    public const string TYPE_ROTATION = 'rotation';
 
-    public const TYPE_MANUAL = 'manual';
+    public const string TYPE_MANUAL = 'manual';
 
-    public const TYPE_REPLACEMENT = 'replacement';
+    public const string TYPE_REPLACEMENT = 'replacement';
 
-    public const TYPE_SWAPPED = 'swapped';
+    public const string TYPE_SWAPPED = 'swapped';
 
-    public const TYPE_CALL_IN = 'call_in';
+    public const string TYPE_CALL_IN = 'call_in';
 
-    public const TYPE_OVERTIME = 'overtime';
+    public const string TYPE_OVERTIME = 'overtime';
 
-    public const TYPE_TRAINING = 'training';
+    public const string TYPE_TRAINING = 'training';
 
-    public const TYPE_OFFICIAL_DUTY = 'official_duty';
+    public const string TYPE_OFFICIAL_DUTY = 'official_duty';
 
-    public const STATUS_DRAFT = 'draft';
+    public const string STATUS_DRAFT = 'draft';
 
-    public const STATUS_SCHEDULED = 'scheduled';
+    public const string STATUS_SCHEDULED = 'scheduled';
 
-    public const STATUS_PUBLISHED = 'published';
+    public const string STATUS_PUBLISHED = 'published';
 
-    public const STATUS_ACCEPTED = 'accepted';
+    public const string STATUS_ACCEPTED = 'accepted';
 
-    public const STATUS_DECLINED = 'declined';
+    public const string STATUS_DECLINED = 'declined';
 
-    public const STATUS_COMPLETED = 'completed';
+    public const string STATUS_COMPLETED = 'completed';
 
-    public const STATUS_ABSENT = 'absent';
+    public const string STATUS_ABSENT = 'absent';
 
-    public const STATUS_CANCELLED = 'cancelled';
+    public const string STATUS_CANCELLED = 'cancelled';
 
-    public const STATUS_REPLACED = 'replaced';
+    public const string STATUS_REPLACED = 'replaced';
 
     protected $fillable = [
-        'workforce_roster_period_id', 'employee_id', 'work_date', 'employee_shift_id',
-        'attendance_location_id', 'department_id', 'work_center_id', 'roster_role_id',
-        'assignment_type', 'status', 'source_reference_type', 'source_reference_id',
-        'original_assignment_id', 'replaced_by_assignment_id', 'expected_start_at',
-        'expected_end_at', 'break_minutes', 'may_create_overtime', 'conflict_status',
-        'conflict_details', 'forecast_overtime_minutes', 'assigned_by', 'published_at',
-        'cancelled_by', 'cancelled_at', 'cancellation_reason', 'metadata',
+        'workforce_roster_period_id',
+        'employee_id',
+        'work_date',
+        'employee_shift_id',
+        'attendance_location_id',
+        'department_id',
+        'work_center_id',
+        'roster_role_id',
+        'assignment_type',
+        'status',
+        'source_reference_type',
+        'source_reference_id',
+        'original_assignment_id',
+        'replaced_by_assignment_id',
+        'expected_start_at',
+        'expected_end_at',
+        'break_minutes',
+        'may_create_overtime',
+        'conflict_status',
+        'conflict_details',
+        'forecast_overtime_minutes',
+        'assigned_by',
+        'published_at',
+        'cancelled_by',
+        'cancelled_at',
+        'cancellation_reason',
+        'metadata',
     ];
 
     protected $casts = [
@@ -93,6 +114,23 @@ class WorkforceRosterAssignment extends Model
                 throw new \RuntimeException('Employee already has an overlapping active roster assignment.');
             }
         });
+    }
+
+    // Add this relationship to WorkforceRosterAssignment.php
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function workCenter(): BelongsTo
+    {
+        return $this->belongsTo(WorkCenter::class);
+    }
+
+    public function assignedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_by');
     }
 
     public function period(): BelongsTo

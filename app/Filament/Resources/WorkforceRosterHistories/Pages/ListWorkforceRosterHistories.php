@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Resources\WorkforceRosterHistories\Pages;
 
 use App\Filament\Resources\WorkforceRosterHistories\WorkforceRosterHistoryResource;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListWorkforceRosterHistories extends ListRecords
@@ -14,8 +13,6 @@ class ListWorkforceRosterHistories extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [
-            CreateAction::make(),
-        ];
+        return [];
     }
 }

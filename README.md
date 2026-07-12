@@ -177,6 +177,8 @@ docs/hr-time-attendance.md
 docs/hr-attendance-review-payroll-integration.md
 docs/hr-workforce-scheduling-roster.md
 docs/hr-performance-appraisal-management.md
+docs/hr-recruitment-onboarding-confirmation.md
+docs/hr-filament-resource-guide.md
 ```
 
 Run the report-only pilot readiness checklist with:

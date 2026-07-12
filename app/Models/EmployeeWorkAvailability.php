@@ -9,33 +9,33 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EmployeeWorkAvailability extends Model
 {
-    public const TYPE_AVAILABLE = 'available';
+    public const string TYPE_AVAILABLE = 'available';
 
-    public const TYPE_UNAVAILABLE = 'unavailable';
+    public const string TYPE_UNAVAILABLE = 'unavailable';
 
-    public const TYPE_PREFERRED_SHIFT = 'preferred_shift';
+    public const string TYPE_PREFERRED_SHIFT = 'preferred_shift';
 
-    public const TYPE_RESTRICTED_SHIFT = 'restricted_shift';
+    public const string TYPE_RESTRICTED_SHIFT = 'restricted_shift';
 
-    public const TYPE_OFFICIAL_DUTY = 'official_duty';
+    public const string TYPE_OFFICIAL_DUTY = 'official_duty';
 
-    public const TYPE_TRAINING = 'training';
+    public const string TYPE_TRAINING = 'training';
 
-    public const TYPE_TEMPORARY_ASSIGNMENT = 'temporary_assignment';
+    public const string TYPE_TEMPORARY_ASSIGNMENT = 'temporary_assignment';
 
-    public const TYPE_SUSPENSION = 'suspension';
+    public const string TYPE_SUSPENSION = 'suspension';
 
-    public const TYPE_OTHER = 'other';
+    public const string TYPE_OTHER = 'other';
 
-    public const STATUS_DRAFT = 'draft';
+    public const string STATUS_DRAFT = 'draft';
 
-    public const STATUS_SUBMITTED = 'submitted';
+    public const string STATUS_SUBMITTED = 'submitted';
 
-    public const STATUS_APPROVED = 'approved';
+    public const string STATUS_APPROVED = 'approved';
 
-    public const STATUS_REJECTED = 'rejected';
+    public const string STATUS_REJECTED = 'rejected';
 
-    public const STATUS_CANCELLED = 'cancelled';
+    public const string STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
         'employee_id', 'date_from', 'date_to', 'availability_type', 'employee_shift_id',

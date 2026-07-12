@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\AttendanceLedgerEntries\Schemas;
 
 use App\Models\AttendanceLedgerEntry;
@@ -82,6 +84,7 @@ class AttendanceLedgerEntryForm
                                 if ($in && $out) {
                                     $minutes = Carbon::parse($in)->diffInMinutes(Carbon::parse($out));
                                     $netMinutes = max(0, $minutes - $break);
+
                                     return number_format(round($netMinutes / 60, 2), 2);
                                 }
 

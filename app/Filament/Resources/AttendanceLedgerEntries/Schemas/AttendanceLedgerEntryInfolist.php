@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\AttendanceLedgerEntries\Schemas;
 
 use Filament\Infolists\Components\TextEntry;
@@ -23,7 +25,7 @@ class AttendanceLedgerEntryInfolist
 
                             TextEntry::make('employee_name')
                                 ->label('Full Name')
-                                ->state(fn ($record) => $record->employee?->first_name . ' ' . $record->employee?->last_name)
+                                ->state(fn ($record) => $record->employee?->first_name.' '.$record->employee?->last_name)
                                 ->icon('heroicon-m-user')
                                 ->columnSpan(2),
 

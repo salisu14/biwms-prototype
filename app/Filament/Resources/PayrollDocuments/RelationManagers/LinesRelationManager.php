@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\PayrollDocuments\RelationManagers;
 
 use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
@@ -11,6 +13,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -23,6 +26,7 @@ class LinesRelationManager extends RelationManager
     protected static ?string $recordTitleAttribute = 'Payroll Line';
 
     protected static ?string $title = 'Payroll Lines';
+
     protected static ?string $pluralTitle = 'Payroll Lines';
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
@@ -78,7 +82,7 @@ class LinesRelationManager extends RelationManager
                 TextColumn::make('amount')
                     ->money()
                     ->sortable()
-                    ->summarize(\Filament\Tables\Columns\Summarizers\Sum::make()->label('Total')),
+                    ->summarize(Sum::make()->label('Total')),
 
                 TextColumn::make('description')
                     ->searchable()

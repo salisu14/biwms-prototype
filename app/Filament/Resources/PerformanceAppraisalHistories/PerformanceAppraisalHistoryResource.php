@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\PerformanceAppraisalHistories;
 
-use App\Filament\Resources\PerformanceAppraisalHistories\Pages\CreatePerformanceAppraisalHistory;
-use App\Filament\Resources\PerformanceAppraisalHistories\Pages\EditPerformanceAppraisalHistory;
 use App\Filament\Resources\PerformanceAppraisalHistories\Pages\ListPerformanceAppraisalHistories;
 use App\Filament\Resources\PerformanceAppraisalHistories\Pages\ViewPerformanceAppraisalHistory;
 use App\Filament\Resources\PerformanceAppraisalHistories\Schemas\PerformanceAppraisalHistoryForm;
@@ -36,6 +34,25 @@ class PerformanceAppraisalHistoryResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Performance Management';
 
+    protected static ?string $navigationLabel = 'Appraisal History';
+
+    protected static ?int $navigationSort = 99;
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canEdit($record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete($record): bool
+    {
+        return false;
+    }
+
     public static function form(Schema $schema): Schema
     {
         return PerformanceAppraisalHistoryForm::configure($schema);
@@ -62,9 +79,7 @@ class PerformanceAppraisalHistoryResource extends Resource
     {
         return [
             'index' => ListPerformanceAppraisalHistories::route('/'),
-            'create' => CreatePerformanceAppraisalHistory::route('/create'),
             'view' => ViewPerformanceAppraisalHistory::route('/{record}'),
-            'edit' => EditPerformanceAppraisalHistory::route('/{record}/edit'),
         ];
     }
 }

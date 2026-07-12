@@ -9,25 +9,37 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WorkforceShiftReplacement extends Model
 {
-    public const STATUS_DRAFT = 'draft';
+    public const string STATUS_DRAFT = 'draft';
 
-    public const STATUS_PROPOSED = 'proposed';
+    public const string STATUS_PROPOSED = 'proposed';
 
-    public const STATUS_ACCEPTED = 'accepted';
+    public const string STATUS_ACCEPTED = 'accepted';
 
-    public const STATUS_APPROVED = 'approved';
+    public const string STATUS_APPROVED = 'approved';
 
-    public const STATUS_REJECTED = 'rejected';
+    public const string STATUS_REJECTED = 'rejected';
 
-    public const STATUS_CANCELLED = 'cancelled';
+    public const string STATUS_CANCELLED = 'cancelled';
 
-    public const STATUS_COMPLETED = 'completed';
+    public const string STATUS_COMPLETED = 'completed';
 
     protected $fillable = [
-        'original_roster_assignment_id', 'original_employee_id', 'replacement_employee_id',
-        'replacement_roster_assignment_id', 'replacement_type', 'reason', 'status',
-        'proposed_by', 'accepted_by', 'accepted_at', 'approved_by', 'approved_at',
-        'rejected_by', 'rejected_at', 'rejection_reason', 'may_create_overtime',
+        'original_roster_assignment_id',
+        'original_employee_id',
+        'replacement_employee_id',
+        'replacement_roster_assignment_id',
+        'replacement_type',
+        'reason',
+        'status',
+        'proposed_by',
+        'accepted_by',
+        'accepted_at',
+        'approved_by',
+        'approved_at',
+        'rejected_by',
+        'rejected_at',
+        'rejection_reason',
+        'may_create_overtime',
     ];
 
     protected $casts = [
@@ -36,6 +48,36 @@ class WorkforceShiftReplacement extends Model
         'rejected_at' => 'datetime',
         'may_create_overtime' => 'boolean',
     ];
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'approved_by');
+    }
+
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'rejected_by');
+    }
+
+    public function originalEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'original_employee_id');
+    }
+
+    public function replacementAssignment(): BelongsTo
+    {
+        return $this->belongsTo(WorkforceRosterAssignment::class, 'replacement_roster_assignment_id');
+    }
+
+    public function replacementEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'replacement_employee_id');
+    }
+
+    public function replacementRosterAssignment(): BelongsTo
+    {
+        return $this->belongsTo(WorkforceRosterAssignment::class, 'replacement_roster_assignment_id');
+    }
 
     public function originalAssignment(): BelongsTo
     {

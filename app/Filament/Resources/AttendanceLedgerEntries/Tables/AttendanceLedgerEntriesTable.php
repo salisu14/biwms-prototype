@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\AttendanceLedgerEntries\Tables;
 
 use App\Models\AttendanceLedgerEntry;
@@ -92,16 +94,14 @@ class AttendanceLedgerEntriesTable
 
                     // ANTI-FRAUD: Hide edit if clocked out OR approved
                     EditAction::make()
-                        ->visible(fn (AttendanceLedgerEntry $record): bool =>
-                            $record->status === 'OPEN' && !$record->clock_out_at
+                        ->visible(fn (AttendanceLedgerEntry $record): bool => $record->status === 'OPEN' && ! $record->clock_out_at
                         ),
 
                     Action::make('clock_out')
                         ->label('Clock Out')
                         ->icon('heroicon-o-clock')
                         ->color('gray')
-                        ->visible(fn (AttendanceLedgerEntry $record): bool =>
-                            $record->status === 'OPEN' && $record->clock_in_at && !$record->clock_out_at
+                        ->visible(fn (AttendanceLedgerEntry $record): bool => $record->status === 'OPEN' && $record->clock_in_at && ! $record->clock_out_at
                         )
                         ->action(function (AttendanceLedgerEntry $record): void {
                             $record->update(['clock_out_at' => now()]);
@@ -115,8 +115,9 @@ class AttendanceLedgerEntriesTable
                         ->requiresConfirmation()
                         ->visible(fn (AttendanceLedgerEntry $record): bool => $record->status === 'OPEN')
                         ->action(function (AttendanceLedgerEntry $record): void {
-                            if (!auth()->user()?->can('hr.attendance.approve')) {
+                            if (! auth()->user()?->can('hr.attendance.approve')) {
                                 Notification::make()->danger()->title('Not allowed')->body('Missing permission: hr.attendance.approve')->send();
+
                                 return;
                             }
                             $record->update([
@@ -140,8 +141,9 @@ class AttendanceLedgerEntriesTable
                         ])
                         ->visible(fn (AttendanceLedgerEntry $record): bool => $record->status === 'OPEN')
                         ->action(function (AttendanceLedgerEntry $record, array $data): void {
-                            if (!auth()->user()?->can('hr.attendance.reject')) {
+                            if (! auth()->user()?->can('hr.attendance.reject')) {
                                 Notification::make()->danger()->title('Not allowed')->body('Missing permission: hr.attendance.reject')->send();
+
                                 return;
                             }
                             $record->update([
@@ -152,7 +154,7 @@ class AttendanceLedgerEntriesTable
                             ]);
                             Notification::make()->success()->title('Entry Rejected')->send();
                         }),
-                ])
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -163,7 +165,7 @@ class AttendanceLedgerEntriesTable
                         ->color('success')
                         ->action(function (Collection $records) {
                             $count = $records->where('status', 'OPEN')->each(fn ($r) => $r->update([
-                                'status' => 'APPROVED', 'approved_by' => auth()->id(), 'approved_at' => now()
+                                'status' => 'APPROVED', 'approved_by' => auth()->id(), 'approved_at' => now(),
                             ]))->count();
                             Notification::make()->title("{$count} entries approved")->success()->send();
                         }),
@@ -178,7 +180,7 @@ class AttendanceLedgerEntriesTable
                         ])
                         ->action(function (Collection $records, array $data) {
                             $count = $records->where('status', 'OPEN')->each(fn ($r) => $r->update([
-                                'status' => 'REJECTED', 'approved_by' => auth()->id(), 'approved_at' => now(), 'approval_note' => $data['rejection_reason']
+                                'status' => 'REJECTED', 'approved_by' => auth()->id(), 'approved_at' => now(), 'approval_note' => $data['rejection_reason'],
                             ]))->count();
                             Notification::make()->title("{$count} entries rejected")->danger()->send();
                         }),

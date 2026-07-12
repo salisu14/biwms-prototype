@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\WorkforceRosterHistories;
 
-use App\Filament\Resources\WorkforceRosterHistories\Pages\CreateWorkforceRosterHistory;
-use App\Filament\Resources\WorkforceRosterHistories\Pages\EditWorkforceRosterHistory;
 use App\Filament\Resources\WorkforceRosterHistories\Pages\ListWorkforceRosterHistories;
 use App\Filament\Resources\WorkforceRosterHistories\Pages\ViewWorkforceRosterHistory;
 use App\Filament\Resources\WorkforceRosterHistories\Schemas\WorkforceRosterHistoryForm;
@@ -38,6 +36,23 @@ class WorkforceRosterHistoryResource extends Resource
 
     protected static ?string $navigationLabel = 'Roster History';
 
+    protected static ?int $navigationSort = 99;
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canEdit($record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete($record): bool
+    {
+        return false;
+    }
+
     public static function form(Schema $schema): Schema
     {
         return WorkforceRosterHistoryForm::configure($schema);
@@ -64,9 +79,7 @@ class WorkforceRosterHistoryResource extends Resource
     {
         return [
             'index' => ListWorkforceRosterHistories::route('/'),
-            'create' => CreateWorkforceRosterHistory::route('/create'),
             'view' => ViewWorkforceRosterHistory::route('/{record}'),
-            'edit' => EditWorkforceRosterHistory::route('/{record}/edit'),
         ];
     }
 }

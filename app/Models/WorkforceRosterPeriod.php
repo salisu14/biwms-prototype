@@ -12,28 +12,44 @@ use Illuminate\Support\Carbon;
 
 class WorkforceRosterPeriod extends Model
 {
-    public const STATUS_DRAFT = 'draft';
+    public const string STATUS_DRAFT = 'draft';
 
-    public const STATUS_GENERATED = 'generated';
+    public const string STATUS_GENERATED = 'generated';
 
-    public const STATUS_UNDER_REVIEW = 'under_review';
+    public const string STATUS_UNDER_REVIEW = 'under_review';
 
-    public const STATUS_PUBLISHED = 'published';
+    public const string STATUS_PUBLISHED = 'published';
 
-    public const STATUS_ACTIVE = 'active';
+    public const string STATUS_ACTIVE = 'active';
 
-    public const STATUS_CLOSED = 'closed';
+    public const string STATUS_CLOSED = 'closed';
 
-    public const STATUS_CANCELLED = 'cancelled';
+    public const string STATUS_CANCELLED = 'cancelled';
 
-    public const STATUS_REOPENED = 'reopened';
+    public const string STATUS_REOPENED = 'reopened';
 
     protected $fillable = [
-        'business_id', 'code', 'name', 'date_from', 'date_to', 'status',
-        'department_id', 'work_center_id', 'attendance_location_id',
-        'generated_by', 'generated_at', 'submitted_by', 'submitted_at',
-        'published_by', 'published_at', 'closed_by', 'closed_at',
-        'reopened_by', 'reopened_at', 'reopen_reason', 'notes',
+        'business_id',
+        'code',
+        'name',
+        'date_from',
+        'date_to',
+        'status',
+        'department_id',
+        'work_center_id',
+        'attendance_location_id',
+        'generated_by',
+        'generated_at',
+        'submitted_by',
+        'submitted_at',
+        'published_by',
+        'published_at',
+        'closed_by',
+        'closed_at',
+        'reopened_by',
+        'reopened_at',
+        'reopen_reason',
+        'notes',
     ];
 
     protected $casts = [

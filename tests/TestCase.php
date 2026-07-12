@@ -13,9 +13,19 @@ abstract class TestCase extends BaseTestCase
 {
     private static bool $hasValidatedTestDatabaseIsolation = false;
 
+    private static ?string $postgresRuntimeTestingSchema = null;
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        if ((string) config('database.default') === 'pgsql') {
+            if (self::$postgresRuntimeTestingSchema !== null) {
+                config()->set('database.connections.pgsql.search_path', self::$postgresRuntimeTestingSchema);
+            }
+
+            $this->applyPostgresSearchPath();
+        }
 
         if (self::$hasValidatedTestDatabaseIsolation) {
             return;
@@ -148,12 +158,14 @@ abstract class TestCase extends BaseTestCase
             return;
         }
 
-        $this->ensurePostgresTestingSchemaExists();
+        $this->useFreshPostgresRuntimeTestingSchema();
 
         $this->artisan('migrate:fresh', [
             '--schema-path' => $this->testing_schema_dump_path(),
             '--drop-types' => true,
         ]);
+
+        $this->setPostgresSearchPathFromConfig();
     }
 
     private function refreshPostgresDatabaseForRefreshDatabaseTrait(): void
@@ -180,5 +192,53 @@ abstract class TestCase extends BaseTestCase
         $schema = (string) config('database.connections.pgsql.search_path');
 
         DB::statement(sprintf('CREATE SCHEMA IF NOT EXISTS "%s"', str_replace('"', '""', $schema)));
+    }
+
+    private function useFreshPostgresRuntimeTestingSchema(): void
+    {
+        $schema = (string) env('DB_SCHEMA', config('database.connections.pgsql.search_path'));
+
+        if (! str_contains(strtolower($schema), 'test')) {
+            throw new RuntimeException(
+                "Refusing to prepare non-test PostgreSQL schema '{$schema}'."
+            );
+        }
+
+        $schemaPrefix = substr($schema, 0, 42);
+        $runtimeSchema = sprintf(
+            '%s_%s_%s',
+            $schemaPrefix,
+            getmypid(),
+            substr(md5((string) microtime(true)), 0, 8)
+        );
+        self::$postgresRuntimeTestingSchema = $runtimeSchema;
+
+        $quotedSchema = str_replace('"', '""', $runtimeSchema);
+
+        DB::statement(sprintf('CREATE SCHEMA IF NOT EXISTS "%s"', $quotedSchema));
+
+        config()->set('database.connections.pgsql.search_path', $runtimeSchema);
+
+        DB::purge('pgsql');
+        DB::reconnect('pgsql');
+        $this->setPostgresSearchPathFromConfig();
+    }
+
+    private function setPostgresSearchPathFromConfig(): void
+    {
+        $schema = (string) config('database.connections.pgsql.search_path');
+        $quotedSchema = str_replace('"', '""', $schema);
+
+        DB::purge('pgsql');
+        DB::reconnect('pgsql');
+        $this->applyPostgresSearchPath();
+    }
+
+    private function applyPostgresSearchPath(): void
+    {
+        $schema = (string) config('database.connections.pgsql.search_path');
+        $quotedSchema = str_replace('"', '""', $schema);
+
+        DB::statement(sprintf('SET search_path TO "%s"', $quotedSchema));
     }
 }

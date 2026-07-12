@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\AdminDashboard;
@@ -13,23 +15,27 @@ use App\Filament\Pages\Finance\PurchaseStatisticsReport;
 use App\Filament\Pages\Finance\SalesStatisticsReport;
 use App\Filament\Pages\FiscalYearManagement;
 use App\Filament\Pages\PurchaseHistory;
+use App\Filament\Pages\RecruitmentDashboard;
+use App\Filament\Pages\RecruitmentReports;
 use App\Filament\Pages\SalesHistory;
 use App\Filament\Pages\UserSecurity;
 use App\Filament\Resources\AttendanceCorrectionRequests\AttendanceCorrectionRequestResource;
 use App\Filament\Resources\AttendanceDevices\AttendanceDeviceResource;
 use App\Filament\Resources\AttendanceLocations\AttendanceLocationResource;
+use App\Filament\Resources\AttendancePayrollReviewBatches\AttendancePayrollReviewBatchResource;
+use App\Filament\Resources\AttendancePayrollReviewBatchLines\AttendancePayrollReviewBatchLineResource;
+use App\Filament\Resources\AttendancePayrollRules\AttendancePayrollRuleResource;
+use App\Filament\Resources\AttendanceReviewItems\AttendanceReviewItemResource;
+use App\Filament\Resources\AttendanceReviewPeriods\AttendanceReviewPeriodResource;
 use App\Filament\Resources\EmployeeAttendanceDays\EmployeeAttendanceDayResource;
 use App\Filament\Resources\EmployeeAttendanceEvents\EmployeeAttendanceEventResource;
-use App\Filament\Resources\EmployeeIdCardHistories\EmployeeIdCardHistoryResource;
-use App\Filament\Resources\EmployeeIdCardPrintBatches\EmployeeIdCardPrintBatchResource;
-use App\Filament\Resources\EmployeeIdCards\EmployeeIdCardResource;
-use App\Filament\Resources\EmployeeIdCardTemplates\EmployeeIdCardTemplateResource;
-use App\Filament\Resources\EmployeeIdCardVerificationLogs\EmployeeIdCardVerificationLogResource;
+use App\Filament\Resources\EmployeeConfirmationDecisions\EmployeeConfirmationDecisionResource;
 use App\Filament\Resources\EmployeeLeaveEntitlements\EmployeeLeaveEntitlementResource;
 use App\Filament\Resources\EmployeeLeaveLedgerEntries\EmployeeLeaveLedgerEntryResource;
 use App\Filament\Resources\EmployeePayslipHistories\EmployeePayslipHistoryResource;
 use App\Filament\Resources\EmployeePayslips\EmployeePayslipResource;
 use App\Filament\Resources\EmployeeShifts\EmployeeShiftResource;
+use App\Filament\Resources\EmployeeWorkAvailabilities\EmployeeWorkAvailabilityResource;
 use App\Filament\Resources\EmployeeWorkScheduleAssignments\EmployeeWorkScheduleAssignmentResource;
 use App\Filament\Resources\LeavePolicies\LeavePolicyResource;
 use App\Filament\Resources\LeaveRequests\LeaveRequestResource;
@@ -39,6 +45,54 @@ use App\Filament\Resources\MaintenanceContractBillings\MaintenanceContractBillin
 use App\Filament\Resources\MaintenanceContracts\MaintenanceContractResource;
 use App\Filament\Resources\MaintenanceContractSchedules\MaintenanceContractScheduleResource;
 use App\Filament\Resources\OvertimeApprovals\OvertimeApprovalResource;
+use App\Filament\Resources\PayCodes\PayCodeResource;
+use App\Filament\Resources\PayrollDocuments\PayrollDocumentResource;
+use App\Filament\Resources\PayrollPeriods\PayrollPeriodResource;
+use App\Filament\Resources\PayrollPostingGroups\PayrollPostingGroupResource;
+use App\Filament\Resources\PerformanceAppraisalCycles\PerformanceAppraisalCycleResource;
+use App\Filament\Resources\PerformanceAppraisalDisputes\PerformanceAppraisalDisputeResource;
+use App\Filament\Resources\PerformanceAppraisalHistories\PerformanceAppraisalHistoryResource;
+use App\Filament\Resources\PerformanceAppraisalModerationSessions\PerformanceAppraisalModerationSessionResource;
+use App\Filament\Resources\PerformanceAppraisalRecommendations\PerformanceAppraisalRecommendationResource;
+use App\Filament\Resources\PerformanceAppraisals\PerformanceAppraisalResource;
+use App\Filament\Resources\PerformanceAppraisalTemplates\PerformanceAppraisalTemplateResource;
+use App\Filament\Resources\PerformanceCompetencies\PerformanceCompetencyResource;
+use App\Filament\Resources\PerformanceCompetencyFrameworks\PerformanceCompetencyFrameworkResource;
+use App\Filament\Resources\PerformanceDevelopmentPlans\PerformanceDevelopmentPlanResource;
+use App\Filament\Resources\PerformanceGoalPlans\PerformanceGoalPlanResource;
+use App\Filament\Resources\PerformanceGoals\PerformanceGoalResource;
+use App\Filament\Resources\PerformanceImprovementPlans\PerformanceImprovementPlanResource;
+use App\Filament\Resources\PerformancePositionCompetencies\PerformancePositionCompetencyResource;
+use App\Filament\Resources\PerformanceProbationReviews\PerformanceProbationReviewResource;
+use App\Filament\Resources\PerformanceRatingScales\PerformanceRatingScaleResource;
+use App\Filament\Resources\RecruitmentApplications\RecruitmentApplicationResource;
+use App\Filament\Resources\RecruitmentApplicationScreenings\RecruitmentApplicationScreeningResource;
+use App\Filament\Resources\RecruitmentAssessments\RecruitmentAssessmentResource;
+use App\Filament\Resources\RecruitmentCandidates\RecruitmentCandidateResource;
+use App\Filament\Resources\RecruitmentHistories\RecruitmentHistoryResource;
+use App\Filament\Resources\RecruitmentInterviewPanels\RecruitmentInterviewPanelResource;
+use App\Filament\Resources\RecruitmentInterviews\RecruitmentInterviewResource;
+use App\Filament\Resources\RecruitmentInterviewScorecardTemplates\RecruitmentInterviewScorecardTemplateResource;
+use App\Filament\Resources\RecruitmentJobPostings\RecruitmentJobPostingResource;
+use App\Filament\Resources\RecruitmentOffers\RecruitmentOfferResource;
+use App\Filament\Resources\RecruitmentOnboardingPlans\RecruitmentOnboardingPlanResource;
+use App\Filament\Resources\RecruitmentOnboardingTasks\RecruitmentOnboardingTaskResource;
+use App\Filament\Resources\RecruitmentOnboardingTemplates\RecruitmentOnboardingTemplateResource;
+use App\Filament\Resources\RecruitmentPreEmploymentChecks\RecruitmentPreEmploymentCheckResource;
+use App\Filament\Resources\RecruitmentRequisitions\RecruitmentRequisitionResource;
+use App\Filament\Resources\RecruitmentScreeningTemplates\RecruitmentScreeningTemplateResource;
+use App\Filament\Resources\RecruitmentSelectionReviews\RecruitmentSelectionReviewResource;
+use App\Filament\Resources\RecruitmentVacancies\RecruitmentVacancyResource;
+use App\Filament\Resources\WorkforceRosterAssignments\WorkforceRosterAssignmentResource;
+use App\Filament\Resources\WorkforceRosterHistories\WorkforceRosterHistoryResource;
+use App\Filament\Resources\WorkforceRosterPeriods\WorkforceRosterPeriodResource;
+use App\Filament\Resources\WorkforceRosterRoles\WorkforceRosterRoleResource;
+use App\Filament\Resources\WorkforceRotationAssignments\WorkforceRotationAssignmentResource;
+use App\Filament\Resources\WorkforceRotationTemplates\WorkforceRotationTemplateResource;
+use App\Filament\Resources\WorkforceSchedulingRules\WorkforceSchedulingRuleResource;
+use App\Filament\Resources\WorkforceShiftReplacements\WorkforceShiftReplacementResource;
+use App\Filament\Resources\WorkforceShiftSwapRequests\WorkforceShiftSwapRequestResource;
+use App\Filament\Resources\WorkforceStaffingRequirements\WorkforceStaffingRequirementResource;
 use App\Http\Middleware\AddSecurityHeaders;
 use App\Http\Middleware\EnforceAdminAbsoluteSessionLifetime;
 use App\Http\Middleware\EnforceAdminIdleTimeout;
@@ -797,65 +851,6 @@ class AdminPanelProvider extends PanelProvider
                                         ->url('/admin/employee-promotion-histories')
                                         ->isActiveWhen(fn () => request()->is('admin/employee-promotion-histories*')),
 
-                                    NavigationItem::make('Pay Codes')
-                                        ->icon('heroicon-o-banknotes')
-                                        ->url('/admin/pay-codes')
-                                        ->isActiveWhen(fn () => request()->is('admin/pay-codes*')),
-
-                                    NavigationItem::make('Employee ID Cards')
-                                        ->icon('heroicon-o-credit-card')
-                                        ->url(EmployeeIdCardResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-id-cards*')),
-
-                                    NavigationItem::make('Employee ID Card Templates')
-                                        ->icon('heroicon-o-credit-card')
-                                        ->url(EmployeeIdCardTemplateResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-id-card-templates*')),
-
-                                    NavigationItem::make('Employee ID Card Print Batches')
-                                        ->icon('heroicon-o-credit-card')
-                                        ->url(EmployeeIdCardPrintBatchResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-id-card-print-batches*')),
-
-                                    NavigationItem::make('Employee ID Card History')
-                                        ->icon('heroicon-o-credit-card')
-                                        ->url(EmployeeIdCardHistoryResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-id-card-history*')),
-
-                                    NavigationItem::make('Employee ID Card Verification Logs')
-                                        ->icon('heroicon-o-credit-card')
-                                        ->url(EmployeeIdCardVerificationLogResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-id-card-verification-logs*')),
-
-                                    NavigationItem::make('Payroll Periods')
-                                        ->icon('heroicon-o-calendar-date-range')
-                                        ->url('/admin/payroll-periods')
-                                        ->isActiveWhen(fn () => request()->is('admin/payroll-periods*')),
-
-                                    NavigationItem::make('Payroll Documents')
-                                        ->icon('heroicon-o-document-currency-dollar')
-                                        ->url('/admin/payroll-documents')
-                                        ->isActiveWhen(fn () => request()->is('admin/payroll-documents*')),
-
-                                    NavigationItem::make('Employee Payslips')
-                                        ->icon('heroicon-o-document-currency-dollar')
-                                        ->url(EmployeePayslipResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-payslips*')),
-
-                                    NavigationItem::make('Payslip History')
-                                        ->icon('heroicon-o-clock')
-                                        ->url(EmployeePayslipHistoryResource::getUrl())
-                                        ->isActiveWhen(fn () => request()->is('admin/employee-payslip-histories*')),
-
-                                    NavigationItem::make('Tax Tables')
-                                        ->icon('heroicon-o-table-cells')
-                                        ->url('/admin/tax-tables')
-                                        ->isActiveWhen(fn () => request()->is('admin/tax-tables*')),
-
-                                    NavigationItem::make('Social Security Tiers')
-                                        ->icon('heroicon-o-square-2-stack')
-                                        ->url('/admin/social-security-tiers')
-                                        ->isActiveWhen(fn () => request()->is('admin/social-security-tiers*')),
                                 ])
                         )
                         ->group(
@@ -933,6 +928,353 @@ class AdminPanelProvider extends PanelProvider
                                         ->icon('heroicon-o-user-group')
                                         ->url(EmployeeAttendanceEventResource::getUrl())
                                         ->isActiveWhen(fn () => request()->is('admin/employee-attendance-events*')),
+                                ])
+                        )
+
+                    // Workforce Scheduling
+                        ->group(
+                            NavigationGroup::make('Workforce Scheduling')
+                                ->collapsible()
+                                ->items([
+                                    NavigationItem::make('Roster Periods')
+                                        ->icon('heroicon-o-calendar-days')
+                                        ->visible(fn (): bool => WorkforceRosterPeriodResource::canViewAny())
+                                        ->url(WorkforceRosterPeriodResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Shift Assignments')
+                                        ->icon('heroicon-o-calendar')
+                                        ->visible(fn (): bool => WorkforceRosterAssignmentResource::canViewAny())
+                                        ->url(WorkforceRosterAssignmentResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Rotation Templates')
+                                        ->icon('heroicon-o-arrow-path-rounded-square')
+                                        ->visible(fn (): bool => WorkforceRotationTemplateResource::canViewAny())
+                                        ->url(WorkforceRotationTemplateResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Rotation Assignments')
+                                        ->icon('heroicon-o-arrows-right-left')
+                                        ->visible(fn (): bool => WorkforceRotationAssignmentResource::canViewAny())
+                                        ->url(WorkforceRotationAssignmentResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Staffing Requirements')
+                                        ->icon('heroicon-o-user-group')
+                                        ->visible(fn (): bool => WorkforceStaffingRequirementResource::canViewAny())
+                                        ->url(WorkforceStaffingRequirementResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Roster Roles')
+                                        ->icon('heroicon-o-identification')
+                                        ->visible(fn (): bool => WorkforceRosterRoleResource::canViewAny())
+                                        ->url(WorkforceRosterRoleResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Employee Availability')
+                                        ->icon('heroicon-o-clock')
+                                        ->visible(fn (): bool => EmployeeWorkAvailabilityResource::canViewAny())
+                                        ->url(EmployeeWorkAvailabilityResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Shift Swaps')
+                                        ->icon('heroicon-o-arrow-path')
+                                        ->visible(fn (): bool => WorkforceShiftSwapRequestResource::canViewAny())
+                                        ->url(WorkforceShiftSwapRequestResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Shift Replacements')
+                                        ->icon('heroicon-o-user-plus')
+                                        ->visible(fn (): bool => WorkforceShiftReplacementResource::canViewAny())
+                                        ->url(WorkforceShiftReplacementResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Scheduling Rules')
+                                        ->icon('heroicon-o-adjustments-horizontal')
+                                        ->visible(fn (): bool => WorkforceSchedulingRuleResource::canViewAny())
+                                        ->url(WorkforceSchedulingRuleResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Roster History')
+                                        ->icon('heroicon-o-clock')
+                                        ->visible(fn (): bool => WorkforceRosterHistoryResource::canViewAny())
+                                        ->url(WorkforceRosterHistoryResource::getUrl(panel: 'admin')),
+                                ])
+                        )
+
+                    // Performance Management
+                        ->group(
+                            NavigationGroup::make('Performance Management')
+                                ->collapsible()
+                                ->items([
+                                    NavigationItem::make('Rating Scales')
+                                        ->icon('heroicon-o-star')
+                                        ->visible(fn (): bool => PerformanceRatingScaleResource::canViewAny())
+                                        ->url(PerformanceRatingScaleResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Appraisal Cycles')
+                                        ->icon('heroicon-o-calendar-date-range')
+                                        ->visible(fn (): bool => PerformanceAppraisalCycleResource::canViewAny())
+                                        ->url(PerformanceAppraisalCycleResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Appraisal Templates')
+                                        ->icon('heroicon-o-document-duplicate')
+                                        ->visible(fn (): bool => PerformanceAppraisalTemplateResource::canViewAny())
+                                        ->url(PerformanceAppraisalTemplateResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Competency Frameworks')
+                                        ->icon('heroicon-o-squares-plus')
+                                        ->visible(fn (): bool => PerformanceCompetencyFrameworkResource::canViewAny())
+                                        ->url(PerformanceCompetencyFrameworkResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Competencies')
+                                        ->icon('heroicon-o-academic-cap')
+                                        ->visible(fn (): bool => PerformanceCompetencyResource::canViewAny())
+                                        ->url(PerformanceCompetencyResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Position Competencies')
+                                        ->icon('heroicon-o-briefcase')
+                                        ->visible(fn (): bool => PerformancePositionCompetencyResource::canViewAny())
+                                        ->url(PerformancePositionCompetencyResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Goal Plans')
+                                        ->icon('heroicon-o-flag')
+                                        ->visible(fn (): bool => PerformanceGoalPlanResource::canViewAny())
+                                        ->url(PerformanceGoalPlanResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Employee Goals')
+                                        ->icon('heroicon-o-flag')
+                                        ->visible(fn (): bool => PerformanceGoalResource::canViewAny())
+                                        ->url(PerformanceGoalResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Appraisals')
+                                        ->icon('heroicon-o-clipboard-document-check')
+                                        ->visible(fn (): bool => PerformanceAppraisalResource::canViewAny())
+                                        ->url(PerformanceAppraisalResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Moderation Sessions')
+                                        ->icon('heroicon-o-scale')
+                                        ->visible(fn (): bool => PerformanceAppraisalModerationSessionResource::canViewAny())
+                                        ->url(PerformanceAppraisalModerationSessionResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Development Plans')
+                                        ->icon('heroicon-o-arrow-trending-up')
+                                        ->visible(fn (): bool => PerformanceDevelopmentPlanResource::canViewAny())
+                                        ->url(PerformanceDevelopmentPlanResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Performance Improvement Plans')
+                                        ->icon('heroicon-o-wrench-screwdriver')
+                                        ->visible(fn (): bool => PerformanceImprovementPlanResource::canViewAny())
+                                        ->url(PerformanceImprovementPlanResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Probation Reviews')
+                                        ->icon('heroicon-o-check-badge')
+                                        ->visible(fn (): bool => PerformanceProbationReviewResource::canViewAny())
+                                        ->url(PerformanceProbationReviewResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Appraisal Disputes')
+                                        ->icon('heroicon-o-exclamation-triangle')
+                                        ->visible(fn (): bool => PerformanceAppraisalDisputeResource::canViewAny())
+                                        ->url(PerformanceAppraisalDisputeResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Recommendations')
+                                        ->icon('heroicon-o-light-bulb')
+                                        ->visible(fn (): bool => PerformanceAppraisalRecommendationResource::canViewAny())
+                                        ->url(PerformanceAppraisalRecommendationResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Appraisal History')
+                                        ->icon('heroicon-o-clock')
+                                        ->visible(fn (): bool => PerformanceAppraisalHistoryResource::canViewAny())
+                                        ->url(PerformanceAppraisalHistoryResource::getUrl(panel: 'admin')),
+                                ])
+                        )
+
+                    // Recruitment & Onboarding
+                        ->group(
+                            NavigationGroup::make('Recruitment & Onboarding')
+                                ->collapsible()
+                                ->items([
+                                    NavigationItem::make('Recruitment Dashboard')
+                                        ->icon('heroicon-o-chart-bar-square')
+                                        ->visible(fn (): bool => auth()->user()?->can('hr.recruitment_report.view') ?? false)
+                                        ->url(RecruitmentDashboard::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Workforce Requisitions')
+                                        ->icon('heroicon-o-clipboard-document-list')
+                                        ->visible(fn (): bool => RecruitmentRequisitionResource::canViewAny())
+                                        ->url(RecruitmentRequisitionResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Vacancies')
+                                        ->icon('heroicon-o-briefcase')
+                                        ->visible(fn (): bool => RecruitmentVacancyResource::canViewAny())
+                                        ->url(RecruitmentVacancyResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Job Postings')
+                                        ->icon('heroicon-o-megaphone')
+                                        ->visible(fn (): bool => RecruitmentJobPostingResource::canViewAny())
+                                        ->url(RecruitmentJobPostingResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Candidates')
+                                        ->icon('heroicon-o-users')
+                                        ->visible(fn (): bool => RecruitmentCandidateResource::canViewAny())
+                                        ->url(RecruitmentCandidateResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Applications')
+                                        ->icon('heroicon-o-document-text')
+                                        ->visible(fn (): bool => RecruitmentApplicationResource::canViewAny())
+                                        ->url(RecruitmentApplicationResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Screening')
+                                        ->icon('heroicon-o-funnel')
+                                        ->visible(fn (): bool => RecruitmentApplicationScreeningResource::canViewAny())
+                                        ->url(RecruitmentApplicationScreeningResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Assessments')
+                                        ->icon('heroicon-o-clipboard-document-check')
+                                        ->visible(fn (): bool => RecruitmentAssessmentResource::canViewAny())
+                                        ->url(RecruitmentAssessmentResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Interviews')
+                                        ->icon('heroicon-o-chat-bubble-left-right')
+                                        ->visible(fn (): bool => RecruitmentInterviewResource::canViewAny())
+                                        ->url(RecruitmentInterviewResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Interview Panels')
+                                        ->icon('heroicon-o-user-group')
+                                        ->visible(fn (): bool => RecruitmentInterviewPanelResource::canViewAny())
+                                        ->url(RecruitmentInterviewPanelResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Selection Reviews')
+                                        ->icon('heroicon-o-check-badge')
+                                        ->visible(fn (): bool => RecruitmentSelectionReviewResource::canViewAny())
+                                        ->url(RecruitmentSelectionReviewResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Offers')
+                                        ->icon('heroicon-o-envelope')
+                                        ->visible(fn (): bool => RecruitmentOfferResource::canViewAny())
+                                        ->url(RecruitmentOfferResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Pre-Employment Checks')
+                                        ->icon('heroicon-o-shield-check')
+                                        ->visible(fn (): bool => RecruitmentPreEmploymentCheckResource::canViewAny())
+                                        ->url(RecruitmentPreEmploymentCheckResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Onboarding Plans')
+                                        ->icon('heroicon-o-academic-cap')
+                                        ->visible(fn (): bool => RecruitmentOnboardingPlanResource::canViewAny())
+                                        ->url(RecruitmentOnboardingPlanResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Onboarding Tasks')
+                                        ->icon('heroicon-o-list-bullet')
+                                        ->visible(fn (): bool => RecruitmentOnboardingTaskResource::canViewAny())
+                                        ->url(RecruitmentOnboardingTaskResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Confirmation Decisions')
+                                        ->icon('heroicon-o-check-circle')
+                                        ->visible(fn (): bool => EmployeeConfirmationDecisionResource::canViewAny())
+                                        ->url(EmployeeConfirmationDecisionResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Recruitment Reports')
+                                        ->icon('heroicon-o-presentation-chart-line')
+                                        ->visible(fn (): bool => auth()->user()?->can('hr.recruitment_report.view') ?? false)
+                                        ->url(RecruitmentReports::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Recruitment History')
+                                        ->icon('heroicon-o-clock')
+                                        ->visible(fn (): bool => RecruitmentHistoryResource::canViewAny())
+                                        ->url(RecruitmentHistoryResource::getUrl(panel: 'admin')),
+                                ])
+                        )
+
+                    // Recruitment Setup
+                        ->group(
+                            NavigationGroup::make('Recruitment Setup')
+                                ->collapsed()
+                                ->items([
+                                    NavigationItem::make('Screening Templates')
+                                        ->icon('heroicon-o-adjustments-horizontal')
+                                        ->visible(fn (): bool => RecruitmentScreeningTemplateResource::canViewAny())
+                                        ->url(RecruitmentScreeningTemplateResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Interview Scorecards')
+                                        ->icon('heroicon-o-list-bullet')
+                                        ->visible(fn (): bool => RecruitmentInterviewScorecardTemplateResource::canViewAny())
+                                        ->url(RecruitmentInterviewScorecardTemplateResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Onboarding Templates')
+                                        ->icon('heroicon-o-document-duplicate')
+                                        ->visible(fn (): bool => RecruitmentOnboardingTemplateResource::canViewAny())
+                                        ->url(RecruitmentOnboardingTemplateResource::getUrl(panel: 'admin')),
+                                ])
+                        )
+
+                    // Attendance Review & Payroll Integration
+                        ->group(
+                            NavigationGroup::make('Attendance Review')
+                                ->collapsed()
+                                ->items([
+                                    NavigationItem::make('Review Periods')
+                                        ->icon('heroicon-o-calendar-date-range')
+                                        ->visible(fn (): bool => AttendanceReviewPeriodResource::canViewAny())
+                                        ->url(AttendanceReviewPeriodResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Review Items')
+                                        ->icon('heroicon-o-exclamation-circle')
+                                        ->visible(fn (): bool => AttendanceReviewItemResource::canViewAny())
+                                        ->url(AttendanceReviewItemResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Payroll Review Batches')
+                                        ->icon('heroicon-o-queue-list')
+                                        ->visible(fn (): bool => AttendancePayrollReviewBatchResource::canViewAny())
+                                        ->url(AttendancePayrollReviewBatchResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Payroll Review Lines')
+                                        ->icon('heroicon-o-list-bullet')
+                                        ->visible(fn (): bool => AttendancePayrollReviewBatchLineResource::canViewAny())
+                                        ->url(AttendancePayrollReviewBatchLineResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Attendance Payroll Rules')
+                                        ->icon('heroicon-o-calculator')
+                                        ->visible(fn (): bool => AttendancePayrollRuleResource::canViewAny())
+                                        ->url(AttendancePayrollRuleResource::getUrl(panel: 'admin')),
+                                ])
+                        )
+
+                    // Payroll
+                        ->group(
+                            NavigationGroup::make('Payroll')
+                                ->collapsible()
+                                ->items([
+                                    NavigationItem::make('Payroll Periods')
+                                        ->icon('heroicon-o-calendar-date-range')
+                                        ->visible(fn (): bool => PayrollPeriodResource::canViewAny())
+                                        ->url(PayrollPeriodResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Payroll Documents')
+                                        ->icon('heroicon-o-document-currency-dollar')
+                                        ->visible(fn (): bool => PayrollDocumentResource::canViewAny())
+                                        ->url(PayrollDocumentResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Employee Payslips')
+                                        ->icon('heroicon-o-document-text')
+                                        ->visible(fn (): bool => EmployeePayslipResource::canViewAny())
+                                        ->url(EmployeePayslipResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Payslip History')
+                                        ->icon('heroicon-o-clock')
+                                        ->visible(fn (): bool => EmployeePayslipHistoryResource::canViewAny())
+                                        ->url(EmployeePayslipHistoryResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Pay Codes')
+                                        ->icon('heroicon-o-banknotes')
+                                        ->visible(fn (): bool => PayCodeResource::canViewAny())
+                                        ->url(PayCodeResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Payroll Posting Groups')
+                                        ->icon('heroicon-o-squares-2x2')
+                                        ->visible(fn (): bool => PayrollPostingGroupResource::canViewAny())
+                                        ->url(PayrollPostingGroupResource::getUrl(panel: 'admin')),
+
+                                    NavigationItem::make('Tax Tables')
+                                        ->icon('heroicon-o-table-cells')
+                                        ->url('/admin/tax-tables')
+                                        ->isActiveWhen(fn (): bool => request()->is('admin/tax-tables*')),
+
+                                    NavigationItem::make('Social Security Tiers')
+                                        ->icon('heroicon-o-square-2-stack')
+                                        ->url('/admin/social-security-tiers')
+                                        ->isActiveWhen(fn (): bool => request()->is('admin/social-security-tiers*')),
                                 ])
                         )
 
