@@ -9,7 +9,18 @@ use Illuminate\Support\Carbon;
 
 class PerformancePositionCompetency extends Model
 {
-    protected $guarded = [];
+    protected $fillable = [
+        'position_id',
+        'job_title_id',
+        'grade_id',
+        'department_id',
+        'performance_competency_id',
+        'expected_level',
+        'weight_percent',
+        'is_required',
+        'effective_from',
+        'effective_to'
+    ];
 
     protected $casts = [
         'expected_level' => 'integer',

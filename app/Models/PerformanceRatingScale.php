@@ -5,12 +5,24 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 class PerformanceRatingScale extends Model
 {
-    protected $guarded = [];
+    protected $fillable = [
+        'business_id',
+        'code',
+        'name',
+        'description',
+        'minimum_score',
+        'maximum_score',
+        'decimal_places',
+        'is_default',
+        'effective_from',
+        'effective_to',
+    ];
 
     protected $casts = [
         'minimum_score' => 'decimal:4',
@@ -55,6 +67,11 @@ class PerformanceRatingScale extends Model
                 }
             }
         });
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class, 'business_id');
     }
 
     public function levels(): HasMany

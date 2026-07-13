@@ -9,7 +9,18 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PerformanceRatingScaleLevel extends Model
 {
-    protected $guarded = [];
+    protected $fillable = [
+        'performance_rating_scale_id',
+        'code',
+        'name',
+        'score_from',
+        'score_to',
+        'numeric_value',
+        'description',
+        'color',
+        'sort_order',
+        'is_passing',
+    ];
 
     protected $casts = [
         'score_from' => 'decimal:4',

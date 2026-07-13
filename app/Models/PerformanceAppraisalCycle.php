@@ -5,34 +5,67 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 class PerformanceAppraisalCycle extends Model
 {
-    public const STATUS_DRAFT = 'draft';
+    public const string STATUS_DRAFT = 'draft';
 
-    public const STATUS_OPEN = 'open';
+    public const string STATUS_OPEN = 'open';
 
-    public const STATUS_GOAL_SETTING = 'goal_setting';
+    public const string STATUS_GOAL_SETTING = 'goal_setting';
 
-    public const STATUS_SELF_ASSESSMENT = 'self_assessment';
+    public const string STATUS_SELF_ASSESSMENT = 'self_assessment';
 
-    public const STATUS_MANAGER_REVIEW = 'manager_review';
+    public const string STATUS_MANAGER_REVIEW = 'manager_review';
 
-    public const STATUS_MODERATION = 'moderation';
+    public const string STATUS_MODERATION = 'moderation';
 
-    public const STATUS_FINALIZATION = 'finalization';
+    public const string STATUS_FINALIZATION = 'finalization';
 
-    public const STATUS_COMPLETED = 'completed';
+    public const string STATUS_COMPLETED = 'completed';
 
-    public const STATUS_CLOSED = 'closed';
+    public const string STATUS_CLOSED = 'closed';
 
-    public const STATUS_CANCELLED = 'cancelled';
+    public const string STATUS_CANCELLED = 'cancelled';
 
-    public const STATUS_REOPENED = 'reopened';
+    public const string STATUS_REOPENED = 'reopened';
 
-    protected $guarded = [];
+    protected $fillable = [
+        'code',
+        'name',
+        'description',
+        'cycle_type',
+        'period_start',
+        'period_end',
+        'goal_setting_start',
+        'goal_setting_end',
+        'self_assessment_start',
+        'self_assessment_end',
+        'manager_review_start',
+        'manager_review_end',
+        'moderation_start',
+        'moderation_end',
+        'acknowledgement_deadline',
+        'status',
+        'rating_scale_id',
+        'allow_self_assessment',
+        'allow_peer_review',
+        'allow_secondary_reviewer',
+        'require_employee_acknowledgement',
+        'require_moderation',
+        'lock_completed_reviews',
+        'opened_by',
+        'opened_at',
+        'completed_by',
+        'closed_by',
+        'closed_at',
+        'reopened_by',
+        'reopened_at',
+        'reopen_reason',
+    ];
 
     protected $casts = [
         'period_start' => 'date',
@@ -78,6 +111,10 @@ class PerformanceAppraisalCycle extends Model
         });
     }
 
+    public function ratingScale(): BelongsTo
+    {
+        return $this->belongsTo(PerformanceRatingScale::class, 'rating_scale_id');
+    }
     public function assignments(): HasMany
     {
         return $this->hasMany(PerformanceAppraisalCycleAssignment::class, 'performance_appraisal_cycle_id');

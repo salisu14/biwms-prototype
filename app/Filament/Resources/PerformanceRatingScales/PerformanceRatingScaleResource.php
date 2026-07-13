@@ -54,7 +54,7 @@ class PerformanceRatingScaleResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\LevelsRelationManager::class,
         ];
     }
 

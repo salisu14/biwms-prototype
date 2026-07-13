@@ -54,7 +54,9 @@ class PerformanceAppraisalCycleResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\AssignmentsRelationManager::class,
+            RelationManagers\AppraisalsRelationManager::class,
+            RelationManagers\CycleRelationManager::class,
         ];
     }
 
