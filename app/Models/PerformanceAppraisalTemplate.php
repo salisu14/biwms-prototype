@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Sabberworm\CSS\Position\Position;
+use Illuminate\Support\Carbon;
 
 class PerformanceAppraisalTemplate extends Model
 {
@@ -56,6 +56,23 @@ class PerformanceAppraisalTemplate extends Model
         'version' => 'integer',
     ];
 
+    protected static function booted(): void
+    {
+        static::saving(function (PerformanceAppraisalTemplate $template): void {
+            $totalWeight = (float) $template->goal_weight_percent
+                + (float) $template->competency_weight_percent
+                + (float) $template->other_weight_percent;
+
+            if (abs($totalWeight - 100.0) > 0.0001) {
+                throw new \RuntimeException('Performance appraisal template weights must total 100%.');
+            }
+
+            if ($template->effective_from !== null && $template->effective_to !== null && Carbon::parse($template->effective_from)->gt(Carbon::parse($template->effective_to))) {
+                throw new \RuntimeException('Performance appraisal template effective-from date must be on or before effective-to date.');
+            }
+        });
+    }
+
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
@@ -85,13 +102,13 @@ class PerformanceAppraisalTemplate extends Model
         );
     }
 
-//    public function grade(): BelongsTo
-//    {
-//        return $this->belongsTo(
-//            EmployeeGrade::class,
-//            'applicable_grade_id'
-//        );
-//    }
+    //    public function grade(): BelongsTo
+    //    {
+    //        return $this->belongsTo(
+    //            EmployeeGrade::class,
+    //            'applicable_grade_id'
+    //        );
+    //    }
 
     public function ratingScale(): BelongsTo
     {

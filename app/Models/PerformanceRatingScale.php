@@ -20,6 +20,7 @@ class PerformanceRatingScale extends Model
         'maximum_score',
         'decimal_places',
         'is_default',
+        'is_active',
         'effective_from',
         'effective_to',
     ];
