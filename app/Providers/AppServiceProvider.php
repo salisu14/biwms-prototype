@@ -23,6 +23,7 @@ use App\Models\AttendanceReviewPeriod;
 use App\Models\AuditTrail;
 use App\Models\BankAccount;
 use App\Models\BlanketOrder;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\CurrencyAdjustmentLedger;
 use App\Models\Customer;
@@ -140,6 +141,7 @@ use App\Policies\AttendanceReviewPeriodPolicy;
 use App\Policies\AuditTrailPolicy;
 use App\Policies\BankAccountPolicy;
 use App\Policies\BlanketOrderPolicy;
+use App\Policies\BusinessPolicy;
 use App\Policies\CapExProjectPolicy;
 use App\Policies\CurrencyAdjustmentLedgerPolicy;
 use App\Policies\CustomerLedgerEntryPolicy;
@@ -235,6 +237,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Spatie\Permission\Events\PermissionAttachedEvent;
 use Spatie\Permission\Events\PermissionDetachedEvent;
 use Spatie\Permission\Events\RoleAttachedEvent;
@@ -255,8 +258,53 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Gate::before(function (User $user): ?bool {
-            return $user->hasRole('super_admin') ? true : null;
+        Gate::before(function (User $user, string $ability, array $arguments): ?bool {
+            if ($user->hasRole('super_admin')) {
+                return true;
+            }
+
+            $modelClass = $arguments[0] ?? null;
+
+            if (! is_string($modelClass)) {
+                return null;
+            }
+
+            $policy = Gate::getPolicyFor($modelClass);
+
+            if (! $policy instanceof GenericFilamentPolicy) {
+                return null;
+            }
+
+            $action = Str::snake($ability);
+            $classLevelActions = [
+                'view_any',
+                'create',
+                'delete_any',
+                'restore_any',
+                'force_delete_any',
+            ];
+
+            if (! in_array($action, $classLevelActions, true)) {
+                return null;
+            }
+
+            $parts = app(FilamentPermissionRegistry::class)->permissionPartsForModel($modelClass);
+
+            if ($parts === null) {
+                return null;
+            }
+
+            $permissionName = "{$parts['module']}.{$parts['resource']}.{$action}";
+            $guardName = config('auth.defaults.guard', 'web');
+
+            if (! Permission::query()
+                ->where('name', $permissionName)
+                ->where('guard_name', $guardName)
+                ->exists()) {
+                return false;
+            }
+
+            return $user->hasPermissionTo($permissionName, $guardName);
         });
         Gate::policy(SalesQuote::class, SalesQuotePolicy::class);
         Gate::policy(SalesOrder::class, SalesOrderPolicy::class);
@@ -271,6 +319,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(OverheadCostCategory::class, OverheadCostCategoryPolicy::class);
         Gate::policy(ActualOverheadCost::class, ActualOverheadCostPolicy::class);
         Gate::policy(BankAccount::class, BankAccountPolicy::class);
+        Gate::policy(Business::class, BusinessPolicy::class);
         Gate::policy(GeneralJournalBatch::class, GeneralJournalBatchPolicy::class);
         Gate::policy(CurrencyAdjustmentLedger::class, CurrencyAdjustmentLedgerPolicy::class);
         Gate::policy(CustomerLedgerEntry::class, CustomerLedgerEntryPolicy::class);
