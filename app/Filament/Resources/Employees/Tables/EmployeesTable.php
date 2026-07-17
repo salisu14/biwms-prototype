@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Services\Hr\EmployeeIdCardService;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
@@ -37,50 +38,52 @@ class EmployeesTable
                 TextColumn::make('is_active')
                     ->label('Status')
                     ->badge()
-                    ->formatStateUsing(fn (bool $state): string => $state ? 'Active' : 'Inactive')
-                    ->color(fn (bool $state): string => $state ? 'success' : 'gray')
+                    ->formatStateUsing(fn(bool $state): string => $state ? 'Active' : 'Inactive')
+                    ->color(fn(bool $state): string => $state ? 'success' : 'gray')
                     ->sortable(),
             ])
             ->filters([
                 //
             ])
             ->recordActions([
-                ViewAction::make(),
-                EditAction::make(),
-                Action::make('generateIdCard')
-                    ->label('Generate ID Card')
-                    ->icon('heroicon-o-identification')
-                    ->color('info')
-                    ->visible(fn (Employee $record): bool => blank($record->id_card_token) && auth()->user()?->can('hr.employee_id_card.generate'))
-                    ->action(function (Employee $record): void {
-                        app(EmployeeIdCardService::class)->issueCard($record);
-
-                        Notification::make()
-                            ->title('Employee ID card generated')
-                            ->success()
-                            ->send();
-                    }),
-                SensitiveActionPasswordConfirmation::protect(
-                    Action::make('regenerateIdCard')
-                        ->label('Regenerate ID Card')
-                        ->icon('heroicon-o-arrow-path')
-                        ->color('warning')
-                        ->visible(fn (Employee $record): bool => filled($record->id_card_token) && auth()->user()?->can('hr.employee_id_card.regenerate'))
+                ActionGroup::make([
+                    ViewAction::make(),
+                    EditAction::make(),
+                    Action::make('generateIdCard')
+                        ->label('Generate ID Card')
+                        ->icon('heroicon-o-identification')
+                        ->color('info')
+                        ->visible(fn(Employee $record): bool => blank($record->id_card_token) && auth()->user()?->can('hr.employee_id_card.generate'))
                         ->action(function (Employee $record): void {
-                            app(EmployeeIdCardService::class)->replaceCard($record, 'Regenerated from employee shortcut.');
+                            app(EmployeeIdCardService::class)->issueCard($record);
 
                             Notification::make()
-                                ->title('Employee ID card regenerated')
+                                ->title('Employee ID card generated')
                                 ->success()
                                 ->send();
-                        })
-                ),
-                Action::make('downloadIdCard')
-                    ->label('Download ID Card PDF')
-                    ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn (Employee $record): string => route('employees.id-card.download', $record))
-                    ->openUrlInNewTab()
-                    ->visible(fn (Employee $record): bool => filled($record->id_card_token) && auth()->user()?->can('hr.employee_id_card.download')),
+                        }),
+                    SensitiveActionPasswordConfirmation::protect(
+                        Action::make('regenerateIdCard')
+                            ->label('Regenerate ID Card')
+                            ->icon('heroicon-o-arrow-path')
+                            ->color('warning')
+                            ->visible(fn(Employee $record): bool => filled($record->id_card_token) && auth()->user()?->can('hr.employee_id_card.regenerate'))
+                            ->action(function (Employee $record): void {
+                                app(EmployeeIdCardService::class)->replaceCard($record, 'Regenerated from employee shortcut.');
+
+                                Notification::make()
+                                    ->title('Employee ID card regenerated')
+                                    ->success()
+                                    ->send();
+                            })
+                    ),
+                    Action::make('downloadIdCard')
+                        ->label('Download ID Card PDF')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->url(fn(Employee $record): string => route('employees.id-card.download', $record))
+                        ->openUrlInNewTab()
+                        ->visible(fn(Employee $record): bool => filled($record->id_card_token) && auth()->user()?->can('hr.employee_id_card.download')),
+                ])
             ]);
     }
 }
