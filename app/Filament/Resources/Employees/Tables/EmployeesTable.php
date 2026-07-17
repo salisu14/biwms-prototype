@@ -12,6 +12,7 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -23,6 +24,19 @@ class EmployeesTable
             ->defaultPaginationPageOption(10)
             ->paginationPageOptions([10, 25, 50])
             ->columns([
+                ImageColumn::make('photo_path')
+                    ->label('Photo')
+                    ->disk('public')
+                    ->imageSize(44)
+                    ->circular()
+                    ->checkFileExistence(false)
+                    ->defaultImageUrl(asset('images/employee-placeholder.svg'))
+                    ->extraImgAttributes([
+                        'loading' => 'lazy',
+                        'decoding' => 'async',
+                        'alt' => 'Employee photo',
+                    ])
+                    ->toggleable(),
                 TextColumn::make('employee_number')
                     ->label('No.')
                     ->searchable()

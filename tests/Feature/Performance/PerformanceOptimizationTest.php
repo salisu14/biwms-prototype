@@ -96,6 +96,9 @@ it('keeps the employee index table payload lean', function (): void {
         ->and($source)->toContain('->paginationPageOptions([10, 25, 50])')
         ->and($source)->not->toContain("Action::make('createLoginAccount')")
         ->and($source)->not->toContain("Action::make('downloadIdCards')")
+        ->and($source)->not->toContain("url('')")
+        ->and($source)->toContain('->checkFileExistence(false)')
+        ->and($source)->toContain("asset('images/employee-placeholder.svg')")
         ->and($source)->toContain("Action::make('generateIdCard')")
         ->and($source)->toContain("Action::make('regenerateIdCard')");
 });
