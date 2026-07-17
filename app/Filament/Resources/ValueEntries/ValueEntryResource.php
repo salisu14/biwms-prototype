@@ -29,6 +29,8 @@ class ValueEntryResource extends Resource
 
     protected static ?string $model = ValueEntry::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static \UnitEnum|string|null $navigationGroup = 'Accounting';

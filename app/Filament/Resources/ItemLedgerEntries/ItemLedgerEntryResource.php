@@ -30,6 +30,8 @@ class ItemLedgerEntryResource extends Resource
 
     protected static ?string $model = ItemLedgerEntry::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static ?int $globalSearchSort = 200;

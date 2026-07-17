@@ -28,6 +28,8 @@ class EmployeeIdCardHistoryResource extends Resource
 
     protected static ?string $model = EmployeeIdCardHistory::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClock;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Employee Identity';

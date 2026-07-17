@@ -242,6 +242,7 @@ use Spatie\Permission\Events\PermissionAttachedEvent;
 use Spatie\Permission\Events\PermissionDetachedEvent;
 use Spatie\Permission\Events\RoleAttachedEvent;
 use Spatie\Permission\Events\RoleDetachedEvent;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -295,16 +296,11 @@ class AppServiceProvider extends ServiceProvider
             }
 
             $permissionName = "{$parts['module']}.{$parts['resource']}.{$action}";
-            $guardName = config('auth.defaults.guard', 'web');
-
-            if (! Permission::query()
-                ->where('name', $permissionName)
-                ->where('guard_name', $guardName)
-                ->exists()) {
+            try {
+                return $user->hasPermissionTo($permissionName, config('auth.defaults.guard', 'web'));
+            } catch (PermissionDoesNotExist) {
                 return false;
             }
-
-            return $user->hasPermissionTo($permissionName, $guardName);
         });
         Gate::policy(SalesQuote::class, SalesQuotePolicy::class);
         Gate::policy(SalesOrder::class, SalesOrderPolicy::class);

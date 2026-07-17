@@ -93,7 +93,7 @@ class WorkforceRosterAssignmentForm
             ])
             )
             ->searchable()
-            ->preload()
+            ->preload(false)
             ->required()
             ->live()
             ->afterStateUpdated(function ($state, Set $set) {
@@ -134,7 +134,7 @@ class WorkforceRosterAssignmentForm
                 fn ($query) => $query->where('is_active', true)->orderBy('last_name')
             )
             ->searchable(['first_name', 'last_name', 'employee_number'])
-            ->preload()
+            ->preload(false)
             ->required()
             ->getSearchResultsUsing(function (string $search): array {
                 return Employee::query()
@@ -174,7 +174,7 @@ class WorkforceRosterAssignmentForm
             ->label('Shift')
             ->relationship('shift', 'name')
             ->searchable()
-            ->preload()
+            ->preload(false)
             ->required()
             ->live()
             ->afterStateUpdated(function ($state, Get $get, Set $set) {
@@ -208,7 +208,7 @@ class WorkforceRosterAssignmentForm
             ->label('Roster Role')
             ->relationship('rosterRole', 'name')
             ->searchable()
-            ->preload()
+            ->preload(false)
             ->nullable()
             ->placeholder('Optional role');
     }
@@ -239,7 +239,7 @@ class WorkforceRosterAssignmentForm
             ->label('Department')
             ->relationship('department', 'name')
             ->searchable()
-            ->preload()
+            ->preload(false)
             ->nullable();
     }
 
@@ -249,7 +249,7 @@ class WorkforceRosterAssignmentForm
             ->label('Work Center')
             ->relationship('workCenter', 'name')
             ->searchable()
-            ->preload()
+            ->preload(false)
             ->nullable();
     }
 
@@ -259,7 +259,7 @@ class WorkforceRosterAssignmentForm
             ->label('Attendance Location')
             ->relationship('attendanceLocation', 'name')
             ->searchable()
-            ->preload()
+            ->preload(false)
             ->nullable();
     }
 

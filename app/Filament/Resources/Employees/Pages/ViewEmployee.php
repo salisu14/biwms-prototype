@@ -61,7 +61,7 @@ class ViewEmployee extends ViewRecord
                         ->label('New Department')
                         ->options(fn (): array => Department::query()->orderBy('name')->pluck('name', 'id')->all())
                         ->searchable()
-                        ->preload()
+                        ->preload(false)
                         ->default(fn () => $this->record->department_id),
                     TextInput::make('new_base_salary')
                         ->required()

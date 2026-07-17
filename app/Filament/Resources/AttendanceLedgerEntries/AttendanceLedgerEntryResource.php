@@ -32,6 +32,8 @@ class AttendanceLedgerEntryResource extends Resource
 
     protected static ?string $model = AttendanceLedgerEntry::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Human Resources';

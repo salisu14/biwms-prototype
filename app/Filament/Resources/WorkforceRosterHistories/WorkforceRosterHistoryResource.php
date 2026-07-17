@@ -30,6 +30,8 @@ class WorkforceRosterHistoryResource extends Resource
 
     protected static ?string $model = WorkforceRosterHistory::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Workforce Scheduling';

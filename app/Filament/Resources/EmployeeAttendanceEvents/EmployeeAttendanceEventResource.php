@@ -30,6 +30,8 @@ class EmployeeAttendanceEventResource extends Resource
 
     protected static ?string $model = EmployeeAttendanceEvent::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQueueList;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Time & Attendance';

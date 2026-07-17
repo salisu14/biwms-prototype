@@ -42,7 +42,7 @@ class EmployeePayCodesRelationManager extends RelationManager
                         ->relationship('payCode', 'name')
                         ->getOptionLabelFromRecordUsing(fn (PayCode $record) => "{$record->code} - {$record->name}")
                         ->searchable()
-                        ->preload()
+                        ->preload(false)
                         ->required()
                         ->reactive()
                         ->afterStateUpdated(function ($state, callable $set) {

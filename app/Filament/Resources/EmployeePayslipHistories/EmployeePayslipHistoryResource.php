@@ -28,6 +28,8 @@ class EmployeePayslipHistoryResource extends Resource
 
     protected static ?string $model = EmployeePayslipHistory::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClock;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Payroll';

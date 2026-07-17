@@ -31,6 +31,8 @@ class CustomerLedgerEntryResource extends Resource
 
     protected static ?string $model = CustomerLedgerEntry::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static ?string $recordTitleAttribute = null;

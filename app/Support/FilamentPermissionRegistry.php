@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Support;
 
 use Filament\Resources\Resource;
@@ -9,17 +11,36 @@ use Illuminate\Support\Str;
 class FilamentPermissionRegistry
 {
     /**
-     * @return array<int, class-string<resource>>
+     * @var array<int, class-string<\Filament\Resources\Resource>>|null
+     */
+    private static ?array $resourceClasses = null;
+
+    /**
+     * @var array<class-string, array{module: string, resource: string}|null>
+     */
+    private static array $permissionPartsByModel = [];
+
+    /**
+     * @var array<class-string<\Filament\Resources\Resource>, array{module: string, resource: string}>
+     */
+    private static array $permissionPartsByResource = [];
+
+    /**
+     * @return array<int, class-string<\Filament\Resources\Resource>>
      */
     public function resources(): array
     {
+        if (self::$resourceClasses !== null) {
+            return self::$resourceClasses;
+        }
+
         $resourcePath = app_path('Filament/Resources');
 
         if (! File::exists($resourcePath)) {
             return [];
         }
 
-        return collect(File::allFiles($resourcePath))
+        return self::$resourceClasses = collect(File::allFiles($resourcePath))
             ->filter(fn ($file): bool => str_ends_with($file->getFilename(), 'Resource.php'))
             ->map(function ($file): string {
                 return 'App\\Filament\\Resources\\'
@@ -35,7 +56,11 @@ class FilamentPermissionRegistry
      */
     public function permissionPartsForResource(string $resourceClass): array
     {
-        return [
+        if (isset(self::$permissionPartsByResource[$resourceClass])) {
+            return self::$permissionPartsByResource[$resourceClass];
+        }
+
+        return self::$permissionPartsByResource[$resourceClass] = [
             'module' => method_exists($resourceClass, 'permissionModule')
                 ? $resourceClass::permissionModule()
                 : $this->inferModule($resourceClass),
@@ -50,15 +75,19 @@ class FilamentPermissionRegistry
      */
     public function permissionPartsForModel(string $modelClass): ?array
     {
+        if (array_key_exists($modelClass, self::$permissionPartsByModel)) {
+            return self::$permissionPartsByModel[$modelClass];
+        }
+
         foreach ($this->resources() as $resourceClass) {
             if (! method_exists($resourceClass, 'getModel') || $resourceClass::getModel() !== $modelClass) {
                 continue;
             }
 
-            return $this->permissionPartsForResource($resourceClass);
+            return self::$permissionPartsByModel[$modelClass] = $this->permissionPartsForResource($resourceClass);
         }
 
-        return null;
+        return self::$permissionPartsByModel[$modelClass] = null;
     }
 
     /**

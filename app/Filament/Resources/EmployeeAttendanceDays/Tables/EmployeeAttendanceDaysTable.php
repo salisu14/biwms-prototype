@@ -11,12 +11,14 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class EmployeeAttendanceDaysTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['employee', 'shift']))
             ->columns([
                 TextColumn::make('attendance_date')->date()->sortable(),
                 TextColumn::make('employee.employee_number')->label('Emp No.')->searchable(),

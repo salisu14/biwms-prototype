@@ -30,6 +30,8 @@ class WarehouseEntryResource extends Resource
 
     protected static ?string $model = WarehouseEntry::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema

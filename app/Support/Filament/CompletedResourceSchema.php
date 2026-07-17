@@ -24,6 +24,11 @@ use Illuminate\Support\Str;
 class CompletedResourceSchema
 {
     /**
+     * @var array<class-string<Model>, array<int, string>>
+     */
+    private static array $columnsByModel = [];
+
+    /**
      * @param  class-string<Model>  $modelClass
      */
     public static function form(Schema $schema, string $modelClass): Schema
@@ -156,10 +161,14 @@ class CompletedResourceSchema
      */
     private static function columns(string $modelClass): array
     {
+        if (isset(self::$columnsByModel[$modelClass])) {
+            return self::$columnsByModel[$modelClass];
+        }
+
         /** @var Model $model */
         $model = new $modelClass;
 
-        return DB::getSchemaBuilder()->getColumnListing($model->getTable());
+        return self::$columnsByModel[$modelClass] = DB::getSchemaBuilder()->getColumnListing($model->getTable());
     }
 
     private static function formComponent(string $column): object

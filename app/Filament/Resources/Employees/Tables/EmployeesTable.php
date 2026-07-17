@@ -24,6 +24,7 @@ use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Spatie\Permission\Models\Role;
 
 class EmployeesTable
@@ -31,6 +32,7 @@ class EmployeesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->withExists(['payslips', 'user']))
             ->columns([
                 TextColumn::make('employee_number')
                     ->label('No.')
@@ -73,7 +75,7 @@ class EmployeesTable
                         ->label('Create Login Account')
                         ->icon('heroicon-o-user-plus')
                         ->color('success')
-                        ->visible(fn (Employee $record): bool => ! $record->hasUserAccount())
+                        ->visible(fn (Employee $record): bool => ! (bool) ($record->user_exists ?? $record->hasUserAccount()))
                         ->form([
                             TextInput::make('login_email')
                                 ->label('Login Email')
@@ -90,7 +92,7 @@ class EmployeesTable
                                     ->pluck('name', 'name')
                                     ->all())
                                 ->searchable()
-                                ->preload(),
+                                ->preload(false),
                             ToggleButtons::make('password_method')
                                 ->label('Password Setup Method')
                                 ->options([
@@ -167,7 +169,7 @@ class EmployeesTable
                         ->label('View Payslips')
                         ->icon('heroicon-o-document-currency-dollar')
                         ->url(fn (): string => EmployeePayslipResource::getUrl())
-                        ->visible(fn (Employee $record): bool => $record->payslips()->exists() && auth()->user()?->can('hr.employee_payslip.view_any')),
+                        ->visible(fn (Employee $record): bool => (bool) ($record->payslips_exists ?? $record->payslips()->exists()) && auth()->user()?->can('hr.employee_payslip.view_any')),
                     DeleteAction::make(),
                 ]),
             ])

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\WorkforceRosterAssignments\Tables;
 
-use App\Models\Employee;
 use App\Models\WorkforceRosterAssignment;
 use App\Models\WorkforceRosterPeriod;
 use Carbon\Carbon;
@@ -29,6 +28,7 @@ class WorkforceRosterAssignmentsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['employee', 'shift', 'department']))
             ->defaultSort('work_date', 'asc')
             ->defaultPaginationPageOption(25)
             ->columns(self::getColumns())
@@ -202,25 +202,16 @@ class WorkforceRosterAssignmentsTable
                         ->all();
                 })
                 ->searchable()
-                ->preload(),
+                ->preload(false),
 
             SelectFilter::make('employee_id')
                 ->label('Employee')
-                ->options(function (): array {
-                    return Employee::query()
-                        ->where('is_active', true)
-                        ->orderBy('first_name')
-                        ->orderBy('last_name')
-                        ->get()
-                        ->mapWithKeys(fn (Employee $employee): array => [
-                            $employee->getKey() => trim(
-                                "{$employee->full_name} ({$employee->employee_number})"
-                            ),
-                        ])
-                        ->all();
-                })
-                ->searchable()
-                ->preload(),
+                ->relationship('employee', 'full_name', fn (Builder $query): Builder => $query
+                    ->where('is_active', true)
+                    ->orderBy('first_name')
+                    ->orderBy('last_name'))
+                ->searchable(['first_name', 'last_name', 'employee_number'])
+                ->preload(false),
 
             // ─── Form-Based Filters (receive array $data) ───
 

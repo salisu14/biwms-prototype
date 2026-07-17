@@ -27,6 +27,8 @@ class EmployeePromotionHistoryResource extends Resource
 
     protected static ?string $model = EmployeePromotionHistory::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static ?string $navigationLabel = 'Promotions History';

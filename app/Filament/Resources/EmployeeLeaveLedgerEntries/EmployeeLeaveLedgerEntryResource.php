@@ -28,6 +28,8 @@ class EmployeeLeaveLedgerEntryResource extends Resource
 
     protected static ?string $model = EmployeeLeaveLedgerEntry::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBookOpen;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Leave Management';

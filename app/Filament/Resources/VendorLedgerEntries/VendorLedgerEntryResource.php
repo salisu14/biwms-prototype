@@ -31,6 +31,8 @@ class VendorLedgerEntryResource extends Resource
 
     protected static ?string $model = VendorLedgerEntry::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static ?string $recordTitleAttribute = 'description';

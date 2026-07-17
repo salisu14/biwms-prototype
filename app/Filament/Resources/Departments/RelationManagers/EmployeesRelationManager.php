@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\Departments\RelationManagers;
 
-use App\Models\Employee;
 use App\Models\DepartmentEmployee;
+use App\Models\Employee;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -17,8 +17,8 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;  // ✅ Use this instead
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
@@ -32,7 +32,9 @@ class EmployeesRelationManager extends RelationManager
     }
 
     protected static ?string $recordTitleAttribute = 'position_title';
+
     protected static ?string $title = 'Employees';
+
     protected static ?string $modelLabel = 'Employee Assignment';
 
     public function form(Schema $schema): Schema
@@ -47,10 +49,9 @@ class EmployeesRelationManager extends RelationManager
                         modifyQueryUsing: fn ($query) => $query->orderBy('last_name')->orderBy('first_name'),
                     )
                     ->searchable()
-                    ->preload()
+                    ->preload(false)
                     ->required()
-                    ->getOptionLabelFromRecordUsing(fn (Employee $record): string =>
-                    "{$record->full_name} ({$record->employee_number})"
+                    ->getOptionLabelFromRecordUsing(fn (Employee $record): string => "{$record->full_name} ({$record->employee_number})"
                     )
                     ->searchPrompt('Search by name or employee number...'),
 
@@ -105,8 +106,7 @@ class EmployeesRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('employee.full_name')
                     ->label('Employee')
-                    ->description(fn (DepartmentEmployee $record): string =>
-                        $record->employee?->employee_number ?? ''
+                    ->description(fn (DepartmentEmployee $record): string => $record->employee?->employee_number ?? ''
                     )
                     ->sortable()
                     ->searchable(['first_name', 'last_name', 'employee_number'])
@@ -132,8 +132,7 @@ class EmployeesRelationManager extends RelationManager
                     ->suffix('%')
                     ->alignCenter()
                     ->badge()
-                    ->color(fn (string $state): string =>
-                    $state >= 100 ? 'success' : ($state >= 50 ? 'warning' : 'danger')
+                    ->color(fn (string $state): string => $state >= 100 ? 'success' : ($state >= 50 ? 'warning' : 'danger')
                     ),
 
                 TextColumn::make('assignment_date')
@@ -149,7 +148,9 @@ class EmployeesRelationManager extends RelationManager
                     ->alignCenter()
                     ->placeholder('Ongoing')
                     ->formatStateUsing(function ($state): string {
-                        if (!$state) return 'Ongoing';
+                        if (! $state) {
+                            return 'Ongoing';
+                        }
 
                         return now()->gt($state) ? 'Expired' : $state->format('M d, Y');
                     }),
@@ -186,6 +187,7 @@ class EmployeesRelationManager extends RelationManager
                 CreateAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['department_id'] = $this->getOwnerRecord()->id;
+
                         return $data;
                     })
                     ->successNotificationTitle('Employee assigned successfully'),

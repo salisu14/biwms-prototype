@@ -70,7 +70,7 @@ class EditEmployee extends EditRecord
                         ->options(fn (): array => Role::query()->where('guard_name', 'web')->pluck('name', 'name')->all())
                         ->multiple()
                         ->searchable()
-                        ->preload(),
+                        ->preload(false),
                 ])
                 ->action(function (array $data): void {
                     $user = User::create([
@@ -103,7 +103,7 @@ class EditEmployee extends EditRecord
                         ->label('New Department')
                         ->options(fn (): array => Department::query()->orderBy('name')->pluck('name', 'id')->all())
                         ->searchable()
-                        ->preload(),
+                        ->preload(false),
                     TextInput::make('new_base_salary')
                         ->required()
                         ->numeric(),

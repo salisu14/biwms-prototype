@@ -28,6 +28,8 @@ class EmployeeIdCardVerificationLogResource extends Resource
 
     protected static ?string $model = EmployeeIdCardVerificationLog::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Employee Identity';

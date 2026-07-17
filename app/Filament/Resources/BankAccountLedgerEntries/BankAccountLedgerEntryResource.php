@@ -30,6 +30,8 @@ class BankAccountLedgerEntryResource extends Resource
 
     protected static ?string $model = BankAccountLedgerEntry::class;
 
+    protected static bool $isGloballySearchable = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema
