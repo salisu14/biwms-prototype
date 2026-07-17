@@ -163,6 +163,16 @@ The command reports environment/debug status, HTTPS/session cookie posture, admi
 
 It returns a non-zero exit code for critical production failures such as `APP_DEBUG=true`, insecure session cookies, database outage, unwritable storage/logs, or security audit hard-check failures.
 
+### Performance Audit
+
+Use the report-only performance audit to rank Filament/Livewire payload, route timing, global search, and eager-loading risks:
+
+```bash
+php artisan biwms:performance-audit --panel=hr --measure-routes --runs=5
+```
+
+See `docs/performance-audit.md` for command options, severity levels, route measurement methodology, Employees index diagnostic and production benchmarks, budgets, JSON exports, and cache lifecycle notes.
+
 ### Pilot Readiness
 
 Before the 3-month client pilot, review the pilot setup guide:
@@ -179,6 +189,7 @@ docs/hr-workforce-scheduling-roster.md
 docs/hr-performance-appraisal-management.md
 docs/hr-recruitment-onboarding-confirmation.md
 docs/hr-filament-resource-guide.md
+docs/performance-audit.md
 ```
 
 Run the report-only pilot readiness checklist with:

@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
-#[Signature('biwms:performance-audit {--panel= : Panel id to focus on, for example admin or hr} {--details : Show detailed findings} {--measure-routes : Measure representative route performance} {--export= : Write JSON report to the given path}')]
+#[Signature('biwms:performance-audit {--panel= : Panel id to focus on, for example admin or hr} {--details : Show detailed findings} {--measure-routes : Measure representative route performance} {--runs=2 : Number of route measurement runs per route} {--export= : Write JSON report to the given path}')]
 #[Description('Report static BIWMS performance risks without mutating data.')]
 class BiwmsPerformanceAudit extends Command
 {
@@ -34,6 +34,7 @@ class BiwmsPerformanceAudit extends Command
         $panel = $this->option('panel') ? (string) $this->option('panel') : null;
         $details = (bool) $this->option('details');
         $measureRoutes = (bool) $this->option('measure-routes');
+        $runs = max(1, (int) $this->option('runs'));
 
         $startedAt = hrtime(true);
 
@@ -57,7 +58,7 @@ class BiwmsPerformanceAudit extends Command
                 ...$schemaFindings,
             ],
             'global_search' => $globalSearchFindings,
-            'route_measurements' => $measureRoutes ? $this->measureRepresentativeRoutes() : [],
+            'route_measurements' => $measureRoutes ? $this->measureRepresentativeRoutes($runs) : [],
             'duration_ms' => round((hrtime(true) - $startedAt) / 1e6, 2),
         ];
         $report['summary'] = $this->severitySummary($report['findings']);
@@ -78,14 +79,15 @@ class BiwmsPerformanceAudit extends Command
 
             foreach ($report['route_measurements'] as $measurement) {
                 $this->line(sprintf(
-                    '%s [%s] cold=%sms/%s queries warm=%sms/%s queries size=%s bytes',
+                    '%s [%s] cold=%sms/%s queries warm_median=%sms/%s queries size=%s bytes budget=%s',
                     $measurement['label'],
                     $measurement['path'],
                     $measurement['cold']['response_time_ms'] ?? 'n/a',
                     $measurement['cold']['query_count'] ?? 'n/a',
-                    $measurement['warm']['response_time_ms'] ?? 'n/a',
-                    $measurement['warm']['query_count'] ?? 'n/a',
-                    $measurement['warm']['response_size_bytes'] ?? 'n/a',
+                    $measurement['warm_summary']['response_time_ms']['median'] ?? 'n/a',
+                    $measurement['warm_summary']['query_count']['median'] ?? 'n/a',
+                    $measurement['warm_summary']['response_size_bytes']['median'] ?? 'n/a',
+                    empty($measurement['budget_warnings']) ? 'ok' : 'warning',
                 ));
             }
         }
@@ -500,7 +502,7 @@ class BiwmsPerformanceAudit extends Command
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function measureRepresentativeRoutes(): array
+    private function measureRepresentativeRoutes(int $runs): array
     {
         $user = $this->benchmarkUser();
 
@@ -513,17 +515,92 @@ class BiwmsPerformanceAudit extends Command
         }
 
         return collect($this->representativeRoutes())
-            ->map(function (array $route) use ($user): array {
+            ->map(function (array $route) use ($runs, $user): array {
                 $path = $route['path'];
+                $warmRuns = [];
+
+                for ($run = 0; $run < $runs; $run++) {
+                    $warmRuns[] = $this->measureRoute($path, $user);
+                }
 
                 return [
                     'label' => $route['label'],
                     'path' => $path,
                     'cold' => $this->measureRoute($path, $user),
-                    'warm' => $this->measureRoute($path, $user),
+                    'warm_runs' => $warmRuns,
+                    'warm' => $warmRuns[array_key_last($warmRuns)],
+                    'warm_summary' => $this->routeSummary($warmRuns),
+                    'budget_warnings' => $this->budgetWarnings($route['label'], $warmRuns),
                 ];
             })
             ->all();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $runs
+     * @return array<string, array{min: float|int, median: float|int, max: float|int}>
+     */
+    private function routeSummary(array $runs): array
+    {
+        $metrics = [
+            'response_time_ms',
+            'query_count',
+            'duplicate_query_count',
+            'database_duration_ms',
+            'peak_memory_mb',
+            'response_size_bytes',
+        ];
+
+        $summary = [];
+
+        foreach ($metrics as $metric) {
+            $values = collect($runs)
+                ->pluck($metric)
+                ->filter(fn ($value): bool => is_numeric($value))
+                ->map(fn ($value): float|int => $value + 0)
+                ->sort()
+                ->values()
+                ->all();
+
+            if ($values === []) {
+                continue;
+            }
+
+            $summary[$metric] = [
+                'min' => $values[0],
+                'median' => $values[(int) floor((count($values) - 1) / 2)],
+                'max' => $values[array_key_last($values)],
+            ];
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $runs
+     * @return array<int, string>
+     */
+    private function budgetWarnings(string $label, array $runs): array
+    {
+        $summary = $this->routeSummary($runs);
+        $isComplex = Str::contains($label, ['Employees', 'Workforce']);
+        $timeBudget = $isComplex ? 800 : 500;
+        $payloadBudget = $isComplex ? 300_000 : 200_000;
+        $warnings = [];
+
+        if (($summary['response_time_ms']['median'] ?? 0) > $timeBudget) {
+            $warnings[] = "warm median exceeds {$timeBudget}ms";
+        }
+
+        if (($summary['response_size_bytes']['median'] ?? 0) > $payloadBudget) {
+            $warnings[] = 'HTML payload exceeds '.number_format($payloadBudget).' bytes';
+        }
+
+        if (($summary['duplicate_query_count']['median'] ?? 0) > 0) {
+            $warnings[] = 'duplicate queries detected';
+        }
+
+        return $warnings;
     }
 
     private function benchmarkUser(): ?object

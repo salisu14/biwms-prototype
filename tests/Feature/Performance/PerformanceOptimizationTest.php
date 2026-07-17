@@ -89,10 +89,13 @@ it('keeps high-volume history ledger and event resources out of global search', 
     }
 });
 
-it('keeps employee table row action relationship checks precomputed', function (): void {
+it('keeps the employee index table payload lean', function (): void {
     $source = (string) file_get_contents(app_path('Filament/Resources/Employees/Tables/EmployeesTable.php'));
 
-    expect($source)->toContain("withExists(['payslips', 'user'])")
-        ->and($source)->toContain('$record->user_exists')
-        ->and($source)->toContain('$record->payslips_exists');
+    expect($source)->toContain('->defaultPaginationPageOption(10)')
+        ->and($source)->toContain('->paginationPageOptions([10, 25, 50])')
+        ->and($source)->not->toContain("Action::make('createLoginAccount')")
+        ->and($source)->not->toContain("Action::make('downloadIdCards')")
+        ->and($source)->toContain("Action::make('generateIdCard')")
+        ->and($source)->toContain("Action::make('regenerateIdCard')");
 });
