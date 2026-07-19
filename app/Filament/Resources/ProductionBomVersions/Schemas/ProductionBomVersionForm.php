@@ -4,6 +4,8 @@ namespace App\Filament\Resources\ProductionBomVersions\Schemas;
 
 use App\Enums\ProductionBomStatus;
 use App\Models\Manufacturing\ProductionBomVersion;
+use App\Support\DecimalFormatter;
+use App\Support\DecimalMath;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -82,7 +84,10 @@ class ProductionBomVersionForm
                             ->required()
                             ->numeric()
                             ->default(1)
-                            ->minValue(0.00001),
+                            ->step('0.00000001')
+                            ->minValue('0.00000001')
+                            ->formatStateUsing(fn ($state): string => DecimalFormatter::quantityForInput($state))
+                            ->dehydrateStateUsing(fn ($state): string => DecimalMath::quantity($state)),
 
                         // ✅ COST ROLLUP (READ-ONLY)
                         TextInput::make('cost_rollup')

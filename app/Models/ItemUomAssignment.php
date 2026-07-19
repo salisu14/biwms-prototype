@@ -28,7 +28,7 @@ class ItemUomAssignment extends Pivot
     ];
 
     protected $casts = [
-        'conversion_factor' => 'decimal:6',
+        'conversion_factor' => 'decimal:12',
         'is_default' => 'boolean',
         'sort_order' => 'integer',
     ];
@@ -38,8 +38,8 @@ class ItemUomAssignment extends Pivot
         static::saving(function (self $assignment) {
             if (empty($assignment->uom_type)) {
                 throw new \InvalidArgumentException(
-                    'uom_type is required for ItemUomAssignment. ' .
-                    'Use base_uom_id on Item for the base unit, ' .
+                    'uom_type is required for ItemUomAssignment. '.
+                    'Use base_uom_id on Item for the base unit, '.
                     'or explicitly set uom_type when creating assignments.'
                 );
             }

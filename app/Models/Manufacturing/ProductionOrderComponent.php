@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Manufacturing;
 
 use App\Enums\FlushingMethod;
@@ -7,6 +9,9 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\UnitOfMeasure;
 use App\Models\WarehouseRequest;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
+use App\Support\DecimalTolerance;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -62,15 +67,15 @@ class ProductionOrderComponent extends Model
     ];
 
     protected $casts = [
-        'quantity_per' => 'decimal:4',
-        'expected_quantity' => 'decimal:4',
-        'expected_quantity_base' => 'decimal:4',
-        'actual_quantity_consumed' => 'decimal:4',
-        'actual_scrap_quantity' => 'decimal:4',
-        'remaining_quantity' => 'decimal:4',
+        'quantity_per' => 'decimal:8',
+        'expected_quantity' => 'decimal:8',
+        'expected_quantity_base' => 'decimal:8',
+        'actual_quantity_consumed' => 'decimal:8',
+        'actual_scrap_quantity' => 'decimal:8',
+        'remaining_quantity' => 'decimal:8',
         'scrap_percent' => 'decimal:2',
-        'reserved_quantity' => 'decimal:4',
-        'unit_cost' => 'decimal:4',
+        'reserved_quantity' => 'decimal:8',
+        'unit_cost' => 'decimal:8',
         'total_cost' => 'decimal:4',
         'due_date' => 'date',
         'bom_level' => 'integer',
@@ -84,11 +89,12 @@ class ProductionOrderComponent extends Model
 
     public function getAvailableRemainingQuantityAttribute(): float
     {
-        $requested = (float) $this->warehouseRequests()
+        $requested = $this->warehouseRequests()
             ->whereIn('status', ['open', 'partial'])
             ->sum('quantity_outstanding');
+        $remaining = DecimalMath::sub($this->remaining_quantity ?? '0', $requested, DecimalPrecision::QUANTITY_SCALE);
 
-        return max(0, (float) ($this->remaining_quantity ?? 0) - $requested);
+        return DecimalMath::compare($remaining, '0') > 0 ? (float) $remaining : 0.0;
     }
 
     public function flushingMethod(): FlushingMethod
@@ -133,6 +139,9 @@ class ProductionOrderComponent extends Model
 
     public function getIsFullyConsumedAttribute(): bool
     {
-        return (float) $this->remaining_quantity <= 0.01;
+        return DecimalMath::isLessThanOrEqualToTolerance(
+            $this->remaining_quantity ?? '0',
+            DecimalTolerance::QUANTITY
+        );
     }
 }

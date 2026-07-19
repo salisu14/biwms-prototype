@@ -46,8 +46,8 @@ class ItemLedgerEntry extends Model
 
     protected $casts = [
         'entry_type' => ItemLedgerEntryType::class,
-        'quantity' => 'decimal:4',
-        'remaining_quantity' => 'decimal:4',
+        'quantity' => 'decimal:8',
+        'remaining_quantity' => 'decimal:8',
         'cost_amount_actual' => 'decimal:4',
         'cost_amount_expected' => 'decimal:4',
         'purchase_amount_actual' => 'decimal:4',

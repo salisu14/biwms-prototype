@@ -1,10 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Manufacturing;
 
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\UnitOfMeasure;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,7 +38,7 @@ class ProductionBomVersionLine extends Model
     ];
 
     protected $casts = [
-        'quantity_per' => 'decimal:4',
+        'quantity_per' => 'decimal:8',
         'scrap_percent' => 'decimal:2',
         'lead_time_offset_days' => 'integer',
     ];
@@ -69,9 +73,18 @@ class ProductionBomVersionLine extends Model
      */
     public function getExpectedQuantity(float $parentQuantity): float
     {
-        $baseQty = $parentQuantity * $this->quantity_per;
-        $scrapQty = $baseQty * ($this->scrap_percent / 100);
+        return (float) $this->getExpectedQuantityDecimal((string) $parentQuantity);
+    }
 
-        return $baseQty + $scrapQty;
+    public function getExpectedQuantityDecimal(float|string $parentQuantity): string
+    {
+        $baseQuantity = DecimalMath::mul($parentQuantity, $this->quantity_per, DecimalPrecision::QUANTITY_SCALE);
+        $scrapMultiplier = DecimalMath::add(
+            '1',
+            DecimalMath::div($this->scrap_percent ?? '0', '100', DecimalPrecision::CONVERSION_SCALE),
+            DecimalPrecision::CONVERSION_SCALE
+        );
+
+        return DecimalMath::mul($baseQuantity, $scrapMultiplier, DecimalPrecision::QUANTITY_SCALE);
     }
 }

@@ -51,7 +51,7 @@ class ProductionBomLine extends Model
     ];
 
     protected $casts = [
-        'quantity_per' => 'decimal:4',
+        'quantity_per' => 'decimal:8',
         'scrap_percent' => 'decimal:2',
         'lead_time_offset_days' => 'integer',
     ];

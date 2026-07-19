@@ -838,7 +838,7 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
         ->and((float) $outputEntry->quantity)->toBe(288.0)
         ->and((float) $outputEntry->cost_amount_actual)->toBe(1596.0)
         ->and((float) $outputValueEntry->cost_amount_actual)->toBe(1596.0)
-        ->and((float) $outputValueEntry->unit_cost)->toBe(5.5417)
+        ->and((float) $outputValueEntry->unit_cost)->toBe(5.54166667)
         ->and((float) $finishedGood->fresh()->inventory)->toBe(288.0);
 
     $documentGlEntries = GlEntry::query()

@@ -18,6 +18,8 @@ use App\Models\User;
 use App\Models\WarehouseActivity;
 use App\Models\WarehouseRequest;
 use App\Services\Manufacturing\ProductionOrderService;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -106,13 +108,13 @@ class ProductionOrder extends Model
     protected $casts = [
         'status' => ProductionOrderStatus::class,
         'source_type' => ProductionOrderSourceType::class,
-        'quantity' => 'decimal:4',
-        'quantity_base' => 'decimal:4',
+        'quantity' => 'decimal:8',
+        'quantity_base' => 'decimal:8',
         'due_date' => 'date',
         'starting_date_time' => 'datetime',
         'ending_date_time' => 'datetime',
-        'unit_cost' => 'decimal:4',
-        'cost_rollup' => 'decimal:4',
+        'unit_cost' => 'decimal:8',
+        'cost_rollup' => 'decimal:8',
         'scrap_percent' => 'decimal:2',
         'posted' => 'boolean',
         'posted_at' => 'datetime',
@@ -343,12 +345,12 @@ class ProductionOrder extends Model
     public function getRemainingQuantityAttribute(): float
     {
         // Ensure produced_quantity is also pulling the base quantity
-        $producedBase = (float) $this->itemLedgerEntries()
+        $producedBase = (string) $this->itemLedgerEntries()
             ->where('entry_type', 'Output') // Use exact DB string
             ->where('item_id', $this->item_id)
             ->sum('quantity');
 
-        return (float) $this->quantity_base - $producedBase;
+        return (float) DecimalMath::sub($this->quantity_base, $producedBase, DecimalPrecision::QUANTITY_SCALE);
     }
 
     public function orderUomCode(): string
@@ -363,19 +365,24 @@ class ProductionOrder extends Model
 
     public function orderUomConversionFactor(): float
     {
-        $conversionFactor = (float) ($this->item?->getConversionFactorForUom($this->orderUomCode()) ?? 1.0);
+        return (float) $this->orderUomConversionFactorDecimal();
+    }
 
-        return $conversionFactor > 0 ? $conversionFactor : 1.0;
+    public function orderUomConversionFactorDecimal(): string
+    {
+        $conversionFactor = $this->item?->getConversionFactorForUomDecimal($this->orderUomCode()) ?? DecimalMath::conversion('1');
+
+        return DecimalMath::compare($conversionFactor, '0') > 0 ? $conversionFactor : DecimalMath::conversion('1');
     }
 
     public function convertBaseQuantityToOrderUom(float $quantityBase): float
     {
-        return $quantityBase / $this->orderUomConversionFactor();
+        return (float) DecimalMath::div($quantityBase, $this->orderUomConversionFactorDecimal(), DecimalPrecision::QUANTITY_SCALE);
     }
 
     public function convertOrderUomQuantityToBase(float $quantityInOrderUom): float
     {
-        return $quantityInOrderUom * $this->orderUomConversionFactor();
+        return (float) DecimalMath::mul($quantityInOrderUom, $this->orderUomConversionFactorDecimal(), DecimalPrecision::QUANTITY_SCALE);
     }
 
     public function quantityInOrderUom(): float

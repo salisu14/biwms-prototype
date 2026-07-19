@@ -9,6 +9,8 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\CapacityLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ValueEntry;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Support\Facades\Log;
 use UnitEnum;
 
@@ -19,10 +21,18 @@ class ValueEntryService
         try {
             $entry->loadMissing(['item', 'location', 'source']);
 
-            $quantity = (float) $entry->quantity;
-            $costAmountActual = (float) $entry->cost_amount_actual;
-            $costAmountExpected = (float) $entry->cost_amount_expected;
-            $unitCost = $quantity !== 0.0 ? ($costAmountActual / $quantity) : 0.0;
+            $quantity = DecimalMath::quantity($entry->quantity);
+            $costAmountActual = DecimalMath::amount($entry->cost_amount_actual);
+            $costAmountExpected = DecimalMath::amount($entry->cost_amount_expected);
+            $unitCost = ! DecimalMath::isZero($quantity)
+                ? DecimalMath::div($costAmountActual, $quantity, DecimalPrecision::UNIT_COST_SCALE)
+                : DecimalMath::unitCost('0');
+
+            if (DecimalMath::isZero($unitCost) && ! DecimalMath::isZero($quantity) && ! DecimalMath::isZero($entry->item?->unit_cost ?? 0)) {
+                $unitCost = DecimalMath::compare($quantity, '0') < 0
+                    ? DecimalMath::unitCost(DecimalMath::of($entry->item?->unit_cost)->negated())
+                    : DecimalMath::unitCost($entry->item?->unit_cost);
+            }
             $productionOrder = $entry->source instanceof ProductionOrder ? $entry->source : null;
             $entryType = strtolower($this->entryTypeValue($entry->entry_type));
             $isConsumption = $entryType === 'consumption';
@@ -94,9 +104,11 @@ class ValueEntryService
 
             $productionOrder = $entry->productionOrder;
             $routingLine = $entry->routingLine;
-            $quantity = (float) $entry->setup_time + (float) $entry->run_time;
-            $costAmountActual = (float) $entry->total_cost;
-            $unitCost = $quantity !== 0.0 ? $costAmountActual / $quantity : 0.0;
+            $quantity = DecimalMath::quantity(DecimalMath::add($entry->setup_time, $entry->run_time, DecimalPrecision::QUANTITY_SCALE));
+            $costAmountActual = DecimalMath::amount($entry->total_cost);
+            $unitCost = ! DecimalMath::isZero($quantity)
+                ? DecimalMath::div($costAmountActual, $quantity, DecimalPrecision::UNIT_COST_SCALE)
+                : DecimalMath::unitCost('0');
             $routingLineNumber = $routingLine?->line_number;
             $capacityCenter = $entry->machineCenter ?? $entry->workCenter;
 
@@ -120,13 +132,13 @@ class ValueEntryService
                 'cost_amount_expected' => 0,
                 'cost_amount_actual_acy' => $costAmountActual,
                 'cost_amount_expected_acy' => 0,
-                'direct_cost_amount' => (float) $entry->direct_cost,
-                'indirect_cost_amount' => (float) $entry->overhead_cost,
-                'overhead_amount' => (float) $entry->overhead_cost,
+                'direct_cost_amount' => DecimalMath::amount($entry->direct_cost),
+                'indirect_cost_amount' => DecimalMath::amount($entry->overhead_cost),
+                'overhead_amount' => DecimalMath::amount($entry->overhead_cost),
                 'unit_cost' => $unitCost,
                 'unit_cost_acy' => $unitCost,
-                'single_level_capacity_cost' => (float) $entry->direct_cost,
-                'single_level_overhead_cost' => (float) $entry->overhead_cost,
+                'single_level_capacity_cost' => DecimalMath::amount($entry->direct_cost),
+                'single_level_overhead_cost' => DecimalMath::amount($entry->overhead_cost),
                 'source_line_no' => $routingLineNumber,
                 'production_order_no' => $productionOrder?->document_number,
                 'production_order_line_no' => $routingLineNumber !== null ? (string) $routingLineNumber : null,

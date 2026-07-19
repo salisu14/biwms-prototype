@@ -30,8 +30,8 @@ class ProductionBomVersion extends Model
     protected $casts = [
         'starting_date' => 'date',
         'ending_date' => 'date',
-        'quantity_per' => 'decimal:4',
-        'cost_rollup' => 'decimal:4',
+        'quantity_per' => 'decimal:8',
+        'cost_rollup' => 'decimal:8',
     ];
 
     public function productionBom(): BelongsTo

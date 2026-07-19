@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ProductionBomVersions\Tables;
 
 use App\Enums\ProductionBomStatus;
+use App\Support\DecimalFormatter;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -49,7 +50,7 @@ class ProductionBomVersionsTable
 
                 TextColumn::make('quantity_per')
                     ->label('Qty Per')
-                    ->numeric(decimalPlaces: 4)
+                    ->formatStateUsing(fn ($state, $record): string => DecimalFormatter::quantity($state, $record->unit_of_measure_code))
                     ->sortable(),
 
                 TextColumn::make('cost_rollup')

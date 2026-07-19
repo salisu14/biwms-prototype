@@ -5,6 +5,9 @@ namespace App\Filament\Resources\ProductionOrders\RelationManagers;
 use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
 use App\Models\Item;
 use App\Services\Manufacturing\ProductionOrderService;
+use App\Support\DecimalFormatter;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -88,10 +91,13 @@ class ProductionOrderLineRelationManager extends RelationManager
                     ->schema([
                         TextInput::make('quantity')
                             ->numeric()
+                            ->step('0.00000001')
                             ->default(1)
                             ->required()
                             ->live()
-                            ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', $state * ($get('unit_cost') ?? 0))
+                            ->formatStateUsing(fn ($state): string => DecimalFormatter::quantityForInput($state))
+                            ->dehydrateStateUsing(fn ($state): string => DecimalMath::quantity($state))
+                            ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', DecimalMath::amount(DecimalMath::mul($state ?? 0, $get('unit_cost') ?? 0, DecimalPrecision::AMOUNT_SCALE)))
                             ),
 
                         Select::make('unit_of_measure_code')
@@ -103,9 +109,10 @@ class ProductionOrderLineRelationManager extends RelationManager
 
                         TextInput::make('unit_cost')
                             ->numeric()
+                            ->step('0.00000001')
                             ->prefix('₦')
                             ->live()
-                            ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', $state * ($get('quantity') ?? 0))
+                            ->afterStateUpdated(fn ($state, Set $set, Get $get) => $set('cost_amount', DecimalMath::amount(DecimalMath::mul($state ?? 0, $get('quantity') ?? 0, DecimalPrecision::AMOUNT_SCALE)))
                             ),
 
                         TextInput::make('cost_amount')
@@ -218,6 +225,8 @@ class ProductionOrderLineRelationManager extends RelationManager
                         ->schema([
                             TextInput::make('quantity')
                                 ->numeric()
+                                ->step('0.00000001')
+                                ->minValue('0.00000001')
                                 ->required()
                                 ->default(fn ($record): float => ProductionOrderActions::postOutputDefaultQuantity($record->productionOrder))
                                 ->helperText(fn ($record): string => ProductionOrderActions::postOutputHelperText($record->productionOrder))
@@ -279,7 +288,7 @@ class ProductionOrderLineRelationManager extends RelationManager
             $set('unit_of_measure_code', $item->base_unit_of_measure);
         }
 
-        $set('unit_cost', (float) ($item->unit_cost ?? 0));
+        $set('unit_cost', DecimalMath::unitCost($item->unit_cost ?? 0));
 
         if (blank($get('production_bom_id')) && filled($item->production_bom_id)) {
             $set('production_bom_id', $item->production_bom_id);
@@ -289,8 +298,7 @@ class ProductionOrderLineRelationManager extends RelationManager
             $set('routing_id', $item->routing_id);
         }
 
-        $quantity = (float) ($get('quantity') ?? 0);
-        $set('cost_amount', $quantity * (float) ($item->unit_cost ?? 0));
+        $set('cost_amount', DecimalMath::amount(DecimalMath::mul($get('quantity') ?? 0, $item->unit_cost ?? 0, DecimalPrecision::AMOUNT_SCALE)));
     }
 
     /**
@@ -313,10 +321,10 @@ class ProductionOrderLineRelationManager extends RelationManager
 
         $data['description'] = $data['description'] ?: $item->description;
         $data['unit_of_measure_code'] = $data['unit_of_measure_code'] ?: $item->base_unit_of_measure;
-        $data['unit_cost'] = filled($data['unit_cost'] ?? null) ? $data['unit_cost'] : (float) ($item->unit_cost ?? 0);
+        $data['unit_cost'] = filled($data['unit_cost'] ?? null) ? $data['unit_cost'] : DecimalMath::unitCost($item->unit_cost ?? 0);
         $data['production_bom_id'] = $data['production_bom_id'] ?: $item->production_bom_id;
         $data['routing_id'] = $data['routing_id'] ?: $item->routing_id;
-        $data['cost_amount'] = (float) ($data['quantity'] ?? 0) * (float) ($data['unit_cost'] ?? 0);
+        $data['cost_amount'] = DecimalMath::amount(DecimalMath::mul($data['quantity'] ?? 0, $data['unit_cost'] ?? 0, DecimalPrecision::AMOUNT_SCALE));
 
         return $data;
     }

@@ -1,9 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Manufacturing;
 
 use App\Models\Item;
 use App\Models\UnitOfMeasure;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -37,7 +41,7 @@ class ProductionBom extends Model
     protected $casts = [
         'starting_date' => 'date',
         'ending_date' => 'date',
-        'cost_rollup' => 'decimal:4',
+        'cost_rollup' => 'decimal:8',
     ];
 
     public function item(): BelongsTo
@@ -65,27 +69,43 @@ class ProductionBom extends Model
      */
     public function calculateCost(): float
     {
+        return (float) $this->calculateCostDecimal();
+    }
+
+    public function calculateCostDecimal(): string
+    {
         return $this->calculateCostRecursive([]);
     }
 
     /**
      * @param  array<int, bool>  $visitedBomIds
      */
-    private function calculateCostRecursive(array $visitedBomIds): float
+    private function calculateCostRecursive(array $visitedBomIds): string
     {
         if (isset($visitedBomIds[$this->id])) {
-            return 0;
+            return DecimalMath::unitCost('0');
         }
 
         $visitedBomIds[$this->id] = true;
-        $cost = 0.0;
+        $cost = DecimalMath::unitCost('0');
 
         foreach ($this->lines as $line) {
             if ($line->type === ProductionBomLine::TYPE_ITEM) {
-                $itemCost = (float) ($line->item?->unit_cost ?? 0);
-                $lineQuantity = (float) $line->quantity_per;
-                $lineScrapPercent = (float) $line->scrap_percent;
-                $cost += ($itemCost * $lineQuantity) * (1 + ($lineScrapPercent / 100));
+                $lineCost = DecimalMath::mul(
+                    $line->item?->unit_cost ?? '0',
+                    $line->quantity_per,
+                    DecimalPrecision::UNIT_COST_SCALE
+                );
+                $scrapMultiplier = DecimalMath::add(
+                    '1',
+                    DecimalMath::div($line->scrap_percent ?? '0', '100', DecimalPrecision::CONVERSION_SCALE),
+                    DecimalPrecision::CONVERSION_SCALE
+                );
+                $cost = DecimalMath::add(
+                    $cost,
+                    DecimalMath::mul($lineCost, $scrapMultiplier, DecimalPrecision::UNIT_COST_SCALE),
+                    DecimalPrecision::UNIT_COST_SCALE
+                );
 
                 continue;
             }
@@ -99,7 +119,15 @@ class ProductionBom extends Model
                 continue;
             }
 
-            $cost += $relatedBom->calculateCostRecursive($visitedBomIds) * (float) $line->quantity_per;
+            $cost = DecimalMath::add(
+                $cost,
+                DecimalMath::mul(
+                    $relatedBom->calculateCostRecursive($visitedBomIds),
+                    $line->quantity_per,
+                    DecimalPrecision::UNIT_COST_SCALE
+                ),
+                DecimalPrecision::UNIT_COST_SCALE
+            );
         }
 
         return $cost;

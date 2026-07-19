@@ -29,6 +29,11 @@ use App\Services\Posting\InventoryPostingResolverService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PickWorksheetService;
 use App\Services\Warehouse\PutAwayWorksheetService;
+use App\Support\DecimalFormatter;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
+use App\Support\DecimalRounding;
+use App\Support\DecimalTolerance;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -152,45 +157,45 @@ class ProductionOrderService
                     continue;
                 }
 
-                $qty = (float) $line['quantity'];
-                $scrapQty = (float) ($line['scrap_quantity'] ?? 0);
+                $quantity = DecimalMath::quantity($line['quantity']);
+                $scrapQuantity = DecimalMath::quantity($line['scrap_quantity'] ?? 0);
 
-                if ($qty <= 0) {
+                if (! DecimalMath::isPositive($quantity)) {
                     throw new \Exception('Quantity must be positive');
                 }
 
-                // ✅ FIXED: Calculate Base Quantity based on component UoM ratio
-                $conversionFactor = ($component->expected_quantity_base > 0 && $component->expected_quantity > 0)
-                    ? (float) $component->expected_quantity_base / (float) $component->expected_quantity
-                    : 1.0;
-                $qtyBase = $qty * $conversionFactor;
-                $remainingQuantityBase = max(
-                    0.0,
-                    (float) $component->expected_quantity_base - (float) $component->actual_quantity_consumed
-                );
+                $conversionFactor = (DecimalMath::isPositive($component->expected_quantity_base) && DecimalMath::isPositive($component->expected_quantity))
+                    ? DecimalMath::div($component->expected_quantity_base, $component->expected_quantity, DecimalPrecision::CONVERSION_SCALE)
+                    : DecimalMath::conversion('1');
+                $quantityBase = DecimalMath::mul($quantity, $conversionFactor, DecimalPrecision::QUANTITY_SCALE);
+                $remainingQuantityBase = DecimalMath::sub($component->expected_quantity_base, $component->actual_quantity_consumed, DecimalPrecision::QUANTITY_SCALE);
 
-                if ($qtyBase > $remainingQuantityBase + 0.0001) {
+                if (DecimalMath::compare(
+                    DecimalMath::sub($quantityBase, $remainingQuantityBase, DecimalPrecision::QUANTITY_SCALE),
+                    DecimalTolerance::QUANTITY
+                ) > 0) {
                     throw new \Exception('Cannot consume more than the remaining component quantity');
                 }
 
-                $actualUnitCost = $this->costingService->getUnitCost(
+                $actualUnitCost = DecimalMath::unitCost($this->costingService->getUnitCost(
                     $component->item,
                     $component->location,
                     null, // lot
                     $postingDate->format('Y-m-d')
-                );
+                ));
+                $costAmountActual = DecimalMath::amount(DecimalMath::mul($quantityBase, $actualUnitCost, DecimalPrecision::AMOUNT_SCALE));
 
                 if (! (bool) config('manufacturing.allow_negative_component_stock', false)) {
                     $availableInventory = $this->getAvailableInventory($component->item_id, $component->location_code);
 
-                    if ($availableInventory < $qtyBase) {
+                    if (DecimalMath::compare($availableInventory, $quantityBase) < 0) {
                         $itemDescription = $component->item?->description ?? "item #{$component->item_id}";
                         $locationLabel = $component->location_code ? " at {$component->location_code}" : '';
 
                         throw new \Exception(
                             "Insufficient component inventory for {$itemDescription}{$locationLabel}. ".
-                            'Required: '.number_format($qtyBase, 4).
-                            ', Available: '.number_format($availableInventory, 4)
+                            'Required: '.DecimalFormatter::quantity($quantityBase).
+                            ', Available: '.DecimalFormatter::quantity($availableInventory)
                         );
                     }
                 }
@@ -199,7 +204,7 @@ class ProductionOrderService
                     'entry_type' => ItemLedgerEntryType::CONSUMPTION,
                     'item_id' => $component->item_id,
                     // ✅ FIXED: Always use negative BASE quantity for consumption
-                    'quantity' => -$qtyBase,
+                    'quantity' => DecimalMath::quantity(DecimalMath::of($quantityBase)->negated()),
                     'remaining_quantity' => 0,
                     'open' => false,
                     'posting_date' => $postingDate,
@@ -209,34 +214,36 @@ class ProductionOrderService
                     'source_type' => ProductionOrder::class,
                     'location_id' => $component->location?->id,
                     // ✅ FIXED: Removed 'unit_cost', use total actual cost instead
-                    'cost_amount_actual' => $qtyBase * $actualUnitCost,
+                    'cost_amount_actual' => $costAmountActual,
                     'dimensions' => $order->dimension_set_id,
                     'general_product_posting_group_id' => $component->item->general_product_posting_group_id,
                     'inventory_posting_group_id' => $component->item->inventory_posting_group_id,
                     'entry_date' => now(),
                 ]);
 
-                $component->item?->decrement('inventory', $qtyBase);
+                $component->item?->decrement('inventory', $quantityBase);
 
                 // ✅ FIXED: Track consumption in base quantities to prevent math errors
-                $component->actual_quantity_consumed = (float) $component->actual_quantity_consumed + $qtyBase;
-                $component->actual_scrap_quantity = (float) $component->actual_scrap_quantity + $scrapQty;
-                $component->remaining_quantity = max(
-                    0,
-                    (float) $component->expected_quantity_base - (float) $component->actual_quantity_consumed
-                );
+                $component->actual_quantity_consumed = DecimalMath::add($component->actual_quantity_consumed, $quantityBase, DecimalPrecision::QUANTITY_SCALE);
+                $component->actual_scrap_quantity = DecimalMath::add($component->actual_scrap_quantity, $scrapQuantity, DecimalPrecision::QUANTITY_SCALE);
+                $component->remaining_quantity = DecimalMath::compare(
+                    $component->expected_quantity_base,
+                    $component->actual_quantity_consumed
+                ) > 0
+                    ? DecimalMath::sub($component->expected_quantity_base, $component->actual_quantity_consumed, DecimalPrecision::QUANTITY_SCALE)
+                    : DecimalMath::quantity('0');
                 $component->save();
 
                 // Update CapEx Project if linked
                 if ($order->capex_project_id && $order->capexProject) {
-                    $order->capexProject->increment('actual_amount', $qtyBase * $actualUnitCost);
+                    $order->capexProject->increment('actual_amount', $costAmountActual);
                 }
 
                 // G/L Integration: Dr. WIP, Cr. Inventory
                 $this->createWipGlEntries(
                     $order,
                     $component->item,
-                    $qtyBase * $actualUnitCost,
+                    (float) $costAmountActual,
                     $postingDate,
                     "Consumption: {$component->item->description} ({$itemLedgerEntry->entry_number})"
                 );
@@ -251,14 +258,16 @@ class ProductionOrderService
      */
     public function postOutput(
         ProductionOrder $order,
-        float $quantityBase,
+        float|string $quantityBase,
         int $userId,
         ?\DateTime $postingDate = null,
         ?int $routingLineId = null
     ): void {
         Gate::forUser(User::query()->findOrFail($userId))->authorize('postOutput', $order);
 
-        if ($quantityBase <= 0) {
+        $quantityBase = DecimalMath::quantity($quantityBase);
+
+        if (! DecimalMath::isPositive($quantityBase)) {
             throw new \Exception('Output quantity must be positive');
         }
 
@@ -279,11 +288,12 @@ class ProductionOrderService
             }
 
             // Note: $quantityBase passed here MUST be in BASE units.
-            if ($quantityBase > (float) $order->remaining_quantity) {
+            if (DecimalMath::compare($quantityBase, $order->remaining_quantity) > 0) {
                 throw new \Exception('Cannot overproduce');
             }
 
-            $expectedUnitCost = (float) ($order->cost_rollup ?? $order->unit_cost ?? 0);
+            $expectedUnitCost = DecimalMath::unitCost($order->cost_rollup ?? $order->unit_cost ?? 0);
+            $expectedCostAmount = DecimalMath::amount(DecimalMath::mul($quantityBase, $expectedUnitCost, DecimalPrecision::AMOUNT_SCALE));
             $locationId = Location::query()
                 ->where('code', $order->location_code)
                 ->value('id');
@@ -302,8 +312,8 @@ class ProductionOrderService
                 'source_type' => ProductionOrder::class,
                 'location_id' => $locationId,
                 // ✅ FIXED: Removed 'unit_cost', use total expected/actual cost columns
-                'cost_amount_expected' => $quantityBase * $expectedUnitCost,
-                'cost_amount_actual' => $quantityBase * $expectedUnitCost, // Actuals updated at finish
+                'cost_amount_expected' => $expectedCostAmount,
+                'cost_amount_actual' => $expectedCostAmount, // Actuals updated at finish
                 'dimensions' => $order->dimension_set_id,
                 'general_product_posting_group_id' => $order->general_product_posting_group_id,
                 'inventory_posting_group_id' => $order->inventory_posting_group_id,
@@ -315,7 +325,7 @@ class ProductionOrderService
             if ($routingLineId) {
                 $routingLine = $order->routingLines()->find($routingLineId);
                 if ($routingLine) {
-                    $routingLine->actual_output_quantity = (float) $routingLine->actual_output_quantity + $quantityBase;
+                    $routingLine->actual_output_quantity = DecimalMath::add($routingLine->actual_output_quantity, $quantityBase, DecimalPrecision::QUANTITY_SCALE);
                     $routingLine->save();
                 }
             }
@@ -557,8 +567,8 @@ class ProductionOrderService
                 $this->backwardFlushComponents($order, $postingDate, $userId);
             }
 
-            $remainingOutputQuantityBase = (float) $order->fresh()->remaining_quantity;
-            if ($remainingOutputQuantityBase > 0) {
+            $remainingOutputQuantityBase = DecimalMath::quantity($order->fresh()->remaining_quantity);
+            if (DecimalMath::isPositive($remainingOutputQuantityBase)) {
                 $this->postOutput($order->fresh(), $remainingOutputQuantityBase, $userId, $postingDate);
                 $order = $order->fresh();
             }
@@ -570,25 +580,24 @@ class ProductionOrderService
             $this->validateBeforeFinish($order);
 
             // ✅ FIXED: Cast to float to prevent math errors
-            $totalActualCost = (float) ($order->total_actual_cost ?? 0);
-            $totalOutput = (float) $order->itemLedgerEntries()
+            $totalActualCost = DecimalMath::amount($order->total_actual_cost ?? 0);
+            $totalOutput = DecimalMath::quantity($order->itemLedgerEntries()
                 ->where('entry_type', ItemLedgerEntryType::OUTPUT)
-                ->sum('quantity');
+                ->sum('quantity'));
 
             // Determine the cost to record in Inventory
             $inventoryUnitCost = ($order->costing_method === 'STANDARD')
-                ? (float) $order->unit_cost
-                : ($totalOutput > 0 ? $totalActualCost / $totalOutput : 0);
+                ? DecimalMath::unitCost($order->unit_cost)
+                : (DecimalMath::isPositive($totalOutput) ? DecimalMath::div($totalActualCost, $totalOutput, DecimalPrecision::UNIT_COST_SCALE) : DecimalMath::unitCost('0'));
 
             // Update Output entries with the determined cost
             $outputEntries = $order->itemLedgerEntries()
                 ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                 ->get();
 
-            $totalInventoryCost = 0;
+            $totalInventoryCost = DecimalMath::amount('0');
             foreach ($outputEntries as $entry) {
-                // ✅ FIXED: Explicitly cast to float
-                $actualCostForEntry = (float) $entry->quantity * (float) $inventoryUnitCost;
+                $actualCostForEntry = DecimalMath::amount(DecimalMath::mul($entry->quantity, $inventoryUnitCost, DecimalPrecision::AMOUNT_SCALE));
 
                 $entry->update([
                     // ✅ FIXED: Removed 'unit_cost' (column doesn't exist on Item Ledger)
@@ -597,24 +606,24 @@ class ProductionOrderService
 
                 app(ValueEntryService::class)->ensureForItemLedgerEntry($entry->fresh());
 
-                $totalInventoryCost += $actualCostForEntry;
+                $totalInventoryCost = DecimalMath::add($totalInventoryCost, $actualCostForEntry, DecimalPrecision::AMOUNT_SCALE);
             }
 
             $order->lines()
                 ->where('item_id', $order->item_id)
                 ->update([
                     'unit_cost' => $inventoryUnitCost,
-                    'cost_amount' => (float) $order->quantity * (float) $inventoryUnitCost,
+                    'cost_amount' => DecimalMath::amount(DecimalMath::mul($order->quantity, $inventoryUnitCost, DecimalPrecision::AMOUNT_SCALE)),
                 ]);
 
             // G/L Integration:
             // 1. Move from WIP to Inventory (at the cost we recorded in Inventory)
-            $this->createFinishGlEntries($order, $totalInventoryCost, $postingDate);
+            $this->createFinishGlEntries($order, (float) $totalInventoryCost, $postingDate);
 
             // 2. Clear remaining WIP by posting to Variance (if any)
-            $variance = $totalActualCost - $totalInventoryCost;
-            if (abs($variance) > 0.01) {
-                $this->createVarianceGlEntries($order, $variance, $postingDate);
+            $variance = DecimalMath::sub($totalActualCost, $totalInventoryCost, DecimalPrecision::AMOUNT_SCALE);
+            if (! DecimalMath::isLessThanOrEqualToTolerance($variance, DecimalTolerance::AMOUNT)) {
+                $this->createVarianceGlEntries($order, (float) $variance, $postingDate);
 
                 // Update CapEx Project for variance if linked
                 if ($order->capex_project_id && $order->capexProject) {
@@ -746,7 +755,7 @@ class ProductionOrderService
             'unit_of_measure_code' => $order->unit_of_measure_code ?? $order->item->base_unit_of_measure,
             'quantity_base' => $order->quantity_base,
             'unit_cost' => $lineUnitCost,
-            'cost_amount' => (float) $order->quantity * $lineUnitCost,
+            'cost_amount' => DecimalMath::amount(DecimalMath::mul($order->quantity, $lineUnitCost, DecimalPrecision::AMOUNT_SCALE)),
             'due_date' => $order->due_date,
             'production_bom_id' => $order->production_bom_id,
             'routing_id' => $order->routing_id,
@@ -767,17 +776,17 @@ class ProductionOrderService
         ]);
     }
 
-    private function resolveOrderLineUnitCost(ProductionOrder $order): float
+    private function resolveOrderLineUnitCost(ProductionOrder $order): string
     {
         if ($order->cost_rollup !== null) {
-            return (float) $order->cost_rollup;
+            return DecimalMath::unitCost($order->cost_rollup);
         }
 
         if ($order->unit_cost !== null) {
-            return (float) $order->unit_cost;
+            return DecimalMath::unitCost($order->unit_cost);
         }
 
-        return (float) ($order->item?->unit_cost ?? 0);
+        return DecimalMath::unitCost($order->item?->unit_cost ?? 0);
     }
 
     protected function refreshComponents(ProductionOrder $order): void
@@ -824,8 +833,8 @@ class ProductionOrderService
         $this->explodeBomLines(
             order: $order,
             lines: $rootLines,
-            parentOrderQuantity: (float) $order->quantity,
-            accumulatedQuantityPer: 1.0,
+            parentOrderQuantity: DecimalMath::quantity($order->quantity),
+            accumulatedQuantityPer: DecimalMath::quantity('1'),
             level: 1,
             path: [$bom->code],
             visitedBomPath: $visitedBomPath,
@@ -854,8 +863,8 @@ class ProductionOrderService
     protected function explodeBomLines(
         ProductionOrder $order,
         iterable $lines,
-        float $parentOrderQuantity,
-        float $accumulatedQuantityPer,
+        string $parentOrderQuantity,
+        string $accumulatedQuantityPer,
         int $level,
         array $path,
         array &$visitedBomPath,
@@ -869,9 +878,14 @@ class ProductionOrderService
 
         foreach ($lines as $bomLine) {
             $lineQuantityPer = $this->resolveNormalizedBomLineQuantityPer($bomLine);
-            $lineScrapPercent = (float) $bomLine->scrap_percent;
-            $effectiveQuantityPer = $accumulatedQuantityPer * $lineQuantityPer;
-            $expectedQty = $parentOrderQuantity * $lineQuantityPer * (1 + $lineScrapPercent / 100);
+            $lineScrapPercent = DecimalMath::of($bomLine->scrap_percent)->dividedBy('100', DecimalPrecision::CONVERSION_SCALE, DecimalRounding::CONVERSION);
+            $scrapMultiplier = $lineScrapPercent->plus('1');
+            $effectiveQuantityPer = DecimalMath::mul($accumulatedQuantityPer, $lineQuantityPer, DecimalPrecision::QUANTITY_SCALE);
+            $expectedQty = DecimalMath::quantity(
+                DecimalMath::of($parentOrderQuantity)
+                    ->multipliedBy(DecimalMath::of($lineQuantityPer))
+                    ->multipliedBy($scrapMultiplier)
+            );
 
             if ($bomLine->type === ProductionBomLine::TYPE_ITEM) {
                 if (! $bomLine->item_id || ! $bomLine->item) {
@@ -880,7 +894,7 @@ class ProductionOrderService
                     );
                 }
 
-                $expectedQtyBase = $this->convertBomQuantityToItemBase((float) $expectedQty, $bomLine);
+                $expectedQtyBase = $this->convertBomQuantityToItemBase($expectedQty, $bomLine);
 
                 $target[] = [
                     'item_id' => $bomLine->item_id,
@@ -891,7 +905,7 @@ class ProductionOrderService
                     'expected_quantity_base' => $expectedQtyBase,
                     // ✅ FIXED: Track remaining in Base Quantity
                     'remaining_quantity' => $expectedQtyBase,
-                    'scrap_percent' => $lineScrapPercent,
+                    'scrap_percent' => DecimalMath::amount($bomLine->scrap_percent),
                     'routing_link_code' => $bomLine->routing_link_code,
                     'flushing_method' => $bomLine->flushing_method ?? $order->flushing_method,
                     'location_code' => $bomLine->location_code ?? $order->location_code,
@@ -931,7 +945,11 @@ class ProductionOrderService
             $visitedBomPath[$subBomId] = true;
             $subLines = $this->resolveBomLines($relatedBom, $order->starting_date_time ?? now());
 
-            $subOrderQuantity = $parentOrderQuantity * $lineQuantityPer * (1 + $lineScrapPercent / 100);
+            $subOrderQuantity = DecimalMath::quantity(
+                DecimalMath::of($parentOrderQuantity)
+                    ->multipliedBy(DecimalMath::of($lineQuantityPer))
+                    ->multipliedBy($scrapMultiplier)
+            );
             $subPath = [...$path, $relatedBom->code];
 
             $this->explodeBomLines(
@@ -961,16 +979,19 @@ class ProductionOrderService
         return $routingLine->machineCenter ?? $routingLine->workCenter;
     }
 
-    private function resolveNormalizedBomLineQuantityPer(ProductionBomLine|ProductionBomVersionLine $bomLine): float
+    private function resolveNormalizedBomLineQuantityPer(ProductionBomLine|ProductionBomVersionLine $bomLine): string
     {
-        $lineQuantityPer = (float) $bomLine->quantity_per;
-        $basisQuantity = 1.0;
+        $lineQuantityPer = DecimalMath::quantity($bomLine->quantity_per);
+        $basisQuantity = DecimalMath::quantity('1');
 
         if ($bomLine instanceof ProductionBomVersionLine) {
-            $basisQuantity = max(1.0, (float) ($bomLine->version?->quantity_per ?? 1.0));
+            $versionBasisQuantity = DecimalMath::quantity($bomLine->version?->quantity_per ?? 1);
+            $basisQuantity = DecimalMath::compare($versionBasisQuantity, '1') > 0
+                ? $versionBasisQuantity
+                : DecimalMath::quantity('1');
         }
 
-        return $lineQuantityPer / $basisQuantity;
+        return DecimalMath::div($lineQuantityPer, $basisQuantity, DecimalPrecision::QUANTITY_SCALE);
     }
 
     private function resolveBomLines(
@@ -1084,13 +1105,11 @@ class ProductionOrderService
                 continue;
             }
 
-            // ✅ FIXED: Compare base quantities
-            $remainingQtyBase = (float) $component->expected_quantity_base - (float) $component->actual_quantity_consumed;
-            if ($remainingQtyBase <= 0) {
+            $remainingQtyBase = DecimalMath::sub($component->expected_quantity_base, $component->actual_quantity_consumed, DecimalPrecision::QUANTITY_SCALE);
+            if (! DecimalMath::isPositive($remainingQtyBase)) {
                 continue;
             }
 
-            // Pass the base quantity to postConsumption (conversion factor will evaluate to 1.0)
             $this->postConsumption($order, [[
                 'component_id' => $component->id,
                 'quantity' => $remainingQtyBase,
@@ -1106,9 +1125,8 @@ class ProductionOrderService
                 continue;
             }
 
-            // ✅ FIXED: Flush the full expected base quantity
-            $remainingQtyBase = (float) $component->expected_quantity_base - (float) $component->actual_quantity_consumed;
-            if ($remainingQtyBase <= 0) {
+            $remainingQtyBase = DecimalMath::sub($component->expected_quantity_base, $component->actual_quantity_consumed, DecimalPrecision::QUANTITY_SCALE);
+            if (! DecimalMath::isPositive($remainingQtyBase)) {
                 continue;
             }
 
@@ -1138,22 +1156,24 @@ class ProductionOrderService
                 $remainingByItemAndLocation[$key] = $this->getAvailableInventory($component->item_id, $component->location_code);
             }
 
-            $requiredQuantityBase = (float) ($component->expected_quantity_base ?: $component->expected_quantity);
+            $requiredQuantityBase = DecimalMath::quantity($component->expected_quantity_base ?: $component->expected_quantity);
 
-            if ($remainingByItemAndLocation[$key] < $requiredQuantityBase) {
+            if (DecimalMath::compare($remainingByItemAndLocation[$key], $requiredQuantityBase) < 0) {
                 $itemDescription = $component->item?->description ?? "item #{$component->item_id}";
-                $requiredQuantity = $requiredQuantityBase;
-                $availableQuantity = (float) $remainingByItemAndLocation[$key];
                 $locationLabel = $component->location_code ? " at {$component->location_code}" : '';
 
                 throw new \Exception(
                     "Insufficient inventory for {$itemDescription}{$locationLabel}. ".
-                    'Required: '.number_format($requiredQuantity, 4).
-                    ', Available: '.number_format($availableQuantity, 4)
+                    'Required: '.DecimalFormatter::quantity($requiredQuantityBase).
+                    ', Available: '.DecimalFormatter::quantity($remainingByItemAndLocation[$key])
                 );
             }
 
-            $remainingByItemAndLocation[$key] -= $requiredQuantityBase;
+            $remainingByItemAndLocation[$key] = DecimalMath::sub(
+                $remainingByItemAndLocation[$key],
+                $requiredQuantityBase,
+                DecimalPrecision::QUANTITY_SCALE
+            );
         }
     }
 
@@ -1182,7 +1202,7 @@ class ProductionOrderService
             throw new \Exception("{$incompleteOps} operations incomplete");
         }
 
-        if ((float) $order->remaining_quantity > 0) {
+        if (DecimalMath::isPositive(DecimalMath::quantity($order->remaining_quantity))) {
             throw new \Exception('Production not fully completed');
         }
     }
@@ -1194,17 +1214,16 @@ class ProductionOrderService
             return;
         }
 
-        // ✅ FIXED: Check unconsumed BASE quantities
-        $remainingConsumption = (float) $order->components()
+        $remainingConsumption = $order->components()
             ->selectRaw('sum(coalesce(expected_quantity_base, 0) - coalesce(actual_quantity_consumed, 0)) as remaining')
             ->value('remaining');
-        $remainingConsumption = max(0.0, $remainingConsumption);
+        $remainingConsumption = DecimalMath::quantity($remainingConsumption);
 
-        if ($remainingConsumption > 0.0001) {
+        if (! DecimalMath::isLessThanOrEqualToTolerance($remainingConsumption, DecimalTolerance::QUANTITY)) {
             throw new \Exception(
                 'Cannot finish MANUAL flush order with unconsumed components. '.
                 'Post component consumption first. '.
-                'Remaining component quantity: '.number_format($remainingConsumption, 4)
+                'Remaining component quantity: '.DecimalFormatter::quantity($remainingConsumption)
             );
         }
     }
@@ -1552,27 +1571,27 @@ class ProductionOrderService
         );
     }
 
-    protected function convertBomQuantityToItemBase(float $quantity, ProductionBomLine|ProductionBomVersionLine $bomLine): float
+    protected function convertBomQuantityToItemBase(float|string $quantity, ProductionBomLine|ProductionBomVersionLine $bomLine): string
     {
         $item = $bomLine->item;
         $uomCode = (string) ($bomLine->unit_of_measure_code ?? '');
 
         if (! $item || $uomCode === '') {
-            return $quantity;
+            return DecimalMath::quantity($quantity);
         }
 
         $baseUomCode = (string) ($item->base_unit_of_measure ?? $item->baseUom?->uom_code ?? '');
 
         if ($baseUomCode !== '' && strtoupper($uomCode) === strtoupper($baseUomCode)) {
-            return $quantity;
+            return DecimalMath::quantity($quantity);
         }
 
         $assignment = $item->uoms()
             ->where('uom_code', $uomCode)
             ->first();
 
-        $factor = (float) ($assignment?->pivot?->conversion_factor ?? 1.0);
+        $factor = DecimalMath::conversion($assignment?->pivot?->conversion_factor ?? 1);
 
-        return $quantity * $factor;
+        return DecimalMath::mul($quantity, $factor, DecimalPrecision::QUANTITY_SCALE);
     }
 }

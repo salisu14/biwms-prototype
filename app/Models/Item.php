@@ -10,6 +10,8 @@ use App\Enums\SalesOrderStatus;
 use App\Enums\UomType;
 use App\Models\Manufacturing\ProductionBom;
 use App\Models\Manufacturing\Routing;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -70,14 +72,14 @@ class Item extends Model
         'item_type' => ItemType::class,
         'inventory_method' => InventoryMethod::class,
         'costing_method' => CostingMethod::class,
-        'unit_cost' => 'decimal:4',
-        'standard_cost' => 'decimal:4',
-        'last_direct_cost' => 'decimal:4',
+        'unit_cost' => 'decimal:8',
+        'standard_cost' => 'decimal:8',
+        'last_direct_cost' => 'decimal:8',
         'unit_price' => 'decimal:4',
         'profit_percent' => 'decimal:2',
-        'inventory' => 'decimal:4',
-        'reorder_point' => 'decimal:4',
-        'reorder_quantity' => 'decimal:4',
+        'inventory' => 'decimal:8',
+        'reorder_point' => 'decimal:8',
+        'reorder_quantity' => 'decimal:8',
         'weight' => 'decimal:4',
         'volume' => 'decimal:4',
         'shelf_life_days' => 'integer',
@@ -165,8 +167,13 @@ class Item extends Model
 
     public function getConversionFactorForUom(?string $uomCode): float
     {
+        return (float) $this->getConversionFactorForUomDecimal($uomCode);
+    }
+
+    public function getConversionFactorForUomDecimal(?string $uomCode): string
+    {
         if (! $uomCode) {
-            return 1.0;
+            return DecimalMath::conversion('1');
         }
 
         $uom = $this->uoms()
@@ -174,10 +181,10 @@ class Item extends Model
             ->first();
 
         if ($uom?->pivot?->conversion_factor) {
-            return (float) $uom->pivot->conversion_factor;
+            return DecimalMath::toScale($uom->pivot->conversion_factor, DecimalPrecision::CONVERSION_SCALE);
         }
 
-        return 1.0;
+        return DecimalMath::conversion('1');
     }
 
     /**
@@ -313,20 +320,20 @@ class Item extends Model
         return (float) ($this->inventory ?? 0) + $movementQty;
     }
 
-//    public function getLedgerOnHandAttribute(): float
-//    {
-//        $ledgerOnHand = (float) $this->ledgerEntries()
-//            ->where('open', true)
-//            ->sum('remaining_quantity');
-//
-//        if ($ledgerOnHand > 0) {
-//            return $ledgerOnHand;
-//        }
-//
-//        // Backward-compatible fallback for environments that still keep
-//        // opening stock only on the item card (without open ledger layers).
-//        return (float) ($this->inventory ?? 0);
-//    }
+    //    public function getLedgerOnHandAttribute(): float
+    //    {
+    //        $ledgerOnHand = (float) $this->ledgerEntries()
+    //            ->where('open', true)
+    //            ->sum('remaining_quantity');
+    //
+    //        if ($ledgerOnHand > 0) {
+    //            return $ledgerOnHand;
+    //        }
+    //
+    //        // Backward-compatible fallback for environments that still keep
+    //        // opening stock only on the item card (without open ledger layers).
+    //        return (float) ($this->inventory ?? 0);
+    //    }
 
     public function getBaseUnitOfMeasureAttribute(): string
     {
@@ -404,12 +411,12 @@ class Item extends Model
         return $openingQty + $movementQty;
     }
 
-//    public function quantityAtLocation(int $locationId): float
-//    {
-//        return (float) $this->ledgerEntries()
-//            ->where('location_id', $locationId)
-//            ->sum('quantity');
-//    }
+    //    public function quantityAtLocation(int $locationId): float
+    //    {
+    //        return (float) $this->ledgerEntries()
+    //            ->where('location_id', $locationId)
+    //            ->sum('quantity');
+    //    }
 
     /**
      * Vendor relations

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ProductionOrders\Actions;
 use App\Enums\ProductionOrderStatus;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Services\Manufacturing\ProductionOrderService;
+use App\Support\DecimalFormatter;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -56,6 +57,8 @@ class ProductionOrderActions
                 TextInput::make('quantity')
                     ->numeric()
                     ->required()
+                    ->step('0.00000001')
+                    ->minValue('0.00000001')
                     ->default(fn (ProductionOrder $record): float => self::postOutputDefaultQuantity($record))
                     ->helperText(fn (ProductionOrder $record): string => self::postOutputHelperText($record))
                     ->rules([
@@ -173,6 +176,6 @@ class ProductionOrderActions
 
     private static function formatQuantity(float $quantity): string
     {
-        return rtrim(rtrim(number_format($quantity, 4, '.', ''), '0'), '.');
+        return DecimalFormatter::quantityForInput($quantity);
     }
 }

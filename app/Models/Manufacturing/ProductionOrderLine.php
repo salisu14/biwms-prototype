@@ -9,6 +9,8 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -48,12 +50,12 @@ class ProductionOrderLine extends Model
     ];
 
     protected $casts = [
-        'quantity' => 'decimal:4',
-        'quantity_base' => 'decimal:4',
+        'quantity' => 'decimal:8',
+        'quantity_base' => 'decimal:8',
         'due_date' => 'date',
         'starting_date_time' => 'datetime',
         'ending_date_time' => 'datetime',
-        'unit_cost' => 'decimal:4',
+        'unit_cost' => 'decimal:8',
         'cost_amount' => 'decimal:4',
         'finished' => 'boolean',
         'finished_at' => 'datetime',
@@ -176,7 +178,7 @@ class ProductionOrderLine extends Model
                 $line->quantity_base = $line->quantity ?? 0;
             }
 
-            $line->cost_amount = (float) ($line->quantity ?? 0) * (float) ($line->unit_cost ?? 0);
+            $line->cost_amount = DecimalMath::amount(DecimalMath::mul($line->quantity ?? 0, $line->unit_cost ?? 0, DecimalPrecision::AMOUNT_SCALE));
 
             if (! $line->created_by) {
                 $line->created_by = auth()->id();
@@ -191,7 +193,7 @@ class ProductionOrderLine extends Model
             }
 
             if ($line->isDirty('quantity') || $line->isDirty('unit_cost')) {
-                $line->cost_amount = (float) ($line->quantity ?? 0) * (float) ($line->unit_cost ?? 0);
+                $line->cost_amount = DecimalMath::amount(DecimalMath::mul($line->quantity ?? 0, $line->unit_cost ?? 0, DecimalPrecision::AMOUNT_SCALE));
             }
         });
     }

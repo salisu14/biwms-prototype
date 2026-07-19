@@ -5,6 +5,8 @@ namespace App\Filament\Resources\ProductionBoms\RelationManagers;
 use App\Filament\Resources\ProductionBoms\ProductionBomResource;
 use App\Models\Item;
 use App\Models\Manufacturing\ProductionBom;
+use App\Support\DecimalFormatter;
+use App\Support\DecimalMath;
 use Filament\Actions\AssociateAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -107,7 +109,10 @@ class ProductionBomLinesRelationManager extends RelationManager
                             ->numeric()
                             ->required()
                             ->default(1)
-                            ->minValue(0.00001),
+                            ->step('0.00000001')
+                            ->minValue('0.00000001')
+                            ->formatStateUsing(fn ($state): string => DecimalFormatter::quantityForInput($state))
+                            ->dehydrateStateUsing(fn ($state): string => DecimalMath::quantity($state)),
 
                         TextInput::make('scrap_percent')
                             ->numeric()
@@ -163,7 +168,7 @@ class ProductionBomLinesRelationManager extends RelationManager
                     ->limit(40),
 
                 TextColumn::make('quantity_per')
-                    ->numeric(),
+                    ->formatStateUsing(fn ($state, $record): string => DecimalFormatter::quantity($state, $record->unit_of_measure_code)),
 
                 TextColumn::make('unit_of_measure_code')
                     ->label('UOM'),
