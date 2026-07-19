@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -32,6 +34,7 @@ class DatabaseSeeder extends Seeder
             CustomerPostingGroupSeeder::class,
             //            CustomerSeeder::class,
             ItemSeeder::class,
+            OpeningInventorySeeder::class,
             //            VendorSeeder::class,
             NumberSeriesSeeder::class,
             PayrollPostingGroupSeeder::class,

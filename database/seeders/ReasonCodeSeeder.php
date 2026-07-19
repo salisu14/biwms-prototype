@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
+use App\Models\Location;
 use App\Models\ReasonCode;
 use Illuminate\Database\Seeder;
 
@@ -12,6 +15,8 @@ class ReasonCodeSeeder extends Seeder
      */
     public function run(): void
     {
+        $defaultLocationId = Location::query()->orderBy('id')->value('id');
+
         $reasonCodes = [
             // ============================================
             // INVENTORY ADJUSTMENTS - POSITIVE
@@ -19,7 +24,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'PHYS-COUNT',
                 'description' => 'Physical Inventory Count - Surplus',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '52100',
                 'inventory_account' => '12000',
@@ -29,7 +34,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'RCPT-ERROR',
                 'description' => 'Receipt Error Correction',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '52200',
                 'inventory_account' => '12000',
@@ -39,7 +44,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'RET-VENDOR',
                 'description' => 'Return to Vendor - Reversal',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '52300',
                 'inventory_account' => '12000',
@@ -49,7 +54,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'PROD-OVERRUN',
                 'description' => 'Production Overrun',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '52400',
                 'inventory_account' => '12000',
@@ -59,7 +64,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'TRANS-IN',
                 'description' => 'Transfer In - Inter-warehouse',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '52500',
                 'inventory_account' => '12000',
@@ -69,7 +74,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'FOUND',
                 'description' => 'Inventory Found',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '52600',
                 'inventory_account' => '12000',
@@ -79,7 +84,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'REVAL-UP',
                 'description' => 'Inventory Revaluation - Upward',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '52700',
                 'inventory_account' => '12000',
@@ -89,7 +94,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'CONSIGN-IN',
                 'description' => 'Consignment Stock Received',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '52800',
                 'inventory_account' => '12000',
@@ -103,7 +108,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'DAMAGE',
                 'description' => 'Damaged Goods',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53100',
                 'inventory_account' => '12000',
@@ -113,7 +118,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'EXPIRED',
                 'description' => 'Expired or Obsolete Stock',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53200',
                 'inventory_account' => '12000',
@@ -123,7 +128,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'SHRINKAGE',
                 'description' => 'Inventory Shrinkage',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53300',
                 'inventory_account' => '12000',
@@ -133,7 +138,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'SCRAP',
                 'description' => 'Production Scrap',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53400',
                 'inventory_account' => '12000',
@@ -143,7 +148,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'SAMPLE',
                 'description' => 'Sample or Promotional Use',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53500',
                 'inventory_account' => '12000',
@@ -153,7 +158,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'R&D',
                 'description' => 'Research and Development Consumption',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53600',
                 'inventory_account' => '12000',
@@ -163,7 +168,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'MAINT',
                 'description' => 'Maintenance Consumption',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53700',
                 'inventory_account' => '12000',
@@ -173,7 +178,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'TRANS-OUT',
                 'description' => 'Transfer Out - Inter-warehouse',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53800',
                 'inventory_account' => '12000',
@@ -183,7 +188,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'REVAL-DOWN',
                 'description' => 'Inventory Revaluation - Downward',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53900',
                 'inventory_account' => '12000',
@@ -193,7 +198,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'WRITE-OFF',
                 'description' => 'Inventory Write-Off',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '54000',
                 'inventory_account' => '12000',
@@ -207,7 +212,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'BOM-CHG',
                 'description' => 'BOM Change Adjustment',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '55100',
                 'inventory_account' => '12000',
@@ -217,7 +222,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'YIELD-VAR',
                 'description' => 'Yield Variance',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '55200',
                 'inventory_account' => '12000',
@@ -227,7 +232,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'REWORK',
                 'description' => 'Rework Material Consumption',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '55300',
                 'inventory_account' => '12000',
@@ -237,7 +242,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'TOOLING',
                 'description' => 'Tooling Wear or Breakage',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '55400',
                 'inventory_account' => '12000',
@@ -247,7 +252,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'SET-UP',
                 'description' => 'Setup Material',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '55500',
                 'inventory_account' => '12000',
@@ -261,7 +266,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'QC-REJECT',
                 'description' => 'Quality Control Rejection',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '56100',
                 'inventory_account' => '12000',
@@ -271,7 +276,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'QC-HOLD',
                 'description' => 'QC Hold Release',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '56200',
                 'inventory_account' => '12000',
@@ -281,7 +286,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'RECALL',
                 'description' => 'Product Recall',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '56300',
                 'inventory_account' => '12000',
@@ -295,7 +300,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'PICK-ERROR',
                 'description' => 'Picking Error Correction',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '57100',
                 'inventory_account' => '12000',
@@ -305,7 +310,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'PUT-ERR',
                 'description' => 'Put-away Error',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '57200',
                 'inventory_account' => '12000',
@@ -315,7 +320,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'CYCLE-CNT',
                 'description' => 'Cycle Count Adjustment',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '57300',
                 'inventory_account' => '12000',
@@ -325,7 +330,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'REPACK',
                 'description' => 'Repackaging',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '57400',
                 'inventory_account' => '12000',
@@ -339,7 +344,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'CUST-RET',
                 'description' => 'Customer Return - Good',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '58100',
                 'inventory_account' => '12000',
@@ -349,7 +354,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'CUST-RET-DMG',
                 'description' => 'Customer Return - Damaged',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '58200',
                 'inventory_account' => '12000',
@@ -359,7 +364,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'VEND-RET',
                 'description' => 'Return to Vendor',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '58300',
                 'inventory_account' => '12000',
@@ -373,7 +378,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'SYS-ERR',
                 'description' => 'System Error Correction',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '59100',
                 'inventory_account' => '12000',
@@ -383,7 +388,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'CONV-ERR',
                 'description' => 'Unit of Measure Conversion Error',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '59200',
                 'inventory_account' => '12000',
@@ -393,7 +398,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'OPEN-BAL',
                 'description' => 'Opening Balance Adjustment',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '59300',
                 'inventory_account' => '12000',
@@ -407,7 +412,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'THEFT',
                 'description' => 'Theft (Deprecated - Use SHRINKAGE)',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53300',
                 'inventory_account' => '12000',
@@ -417,7 +422,7 @@ class ReasonCodeSeeder extends Seeder
             [
                 'code' => 'LOST',
                 'description' => 'Lost Inventory (Deprecated - Use SHRINKAGE)',
-                'default_location_id' => 1,
+                'default_location_id' => $defaultLocationId,
                 'default_bin_id' => null,
                 'inventory_adjustment_account' => '53300',
                 'inventory_account' => '12000',

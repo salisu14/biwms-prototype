@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Enums\ItemType;
@@ -7,6 +9,7 @@ use App\Enums\ProductionOrderStatus;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\OpeningInventory;
 use App\Models\PurchaseInvoice;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -41,6 +44,8 @@ class BiwmsInventoryReconcile extends Command
         $unbalancedTransferEntries = $this->unbalancedTransferEntries();
         $duplicateWarehousePostings = $this->duplicateWarehousePostings();
         $transferSourceDestinationMismatches = $this->transferSourceDestinationMismatches();
+        $duplicateOpeningInventoryEntries = $this->duplicateOpeningInventoryEntries();
+        $postedOpeningDocumentsWithoutLedger = $this->postedOpeningDocumentsWithoutLedger();
 
         $report = [
             'stock_mismatches' => $stockMismatches,
@@ -61,6 +66,8 @@ class BiwmsInventoryReconcile extends Command
             'unbalanced_transfer_entries' => $unbalancedTransferEntries,
             'duplicate_warehouse_postings' => $duplicateWarehousePostings,
             'transfer_source_destination_mismatches' => $transferSourceDestinationMismatches,
+            'duplicate_opening_inventory_entries' => $duplicateOpeningInventoryEntries,
+            'posted_opening_documents_without_ledger' => $postedOpeningDocumentsWithoutLedger,
         ];
 
         if ($exportPath = $this->option('export')) {
@@ -239,6 +246,22 @@ class BiwmsInventoryReconcile extends Command
             $entry['location_count'],
             number_format($entry['negative_quantity'], 4, '.', ''),
             number_format($entry['positive_quantity'], 4, '.', ''),
+        ));
+        $this->section('Duplicate opening inventory entries', $duplicateOpeningInventoryEntries, $details, fn (array $entry): string => sprintf(
+            '[%s] %s line=%s item=%s entries=%s quantity=%s',
+            $entry['severity'],
+            $entry['document_number'],
+            $entry['document_line_number'],
+            $entry['item_id'],
+            $entry['entry_count'],
+            number_format($entry['quantity'], 4, '.', ''),
+        ));
+        $this->section('Posted opening documents without ledger records', $postedOpeningDocumentsWithoutLedger, $details, fn (array $entry): string => sprintf(
+            '[%s] %s line=%s item=%s',
+            $entry['severity'],
+            $entry['document_number'],
+            $entry['line_number'],
+            $entry['item_id'],
         ));
 
         return self::SUCCESS;
@@ -480,6 +503,10 @@ class BiwmsInventoryReconcile extends Command
             ->with('item:id,item_code')
             ->where('open', true)
             ->where('remaining_quantity', '!=', 0)
+            ->where(function ($query): void {
+                $query->where('source_type', '!=', OpeningInventory::class)
+                    ->orWhereNull('source_type');
+            })
             ->orderBy('entry_number')
             ->limit(500)
             ->get()
@@ -1187,6 +1214,84 @@ class BiwmsInventoryReconcile extends Command
                     classification: 'transfer_source_destination_mismatch',
                     severity: 'critical',
                     suggestedRemediation: 'Review the transfer source and destination locations. A valid transfer must have matching outbound and inbound quantities for different locations.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function duplicateOpeningInventoryEntries(): array
+    {
+        return DB::table('item_ledger_entries as ile')
+            ->where('ile.source_type', OpeningInventory::class)
+            ->groupBy('ile.source_id', 'ile.document_number', 'ile.document_line_number', 'ile.item_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->orderBy('ile.document_number')
+            ->limit(250)
+            ->get([
+                'ile.source_id',
+                'ile.document_number',
+                'ile.document_line_number',
+                'ile.item_id',
+                DB::raw('COUNT(*) as entry_count'),
+                DB::raw('COALESCE(SUM(ile.quantity), 0) as quantity'),
+            ])
+            ->map(fn ($entry): array => [
+                'opening_inventory_id' => $entry->source_id,
+                'document_number' => $entry->document_number,
+                'document_line_number' => $entry->document_line_number,
+                'item_id' => $entry->item_id,
+                'entry_count' => (int) $entry->entry_count,
+                'quantity' => round((float) $entry->quantity, 4),
+                ...$this->findingMetadata(
+                    classification: 'duplicate_seed_opening_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the opening inventory document and reverse duplicate opening entries through an approved controlled repair. Do not delete ledger history directly.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function postedOpeningDocumentsWithoutLedger(): array
+    {
+        if (! DB::getSchemaBuilder()->hasTable('opening_inventories')) {
+            return [];
+        }
+
+        return DB::table('opening_inventory_lines as oil')
+            ->join('opening_inventories as oi', 'oi.id', '=', 'oil.opening_inventory_id')
+            ->where('oi.status', OpeningInventory::STATUS_POSTED)
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('item_ledger_entries as ile')
+                    ->whereColumn('ile.source_id', 'oi.id')
+                    ->where('ile.source_type', OpeningInventory::class)
+                    ->whereColumn('ile.document_line_number', 'oil.line_number');
+            })
+            ->orderBy('oi.document_number')
+            ->limit(250)
+            ->get([
+                'oi.id as opening_inventory_id',
+                'oi.document_number',
+                'oil.line_number',
+                'oil.item_id',
+            ])
+            ->map(fn ($entry): array => [
+                'opening_inventory_id' => $entry->opening_inventory_id,
+                'document_number' => $entry->document_number,
+                'line_number' => $entry->line_number,
+                'item_id' => $entry->item_id,
+                ...$this->findingMetadata(
+                    classification: 'opening_document_posted_without_ledger',
+                    severity: 'critical',
+                    suggestedRemediation: 'Reopen the controlled opening-inventory repair plan. A posted opening document must not remain without matching item-ledger records.'
                 ),
             ])
             ->values()

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Enums\CostingMethod;
@@ -16,7 +18,6 @@ use App\Models\UnitOfMeasure;
 use App\Models\VatMaster;
 use App\Models\VatProductPostingGroup;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Schema;
 
 class ItemSeeder extends Seeder
 {
@@ -25,11 +26,6 @@ class ItemSeeder extends Seeder
      */
     public function run(): void
     {
-        Schema::disableForeignKeyConstraints();
-        Item::truncate();
-        ItemSku::truncate();
-        Schema::enableForeignKeyConstraints();
-
         // Ensure we have supporting data
         $mainLocation = Location::first() ?? Location::create(['name' => 'Main Warehouse', 'code' => 'MAIN']);
 
@@ -84,7 +80,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 850.00,
                 'last_direct_cost' => 845.00,
                 'unit_price' => 1200.00,
-                'inventory' => 50.00,
+                'opening_inventory' => 50.00,
                 'reorder_point' => 10.00,
                 'reorder_quantity' => 25.00,
                 'location_id' => $mainLocation->id,
@@ -107,7 +103,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 8.80,
                 'last_direct_cost' => 8.80,
                 'unit_price' => 8.80,
-                'inventory' => 25000.00,
+                'opening_inventory' => 25000.00,
                 'reorder_point' => 250000.00,
                 'reorder_quantity' => 250000.00,
                 'location_id' => $mainLocation->id,
@@ -130,7 +126,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 778.50,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 778.50,
-                'inventory' => 400000.00,
+                'opening_inventory' => 400000.00,
                 'reorder_point' => 250000.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $uomId,
@@ -150,7 +146,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 336.00,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 336.00,
-                'inventory' => 1000000.00,
+                'opening_inventory' => 1000000.00,
                 'reorder_point' => 500000.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $uomId,
@@ -170,7 +166,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 2.80,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 2.80,
-                'inventory' => 150000.00,
+                'opening_inventory' => 150000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $uomId,
@@ -190,7 +186,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 20000,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 20000.00,
-                'inventory' => 150000.00,
+                'opening_inventory' => 150000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $uomId,
@@ -210,7 +206,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 47.43,
                 'last_direct_cost' => 47.43,
                 'unit_price' => 47.43,
-                'inventory' => 10000.00,
+                'opening_inventory' => 10000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $uomId,
@@ -230,7 +226,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 20.00,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 20.00,
-                'inventory' => 10000.00,
+                'opening_inventory' => 10000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $baseUomId,
@@ -250,7 +246,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 150.00,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 150.00,
-                'inventory' => 1000.00,
+                'opening_inventory' => 1000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $baseUomId,
@@ -270,7 +266,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 70.14,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 70.14,
-                'inventory' => 50000.00,
+                'opening_inventory' => 50000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $cartonUomId,
@@ -290,7 +286,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 723.00,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 723.00,
-                'inventory' => 10000.00,
+                'opening_inventory' => 10000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $cartonUomId,
@@ -310,7 +306,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 35.38,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 35.38,
-                'inventory' => 200000.00,
+                'opening_inventory' => 200000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $baseUomId,
@@ -330,7 +326,7 @@ class ItemSeeder extends Seeder
                 'standard_cost' => 35.38,
                 'last_direct_cost' => 0.00,
                 'unit_price' => 35.38,
-                'inventory' => 1000000.00,
+                'opening_inventory' => 1000000.00,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'base_uom_id' => $baseUomId,
@@ -339,6 +335,8 @@ class ItemSeeder extends Seeder
         ];
 
         foreach ($items as $itemData) {
+            unset($itemData['opening_inventory']);
+
             // Resolve VAT ID
             $itemData['vat_id'] = $vats[$itemData['vat_prod_posting_group']] ?? null;
 

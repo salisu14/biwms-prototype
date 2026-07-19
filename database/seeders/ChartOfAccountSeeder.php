@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Enums\AccountCategory;
@@ -191,6 +193,14 @@ class ChartOfAccountSeeder extends Seeder
                 'direct_posting' => true,
                 'parent_account_number' => '20000',
             ],
+            [
+                'account_number' => '30100',
+                'name' => 'Opening Balance Equity',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::EQUITY,
+                'direct_posting' => true,
+                'parent_account_number' => '30000',
+            ],
         ];
 
         foreach ($accounts as $accountData) {
@@ -266,6 +276,13 @@ class ChartOfAccountSeeder extends Seeder
                 'name' => 'Current Liabilities',
                 'structural_type' => AccountStructuralType::HEADING,
                 'account_category' => AccountCategory::LIABILITY,
+                'direct_posting' => false,
+            ],
+            [
+                'account_number' => '30000',
+                'name' => 'Equity',
+                'structural_type' => AccountStructuralType::HEADING,
+                'account_category' => AccountCategory::EQUITY,
                 'direct_posting' => false,
             ],
             [
