@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Resources\PerformanceRatingScales\Tables;
 
 use App\Models\PerformanceRatingScale;
-use App\Support\Filament\CompletedResourceSchema;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -49,9 +48,9 @@ class PerformanceRatingScalesTable
 
                 TextColumn::make('score_range')
                     ->label('Score Range')
-                    ->getStateUsing(fn(PerformanceRatingScale $record): string => number_format((float)$record->minimum_score, $record->decimal_places)
-                        . ' – '
-                        . number_format((float)$record->maximum_score, $record->decimal_places)
+                    ->getStateUsing(fn (PerformanceRatingScale $record): string => number_format((float) $record->minimum_score, $record->decimal_places)
+                        .' – '
+                        .number_format((float) $record->maximum_score, $record->decimal_places)
                     )
                     ->fontFamily('font-mono')
                     ->alignCenter()
@@ -59,7 +58,7 @@ class PerformanceRatingScalesTable
 
                 TextColumn::make('decimal_places')
                     ->label('Precision')
-                    ->formatStateUsing(fn(int $state): string => "{$state} decimal" . ($state === 1 ? '' : 's'))
+                    ->formatStateUsing(fn (int $state): string => "{$state} decimal".($state === 1 ? '' : 's'))
                     ->alignCenter()
                     ->toggleable()
                     ->toggledHiddenByDefault(),
@@ -74,9 +73,9 @@ class PerformanceRatingScalesTable
 
                 TextColumn::make('effective_period')
                     ->label('Effective')
-                    ->getStateUsing(fn(PerformanceRatingScale $record): string => $record->effective_to
+                    ->getStateUsing(fn (PerformanceRatingScale $record): string => $record->effective_to
                         ? "{$record->effective_from->format('M d')} – {$record->effective_to->format('M d, Y')}"
-                        : $record->effective_from->format('M d, Y') . ' – Ongoing'
+                        : $record->effective_from->format('M d, Y').' – Ongoing'
                     )
                     ->sortable(['effective_from', 'effective_to'])
                     ->toggleable(),
@@ -89,7 +88,7 @@ class PerformanceRatingScalesTable
                     ->trueColor('warning')
                     ->falseColor('gray')
                     ->alignCenter()
-                    ->tooltip(fn(PerformanceRatingScale $record): string => $record->is_default ? 'Default scale for this business' : 'Not the default'
+                    ->tooltip(fn (PerformanceRatingScale $record): string => $record->is_default ? 'Default scale for this business' : 'Not the default'
                     ),
 
                 IconColumn::make('is_active')
@@ -133,13 +132,13 @@ class PerformanceRatingScalesTable
                     ->trueLabel('Effective now')
                     ->falseLabel('Not effective')
                     ->queries(
-                        true: fn(Builder $query) => $query
+                        true: fn (Builder $query) => $query
                             ->whereDate('effective_from', '<=', now())
                             ->where(function (Builder $query) {
                                 $query->whereNull('effective_to')
                                     ->orWhereDate('effective_to', '>=', now());
                             }),
-                        false: fn(Builder $query) => $query
+                        false: fn (Builder $query) => $query
                             ->whereDate('effective_from', '>', now())
                             ->orWhere(function (Builder $query) {
                                 $query->whereNotNull('effective_to')

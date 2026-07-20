@@ -37,7 +37,7 @@ class PerformanceAppraisalCyclesTable
                     ->searchable()
                     ->sortable()
                     ->limit(50)
-                    ->tooltip(fn($record) => $record->name)
+                    ->tooltip(fn ($record) => $record->name)
                     ->label('Name'),
 
                 TextColumn::make('status')
@@ -57,11 +57,11 @@ class PerformanceAppraisalCyclesTable
                         'primary' => PerformanceAppraisalCycle::STATUS_COMPLETED,
                         'secondary' => PerformanceAppraisalCycle::STATUS_CLOSED,
                     ])
-                    ->formatStateUsing(fn(string $state): string => str_replace('_', ' ', ucfirst($state)))
+                    ->formatStateUsing(fn (string $state): string => str_replace('_', ' ', ucfirst($state)))
                     ->label('Status'),
 
                 TextColumn::make('cycle_type')
-                    ->formatStateUsing(fn(string $state): string => str_replace('_', ' ', ucfirst($state)))
+                    ->formatStateUsing(fn (string $state): string => str_replace('_', ' ', ucfirst($state)))
                     ->badge()
                     ->label('Type'),
 
@@ -145,7 +145,7 @@ class PerformanceAppraisalCyclesTable
                     ->label('Require Moderation'),
 
                 Filter::make('active_cycles')
-                    ->query(fn(Builder $query): Builder => $query->whereNotIn('status', [
+                    ->query(fn (Builder $query): Builder => $query->whereNotIn('status', [
                         PerformanceAppraisalCycle::STATUS_CLOSED,
                         PerformanceAppraisalCycle::STATUS_CANCELLED,
                     ]))
@@ -159,6 +159,7 @@ class PerformanceAppraisalCyclesTable
                         if (isset($data['status']) && $data['status'] === PerformanceAppraisalCycle::STATUS_REOPENED && empty($data['reopen_reason'])) {
                             throw new \Exception('Reopen reason is required when reopening a cycle.');
                         }
+
                         return $data;
                     }),
                 Action::make('openCycle')
@@ -173,7 +174,7 @@ class PerformanceAppraisalCyclesTable
                             'opened_at' => now(),
                         ]);
                     })
-                    ->visible(fn(PerformanceAppraisalCycle $record): bool => $record->status === PerformanceAppraisalCycle::STATUS_DRAFT
+                    ->visible(fn (PerformanceAppraisalCycle $record): bool => $record->status === PerformanceAppraisalCycle::STATUS_DRAFT
                     ),
 
                 Action::make('completeCycle')
@@ -188,7 +189,7 @@ class PerformanceAppraisalCyclesTable
                             'completed_at' => now(),
                         ]);
                     })
-                    ->visible(fn(PerformanceAppraisalCycle $record): bool => !$record->isLocked() && $record->status !== PerformanceAppraisalCycle::STATUS_DRAFT
+                    ->visible(fn (PerformanceAppraisalCycle $record): bool => ! $record->isLocked() && $record->status !== PerformanceAppraisalCycle::STATUS_DRAFT
                     ),
 
                 Action::make('closeCycle')
@@ -203,7 +204,7 @@ class PerformanceAppraisalCyclesTable
                             'closed_at' => now(),
                         ]);
                     })
-                    ->visible(fn(PerformanceAppraisalCycle $record): bool => $record->status === PerformanceAppraisalCycle::STATUS_COMPLETED
+                    ->visible(fn (PerformanceAppraisalCycle $record): bool => $record->status === PerformanceAppraisalCycle::STATUS_COMPLETED
                     ),
             ])
             ->toolbarActions([

@@ -6,7 +6,10 @@ use App\Filament\Resources\AttendanceLedgerEntries\AttendanceLedgerEntryResource
 use App\Filament\Resources\EmployeeAttendanceEvents\EmployeeAttendanceEventResource;
 use App\Filament\Resources\RecruitmentHistories\RecruitmentHistoryResource;
 use App\Filament\Resources\WorkforceRosterHistories\WorkforceRosterHistoryResource;
+use App\Models\PerformanceAppraisalTemplate;
 use App\Models\RecruitmentApplication;
+use App\Models\Role;
+use App\Models\User;
 use App\Support\Filament\CompletedResourceSchema;
 use App\Support\FilamentPermissionRegistry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -101,4 +104,67 @@ it('keeps the employee index table payload lean', function (): void {
         ->and($source)->toContain("asset('images/employee-placeholder.svg')")
         ->and($source)->toContain("Action::make('generateIdCard')")
         ->and($source)->toContain("Action::make('regenerateIdCard')");
+});
+
+it('keeps performance management resources off the generic completed schema fallback', function (): void {
+    $resourceFiles = collect(glob(app_path('Filament/Resources/Performance*/*/*.php')) ?: [])
+        ->merge(glob(app_path('Filament/Resources/Performance*/*.php')) ?: []);
+
+    expect($resourceFiles)->not->toBeEmpty();
+
+    foreach ($resourceFiles as $resourceFile) {
+        expect((string) file_get_contents($resourceFile))
+            ->not->toContain('CompletedResourceSchema::');
+    }
+});
+
+it('keeps performance competency forms aligned to real migration columns', function (): void {
+    $formSource = (string) file_get_contents(app_path('Filament/Resources/PerformanceCompetencies/Schemas/PerformanceCompetencyForm.php'));
+
+    expect($formSource)
+        ->not->toContain("TextInput::make('version')")
+        ->not->toContain("Select::make('category')")
+        ->not->toContain("KeyValue::make('proficiency_levels')")
+        ->toContain('PerformanceResourceSchema::form');
+});
+
+it('casts appraisal template employment type as the string stored by the migration', function (): void {
+    $template = new PerformanceAppraisalTemplate;
+
+    expect($template->getCasts())
+        ->not->toHaveKey('applicable_employment_type');
+});
+
+it('renders performance management index pages for a confirmed super admin', function (): void {
+    Role::query()->firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+
+    $superAdmin = User::factory()->create([
+        'two_factor_secret' => 'TESTSECRET',
+        'two_factor_confirmed_at' => now(),
+    ]);
+    $superAdmin->assignRole('super_admin');
+
+    foreach ([
+        '/admin/performance-appraisal-cycles',
+        '/admin/performance-appraisal-disputes',
+        '/admin/performance-appraisal-histories',
+        '/admin/performance-appraisal-moderation-sessions',
+        '/admin/performance-appraisal-recommendations',
+        '/admin/performance-appraisal-templates',
+        '/admin/performance-appraisals',
+        '/admin/performance-competencies',
+        '/admin/performance-competency-frameworks',
+        '/admin/performance-development-plans',
+        '/admin/performance-goal-plans',
+        '/admin/performance-goals',
+        '/admin/performance-improvement-plans',
+        '/admin/performance-position-competencies',
+        '/admin/performance-probation-reviews',
+        '/admin/performance-rating-scales',
+    ] as $path) {
+        $this->actingAs($superAdmin)
+            ->withSession(['two_factor_passed_at' => now()->timestamp])
+            ->get($path)
+            ->assertSuccessful();
+    }
 });

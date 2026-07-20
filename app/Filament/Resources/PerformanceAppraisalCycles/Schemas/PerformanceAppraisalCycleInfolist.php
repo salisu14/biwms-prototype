@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Resources\PerformanceAppraisalCycles\Schemas;
 
 use App\Models\PerformanceAppraisalCycle;
-use App\Models\PerformanceRatingScale;
-use App\Support\Filament\CompletedResourceSchema;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Group;

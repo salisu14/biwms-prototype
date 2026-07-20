@@ -62,6 +62,26 @@ class PerformanceAppraisal extends Model
         return $this->hasMany(PerformanceAppraisalSection::class)->orderBy('sort_order');
     }
 
+    public function cycle(): BelongsTo
+    {
+        return $this->belongsTo(PerformanceAppraisalCycle::class, 'performance_appraisal_cycle_id');
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    public function manager(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'manager_employee_id');
+    }
+
+    public function template(): BelongsTo
+    {
+        return $this->belongsTo(PerformanceAppraisalTemplate::class, 'appraisal_template_id');
+    }
+
     public function ratingScale(): BelongsTo
     {
         return $this->belongsTo(PerformanceRatingScale::class, 'rating_scale_id');

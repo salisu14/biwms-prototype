@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Resources\PerformanceRatingScales\Schemas;
 
 use App\Models\PerformanceRatingScale;
-use App\Support\Filament\CompletedResourceSchema;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -64,8 +63,7 @@ class PerformanceRatingScaleInfolist
                             ->color('success')
                             ->weight('font-bold')
                             ->size(TextSize::Large)
-                            ->formatStateUsing(fn (float $state, PerformanceRatingScale $record): string =>
-                            number_format($state, $record->decimal_places)
+                            ->formatStateUsing(fn (float $state, PerformanceRatingScale $record): string => number_format($state, $record->decimal_places)
                             ),
 
                         TextEntry::make('maximum_score')
@@ -74,14 +72,13 @@ class PerformanceRatingScaleInfolist
                             ->color('danger')
                             ->weight('font-bold')
                             ->size(TextSize::Large)
-                            ->formatStateUsing(fn (float $state, PerformanceRatingScale $record): string =>
-                            number_format($state, $record->decimal_places)
+                            ->formatStateUsing(fn (float $state, PerformanceRatingScale $record): string => number_format($state, $record->decimal_places)
                             ),
 
                         TextEntry::make('decimal_places')
                             ->label('Decimal Precision')
                             ->icon('heroicon-o-calculator')
-                            ->formatStateUsing(fn (int $state): string => "{$state} decimal" . ($state === 1 ? '' : 's')),
+                            ->formatStateUsing(fn (int $state): string => "{$state} decimal".($state === 1 ? '' : 's')),
                     ]),
 
                 Section::make('Validity & Status')
@@ -121,8 +118,8 @@ class PerformanceRatingScaleInfolist
                             ->falseIcon('heroicon-o-x-circle')
                             ->trueColor('success')
                             ->falseColor('danger'),
-//                            ->trueLabel('Active — available for evaluations')
-//                            ->falseLabel('Inactive — hidden from selection'),
+                        //                            ->trueLabel('Active — available for evaluations')
+                        //                            ->falseLabel('Inactive — hidden from selection'),
 
                         TextEntry::make('levels_count')
                             ->label('Defined Levels')

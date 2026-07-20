@@ -39,8 +39,6 @@ class PerformanceAppraisalTemplate extends Model
     ];
 
     protected $casts = [
-        'applicable_employment_type' => 'array',
-
         'goal_weight_percent' => 'decimal:4',
         'competency_weight_percent' => 'decimal:4',
         'other_weight_percent' => 'decimal:4',

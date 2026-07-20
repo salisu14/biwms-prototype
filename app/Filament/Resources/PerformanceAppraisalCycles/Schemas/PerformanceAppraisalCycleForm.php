@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\PerformanceAppraisalCycles\Schemas;
 
 use App\Models\PerformanceAppraisalCycle;
-use App\Support\Filament\CompletedResourceSchema;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -65,12 +63,12 @@ class PerformanceAppraisalCycleForm
                         DatePicker::make('period_start')
                             ->required()
                             ->label('Period Start Date')
-                            ->maxDate(fn(Get $get) => $get('period_end')),
+                            ->maxDate(fn (Get $get) => $get('period_end')),
 
                         DatePicker::make('period_end')
                             ->required()
                             ->label('Period End Date')
-                            ->minDate(fn(Get $get) => $get('period_start')),
+                            ->minDate(fn (Get $get) => $get('period_start')),
                     ])
                     ->columns(2),
 
@@ -84,11 +82,11 @@ class PerformanceAppraisalCycleForm
 
                         DatePicker::make('goal_setting_start')
                             ->label('Start Date')
-                            ->maxDate(fn(Get $get) => $get('goal_setting_end')),
+                            ->maxDate(fn (Get $get) => $get('goal_setting_end')),
 
                         DatePicker::make('goal_setting_end')
                             ->label('End Date')
-                            ->minDate(fn(Get $get) => $get('goal_setting_start')),
+                            ->minDate(fn (Get $get) => $get('goal_setting_start')),
 
                         // Self Assessment Phase
                         TextEntry::make('self_assessment_header')
@@ -97,11 +95,11 @@ class PerformanceAppraisalCycleForm
 
                         DatePicker::make('self_assessment_start')
                             ->label('Start Date')
-                            ->maxDate(fn(Get $get) => $get('self_assessment_end')),
+                            ->maxDate(fn (Get $get) => $get('self_assessment_end')),
 
                         DatePicker::make('self_assessment_end')
                             ->label('End Date')
-                            ->minDate(fn(Get $get) => $get('self_assessment_start')),
+                            ->minDate(fn (Get $get) => $get('self_assessment_start')),
 
                         // Manager Review Phase
                         TextEntry::make('manager_review_header')
@@ -110,11 +108,11 @@ class PerformanceAppraisalCycleForm
 
                         DatePicker::make('manager_review_start')
                             ->label('Start Date')
-                            ->maxDate(fn(Get $get) => $get('manager_review_end')),
+                            ->maxDate(fn (Get $get) => $get('manager_review_end')),
 
                         DatePicker::make('manager_review_end')
                             ->label('End Date')
-                            ->minDate(fn(Get $get) => $get('manager_review_start')),
+                            ->minDate(fn (Get $get) => $get('manager_review_start')),
 
                         // Moderation Phase
                         TextEntry::make('moderation_header')
@@ -123,11 +121,11 @@ class PerformanceAppraisalCycleForm
 
                         DatePicker::make('moderation_start')
                             ->label('Start Date')
-                            ->maxDate(fn(Get $get) => $get('moderation_end')),
+                            ->maxDate(fn (Get $get) => $get('moderation_end')),
 
                         DatePicker::make('moderation_end')
                             ->label('End Date')
-                            ->minDate(fn(Get $get) => $get('moderation_start')),
+                            ->minDate(fn (Get $get) => $get('moderation_start')),
 
                         // Acknowledgement Deadline
                         DatePicker::make('acknowledgement_deadline')
@@ -194,11 +192,11 @@ class PerformanceAppraisalCycleForm
                             ])
                             ->required()
                             ->label('Current Status')
-                            ->disabled(fn(string $context): bool => $context === 'edit' && !auth()->user()->can('update_status', PerformanceAppraisalCycle::class)),
+                            ->disabled(fn (string $context): bool => $context === 'edit' && ! auth()->user()->can('update_status', PerformanceAppraisalCycle::class)),
 
                         Textarea::make('reopen_reason')
                             ->label('Reopen Reason')
-                            ->visible(fn(Get $get): bool => $get('status') === PerformanceAppraisalCycle::STATUS_REOPENED
+                            ->visible(fn (Get $get): bool => $get('status') === PerformanceAppraisalCycle::STATUS_REOPENED
                             )
                             ->rows(2),
                     ])

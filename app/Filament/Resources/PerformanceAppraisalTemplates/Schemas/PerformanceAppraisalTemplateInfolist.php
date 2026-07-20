@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Resources\PerformanceAppraisalTemplates\Schemas;
 
 use App\Models\PerformanceAppraisalTemplate;
-use App\Support\Filament\CompletedResourceSchema;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -84,6 +83,7 @@ class PerformanceAppraisalTemplateInfolist
                                     return 'All employment types';
                                 }
                                 $types = json_decode($state, true) ?? [];
+
                                 return collect($types)->map(fn ($t) => ucwords(str_replace('_', ' ', $t)))->implode(', ');
                             }),
                     ]),
@@ -106,9 +106,10 @@ class PerformanceAppraisalTemplateInfolist
                                 if (! $scale) {
                                     return 'Not configured';
                                 }
+
                                 return number_format((float) $scale->minimum_score, $scale->decimal_places)
-                                    . ' – '
-                                    . number_format((float) $scale->maximum_score, $scale->decimal_places);
+                                    .' – '
+                                    .number_format((float) $scale->maximum_score, $scale->decimal_places);
                             })
                             ->fontFamily('font-mono'),
                     ]),
@@ -123,7 +124,7 @@ class PerformanceAppraisalTemplateInfolist
                             ->color('success')
                             ->weight('font-bold')
                             ->size(TextSize::Large)
-                            ->formatStateUsing(fn (float $state): string => number_format($state, 2) . '%'),
+                            ->formatStateUsing(fn (float $state): string => number_format($state, 2).'%'),
 
                         TextEntry::make('competency_weight_percent')
                             ->label('Competency Weight')
@@ -131,7 +132,7 @@ class PerformanceAppraisalTemplateInfolist
                             ->color('warning')
                             ->weight('font-bold')
                             ->size(TextSize::Large)
-                            ->formatStateUsing(fn (float $state): string => number_format($state, 2) . '%'),
+                            ->formatStateUsing(fn (float $state): string => number_format($state, 2).'%'),
 
                         TextEntry::make('other_weight_percent')
                             ->label('Other Weight')
@@ -139,7 +140,7 @@ class PerformanceAppraisalTemplateInfolist
                             ->color('info')
                             ->weight('font-bold')
                             ->size(TextSize::Large)
-                            ->formatStateUsing(fn (float $state): string => number_format($state, 2) . '%'),
+                            ->formatStateUsing(fn (float $state): string => number_format($state, 2).'%'),
 
                         TextEntry::make('weight_total')
                             ->label('Total Weight')
@@ -148,12 +149,14 @@ class PerformanceAppraisalTemplateInfolist
                                 $total = (float) $record->goal_weight_percent
                                     + (float) $record->competency_weight_percent
                                     + (float) $record->other_weight_percent;
-                                return number_format($total, 2) . '%';
+
+                                return number_format($total, 2).'%';
                             })
                             ->color(function (PerformanceAppraisalTemplate $record): string {
                                 $total = (float) $record->goal_weight_percent
                                     + (float) $record->competency_weight_percent
                                     + (float) $record->other_weight_percent;
+
                                 return abs($total - 100.0) < 0.0001 ? 'success' : 'danger';
                             })
                             ->columnSpanFull(),
@@ -170,8 +173,8 @@ class PerformanceAppraisalTemplateInfolist
                             ->falseIcon('heroicon-o-x-circle')
                             ->trueColor('success')
                             ->falseColor('gray'),
-//                            ->trueLabel('Required')
-//                            ->falseLabel('Optional'),
+                        //                            ->trueLabel('Required')
+                        //                            ->falseLabel('Optional'),
 
                         IconEntry::make('require_manager_comment')
                             ->label('Manager Comment')
@@ -180,8 +183,8 @@ class PerformanceAppraisalTemplateInfolist
                             ->falseIcon('heroicon-o-x-circle')
                             ->trueColor('success')
                             ->falseColor('gray'),
-//                            ->trueLabel('Required')
-//                            ->falseLabel('Optional'),
+                        //                            ->trueLabel('Required')
+                        //                            ->falseLabel('Optional'),
 
                         IconEntry::make('require_final_comment')
                             ->label('Final Comment')
@@ -190,8 +193,8 @@ class PerformanceAppraisalTemplateInfolist
                             ->falseIcon('heroicon-o-x-circle')
                             ->trueColor('success')
                             ->falseColor('gray'),
-//                            ->trueLabel('Required')
-//                            ->falseLabel('Optional'),
+                        //                            ->trueLabel('Required')
+                        //                            ->falseLabel('Optional'),
                     ]),
 
                 Section::make('Validity & Version')

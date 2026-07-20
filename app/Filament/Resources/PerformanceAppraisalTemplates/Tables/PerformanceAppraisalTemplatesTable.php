@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Resources\PerformanceAppraisalTemplates\Tables;
 
 use App\Models\PerformanceAppraisalTemplate;
-use App\Support\Filament\CompletedResourceSchema;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -65,10 +64,9 @@ class PerformanceAppraisalTemplatesTable
 
                 TextColumn::make('weight_breakdown')
                     ->label('Weights')
-                    ->getStateUsing(fn (PerformanceAppraisalTemplate $record): string =>
-                        "G: " . number_format((float) $record->goal_weight_percent, 0)
-                        . "% | C: " . number_format((float) $record->competency_weight_percent, 0)
-                        . "% | O: " . number_format((float) $record->other_weight_percent, 0) . "%"
+                    ->getStateUsing(fn (PerformanceAppraisalTemplate $record): string => 'G: '.number_format((float) $record->goal_weight_percent, 0)
+                        .'% | C: '.number_format((float) $record->competency_weight_percent, 0)
+                        .'% | O: '.number_format((float) $record->other_weight_percent, 0).'%'
                     )
                     ->fontFamily('font-mono')
                     ->alignCenter()
@@ -84,10 +82,9 @@ class PerformanceAppraisalTemplatesTable
 
                 TextColumn::make('effective_period')
                     ->label('Effective')
-                    ->getStateUsing(fn (PerformanceAppraisalTemplate $record): string =>
-                    $record->effective_to
+                    ->getStateUsing(fn (PerformanceAppraisalTemplate $record): string => $record->effective_to
                         ? "{$record->effective_from->format('M d')} – {$record->effective_to->format('M d, Y')}"
-                        : $record->effective_from->format('M d, Y') . ' – Ongoing'
+                        : $record->effective_from->format('M d, Y').' – Ongoing'
                     )
                     ->sortable(['effective_from', 'effective_to'])
                     ->toggleable(),

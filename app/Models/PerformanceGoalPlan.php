@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PerformanceGoalPlan extends Model
@@ -33,6 +34,21 @@ class PerformanceGoalPlan extends Model
     public function goals(): HasMany
     {
         return $this->hasMany(PerformanceGoal::class);
+    }
+
+    public function cycle(): BelongsTo
+    {
+        return $this->belongsTo(PerformanceAppraisalCycle::class, 'performance_appraisal_cycle_id');
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    public function manager(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'manager_employee_id');
     }
 
     public function activeGoalWeightTotal(): float
