@@ -135,6 +135,17 @@ it('casts appraisal template employment type as the string stored by the migrati
         ->not->toHaveKey('applicable_employment_type');
 });
 
+it('uses installed heroicons in the performance schema', function (): void {
+    $source = (string) file_get_contents(app_path('Support/Filament/PerformanceResourceSchema.php'));
+
+    preg_match_all('/heroicon-([omsc]-[a-z0-9-]+)/', $source, $matches);
+
+    foreach (array_unique($matches[1]) as $iconName) {
+        expect(base_path("vendor/blade-ui-kit/blade-heroicons/resources/svg/{$iconName}.svg"))
+            ->toBeFile();
+    }
+});
+
 it('renders performance management index pages for a confirmed super admin', function (): void {
     Role::query()->firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
 
@@ -167,4 +178,19 @@ it('renders performance management index pages for a confirmed super admin', fun
             ->get($path)
             ->assertSuccessful();
     }
+});
+
+it('renders the performance probation review create page without missing icon errors', function (): void {
+    Role::query()->firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+
+    $superAdmin = User::factory()->create([
+        'two_factor_secret' => 'TESTSECRET',
+        'two_factor_confirmed_at' => now(),
+    ]);
+    $superAdmin->assignRole('super_admin');
+
+    $this->actingAs($superAdmin)
+        ->withSession(['two_factor_passed_at' => now()->timestamp])
+        ->get('/admin/performance-probation-reviews/create')
+        ->assertSuccessful();
 });

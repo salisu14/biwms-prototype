@@ -273,7 +273,7 @@ class PerformanceResourceSchema
             ],
             PerformanceProbationReview::class => [
                 'sections' => [
-                    ['label' => 'Probation Review', 'icon' => 'heroicon-o-user-check', 'fields' => ['employee_id', 'manager_employee_id', 'review_type', 'status', 'performance_score']],
+                    ['label' => 'Probation Review', 'icon' => 'heroicon-o-check-badge', 'fields' => ['employee_id', 'manager_employee_id', 'review_type', 'status', 'performance_score']],
                     ['label' => 'Probation Dates', 'icon' => 'heroicon-o-calendar-days', 'fields' => ['probation_start_date', 'expected_confirmation_date', 'review_date', 'recommended_extension_end_date']],
                     ['label' => 'Assessment and Decision', 'icon' => 'heroicon-o-document-check', 'fields' => ['strengths', 'improvement_areas', 'manager_recommendation', 'hr_decision', 'decision_reason', 'approved_at']],
                 ],
