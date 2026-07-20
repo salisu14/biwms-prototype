@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Filament\Resources\RecruitmentCandidates\Schemas;
 
 use App\Models\RecruitmentCandidate;
-use App\Support\Filament\CompletedResourceSchema;
+use App\Support\Filament\RecruitmentResourceSchema;
 use Filament\Schemas\Schema;
 
 class RecruitmentCandidateForm
 {
     public static function configure(Schema $schema): Schema
     {
-        return CompletedResourceSchema::form($schema, RecruitmentCandidate::class);
+        return RecruitmentResourceSchema::form($schema, RecruitmentCandidate::class);
     }
 }

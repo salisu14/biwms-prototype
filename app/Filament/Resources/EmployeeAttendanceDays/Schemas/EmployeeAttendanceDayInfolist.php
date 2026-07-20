@@ -3,13 +3,13 @@
 namespace App\Filament\Resources\EmployeeAttendanceDays\Schemas;
 
 use App\Models\EmployeeAttendanceDay;
-use App\Support\Filament\CompletedResourceSchema;
+use App\Support\Filament\AttendanceReviewResourceSchema;
 use Filament\Schemas\Schema;
 
 class EmployeeAttendanceDayInfolist
 {
     public static function configure(Schema $schema): Schema
     {
-        return CompletedResourceSchema::infolist($schema, EmployeeAttendanceDay::class);
+        return AttendanceReviewResourceSchema::infolist($schema, EmployeeAttendanceDay::class);
     }
 }

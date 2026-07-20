@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Filament\Resources\EmployeeConfirmationDecisions\Schemas;
 
 use App\Models\EmployeeConfirmationDecision;
-use App\Support\Filament\CompletedResourceSchema;
+use App\Support\Filament\RecruitmentResourceSchema;
 use Filament\Schemas\Schema;
 
 class EmployeeConfirmationDecisionForm
 {
     public static function configure(Schema $schema): Schema
     {
-        return CompletedResourceSchema::form($schema, EmployeeConfirmationDecision::class);
+        return RecruitmentResourceSchema::form($schema, EmployeeConfirmationDecision::class);
     }
 }
