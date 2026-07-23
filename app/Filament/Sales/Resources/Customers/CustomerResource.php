@@ -2,6 +2,7 @@
 
 namespace App\Filament\Sales\Resources\Customers;
 
+use App\Filament\Resources\Customers\RelationManagers\ReferralHistoryRelationManager;
 use App\Filament\Resources\Customers\Schemas\CustomerForm;
 use App\Filament\Resources\Customers\Schemas\CustomerInfolist;
 use App\Filament\Resources\Customers\Tables\CustomersTable;
@@ -61,7 +62,7 @@ class CustomerResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            ReferralHistoryRelationManager::class,
         ];
     }
 

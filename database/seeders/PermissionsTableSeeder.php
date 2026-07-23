@@ -37,6 +37,9 @@ class PermissionsTableSeeder extends Seeder
             // Sales
             'sales.customer.view_any', 'sales.customer.view', 'sales.customer.create', 'sales.customer.update', 'sales.customer.delete',
             'sales.customer_contact.view_any', 'sales.customer_contact.view', 'sales.customer_contact.create', 'sales.customer_contact.update', 'sales.customer_contact.delete',
+            'sales.referrer.view_any', 'sales.referrer.view', 'sales.referrer.create', 'sales.referrer.update', 'sales.referrer.delete', 'sales.referrer.delete_any', 'sales.referrer.restore', 'sales.referrer.restore_any', 'sales.referrer.force_delete', 'sales.referrer.force_delete_any',
+            'sales.customer_referral.view_any', 'sales.customer_referral.view', 'sales.customer_referral.create', 'sales.customer_referral.update', 'sales.customer_referral.delete', 'sales.customer_referral.delete_any', 'sales.customer_referral.restore', 'sales.customer_referral.restore_any', 'sales.customer_referral.force_delete', 'sales.customer_referral.force_delete_any',
+            'sales.customer_referral.assign', 'sales.customer_referral.change', 'sales.customer_referral.approve', 'sales.customer_referral.suspend', 'sales.customer_referral.reactivate', 'sales.customer_referral.end', 'sales.customer_referral.cancel',
             'sales.item.view_any', 'sales.item.view', 'sales.item.create', 'sales.item.update', 'sales.item.delete',
             'sales.quote.view_any', 'sales.quote.view', 'sales.quote.create', 'sales.quote.update', 'sales.quote.delete',
             'sales.quote.approve', 'sales.quote.convert',

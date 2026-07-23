@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Enums\ContactRole;
@@ -39,7 +41,7 @@ class VendorFactory extends Factory
         ]);
 
         return [
-            'vendor_code' => 'V-'.$this->faker->unique()->numberBetween(1000, 9999),
+            'vendor_code' => 'V-'.$this->faker->unique()->numerify('##########'),
             'vendor_name' => $companyName,
             'contact_person' => $this->faker->name(),
             'email' => $this->faker->unique()->safeEmail(),

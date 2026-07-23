@@ -3,6 +3,9 @@
 namespace App\Filament\Resources\Customers\Schemas;
 
 use App\Filament\Traits\HasSystemGeneratedField;
+use App\Models\Customer;
+use App\Models\Referrer;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -48,9 +51,9 @@ class CustomerForm
                                     ->label('Primary Customer Contact')
                                     ->relationship('contact', 'name')
                                     ->searchable()
-                                    ->preload()
-                                    ->required()
-                                    ->helperText('Select an explicit customer contact. Contacts are no longer auto-created from customer details.'),
+                                    ->optionsLimit(50)
+                                    ->nullable()
+                                    ->helperText('Optional. Contacts are managed separately and are no longer auto-created from customer details.'),
 
                                 Grid::make(2)->schema([
                                     TextInput::make('email')
@@ -122,6 +125,33 @@ class CustomerForm
                             Toggle::make('is_price_inclusive')
                                 ->label('Prices Include VAT'),
                         ]),
+                    ]),
+
+                Section::make('Referral')
+                    ->description('Optional. Referral history is stored separately from the Customer master record.')
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ])
+                    ->visible(fn (?Customer $record): bool => $record === null)
+                    ->schema([
+                        Select::make('referral_referrer_id')
+                            ->label('Referrer')
+                            ->options(fn (): array => Referrer::query()->where('is_active', true)->orderBy('name')->limit(50)->pluck('name', 'id')->all())
+                            ->searchable()
+                            ->helperText('Optional. Leave blank if this customer was not referred.'),
+                        DatePicker::make('referral_effective_from')
+                            ->label('Referral Date')
+                            ->default(today())
+                            ->visible(fn ($get): bool => filled($get('referral_referrer_id')))
+                            ->required(fn ($get): bool => filled($get('referral_referrer_id'))),
+                        TextInput::make('referral_source')
+                            ->maxLength(255)
+                            ->visible(fn ($get): bool => filled($get('referral_referrer_id'))),
+                        Textarea::make('referral_notes')
+                            ->rows(3)
+                            ->columnSpanFull()
+                            ->visible(fn ($get): bool => filled($get('referral_referrer_id'))),
                     ]),
             ]);
     }

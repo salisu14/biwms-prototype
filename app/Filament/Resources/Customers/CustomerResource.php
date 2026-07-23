@@ -58,6 +58,7 @@ class CustomerResource extends Resource
     {
         return [
             PriceListsRelationManager::class,
+            RelationManagers\ReferralHistoryRelationManager::class,
         ];
     }
 

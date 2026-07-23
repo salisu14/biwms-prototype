@@ -4,12 +4,14 @@
 
 namespace App\Models;
 
+use App\Enums\CustomerReferralStatus;
 use App\Enums\CustomerType;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Customer extends Model
 {
@@ -94,6 +96,28 @@ class Customer extends Model
     public function priceLists(): HasMany
     {
         return $this->hasMany(PriceList::class);
+    }
+
+    public function referrals(): HasMany
+    {
+        return $this->hasMany(CustomerReferral::class);
+    }
+
+    public function activeReferral(): HasOne
+    {
+        return $this->hasOne(CustomerReferral::class)
+            ->where('status', CustomerReferralStatus::ACTIVE)
+            ->whereNull('effective_to')
+            ->latestOfMany();
+    }
+
+    public function primaryReferral(): HasOne
+    {
+        return $this->hasOne(CustomerReferral::class)
+            ->where('is_primary', true)
+            ->where('status', CustomerReferralStatus::ACTIVE)
+            ->whereNull('effective_to')
+            ->latestOfMany();
     }
 
     public function getNameAttribute(): string

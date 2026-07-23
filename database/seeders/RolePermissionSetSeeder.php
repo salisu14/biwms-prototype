@@ -16,6 +16,8 @@ class RolePermissionSetSeeder extends Seeder
         $matrix = [
             'sales-representative' => [
                 'sales.customer.view_any', 'sales.customer.view', 'sales.customer.create', 'sales.customer.update',
+                'sales.referrer.view_any', 'sales.referrer.view',
+                'sales.customer_referral.view_any', 'sales.customer_referral.view',
                 'sales.item.view_any', 'sales.item.view',
                 'sales.quote.view_any', 'sales.quote.view', 'sales.quote.create', 'sales.quote.update', 'sales.quote.convert',
                 'sales.order.view_any', 'sales.order.view', 'sales.order.create', 'sales.order.update',
@@ -24,6 +26,8 @@ class RolePermissionSetSeeder extends Seeder
             'sales-manager' => [
                 'sales.customer.view_any', 'sales.customer.view', 'sales.customer.create', 'sales.customer.update', 'sales.customer.delete',
                 'sales.customer_contact.view_any', 'sales.customer_contact.view', 'sales.customer_contact.create', 'sales.customer_contact.update', 'sales.customer_contact.delete',
+                'sales.referrer.view_any', 'sales.referrer.view', 'sales.referrer.create', 'sales.referrer.update', 'sales.referrer.delete', 'sales.referrer.delete_any', 'sales.referrer.restore', 'sales.referrer.restore_any',
+                'sales.customer_referral.view_any', 'sales.customer_referral.view', 'sales.customer_referral.create', 'sales.customer_referral.update', 'sales.customer_referral.delete', 'sales.customer_referral.assign', 'sales.customer_referral.change', 'sales.customer_referral.approve', 'sales.customer_referral.suspend', 'sales.customer_referral.reactivate', 'sales.customer_referral.end', 'sales.customer_referral.cancel',
                 'sales.item.view_any', 'sales.item.view',
                 'sales.quote.view_any', 'sales.quote.view', 'sales.quote.create', 'sales.quote.update', 'sales.quote.delete', 'sales.quote.approve', 'sales.quote.convert',
                 'sales.order.view_any', 'sales.order.view', 'sales.order.create', 'sales.order.update', 'sales.order.delete', 'sales.order.approve', 'sales.order.post',
@@ -55,6 +59,8 @@ class RolePermissionSetSeeder extends Seeder
                 'finance.report.view',
                 'fixed_asset.view_any', 'fixed_asset.view', 'fixed_asset.create', 'fixed_asset.update', 'fixed_asset.acquire', 'fixed_asset.depreciate', 'fixed_asset.dispose',
                 'sales.invoice.view_any', 'sales.invoice.view', 'sales.invoice.create', 'sales.invoice.update', 'sales.invoice.delete', 'sales.invoice.post',
+                'sales.referrer.view_any', 'sales.referrer.view',
+                'sales.customer_referral.view_any', 'sales.customer_referral.view',
                 'sales.order.view_any', 'sales.order.view',
             ],
             'purchasing-agent' => [

@@ -6,6 +6,7 @@ namespace Database\Seeders;
 
 use App\Models\NumberSeries;
 use App\Services\Manufacturing\ProductionOrderNumberSeriesSetupService;
+use App\Services\Sales\ReferrerNumberSeriesSetupService;
 use Illuminate\Database\Seeder;
 
 class NumberSeriesSeeder extends Seeder
@@ -93,5 +94,6 @@ class NumberSeriesSeeder extends Seeder
         }
 
         app(ProductionOrderNumberSeriesSetupService::class)->ensure();
+        app(ReferrerNumberSeriesSetupService::class)->ensure();
     }
 }
