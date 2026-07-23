@@ -2,16 +2,17 @@
 
 namespace App\Filament\Resources\Customers\Tables;
 
-use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Facades\Filament;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Route;
 
 class CustomersTable
 {
@@ -70,9 +71,10 @@ class CustomersTable
                     ->label('Subledger')
                     ->icon('heroicon-o-book-open')
                     ->color('gray')
-                    ->url(fn ($record) => CustomerSubledgerSummary::getUrl([
-                        'customerId' => $record->id,
-                    ])),
+                    ->visible(fn (): bool => static::customerSubledgerRouteName() !== null)
+                    ->url(fn ($record): ?string => ($routeName = static::customerSubledgerRouteName()) !== null
+                        ? route($routeName, ['customerId' => $record->id])
+                        : null),
                 ViewAction::make(),
                 EditAction::make(),
             ])
@@ -82,5 +84,18 @@ class CustomersTable
                         ->label('Delete Selected'),
                 ]),
             ]);
+    }
+
+    private static function customerSubledgerRouteName(): ?string
+    {
+        $panelId = Filament::getCurrentPanel()?->getId();
+
+        if ($panelId === null) {
+            return null;
+        }
+
+        $routeName = "filament.{$panelId}.pages.customer-subledger-summary";
+
+        return Route::has($routeName) ? $routeName : null;
     }
 }

@@ -27,7 +27,7 @@ class CustomerContactResource extends Resource
 
     public static function permissionResource(): string
     {
-        return 'contact';
+        return 'customer_contact';
     }
 
     protected static ?string $model = Contact::class;

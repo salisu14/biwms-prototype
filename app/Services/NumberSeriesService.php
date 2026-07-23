@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
+use App\Exceptions\MissingNumberSeriesException;
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
 use DateTimeInterface;
@@ -26,7 +29,7 @@ class NumberSeriesService
      * @param  string  $seriesCode  e.g., 'S-SHIP', 'S-ORD', 'S-INV'
      * @param  bool  $modifySeries  Whether to actually increment the series
      *
-     * @throws \RuntimeException
+     * @throws MissingNumberSeriesException
      */
     public function getNextNo(
         string $seriesCode,
@@ -42,11 +45,11 @@ class NumberSeriesService
                 ->first();
 
             if (! $series) {
-                throw new \RuntimeException("Number Series {$seriesCode} does not exist");
+                throw new MissingNumberSeriesException("Number Series {$seriesCode} does not exist", [$seriesCode]);
             }
 
             if (! $series->is_active) {
-                throw new \RuntimeException("Number Series {$seriesCode} is inactive");
+                throw new MissingNumberSeriesException("Number Series {$seriesCode} is inactive", [$seriesCode]);
             }
 
             // Check date validity (BC: CheckValidDate)
@@ -56,7 +59,7 @@ class NumberSeriesService
             $line = $this->getSeriesLine($series, $postingDate);
 
             if (! $line) {
-                throw new \RuntimeException("No open Number Series Line exists for date {$postingDate->format('Y-m-d')}");
+                throw new MissingNumberSeriesException("No open Number Series Line exists for date {$postingDate->format('Y-m-d')}", [$seriesCode]);
             }
 
             $this->validateLineHasNextNumber($seriesCode, $line);
@@ -102,15 +105,16 @@ class NumberSeriesService
         foreach ($seriesCodes as $seriesCode) {
             try {
                 return $this->getNextNo($seriesCode, $postingDate);
-            } catch (\RuntimeException $exception) {
+            } catch (MissingNumberSeriesException $exception) {
                 $errors[$seriesCode] = $exception->getMessage();
             }
         }
 
         $label = $description ? "{$description} " : '';
 
-        throw new \RuntimeException(
-            "Missing Number Series: {$label}".implode(', ', $seriesCodes).'. '.implode(' ', $errors)
+        throw new MissingNumberSeriesException(
+            "Missing Number Series: {$label}".implode(', ', $seriesCodes).'. '.implode(' ', $errors),
+            $seriesCodes,
         );
     }
 
@@ -209,7 +213,7 @@ class NumberSeriesService
     {
         $prefix = $line->prefix ?? '';
         $suffix = $line->suffix ?? '';
-        $lastNo = $line->last_no_used ?? $this->getStartingNumber($line);
+        $lastNo = $this->getCurrentNumberBeforeNext($line);
         $increment = $line->increment_by ?? 1;
 
         $nextNumber = $lastNo + $increment;
@@ -224,7 +228,7 @@ class NumberSeriesService
     {
         $prefix = $line->prefix ?? '';
         $suffix = $line->suffix ?? '';
-        $number = $lastNo ? (int) $lastNo : $this->getStartingNumber($line);
+        $number = $lastNo ? (int) $lastNo : $this->getCurrentNumberBeforeNext($line);
 
         $numberStr = str_pad((string) $number, $line->no_of_digits ?? 5, '0', STR_PAD_LEFT);
 
@@ -233,20 +237,28 @@ class NumberSeriesService
 
     private function incrementSeries(NumberSeriesLine $line): void
     {
-        $current = $line->last_no_used ?? $this->getStartingNumber($line);
+        $current = $this->getCurrentNumberBeforeNext($line);
         $line->update(['last_no_used' => $current + ($line->increment_by ?? 1)]);
     }
 
     private function incrementNumber(?string $lastNo, ?NumberSeriesLine $line): string
     {
-        $current = $lastNo ? (int) $lastNo : ($line ? $this->getStartingNumber($line) : 1);
+        $current = $lastNo ? (int) $lastNo : ($line ? $this->getCurrentNumberBeforeNext($line) : 0);
 
         return (string) ($current + ($line->increment_by ?? 1));
     }
 
-    private function getStartingNumber(NumberSeriesLine $line): int
+    private function getCurrentNumberBeforeNext(NumberSeriesLine $line): int
     {
-        return $line->starting_no ? (int) $line->starting_no : 1;
+        if ($line->last_no_used !== null) {
+            return (int) $line->last_no_used;
+        }
+
+        if ($line->starting_no !== null) {
+            return (int) $line->starting_no - (int) ($line->increment_by ?? 1);
+        }
+
+        return 0;
     }
 
     private function validateDateInRange(NumberSeries $series, DateTimeInterface $date): void
@@ -261,7 +273,7 @@ class NumberSeriesService
 
     private function validateLineHasNextNumber(string $seriesCode, NumberSeriesLine $line): void
     {
-        $current = $line->last_no_used ?? $this->getStartingNumber($line);
+        $current = $this->getCurrentNumberBeforeNext($line);
         $next = $current + ($line->increment_by ?? 1);
 
         if ($line->ending_no !== null && (int) $line->ending_no > 0 && $next > (int) $line->ending_no) {

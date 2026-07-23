@@ -4,8 +4,6 @@
 
 namespace App\Models;
 
-use App\Enums\ContactRole;
-use App\Enums\ContactType;
 use App\Enums\CustomerType;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -59,22 +57,6 @@ class Customer extends Model
                 $customer->customer_number = 'CUST-'.str_pad((string) ((int) static::max('id') + 1), 5, '0', STR_PAD_LEFT);
             }
 
-            if (empty($customer->contact_id)) {
-                $contact = Contact::create([
-                    'name' => $customer->name ?: $customer->customer_number,
-                    'full_name' => $customer->name,
-                    'company_name' => $customer->name,
-                    'type' => ContactType::PERSON,
-                    'role' => ContactRole::CUSTOMER,
-                    'email' => $customer->email,
-                    'phone' => $customer->phone,
-                    'address' => $customer->address,
-                    'general_business_posting_group_id' => $customer->general_business_posting_group_id,
-                    'vat_bus_posting_group' => $customer->vat_bus_posting_group,
-                ]);
-
-                $customer->contact_id = $contact->id;
-            }
         });
     }
 

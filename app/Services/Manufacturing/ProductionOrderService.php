@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Manufacturing;
 
 use App\Enums\DocumentType;
@@ -334,7 +336,7 @@ class ProductionOrderService
             $orderLines = $order->lines()->where('item_id', $order->item_id)->get();
             foreach ($orderLines as $orderLine) {
                 try {
-                    $this->putAwayService->createPutAwayFromProductionOutput($orderLine, $quantityBase);
+                    $this->putAwayService->createPutAwayFromProductionOutput($orderLine, (float) $quantityBase);
                 } catch (\RuntimeException $exception) {
                     Log::warning('Put-away generation skipped during production output posting', [
                         'production_order_id' => $order->id,
@@ -1565,7 +1567,7 @@ class ProductionOrderService
     public function generateDocumentNumber(): string
     {
         return app(NumberSeriesService::class)->getNextNoFromSeries(
-            ['PROD-ORDER', 'PRODUCTION_ORDER', 'PROD'],
+            [ProductionOrderNumberSeriesSetupService::CODE],
             null,
             'Production Order'
         );

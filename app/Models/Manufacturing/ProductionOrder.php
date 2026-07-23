@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Manufacturing;
 
 use App\Enums\ItemLedgerEntryType;
@@ -29,6 +31,8 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 class ProductionOrder extends Model
 {
     use HasFactory;
+
+    private static bool $skipAutomaticDocumentNumbering = false;
 
     protected $table = 'production_orders';
 
@@ -419,10 +423,23 @@ class ProductionOrder extends Model
 
     // ==================== BOOTED ====================
 
+    public static function withoutAutomaticDocumentNumbering(callable $callback): mixed
+    {
+        $previous = self::$skipAutomaticDocumentNumbering;
+
+        self::$skipAutomaticDocumentNumbering = true;
+
+        try {
+            return $callback();
+        } finally {
+            self::$skipAutomaticDocumentNumbering = $previous;
+        }
+    }
+
     protected static function booted(): void
     {
         static::creating(function ($order) {
-            if (empty($order->document_number)) {
+            if (! self::$skipAutomaticDocumentNumbering && empty($order->document_number)) {
                 $order->document_number = app(ProductionOrderService::class)->generateDocumentNumber();
             }
 

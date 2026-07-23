@@ -10,6 +10,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Symfony\Component\Routing\Exception\RouteNotFoundException;
 
 class CustomerInfolist
 {
@@ -33,13 +34,13 @@ class CustomerInfolist
                                         return "{$record->group->code} - {$record->group->name}";
                                     })
                                     ->url(fn (Customer $record): ?string => $record->group
-                                        ? CustomerGroupResource::getUrl('view', ['record' => $record->group])
+                                        ? static::safeResourceUrl(CustomerGroupResource::class, 'view', $record->group)
                                         : null)
                                     ->badge()
                                     ->color('info'),
                                 TextEntry::make('contact.name')
                                     ->label('Contact')
-                                    ->placeholder('Auto-created from customer details'),
+                                    ->placeholder('No contact linked'),
                             ]),
                             TextEntry::make('email')->icon('heroicon-m-envelope')->copyable(),
                             TextEntry::make('phone')->icon('heroicon-m-phone'),
@@ -98,10 +99,22 @@ class CustomerInfolist
                                     return "{$record->location->code} - {$record->location->name}";
                                 })
                                 ->url(fn (Customer $record): ?string => $record->location
-                                    ? LocationResource::getUrl('view', ['record' => $record->location])
+                                    ? static::safeResourceUrl(LocationResource::class, 'view', $record->location)
                                     : null),
                         ])->columnSpan(1),
                 ]),
             ]);
+    }
+
+    /**
+     * @param  class-string  $resourceClass
+     */
+    private static function safeResourceUrl(string $resourceClass, string $page, mixed $record): ?string
+    {
+        try {
+            return $resourceClass::getUrl($page, ['record' => $record]);
+        } catch (RouteNotFoundException) {
+            return null;
+        }
     }
 }

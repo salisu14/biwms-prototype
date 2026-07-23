@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\NumberSeries;
+use App\Services\Manufacturing\ProductionOrderNumberSeriesSetupService;
 use Illuminate\Database\Seeder;
 
 class NumberSeriesSeeder extends Seeder
@@ -88,5 +91,7 @@ class NumberSeriesSeeder extends Seeder
         foreach ($series as $s) {
             NumberSeries::firstOrCreate(['code' => $s['code']], $s);
         }
+
+        app(ProductionOrderNumberSeriesSetupService::class)->ensure();
     }
 }

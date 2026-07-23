@@ -45,12 +45,12 @@ class CustomerForm
                                     ->placeholder('Select a group'),
 
                                 Select::make('contact_id')
-                                    ->label('Customer Contact (Optional)')
+                                    ->label('Primary Customer Contact')
                                     ->relationship('contact', 'name')
                                     ->searchable()
                                     ->preload()
-                                    ->nullable()
-                                    ->helperText('If empty, a contact will be auto-created from customer details.'),
+                                    ->required()
+                                    ->helperText('Select an explicit customer contact. Contacts are no longer auto-created from customer details.'),
 
                                 Grid::make(2)->schema([
                                     TextInput::make('email')

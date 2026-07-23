@@ -36,6 +36,7 @@ class PermissionsTableSeeder extends Seeder
         $bcPermissions = [
             // Sales
             'sales.customer.view_any', 'sales.customer.view', 'sales.customer.create', 'sales.customer.update', 'sales.customer.delete',
+            'sales.customer_contact.view_any', 'sales.customer_contact.view', 'sales.customer_contact.create', 'sales.customer_contact.update', 'sales.customer_contact.delete',
             'sales.item.view_any', 'sales.item.view', 'sales.item.create', 'sales.item.update', 'sales.item.delete',
             'sales.quote.view_any', 'sales.quote.view', 'sales.quote.create', 'sales.quote.update', 'sales.quote.delete',
             'sales.quote.approve', 'sales.quote.convert',

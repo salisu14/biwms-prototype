@@ -38,8 +38,13 @@ class PurchaseOrderForm
                                 ->default('purchase_order')
                                 ->required()
                                 ->live()
-                                ->afterStateUpdated(fn ($state, callable $set) => $set('order_number_preview', PurchaseOrderType::from($state)?->seriesCode().'-AUTO')
-                                ),
+                                ->afterStateUpdated(function (mixed $state, callable $set): void {
+                                    $orderType = $state instanceof PurchaseOrderType
+                                        ? $state
+                                        : PurchaseOrderType::tryFrom((string) $state);
+
+                                    $set('order_number_preview', $orderType?->seriesCode() !== null ? $orderType->seriesCode().'-AUTO' : null);
+                                }),
 
                             static::makeSystemGeneratedTextInput(
                                 'order_number',
@@ -51,7 +56,7 @@ class PurchaseOrderForm
                                 ->label('Vendor')
                                 ->relationship('vendor', 'vendor_name')
                                 ->searchable()
-                                ->preload()
+                                ->optionsLimit(50)
                                 ->required()
                                 ->live()
                                 ->afterStateUpdated(function ($state, callable $set) {
@@ -83,7 +88,7 @@ class PurchaseOrderForm
                                 ->label('Ship To Location')
                                 ->relationship('location', 'name')
                                 ->searchable()
-                                ->preload()
+                                ->optionsLimit(50)
                                 ->required(),
 
                             DatePicker::make('order_date')
