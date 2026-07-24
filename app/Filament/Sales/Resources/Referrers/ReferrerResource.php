@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Sales\Resources\Referrers;
 
+use App\Filament\Resources\Referrers\RelationManagers\CommissionPlanHistoryRelationManager;
 use App\Filament\Resources\Referrers\RelationManagers\ReferredCustomersRelationManager;
 use App\Filament\Resources\Referrers\Schemas\ReferrerForm;
 use App\Filament\Resources\Referrers\Schemas\ReferrerInfolist;
@@ -76,6 +77,7 @@ class ReferrerResource extends Resource
     {
         return [
             ReferredCustomersRelationManager::class,
+            CommissionPlanHistoryRelationManager::class,
         ];
     }
 }

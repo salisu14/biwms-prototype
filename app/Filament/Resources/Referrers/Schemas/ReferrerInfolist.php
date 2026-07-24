@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\Referrers\Schemas;
 
 use App\Models\Referrer;
+use App\Models\ReferrerCommissionPlanAssignment;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -44,6 +45,28 @@ class ReferrerInfolist
                             TextEntry::make('country')->placeholder('—'),
                             TextEntry::make('address')->columnSpanFull()->placeholder('—'),
                         ]),
+
+                    Section::make('Active Commission Plan')
+                        ->columns(2)
+                        ->schema([
+                            TextEntry::make('active_commission_plan')
+                                ->label('Plan')
+                                ->state(fn (Referrer $record): string => self::activeCommissionPlanAssignment($record)?->plan?->name ?? 'No active plan'),
+                            TextEntry::make('active_commission_plan_code')
+                                ->label('Plan Code')
+                                ->copyable()
+                                ->state(fn (Referrer $record): ?string => self::activeCommissionPlanAssignment($record)?->plan?->code)
+                                ->placeholder('—'),
+                            TextEntry::make('active_commission_plan_effective_from')
+                                ->label('Effective From')
+                                ->date()
+                                ->state(fn (Referrer $record) => self::activeCommissionPlanAssignment($record)?->effective_from)
+                                ->placeholder('—'),
+                            TextEntry::make('active_commission_plan_reason')
+                                ->label('Assignment Reason')
+                                ->state(fn (Referrer $record): ?string => self::activeCommissionPlanAssignment($record)?->assignment_reason)
+                                ->placeholder('—'),
+                        ]),
                 ]),
 
                 Section::make('Notes')
@@ -52,5 +75,12 @@ class ReferrerInfolist
                         TextEntry::make('notes')->markdown()->placeholder('No notes recorded.'),
                     ]),
             ]);
+    }
+
+    private static function activeCommissionPlanAssignment(Referrer $referrer): ?ReferrerCommissionPlanAssignment
+    {
+        return $referrer->activeCommissionPlanAssignment()
+            ->with('plan')
+            ->first();
     }
 }

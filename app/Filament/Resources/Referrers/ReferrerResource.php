@@ -103,6 +103,7 @@ class ReferrerResource extends Resource
     {
         return [
             RelationManagers\ReferredCustomersRelationManager::class,
+            RelationManagers\CommissionPlanHistoryRelationManager::class,
         ];
     }
 }

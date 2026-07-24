@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\Currency;
@@ -19,7 +21,7 @@ class CurrencyFactory extends Factory
     {
         return [
             'code' => $this->faker->unique()->currencyCode(),
-            'description' => $this->faker->sentence(),
+            'description' => $this->faker->words(4, true),
             'symbol' => '$',
             'decimal_places' => 2,
             'is_active' => true,

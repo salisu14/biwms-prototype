@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\ReferralCommissionAssignmentStatus;
 use App\Enums\ReferrerType;
 use App\Exceptions\MissingNumberSeriesException;
 use App\Services\AuditTrailService;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Validation\ValidationException;
 
@@ -140,6 +142,19 @@ class Referrer extends Model
     public function customerReferrals(): HasMany
     {
         return $this->hasMany(CustomerReferral::class);
+    }
+
+    public function commissionPlanAssignments(): HasMany
+    {
+        return $this->hasMany(ReferrerCommissionPlanAssignment::class);
+    }
+
+    public function activeCommissionPlanAssignment(): HasOne
+    {
+        return $this->hasOne(ReferrerCommissionPlanAssignment::class)
+            ->where('status', ReferralCommissionAssignmentStatus::ACTIVE)
+            ->whereNull('effective_to')
+            ->latestOfMany();
     }
 
     public function referredCustomers(): HasManyThrough
