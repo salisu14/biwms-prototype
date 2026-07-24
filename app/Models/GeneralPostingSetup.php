@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GeneralPostingSetup extends Model
 {
@@ -46,6 +47,14 @@ class GeneralPostingSetup extends Model
     ];
 
     // Relationships to Posting Groups
+    public function lines(): HasMany
+    {
+        return $this->hasMany(
+            GeneralPostingSetupLine::class,
+            'general_posting_setup_id'
+        );
+    }
+
     public function generalBusinessPostingGroup(): BelongsTo
     {
         return $this->belongsTo(GeneralBusinessPostingGroup::class);
