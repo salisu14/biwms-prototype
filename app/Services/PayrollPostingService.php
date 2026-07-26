@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Models\GlEntry;
 use App\Models\PayrollDocument;
 use App\Models\PayrollLine;
+use App\Services\Finance\GeneralLedgerService;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +19,8 @@ use Illuminate\Support\Facades\Gate;
 class PayrollPostingService
 {
     public function __construct(
-        private readonly PostingDateValidator $postingDateValidator
+        private readonly PostingDateValidator $postingDateValidator,
+        private readonly GeneralLedgerService $generalLedgerService,
     ) {}
 
     /**
@@ -47,8 +49,8 @@ class PayrollPostingService
 
             $documentNumber = $document->document_number;
             $postingDate = $document->period_end;
-            $transactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
-            $entryNumber = (GlEntry::max('entry_number') ?? 0) + 1;
+            $glLines = [];
+            $postedLineIds = [];
 
             foreach ($document->lines as $line) {
                 $employee = $line->employee;
@@ -72,9 +74,8 @@ class PayrollPostingService
                 if ($payCode->type === PayCodeType::EARNING) {
                     // Dr Salaries/Wages (Expense), Cr Net Pay (Liability)
                     $expenseAccount = $payCodeAccountId ?? $postingGroup->salaries_account_id;
-                    $glEntry = $this->createGlEntry($entryNumber++, $expenseAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->createGlEntry($entryNumber++, $netPayAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->markLinePosted($line, $glEntry);
+                    $this->appendPayrollLines($glLines, $line, $employee, $expenseAccount, $netPayAccount, $amount, $description);
+                    $postedLineIds[] = $line->id;
                 } elseif ($payCode->type === PayCodeType::DEDUCTION) {
                     // Dr Net Pay (Liability), Cr Tax/Deduction Liability
                     $liabilityAccount = $payCodeAccountId;
@@ -92,24 +93,45 @@ class PayrollPostingService
                         throw new Exception("Missing liability account for deduction: {$payCode->name}");
                     }
 
-                    $glEntry = $this->createGlEntry($entryNumber++, $netPayAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->createGlEntry($entryNumber++, $liabilityAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->markLinePosted($line, $glEntry);
+                    $this->appendPayrollLines($glLines, $line, $employee, $netPayAccount, $liabilityAccount, $amount, $description);
+                    $postedLineIds[] = $line->id;
                 } elseif ($payCode->type === PayCodeType::BENEFIT) {
                     // Employer Cost: Dr Expense, Cr Liability
                     $expenseAccount = $payCodeAccountId ?? $postingGroup->salaries_account_id;
                     $liabilityAccount = $postingGroup->social_security_account_id;
 
-                    $glEntry = $this->createGlEntry($entryNumber++, $expenseAccount, $amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->createGlEntry($entryNumber++, $liabilityAccount, -$amount, $postingDate, $documentNumber, $description, $transactionNumber, $employee);
-                    $this->markLinePosted($line, $glEntry);
+                    $this->appendPayrollLines($glLines, $line, $employee, $expenseAccount, $liabilityAccount, $amount, $description);
+                    $postedLineIds[] = $line->id;
                 }
             }
 
-            $entries = GlEntry::query()->where('document_type', 'PAYROLL')->where('document_number', $documentNumber)->get();
+            if ($glLines === []) {
+                throw new Exception("Payroll document {$documentNumber} has no positive payroll amounts to post.");
+            }
 
-            if (round((float) $entries->sum('debit_amount'), 2) !== round((float) $entries->sum('credit_amount'), 2)) {
-                throw new Exception("Payroll document {$documentNumber} produced unbalanced G/L entries.");
+            $transactionKey = "payroll:document:{$document->id}:{$documentNumber}";
+            $postingTransaction = $this->generalLedgerService->postTransaction($glLines, [
+                'source_module' => 'payroll',
+                'source_type' => SourceType::EMPLOYEE->value,
+                'source_id' => $document->id,
+                'source_number' => $documentNumber,
+                'posting_date' => $postingDate,
+                'document_date' => $postingDate,
+                'document_type' => 'PAYROLL',
+                'document_number' => $documentNumber,
+                'description' => "Payroll {$documentNumber}",
+                'actor_id' => Auth::id() ?? 1,
+                'transaction_key' => $transactionKey,
+                'idempotency_key' => hash('sha256', $transactionKey),
+            ]);
+
+            foreach ($document->lines->whereIn('id', $postedLineIds) as $line) {
+                $glEntry = $postingTransaction->glEntries
+                    ->first(fn ($entry): bool => (int) data_get($entry->dimensions, 'payroll_line_id') === (int) $line->id && (float) $entry->debit_amount > 0);
+
+                if ($glEntry) {
+                    $this->markLinePosted($line, $glEntry);
+                }
             }
 
             $document->status = PayrollStatus::POSTED;
@@ -119,27 +141,32 @@ class PayrollPostingService
         PayrollPosted::dispatch($document->fresh());
     }
 
-    private function createGlEntry(int $entryNumber, int $accountId, float $amount, $postingDate, string $docNo, string $desc, int $transactionNumber, Employee $employee): GlEntry
+    /**
+     * @param  array<int, array<string, mixed>>  $glLines
+     */
+    private function appendPayrollLines(array &$glLines, PayrollLine $line, Employee $employee, int $debitAccountId, int $creditAccountId, float $amount, string $description): void
     {
-        $debit = $amount > 0 ? $amount : 0;
-        $credit = $amount < 0 ? abs($amount) : 0;
+        $dimensions = ['payroll_line_id' => $line->id];
 
-        return GlEntry::create([
-            'entry_number' => $entryNumber,
-            'chart_of_account_id' => $accountId,
-            'transaction_number' => $transactionNumber,
-            'source_type' => SourceType::EMPLOYEE,
+        $glLines[] = [
+            'account_id' => $debitAccountId,
+            'debit' => $amount,
+            'credit' => '0.00',
+            'source_type' => SourceType::EMPLOYEE->value,
             'source_number' => $employee->employee_number,
-            'posting_date' => $postingDate,
-            'document_date' => $postingDate,
-            'document_type' => 'PAYROLL',
-            'document_number' => $docNo,
-            'description' => $desc,
-            'amount' => $amount,
-            'debit_amount' => $debit,
-            'credit_amount' => $credit,
-            'user_id' => Auth::id() ?? 1,
-        ]);
+            'description' => $description,
+            'dimensions' => $dimensions,
+        ];
+
+        $glLines[] = [
+            'account_id' => $creditAccountId,
+            'debit' => '0.00',
+            'credit' => $amount,
+            'source_type' => SourceType::EMPLOYEE->value,
+            'source_number' => $employee->employee_number,
+            'description' => $description,
+            'dimensions' => $dimensions,
+        ];
     }
 
     private function markLinePosted(PayrollLine $line, GlEntry $glEntry): void

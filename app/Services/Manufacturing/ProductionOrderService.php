@@ -1556,9 +1556,7 @@ class ProductionOrderService
 
     protected function createGlEntry(array $attributes): GlEntry
     {
-        $attributes['entry_number'] ??= (int) (GlEntry::query()->max('entry_number') ?? 0) + 1;
-
-        return GlEntry::create($attributes);
+        return $this->postingService->createGlEntry($attributes);
     }
 
     /**

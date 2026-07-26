@@ -10,6 +10,7 @@ use App\Events\FixedAssetPosted;
 use App\Models\FALedgerEntry;
 use App\Models\FixedAsset;
 use App\Models\GlEntry;
+use App\Services\Finance\GeneralLedgerService;
 use App\Services\PostingDateValidator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +19,8 @@ use Illuminate\Support\Facades\Gate;
 class FAPostingService
 {
     public function __construct(
-        private readonly PostingDateValidator $postingDateValidator
+        private readonly PostingDateValidator $postingDateValidator,
+        private readonly GeneralLedgerService $generalLedgerService,
     ) {}
 
     public function postEntry(
@@ -103,54 +105,64 @@ class FAPostingService
         array $additionalData
     ): GlEntry {
         $accounts = $this->resolveAccounts($asset, $postingType, $additionalData);
-        $nextEntryNumber = $this->nextGlEntryNumber();
-        $transactionNumber = (int) (GlEntry::query()->max('transaction_number') ?? 0) + 1;
         $resolvedDocumentNo = $documentNo ?? 'FA-'.time();
+        $transactionKey = "fixed_asset:{$asset->id}:{$postingType->value}:{$resolvedDocumentNo}";
 
-        // Debit entry
-        $debitEntry = GlEntry::create([
-            'entry_number' => $nextEntryNumber++,
-            'chart_of_account_id' => $accounts['debit'],
-            'posting_date' => $date,
+        $postingTransaction = $this->generalLedgerService->postTransaction([
+            [
+                'account_id' => $accounts['debit'],
+                ...$this->amountToDebitCredit($amount),
+                'source_type' => SourceType::FIXED_ASSET->value,
+                'source_number' => $asset->fa_no,
+                'description' => $description,
+            ],
+            [
+                'account_id' => $accounts['credit'],
+                ...$this->amountToCreditDebit($amount),
+                'source_type' => SourceType::FIXED_ASSET->value,
+                'source_number' => $asset->fa_no,
+                'description' => $description.' (Offset)',
+            ],
+        ], [
+            'source_module' => 'fixed_asset',
+            'source_type' => SourceType::FIXED_ASSET->value,
+            'source_id' => $asset->id,
+            'source_number' => $asset->fa_no,
             'document_type' => 'FA '.$postingType->name,
             'document_number' => $resolvedDocumentNo,
             'document_date' => $date,
-            'transaction_number' => $transactionNumber,
-            'debit_amount' => $amount > 0 ? $amount : 0,
-            'credit_amount' => $amount < 0 ? abs($amount) : 0,
-            'amount' => $amount,
-            'amount_lcy' => $amount,
-            'source_type' => SourceType::FIXED_ASSET,
-            'source_number' => $asset->fa_no,
+            'posting_date' => $date,
             'description' => $description,
-            'user_id' => Auth::id() ?? $asset->created_by ?? 1,
+            'actor_id' => Auth::id() ?? $asset->created_by ?? 1,
+            'transaction_key' => $transactionKey,
+            'idempotency_key' => hash('sha256', $transactionKey),
         ]);
 
-        // Credit entry
-        GlEntry::create([
-            'entry_number' => $nextEntryNumber,
-            'chart_of_account_id' => $accounts['credit'],
-            'posting_date' => $date,
-            'document_type' => 'FA '.$postingType->name,
-            'document_number' => $resolvedDocumentNo,
-            'document_date' => $date,
-            'transaction_number' => $transactionNumber,
-            'debit_amount' => $amount < 0 ? abs($amount) : 0,
-            'credit_amount' => $amount > 0 ? $amount : 0,
-            'amount' => $amount,
-            'amount_lcy' => $amount,
-            'source_type' => SourceType::FIXED_ASSET,
-            'source_number' => $asset->fa_no,
-            'description' => $description.' (Offset)',
-            'user_id' => Auth::id() ?? $asset->created_by ?? 1,
-        ]);
-
-        return $debitEntry;
+        return $postingTransaction->glEntries
+            ->firstWhere('chart_of_account_id', $accounts['debit'])
+            ?? $postingTransaction->glEntries->firstOrFail();
     }
 
-    private function nextGlEntryNumber(): int
+    /**
+     * @return array{debit: float, credit: float}
+     */
+    private function amountToDebitCredit(float $amount): array
     {
-        return (int) (GlEntry::query()->max('entry_number') ?? 0) + 1;
+        return [
+            'debit' => $amount > 0 ? $amount : 0,
+            'credit' => $amount < 0 ? abs($amount) : 0,
+        ];
+    }
+
+    /**
+     * @return array{debit: float, credit: float}
+     */
+    private function amountToCreditDebit(float $amount): array
+    {
+        return [
+            'debit' => $amount < 0 ? abs($amount) : 0,
+            'credit' => $amount > 0 ? $amount : 0,
+        ];
     }
 
     private function resolveAccounts(FixedAsset $asset, FAPostingType $postingType, array $additionalData = []): array

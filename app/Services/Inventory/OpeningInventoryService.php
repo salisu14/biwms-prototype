@@ -14,6 +14,7 @@ use App\Models\ItemLedgerEntry;
 use App\Models\OpeningInventory;
 use App\Models\OpeningInventoryLine;
 use App\Services\AuditTrailService;
+use App\Services\Finance\GeneralLedgerService;
 use App\Support\DecimalMath;
 use App\Support\DecimalPrecision;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,7 @@ class OpeningInventoryService
         private readonly InventoryBalanceService $inventoryBalanceService,
         private readonly AuditTrailService $auditTrailService,
         private readonly ValueEntryService $valueEntryService,
+        private readonly GeneralLedgerService $generalLedgerService,
     ) {}
 
     /**
@@ -108,7 +110,7 @@ class OpeningInventoryService
                 $this->inventoryBalanceService->recalculateItem((int) $line->item_id);
             }
 
-            $this->postOpeningGlEntries($document);
+            $this->postOpeningGlEntries($document, $userId);
 
             $document->forceFill([
                 'status' => OpeningInventory::STATUS_POSTED,
@@ -196,7 +198,7 @@ class OpeningInventoryService
         return (int) ItemLedgerEntry::query()->max('entry_number') + 1;
     }
 
-    private function postOpeningGlEntries(OpeningInventory $document): void
+    private function postOpeningGlEntries(OpeningInventory $document, ?int $userId = null): void
     {
         if (GlEntry::query()
             ->where('document_type', 'OPENING_INVENTORY')
@@ -214,7 +216,7 @@ class OpeningInventoryService
             return;
         }
 
-        $transactionNumber = $this->nextGlTransactionNumber();
+        $glLines = [];
 
         foreach ($document->lines as $line) {
             $inventoryAccount = InventoryPostingSetup::getFor(
@@ -231,58 +233,48 @@ class OpeningInventoryService
                 continue;
             }
 
-            $this->createGlEntry($document, $line, $transactionNumber, (int) $inventoryAccount->id, debit: $amount, credit: '0.00');
-            $this->createGlEntry($document, $line, $transactionNumber, (int) $openingEquityAccount->id, debit: '0.00', credit: $amount);
-        }
-    }
+            $glLines[] = [
+                'account_id' => (int) $inventoryAccount->id,
+                'debit' => $amount,
+                'credit' => '0.00',
+                'source_type' => SourceType::ITEM->value,
+                'source_number' => $line->item?->item_code,
+                'description' => "Opening inventory {$line->item?->item_code}",
+                'item_ledger_entry_id' => $line->item_ledger_entry_id,
+            ];
 
-    private function createGlEntry(
-        OpeningInventory $document,
-        OpeningInventoryLine $line,
-        int $transactionNumber,
-        int $chartOfAccountId,
-        string $debit,
-        string $credit,
-    ): void {
-        GlEntry::query()->create([
-            'entry_number' => $this->nextGlEntryNumber(),
-            'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $chartOfAccountId,
-            'debit_amount' => $debit,
-            'debit_amount_lcy' => $debit,
-            'credit_amount' => $credit,
-            'credit_amount_lcy' => $credit,
-            'amount' => DecimalMath::currency(DecimalMath::sub($debit, $credit, 2)),
-            'amount_lcy' => DecimalMath::currency(DecimalMath::sub($debit, $credit, 2)),
-            'source_type' => SourceType::ITEM,
-            'source_number' => $line->item?->item_code,
+            $glLines[] = [
+                'account_id' => (int) $openingEquityAccount->id,
+                'debit' => '0.00',
+                'credit' => $amount,
+                'source_type' => SourceType::ITEM->value,
+                'source_number' => $line->item?->item_code,
+                'description' => "Opening inventory {$line->item?->item_code}",
+                'item_ledger_entry_id' => $line->item_ledger_entry_id,
+            ];
+        }
+
+        if ($glLines === []) {
+            return;
+        }
+
+        $transactionKey = "opening_inventory:{$document->id}:{$document->document_number}";
+
+        $this->generalLedgerService->post($glLines, [
+            'business_id' => $document->business_id,
+            'source_module' => 'inventory',
+            'source_type' => SourceType::ITEM->value,
+            'source_id' => $document->id,
+            'source_number' => $document->document_number,
             'document_type' => 'OPENING_INVENTORY',
             'document_number' => $document->document_number,
             'document_date' => $document->posting_date,
             'posting_date' => $document->posting_date,
-            'description' => "Opening inventory {$line->item?->item_code}",
-            'item_ledger_entry_id' => $line->item_ledger_entry_id,
-            'sourceable_type' => OpeningInventory::class,
-            'sourceable_id' => $document->id,
+            'description' => "Opening inventory {$document->document_number}",
+            'actor_id' => $userId,
+            'transaction_key' => $transactionKey,
+            'idempotency_key' => hash('sha256', $transactionKey),
         ]);
-    }
-
-    private function nextGlEntryNumber(): int
-    {
-        if (DB::getDriverName() === 'pgsql') {
-            DB::statement("select pg_advisory_xact_lock(hashtext('gl_entries_entry_number'))");
-        }
-
-        return (int) GlEntry::query()->max('entry_number') + 1;
-    }
-
-    private function nextGlTransactionNumber(): int
-    {
-        if (DB::getDriverName() === 'pgsql') {
-            DB::statement("select pg_advisory_xact_lock(hashtext('gl_entries_transaction_number'))");
-        }
-
-        return (int) GlEntry::query()->max('transaction_number') + 1;
     }
 
     private function baseQuantity(Item $item, string $quantity, ?string $uomCode): string

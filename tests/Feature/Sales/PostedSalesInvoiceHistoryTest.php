@@ -5,10 +5,12 @@ use App\Enums\ItemType;
 use App\Enums\SalesOrderStatus;
 use App\Filament\Resources\SalesInvoices\Pages\PostedSalesInvoices;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
+use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerPostingGroup;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
@@ -172,6 +174,24 @@ it('blocks sales order shipment when inventory stock is insufficient', function 
  */
 function postedSalesInvoiceHistoryFixture(): array
 {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => now()->startOfYear()->toDateString(),
+            'allow_posting_to' => now()->endOfYear()->toDateString(),
+        ],
+    );
+    AccountingPeriod::query()->firstOrCreate(
+        [
+            'start_date' => now()->startOfYear()->toDateString(),
+            'end_date' => now()->endOfYear()->toDateString(),
+        ],
+        [
+            'name' => 'Current Fiscal Year',
+            'is_closed' => false,
+        ],
+    );
+
     $user = User::factory()->create([
         'two_factor_secret' => 'confirmed-secret',
         'two_factor_recovery_codes' => [],

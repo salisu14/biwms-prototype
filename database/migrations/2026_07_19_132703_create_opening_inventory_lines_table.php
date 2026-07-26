@@ -13,6 +13,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('opening_inventory_lines')) {
+            return;
+        }
+
         Schema::create('opening_inventory_lines', function (Blueprint $table) {
             $table->id();
             $table->foreignId('opening_inventory_id')->constrained('opening_inventories')->cascadeOnDelete();

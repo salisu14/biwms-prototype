@@ -7,6 +7,7 @@ use App\Enums\IncomeBalanceType;
 use App\Enums\ItemType;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SourceType;
+use App\Models\AccountingPeriod;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\ChartOfAccount;
@@ -14,6 +15,7 @@ use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\CustomerPostingGroup;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
@@ -43,6 +45,27 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate(
+        [
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-12-31',
+        ],
+        [
+            'name' => 'FY2026',
+            'is_closed' => false,
+        ],
+    );
+});
 
 it('creates a balanced trial balance from general ledger entries only', function (): void {
     $cash = financeAccount('11000', 'Cash', AccountCategory::LIQUID_ASSET);

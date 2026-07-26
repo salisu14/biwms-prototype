@@ -13,6 +13,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('opening_inventories')) {
+            return;
+        }
+
         Schema::create('opening_inventories', function (Blueprint $table) {
             $table->id();
             $table->foreignId('business_id')->nullable()->constrained('businesses');

@@ -1,10 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 // app/Services/PostingService.php
 
 namespace App\Services;
 
 use App\Enums\FAStatus;
+use App\Enums\SourceType;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
@@ -19,8 +22,10 @@ use App\Models\SalesCreditMemo;
 use App\Models\SalesInvoice;
 use App\Models\VatPostingSetup;
 use App\Models\Vendor;
+use App\Services\Accounting\LedgerSequenceAllocator;
 use App\Services\Finance\GeneralLedgerService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PostingService
 {
@@ -33,11 +38,33 @@ class PostingService
 
     /**
      * Create a G/L entry
+     *
+     * Transitional compatibility writer for legacy callers that have not yet
+     * been moved to PostingIntent. It enforces the same date/account/numbering
+     * safety checks as the posting kernel for single-line legacy writes.
      */
     public function createGlEntry(array $data): GlEntry
     {
+        $data['posting_date'] = $data['posting_date'] ?? now();
+        $data['document_date'] = $data['document_date'] ?? $data['posting_date'];
+
+        $this->validateLegacyGlEntry($data);
+
+        if (filled($data['idempotency_key'] ?? null)) {
+            $existingEntry = GlEntry::query()
+                ->where('idempotency_key', $data['idempotency_key'])
+                ->where('chart_of_account_id', $data['chart_of_account_id'])
+                ->where('debit_amount', $data['debit_amount'] ?? 0)
+                ->where('credit_amount', $data['credit_amount'] ?? 0)
+                ->first();
+
+            if ($existingEntry) {
+                return $existingEntry;
+            }
+        }
+
         $data['transaction_number'] = $data['transaction_number'] ?? $this->transactionNumber;
-        $data['entry_number'] = $this->getNextEntryNumber();
+        $data['entry_number'] = $data['entry_number'] ?? $this->getNextEntryNumber();
 
         $debit = $data['debit_amount'] ?? 0;
         $credit = $data['credit_amount'] ?? 0;
@@ -60,21 +87,40 @@ class PostingService
             $data['amount_lcy'] = $data['amount'];
         }
 
-        $data['user_id'] = auth()->id();
-        $data['document_date'] = $data['document_date'] ?? now();
-        $data['posting_date'] = $data['posting_date'] ?? now();
+        $data['source_type'] ??= SourceType::GENERAL_JOURNAL->value;
+        $data['source_module'] ??= 'legacy_posting';
+        $data['user_id'] = $data['user_id'] ?? auth()->id();
 
         return GlEntry::create($data);
     }
 
     private function getNextTransactionNumber(): int
     {
-        return (GlEntry::max('transaction_number') ?? 0) + 1;
+        return app(LedgerSequenceAllocator::class)->nextGlTransactionNumber();
     }
 
     private function getNextEntryNumber(): int
     {
-        return (GlEntry::max('entry_number') ?? 0) + 1;
+        return app(LedgerSequenceAllocator::class)->nextGlEntryNumber();
+    }
+
+    private function validateLegacyGlEntry(array $data): void
+    {
+        $account = ChartOfAccount::query()->find($data['chart_of_account_id'] ?? null);
+
+        if (! $account) {
+            throw ValidationException::withMessages([
+                'chart_of_account_id' => 'G/L account is required and must exist.',
+            ]);
+        }
+
+        if (! $account->allowsDirectPosting()) {
+            throw ValidationException::withMessages([
+                'chart_of_account_id' => "G/L account {$account->account_number} does not allow direct posting.",
+            ]);
+        }
+
+        app(PostingDateValidator::class)->validate($data['posting_date']);
     }
 
     /**
@@ -422,7 +468,7 @@ class PostingService
             return [];
         }
 
-        $gainLossAmount = $application->gain_loss_amount; // LCY amount
+        $gainLossAmount = (float) $application->gain_loss_amount; // LCY amount
         if (abs($gainLossAmount) < 0.001) {
             return [];
         }

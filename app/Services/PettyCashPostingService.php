@@ -8,9 +8,9 @@ use App\Enums\PettyCashVoucherStatus;
 use App\Enums\SourceType;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
-use App\Models\GlEntry;
 use App\Models\PettyCashVoucher;
 use App\Models\User;
+use App\Services\Finance\GeneralLedgerService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use RuntimeException;
@@ -21,6 +21,7 @@ class PettyCashPostingService
         private readonly NumberSeriesService $numberSeriesService,
         private readonly BankAccountLedgerService $bankAccountLedgerService,
         private readonly AuditTrailService $auditTrailService,
+        private readonly GeneralLedgerService $generalLedgerService,
     ) {}
 
     public function postVoucher(PettyCashVoucher $voucher, int $userId): void
@@ -36,7 +37,6 @@ class PettyCashPostingService
             $this->validateVoucher($voucher);
 
             $pettyCashTransactionNumber = $this->nextNumber('PC-TRANS', 'PCT');
-            $glTransactionNumber = $this->nextGlTransactionNumber();
             $newBalance = (float) $voucher->fund->current_balance - (float) $voucher->total_amount;
 
             $voucher->fund->update([
@@ -55,31 +55,43 @@ class PettyCashPostingService
                 'reference_number' => $voucher->voucher_number,
             ]);
 
-            $this->createGlEntry(
-                accountId: (int) $voucher->fund->chart_of_account_id,
-                debitAmount: 0,
-                creditAmount: (float) $voucher->total_amount,
-                voucher: $voucher,
-                transactionNumber: $glTransactionNumber,
-                description: 'Petty Cash Payment: '.$voucher->purpose,
-                userId: $userId,
-            );
+            $glLines = [[
+                'account_id' => (int) $voucher->fund->chart_of_account_id,
+                'debit' => '0.00',
+                'credit' => (string) $voucher->total_amount,
+                'description' => 'Petty Cash Payment: '.$voucher->purpose,
+                'dimensions' => [],
+            ]];
 
             $bankLedgerEntry = $this->createBankLedgerEntryWhenCashAccountIsBank($voucher, $userId);
 
             foreach ($voucher->lines as $line) {
-                $this->createGlEntry(
-                    accountId: (int) $line->expense_account_id,
-                    debitAmount: (float) $line->amount,
-                    creditAmount: 0,
-                    voucher: $voucher,
-                    transactionNumber: $glTransactionNumber,
-                    description: $line->description,
-                    userId: $userId,
-                    dimension1: $line->dimension_department_id,
-                    dimension2: $line->dimension_project_id,
-                );
+                $glLines[] = [
+                    'account_id' => (int) $line->expense_account_id,
+                    'debit' => (string) $line->amount,
+                    'credit' => '0.00',
+                    'description' => $line->description,
+                    'dimensions' => [
+                        'shortcut_dimension_1_code' => $line->dimension_department_id,
+                        'shortcut_dimension_2_code' => $line->dimension_project_id,
+                    ],
+                ];
             }
+
+            $this->generalLedgerService->post($glLines, [
+                'source_module' => 'petty_cash',
+                'source_type' => SourceType::GENERAL_JOURNAL->value,
+                'source_id' => $voucher->id,
+                'source_number' => $voucher->voucher_number,
+                'document_type' => 'PETTY_CASH_VOUCHER',
+                'document_number' => $voucher->voucher_number,
+                'posting_date' => $voucher->date,
+                'document_date' => $voucher->date,
+                'description' => "Petty cash voucher {$voucher->voucher_number}",
+                'actor_id' => $userId,
+                'transaction_key' => "petty_cash:voucher:{$voucher->id}:{$voucher->voucher_number}",
+                'idempotency_key' => hash('sha256', "petty_cash:voucher:{$voucher->id}:{$voucher->voucher_number}"),
+            ]);
 
             $voucher->update([
                 'status' => PettyCashVoucherStatus::POSTED,
@@ -145,39 +157,6 @@ class PettyCashPostingService
         }
     }
 
-    private function createGlEntry(
-        int $accountId,
-        float $debitAmount,
-        float $creditAmount,
-        PettyCashVoucher $voucher,
-        int $transactionNumber,
-        string $description,
-        int $userId,
-        ?int $dimension1 = null,
-        ?int $dimension2 = null,
-    ): void {
-        GlEntry::create([
-            'entry_number' => $this->nextGlEntryNumber(),
-            'transaction_number' => $transactionNumber,
-            'amount' => $debitAmount - $creditAmount,
-            'posting_date' => $voucher->date,
-            'document_type' => 'PETTY_CASH_VOUCHER',
-            'document_number' => $voucher->voucher_number,
-            'document_date' => $voucher->date,
-            'description' => $description,
-            'debit_amount' => $debitAmount,
-            'credit_amount' => $creditAmount,
-            'chart_of_account_id' => $accountId,
-            'source_type' => SourceType::GENERAL_JOURNAL,
-            'source_number' => $voucher->voucher_number,
-            'sourceable_id' => $voucher->id,
-            'sourceable_type' => PettyCashVoucher::class,
-            'shortcut_dimension_1_code' => $dimension1,
-            'shortcut_dimension_2_code' => $dimension2,
-            'user_id' => $userId,
-        ]);
-    }
-
     private function createBankLedgerEntryWhenCashAccountIsBank(PettyCashVoucher $voucher, int $userId): ?BankAccountLedgerEntry
     {
         $bankAccount = BankAccount::query()
@@ -220,15 +199,5 @@ class PettyCashPostingService
     private function nextNumber(string $seriesCode, string $fallbackPrefix): string
     {
         return $this->numberSeriesService->getNextNoFromSeries([$seriesCode], null, $fallbackPrefix);
-    }
-
-    private function nextGlEntryNumber(): int
-    {
-        return ((int) (GlEntry::query()->max('entry_number') ?? 0)) + 1;
-    }
-
-    private function nextGlTransactionNumber(): int
-    {
-        return ((int) (GlEntry::query()->max('transaction_number') ?? 0)) + 1;
     }
 }

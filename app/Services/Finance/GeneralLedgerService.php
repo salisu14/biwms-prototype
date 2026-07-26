@@ -1,16 +1,26 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Finance;
 
+use App\Accounting\PostingIntent;
 use App\Enums\SourceType;
 use App\Models\ChartOfAccount;
 use App\Models\GlEntry;
+use App\Models\PostingTransaction;
+use App\Services\Accounting\GeneralLedgerPostingKernel;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class GeneralLedgerService
 {
+    public function __construct(
+        private readonly GeneralLedgerPostingKernel $postingKernel,
+    ) {}
+
     /**
      * Post a journal entry to the General Ledger.
      *
@@ -37,53 +47,81 @@ class GeneralLedgerService
      */
     public function post(array $lines, array $meta = []): void
     {
-        DB::transaction(function () use ($lines, $meta) {
-            $totalDebit = collect($lines)->sum('debit');
-            $totalCredit = collect($lines)->sum('credit');
+        $this->postTransaction($lines, $meta);
+    }
 
-            if (round($totalDebit, 2) !== round($totalCredit, 2)) {
-                throw new \Exception('Journal not balanced: Debit ('.$totalDebit.') != Credit ('.$totalCredit.')');
-            }
+    /**
+     * Post a journal entry and return the persisted posting transaction.
+     *
+     * @param array<int, array{
+     *     account_id: int,
+     *     debit?: float|string,
+     *     credit?: float|string,
+     *     debit_amount?: float|string,
+     *     credit_amount?: float|string,
+     *     description?: string,
+     *     dimensions?: array<string, mixed>,
+     *     source_type?: string,
+     *     source_number?: string,
+     *     posting_group_source?: string|null,
+     *     cost_component?: string|null,
+     *     item_ledger_entry_id?: int|null,
+     *     customer_ledger_entry_id?: int|null,
+     *     vendor_ledger_entry_id?: int|null
+     * }> $lines
+     * @param  array<string, mixed>  $meta
+     */
+    public function postTransaction(array $lines, array $meta = []): PostingTransaction
+    {
+        $documentNumber = (string) ($meta['document_number'] ?? $meta['source_number'] ?? 'JOURNAL');
+        $documentType = (string) ($meta['document_type'] ?? 'JOURNAL');
+        $sourceType = $this->normalizeSourceType($meta['source_type'] ?? SourceType::GENERAL_JOURNAL->value);
+        $postingLines = collect($lines)
+            ->map(fn (array $line): array => [
+                'account_id' => $line['account_id'],
+                'debit_amount' => (string) ($line['debit_amount'] ?? $line['debit'] ?? '0'),
+                'credit_amount' => (string) ($line['credit_amount'] ?? $line['credit'] ?? '0'),
+                'description' => $line['description'] ?? $meta['description'] ?? 'G/L Entry',
+                'dimensions' => array_merge($meta['dimensions'] ?? [], $line['dimensions'] ?? []),
+                'source_type' => $this->normalizeSourceType($line['source_type'] ?? $sourceType),
+                'source_number' => $line['source_number'] ?? $meta['source_number'] ?? $documentNumber,
+                'posting_group_source' => $line['posting_group_source'] ?? null,
+                'cost_component' => $line['cost_component'] ?? null,
+                'item_ledger_entry_id' => $line['item_ledger_entry_id'] ?? null,
+                'customer_ledger_entry_id' => $line['customer_ledger_entry_id'] ?? null,
+                'vendor_ledger_entry_id' => $line['vendor_ledger_entry_id'] ?? null,
+            ])
+            ->all();
 
-            $transactionNumber = $this->generateTransactionNumber();
-            $nextEntryNumber = $this->getNextEntryNumber();
+        $transactionKey = (string) ($meta['transaction_key'] ?? "{$documentType}:{$documentNumber}:".hash('sha256', json_encode($postingLines, JSON_THROW_ON_ERROR)));
 
-            foreach ($lines as $line) {
-                GlEntry::create([
-                    'entry_number' => $nextEntryNumber++,
-                    'transaction_number' => $transactionNumber,
-                    'chart_of_account_id' => $line['account_id'],
-                    'debit_amount' => $line['debit'],
-                    'credit_amount' => $line['credit'],
-                    'amount' => $line['debit'] - $line['credit'],
-                    'posting_date' => $meta['posting_date'] ?? now(),
-                    'document_number' => $meta['document_number'] ?? '',
-                    'document_date' => $meta['document_date'] ?? now(),
+        return $this->postingKernel->post(PostingIntent::fromArray([
+            'business_id' => $meta['business_id'] ?? null,
+            'posting_date' => $meta['posting_date'] ?? now(),
+            'document_date' => $meta['document_date'] ?? $meta['posting_date'] ?? now(),
+            'source_module' => $meta['source_module'] ?? 'finance',
+            'source_type' => $sourceType,
+            'source_id' => $meta['source_id'] ?? $meta['sourceable_id'] ?? null,
+            'source_number' => $meta['source_number'] ?? $documentNumber,
+            'document_type' => $documentType,
+            'document_number' => Str::limit($documentNumber, 20, ''),
+            'external_document_number' => $meta['external_document_number'] ?? null,
+            'transaction_key' => $transactionKey,
+            'idempotency_key' => $meta['idempotency_key'] ?? hash('sha256', $transactionKey),
+            'description' => $meta['description'] ?? $documentType.' '.$documentNumber,
+            'currency_code' => $meta['currency_code'] ?? 'NGN',
+            'exchange_rate' => $meta['exchange_rate'] ?? '1',
+            'dimensions' => $meta['dimensions'] ?? [],
+            'actor_id' => $meta['actor_id'] ?? auth()->id(),
+            'lines' => $postingLines,
+        ]));
+    }
 
-                    // Fix: Allow Line-level or Meta-level source override
-                    'source_type' => $line['source_type'] ?? $meta['source_type'] ?? SourceType::GENERAL_JOURNAL->value,
-                    'source_number' => $line['source_number'] ?? $meta['source_number'] ?? null,
-                    'document_type' => $meta['document_type'] ?? 'JOURNAL',
+    private function normalizeSourceType(mixed $sourceType): string
+    {
+        $value = $sourceType instanceof SourceType ? $sourceType->value : (string) $sourceType;
 
-                    // Fix: Polymorphic tracking for Expense Transactions
-                    'sourceable_type' => $meta['sourceable_type'] ?? null,
-                    'sourceable_id' => $meta['sourceable_id'] ?? null,
-
-                    'description' => $line['description'] ?? $meta['description'] ?? 'G/L Entry',
-                    'dimensions' => array_merge($meta['dimensions'] ?? [], $line['dimensions'] ?? []),
-                    'user_id' => auth()->id(),
-
-                    // FIX: Map the new fields we added in ExpenseService
-                    'currency_id' => $line['currency_id'] ?? null,
-                    'debit_amount_lcy' => $line['debit_amount_lcy'] ?? null,
-                    'credit_amount_lcy' => $line['credit_amount_lcy'] ?? null,
-
-                    // FIX: Map Dimension Shortcuts
-                    'shortcut_dimension_1_code' => $line['shortcut_dimension_1_code'] ?? null,
-                    'shortcut_dimension_2_code' => $line['shortcut_dimension_2_code'] ?? null,
-                ]);
-            }
-        });
+        return SourceType::tryFrom($value)?->value ?? SourceType::GENERAL_JOURNAL->value;
     }
 
     /**

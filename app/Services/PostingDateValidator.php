@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\AccountingPeriod;
@@ -15,7 +17,7 @@ class PostingDateValidator
     {
         $date = Carbon::parse($postingDate ?? now())->startOfDay();
 
-        if (! Schema::hasTable('general_ledger_setups') || ! Schema::hasTable('accounting_periods')) {
+        if (! Schema::hasTable('general_ledger_setup') || ! Schema::hasTable('accounting_periods')) {
             return;
         }
 

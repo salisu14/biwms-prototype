@@ -23,8 +23,8 @@ class CurrencyService
      */
     public function getLCY(): Currency
     {
-        return Cache::remember('currency.lcy', self::CACHE_TTL, function () {
-            return Currency::where('is_lcy', true)->first()
+        $currencyId = Cache::remember('currency.lcy.id', self::CACHE_TTL, function (): int {
+            return (int) (Currency::where('is_lcy', true)->value('id')
                 ?? Currency::firstOrCreate(
                     ['code' => self::DEFAULT_LCY],
                     [
@@ -33,8 +33,10 @@ class CurrencyService
                         'is_lcy' => true,
                         'decimal_places' => 2,
                     ]
-                );
+                )->id);
         });
+
+        return Currency::query()->findOrFail($currencyId);
     }
 
     /**

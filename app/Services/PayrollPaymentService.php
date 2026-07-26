@@ -9,9 +9,9 @@ use App\Enums\SourceType;
 use App\Events\PayrollSalaryPaid;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
-use App\Models\GlEntry;
 use App\Models\PayrollDocument;
 use App\Models\User;
+use App\Services\Finance\GeneralLedgerService;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -20,7 +20,8 @@ class PayrollPaymentService
 {
     public function __construct(
         private readonly BankAccountLedgerService $bankAccountLedgerService,
-        private readonly PostingDateValidator $postingDateValidator
+        private readonly PostingDateValidator $postingDateValidator,
+        private readonly GeneralLedgerService $generalLedgerService,
     ) {}
 
     /**
@@ -150,42 +151,40 @@ class PayrollPaymentService
             throw new Exception("Bank account {$bankAccount->account_number} is missing a G/L account.");
         }
 
-        $entryNumber = (int) (GlEntry::query()->max('entry_number') ?? 0) + 1;
-        $transactionNumber = (int) (GlEntry::query()->max('transaction_number') ?? 0) + 1;
         $documentNo = $this->paymentDocumentNo($document);
 
-        GlEntry::query()->create([
-            'entry_number' => $entryNumber++,
-            'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $payrollPayableAccountId,
-            'source_type' => SourceType::EMPLOYEE,
+        $transactionKey = "payroll_payment:{$document->id}:{$documentNo}";
+
+        $this->generalLedgerService->post([
+            [
+                'account_id' => $payrollPayableAccountId,
+                'debit' => $amount,
+                'credit' => '0.00',
+                'source_type' => SourceType::EMPLOYEE->value,
+                'source_number' => $document->document_number,
+                'description' => "Clear payroll payable {$document->document_number}",
+            ],
+            [
+                'account_id' => $bankAccount->gl_account_id,
+                'debit' => '0.00',
+                'credit' => $amount,
+                'source_type' => SourceType::BANK->value,
+                'source_number' => $bankAccount->account_number,
+                'description' => "Salary bank payment {$document->document_number}",
+            ],
+        ], [
+            'source_module' => 'payroll',
+            'source_type' => SourceType::EMPLOYEE->value,
+            'source_id' => $document->id,
             'source_number' => $document->document_number,
             'posting_date' => $document->period_end,
             'document_date' => $document->period_end,
             'document_type' => 'PAYROLL_PAYMENT',
             'document_number' => $documentNo,
-            'description' => "Clear payroll payable {$document->document_number}",
-            'amount' => $amount,
-            'debit_amount' => $amount,
-            'credit_amount' => 0,
-            'user_id' => $userId,
-        ]);
-
-        GlEntry::query()->create([
-            'entry_number' => $entryNumber,
-            'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $bankAccount->gl_account_id,
-            'source_type' => SourceType::BANK,
-            'source_number' => $bankAccount->account_number,
-            'posting_date' => $document->period_end,
-            'document_date' => $document->period_end,
-            'document_type' => 'PAYROLL_PAYMENT',
-            'document_number' => $documentNo,
-            'description' => "Salary bank payment {$document->document_number}",
-            'amount' => -$amount,
-            'debit_amount' => 0,
-            'credit_amount' => $amount,
-            'user_id' => $userId,
+            'description' => "Payroll payment {$document->document_number}",
+            'actor_id' => $userId,
+            'transaction_key' => $transactionKey,
+            'idempotency_key' => hash('sha256', $transactionKey),
         ]);
     }
 }

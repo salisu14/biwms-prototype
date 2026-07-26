@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Posting;
 
 use App\Models\GlEntry;
+use App\Services\Accounting\LedgerSequenceAllocator;
+use App\Services\PostingService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -44,7 +46,7 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
     protected function getTransactionNumber(): int
     {
         if ($this->currentTransactionNumber === null) {
-            $this->currentTransactionNumber = (GlEntry::max('transaction_number') ?? 0) + 1;
+            $this->currentTransactionNumber = app(LedgerSequenceAllocator::class)->nextGlTransactionNumber();
         }
 
         return $this->currentTransactionNumber;
@@ -53,7 +55,7 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
     protected function getEntryNumber(): int
     {
         if ($this->nextEntryNumber === null) {
-            $this->nextEntryNumber = (GlEntry::max('entry_number') ?? 0) + 1;
+            $this->nextEntryNumber = app(LedgerSequenceAllocator::class)->nextGlEntryNumber();
         }
 
         return $this->nextEntryNumber++;
@@ -90,10 +92,6 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
         if (! isset($data['transaction_number'])) {
             $data['transaction_number'] = $this->getTransactionNumber();
         }
-        if (! isset($data['entry_number'])) {
-            $data['entry_number'] = $this->getEntryNumber();
-        }
-
         // Map common aliases to ensure strict schema adherence
         if (isset($data['account_id']) && ! isset($data['chart_of_account_id'])) {
             $data['chart_of_account_id'] = $data['account_id'];
@@ -115,7 +113,7 @@ abstract class AbstractJournalPostingRoutine implements PostingRoutineInterface
             $data['document_date'] = $data['posting_date'] ?? now();
         }
 
-        return GlEntry::create($data);
+        return app(PostingService::class)->createGlEntry($data);
     }
 
     protected function updateLineStatus(object $line, string $status, ?int $postedEntryId = null, ?string $postedEntryType = null): void

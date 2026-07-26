@@ -2,6 +2,7 @@
 
 use App\Enums\PettyCashTransactionType;
 use App\Enums\PettyCashVoucherStatus;
+use App\Models\AccountingPeriod;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\ChartOfAccount;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Artisan;
 
 beforeEach(function () {
     $this->refreshPostgresTestingDatabase();
+    ensurePettyCashAccountingPeriod();
     ensurePettyCashPostingNumberSeries();
     ensurePettyCashBankLedgerNumberSeries();
 });
@@ -267,6 +269,16 @@ function grantPettyCashPostingPermission(User $user): void
     ]);
 
     $user->givePermissionTo('finance.petty_cash_voucher.post');
+}
+
+function ensurePettyCashAccountingPeriod(): void
+{
+    AccountingPeriod::query()->create([
+        'name' => 'FY2026',
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+        'is_closed' => false,
+    ]);
 }
 
 function ensurePettyCashPostingNumberSeries(): void

@@ -10,7 +10,7 @@ use App\Enums\SourceType;
 use App\Events\FixedAssetPosted;
 use App\Models\FALedgerEntry;
 use App\Models\FixedAsset;
-use App\Models\GlEntry;
+use App\Services\Finance\GeneralLedgerService;
 use App\Services\PostingDateValidator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +19,8 @@ use Illuminate\Support\Facades\Gate;
 class DisposalService
 {
     public function __construct(
-        private readonly PostingDateValidator $postingDateValidator
+        private readonly PostingDateValidator $postingDateValidator,
+        private readonly GeneralLedgerService $generalLedgerService,
     ) {}
 
     public function dispose(
@@ -115,16 +116,15 @@ class DisposalService
             throw new \RuntimeException("Disposal posting accounts are incomplete for fixed asset {$asset->fa_no}.");
         }
 
-        $entryNumber = (int) (GlEntry::query()->max('entry_number') ?? 0) + 1;
-        $transactionNumber = (int) (GlEntry::query()->max('transaction_number') ?? 0) + 1;
         $documentNo = $this->documentNo($asset, $date);
+        $glLines = [];
 
         if ((float) $asset->accumulated_depreciation > 0) {
-            $this->createGlEntry($entryNumber++, $transactionNumber, $group->accumulated_depreciation_account_id, (float) $asset->accumulated_depreciation, $date, $documentNo, $asset->fa_no, "Clear accumulated depreciation {$asset->fa_no}");
+            $glLines[] = $this->glLine($group->accumulated_depreciation_account_id, (float) $asset->accumulated_depreciation, $asset->fa_no, "Clear accumulated depreciation {$asset->fa_no}");
         }
 
         if ($proceeds > 0) {
-            $this->createGlEntry($entryNumber++, $transactionNumber, $group->disposal_proceeds_account_id, $proceeds, $date, $documentNo, $asset->fa_no, "Disposal proceeds {$asset->fa_no}");
+            $glLines[] = $this->glLine($group->disposal_proceeds_account_id, $proceeds, $asset->fa_no, "Disposal proceeds {$asset->fa_no}");
         }
 
         if ($gainLoss < 0) {
@@ -134,10 +134,10 @@ class DisposalService
                 throw new \RuntimeException("Disposal loss account is missing for fixed asset {$asset->fa_no}.");
             }
 
-            $this->createGlEntry($entryNumber++, $transactionNumber, $lossAccount, abs($gainLoss), $date, $documentNo, $asset->fa_no, "Loss on disposal {$asset->fa_no}");
+            $glLines[] = $this->glLine($lossAccount, abs($gainLoss), $asset->fa_no, "Loss on disposal {$asset->fa_no}");
         }
 
-        $this->createGlEntry($entryNumber++, $transactionNumber, $group->acquisition_cost_account_id, -(float) $asset->book_value, $date, $documentNo, $asset->fa_no, "Clear asset cost {$asset->fa_no}");
+        $glLines[] = $this->glLine($group->acquisition_cost_account_id, -(float) $asset->book_value, $asset->fa_no, "Clear asset cost {$asset->fa_no}");
 
         if ($gainLoss > 0) {
             $gainAccount = $group->disposal_gain_account_id;
@@ -146,37 +146,40 @@ class DisposalService
                 throw new \RuntimeException("Disposal gain account is missing for fixed asset {$asset->fa_no}.");
             }
 
-            $this->createGlEntry($entryNumber, $transactionNumber, $gainAccount, -$gainLoss, $date, $documentNo, $asset->fa_no, "Gain on disposal {$asset->fa_no}");
+            $glLines[] = $this->glLine($gainAccount, -$gainLoss, $asset->fa_no, "Gain on disposal {$asset->fa_no}");
         }
-    }
 
-    private function createGlEntry(
-        int $entryNumber,
-        int $transactionNumber,
-        int $accountId,
-        float $amount,
-        \DateTime $date,
-        string $documentNo,
-        string $sourceNumber,
-        string $description
-    ): void {
-        GlEntry::query()->create([
-            'entry_number' => $entryNumber,
-            'transaction_number' => $transactionNumber,
-            'chart_of_account_id' => $accountId,
+        $transactionKey = "fixed_asset_disposal:{$asset->id}:{$documentNo}";
+
+        $this->generalLedgerService->post($glLines, [
+            'source_module' => 'fixed_asset',
+            'source_type' => SourceType::FIXED_ASSET->value,
+            'source_id' => $asset->id,
+            'source_number' => $asset->fa_no,
             'posting_date' => $date,
             'document_date' => $date,
             'document_type' => 'FA DISPOSAL',
             'document_number' => $documentNo,
-            'source_type' => SourceType::FIXED_ASSET,
+            'description' => "Disposal of {$asset->fa_no}",
+            'actor_id' => Auth::id() ?? 1,
+            'transaction_key' => $transactionKey,
+            'idempotency_key' => hash('sha256', $transactionKey),
+        ]);
+    }
+
+    /**
+     * @return array{account_id: int, debit: float, credit: float, source_type: string, source_number: string, description: string}
+     */
+    private function glLine(int $accountId, float $amount, string $sourceNumber, string $description): array
+    {
+        return [
+            'account_id' => $accountId,
+            'debit' => $amount > 0 ? $amount : 0,
+            'credit' => $amount < 0 ? abs($amount) : 0,
+            'source_type' => SourceType::FIXED_ASSET->value,
             'source_number' => $sourceNumber,
             'description' => $description,
-            'amount' => $amount,
-            'amount_lcy' => $amount,
-            'debit_amount' => $amount > 0 ? $amount : 0,
-            'credit_amount' => $amount < 0 ? abs($amount) : 0,
-            'user_id' => Auth::id() ?? 1,
-        ]);
+        ];
     }
 
     private function documentNo(FixedAsset $asset, \DateTime $date): string

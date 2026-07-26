@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 // app/Models/GlEntry.php
 
 namespace App\Models;
@@ -19,6 +21,8 @@ class GlEntry extends Model
     protected $fillable = [
         'entry_number',
         'transaction_number',
+        'posting_transaction_id',
+        'business_id',
         'chart_of_account_id',
         'general_business_posting_group_id',
         'debit_amount',
@@ -30,9 +34,16 @@ class GlEntry extends Model
         'currency_id',
         'exchange_rate',
         'source_type',
+        'source_module',
+        'source_id',
         'source_number',
         'document_type',
         'document_number',
+        'external_document_number',
+        'idempotency_key',
+        'transaction_key',
+        'posting_group_source',
+        'cost_component',
         'document_date',
         'posting_date',
         'user_id',
@@ -48,6 +59,7 @@ class GlEntry extends Model
         'vendor_ledger_entry_id',
         'sourceable_id',
         'sourceable_type',
+        'reversal_of_transaction_id',
         'shortcut_dimension_1_code',
         'shortcut_dimension_2_code',
     ];
@@ -62,6 +74,10 @@ class GlEntry extends Model
         'amount_lcy' => 'decimal:2',
         'currency_id' => 'integer',
         'general_business_posting_group_id' => 'integer',
+        'posting_transaction_id' => 'integer',
+        'business_id' => 'integer',
+        'source_id' => 'integer',
+        'reversal_of_transaction_id' => 'integer',
         'exchange_rate' => 'decimal:6',
         'dimensions' => 'array',
         'document_date' => 'date',

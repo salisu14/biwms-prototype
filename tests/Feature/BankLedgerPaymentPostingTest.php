@@ -2,12 +2,14 @@
 
 use App\Events\PaymentApplied;
 use App\Events\PaymentUnapplied;
+use App\Models\AccountingPeriod;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\CashReceiptLine;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GlEntry;
 use App\Models\JournalBatch;
 use App\Models\JournalLine;
@@ -31,6 +33,19 @@ use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     $this->refreshPostgresTestingDatabase();
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+    AccountingPeriod::query()->create([
+        'name' => 'FY2026',
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+        'is_closed' => false,
+    ]);
     ensureBankLedgerNumberSeries();
 });
 

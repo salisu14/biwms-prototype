@@ -26,6 +26,7 @@ class BiwmsInventoryReconcile extends Command
      */
     public function handle(): int
     {
+        $schemaFindings = $this->schemaFindings();
         $stockMismatches = $this->stockMismatches();
         $negativeStockViolations = $this->negativeStockViolations();
         $openItemLedgerEntries = $this->openItemLedgerEntries();
@@ -44,10 +45,15 @@ class BiwmsInventoryReconcile extends Command
         $unbalancedTransferEntries = $this->unbalancedTransferEntries();
         $duplicateWarehousePostings = $this->duplicateWarehousePostings();
         $transferSourceDestinationMismatches = $this->transferSourceDestinationMismatches();
-        $duplicateOpeningInventoryEntries = $this->duplicateOpeningInventoryEntries();
-        $postedOpeningDocumentsWithoutLedger = $this->postedOpeningDocumentsWithoutLedger();
+        $duplicateOpeningInventoryEntries = $this->requiredTableExists('opening_inventory_lines')
+            ? $this->duplicateOpeningInventoryEntries()
+            : [];
+        $postedOpeningDocumentsWithoutLedger = $this->requiredTableExists('opening_inventory_lines')
+            ? $this->postedOpeningDocumentsWithoutLedger()
+            : [];
 
         $report = [
+            'schema_findings' => $schemaFindings,
             'stock_mismatches' => $stockMismatches,
             'negative_stock_violations' => $negativeStockViolations,
             'open_item_ledger_entries' => $openItemLedgerEntries,
@@ -89,6 +95,14 @@ class BiwmsInventoryReconcile extends Command
 
         $details = (bool) $this->option('details');
 
+        $this->section('Schema completeness findings', $schemaFindings, true, fn (array $finding): string => sprintf(
+            '[%s] %s missing_table=%s expected_migration=%s action=%s',
+            $finding['severity'],
+            $finding['classification'],
+            $finding['missing_table'],
+            $finding['expected_migration'],
+            $finding['recommended_action'],
+        ));
         $this->section('Item stock field vs item ledger sum mismatches', $stockMismatches, $details, fn (array $item): string => sprintf(
             '[%s] %s (%s): stock=%s ledger=%s difference=%s',
             $item['severity'],
@@ -303,6 +317,42 @@ class BiwmsInventoryReconcile extends Command
             ->filter(fn (array $item): bool => abs($item['difference']) > 0.0001)
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function schemaFindings(): array
+    {
+        $requiredTables = [
+            'opening_inventory_lines' => 'database/migrations/2026_07_19_132703_create_opening_inventory_lines_table.php',
+        ];
+
+        return collect($requiredTables)
+            ->map(function (string $migration, string $table): ?array {
+                if ($this->requiredTableExists($table)) {
+                    return null;
+                }
+
+                return [
+                    ...$this->findingMetadata(
+                        classification: 'SCHEMA_INCOMPLETE',
+                        severity: 'critical',
+                        suggestedRemediation: "Run migration status and verify {$migration} is present and applied. Regenerate the PostgreSQL schema dump only after the migration path is correct."
+                    ),
+                    'missing_table' => $table,
+                    'expected_migration' => $migration,
+                    'recommended_action' => 'Apply the required migration/schema-dump repair in a controlled deployment. Do not let the reconciliation command auto-create accounting tables.',
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function requiredTableExists(string $table): bool
+    {
+        return DB::getSchemaBuilder()->hasTable($table);
     }
 
     /**

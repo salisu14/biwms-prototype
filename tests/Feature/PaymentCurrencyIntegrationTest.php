@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\Contact;
 use App\Models\Currency;
@@ -17,6 +18,16 @@ use App\Services\Finance\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    AccountingPeriod::query()->updateOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+});
 
 test('it calculates and posts realized gain/loss during foreign currency application', function () {
     // 0. Setup User

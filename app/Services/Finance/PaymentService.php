@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Finance;
 
 use App\Events\PaymentApplied;
@@ -50,8 +52,6 @@ class PaymentService
                 ->lockForUpdate()
                 ->findOrFail($payment->id);
 
-            $this->postingDateValidator->validate($payment->posting_date ?? now());
-
             if ($payment->status === 'POSTED') {
                 throw new \Exception('Payment is already posted.');
             }
@@ -67,6 +67,8 @@ class PaymentService
             if (! $payment->bankAccount) {
                 throw new \Exception('A bank account is required before posting this payment.');
             }
+
+            $this->postingDateValidator->validate($payment->posting_date ?? now());
 
             if ($payment->payment_direction === 'RECEIPT' && ! $payment->bankAccount->allow_receipts) {
                 throw new \Exception('The selected bank account is not enabled for receipts.');
@@ -370,7 +372,7 @@ class PaymentService
             }
 
             // Reverse Gain/Loss G/L entries if they exist
-            if (abs($application->gain_loss_amount) > 0.001) {
+            if (abs((float) $application->gain_loss_amount) > 0.001) {
                 $this->postingService->reverseRealizedGainLoss($application);
             }
         });
@@ -632,24 +634,24 @@ class PaymentService
         if ($payment->payment_direction === 'RECEIPT') {
             $this->postingService->postPaymentReceipt(
                 customer: $payment->customer,
-                amount: $payment->payment_amount,
+                amount: (float) $payment->payment_amount,
                 bankAccount: $payment->bankAccount,
-                discount: $payment->discount_taken,
+                discount: (float) $payment->discount_taken,
                 postingDate: $payment->posting_date->toDateTime(),
                 documentNumber: $payment->payment_number,
                 currencyId: $payment->currency_id,
-                exchangeRate: $payment->currency_factor
+                exchangeRate: (float) $payment->currency_factor
             );
         } else {
             $this->postingService->postPaymentDisbursement(
                 vendor: $payment->vendor,
-                amount: $payment->payment_amount,
+                amount: (float) $payment->payment_amount,
                 bankAccount: $payment->bankAccount,
-                discount: $payment->discount_taken,
+                discount: (float) $payment->discount_taken,
                 postingDate: $payment->posting_date->toDateTime(),
                 documentNumber: $payment->payment_number,
                 currencyId: $payment->currency_id,
-                exchangeRate: $payment->currency_factor
+                exchangeRate: (float) $payment->currency_factor
             );
         }
     }

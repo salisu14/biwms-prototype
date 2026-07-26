@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Models\AccountingPeriod;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\OpeningInventory;
 use App\Services\Inventory\OpeningInventoryService;
+use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use RuntimeException;
 
@@ -57,6 +59,9 @@ class OpeningInventorySeeder extends Seeder
             );
         }
 
+        $postingDate = Carbon::today();
+        $this->ensureAccountingPeriod($postingDate);
+
         $defaultLocation = Location::query()->orderBy('id')->firstOrFail();
         $items = Item::query()
             ->with('baseUom')
@@ -85,9 +90,9 @@ class OpeningInventorySeeder extends Seeder
         $document = app(OpeningInventoryService::class)->createDraft(
             documentNumber: self::DOCUMENT_NUMBER,
             source: 'SEED_OPENING_STOCK',
-            postingDate: now()->toDateString(),
+            postingDate: $postingDate->toDateString(),
             lines: $lines,
-            description: 'Seeded demo opening inventory. Subledger only; no G/L opening-balance posting.',
+            description: 'Seeded demo opening inventory with item, value, and G/L opening-balance entries.',
         );
 
         app(OpeningInventoryService::class)->post($document);
@@ -103,5 +108,19 @@ class OpeningInventorySeeder extends Seeder
                     ->orWhereNull('source_type');
             })
             ->exists();
+    }
+
+    private function ensureAccountingPeriod(Carbon $postingDate): void
+    {
+        if (AccountingPeriod::query()->containingDate($postingDate)->exists()) {
+            return;
+        }
+
+        AccountingPeriod::query()->create([
+            'name' => 'FY'.$postingDate->year,
+            'start_date' => $postingDate->copy()->startOfYear()->toDateString(),
+            'end_date' => $postingDate->copy()->endOfYear()->toDateString(),
+            'is_closed' => false,
+        ]);
     }
 }
