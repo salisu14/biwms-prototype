@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Manufacturing;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,6 +26,8 @@ class CapacityLedgerEntry extends Model
         // Time
         'setup_time',
         'run_time',
+        'wait_time',
+        'queue_time',
         'setup_time_unit',
         'run_time_unit',
 
@@ -34,6 +38,10 @@ class CapacityLedgerEntry extends Model
 
         // Type
         'type', // SETUP, RUN, STOP, OUTPUT
+        'cost_state',
+        'idempotency_key',
+        'reversal_of_capacity_ledger_entry_id',
+        'costing_metadata',
 
         // Links
         'fixed_asset_id',
@@ -44,11 +52,14 @@ class CapacityLedgerEntry extends Model
         'posting_date' => 'date',
         'setup_time' => 'decimal:4',
         'run_time' => 'decimal:4',
+        'wait_time' => 'decimal:8',
+        'queue_time' => 'decimal:8',
         'direct_cost' => 'decimal:4',
         'overhead_cost' => 'decimal:4',
         'total_cost' => 'decimal:4',
         'fixed_asset_id' => 'integer',
         'capex_project_id' => 'integer',
+        'costing_metadata' => 'array',
     ];
 
     public function productionOrder(): BelongsTo
@@ -69,5 +80,10 @@ class CapacityLedgerEntry extends Model
     public function machineCenter(): BelongsTo
     {
         return $this->belongsTo(MachineCenter::class, 'machine_center_id');
+    }
+
+    public function reversalOfCapacityLedgerEntry(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reversal_of_capacity_ledger_entry_id');
     }
 }

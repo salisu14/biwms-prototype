@@ -7,8 +7,10 @@ use App\Enums\ProductionOrderStatus;
 use App\Enums\WarehouseActivityType;
 use App\Enums\WarehouseDocumentStatus;
 use App\Events\ProductionOrderStatusChanged;
+use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
@@ -30,6 +32,24 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+});
 
 test('production bom recursive cost uses related bom link and applies scrap', function () {
     $user = User::factory()->create();

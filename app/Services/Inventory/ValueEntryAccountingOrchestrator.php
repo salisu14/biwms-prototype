@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Inventory;
 
 use App\Enums\ItemLedgerEntryType;
+use App\Enums\ManufacturingCostComponent;
 use App\Enums\SourceType;
 use App\Models\CapacityLedgerEntry as InventoryCapacityLedgerEntry;
 use App\Models\ChartOfAccount;
@@ -39,6 +40,8 @@ class ValueEntryAccountingOrchestrator
             if ($lockedValueEntry->gl_posted) {
                 return $lockedValueEntry->postingTransaction;
             }
+
+            $this->assertSupportedManufacturingCostComponent($lockedValueEntry);
 
             if ($lockedValueEntry->expected_cost && ! config('accounts.post_expected_inventory_cost_to_gl', false)) {
                 return null;
@@ -144,6 +147,12 @@ class ValueEntryAccountingOrchestrator
     {
         $type = $this->normalizedItemLedgerEntryType($valueEntry);
         $documentType = strtoupper((string) $valueEntry->document_type);
+
+        if ($this->isManufacturingVariance($valueEntry)) {
+            return (float) $valueEntry->cost_amount_actual >= 0
+                ? [$this->varianceAccount($valueEntry), $this->wipAccount($valueEntry)]
+                : [$this->wipAccount($valueEntry), $this->varianceAccount($valueEntry)];
+        }
 
         return match ($type) {
             'SALE' => str_contains($documentType, 'CREDIT_MEMO') || (float) $valueEntry->quantity > 0
@@ -275,6 +284,83 @@ class ValueEntryAccountingOrchestrator
         }
 
         return $setup->overheadAppliedAccount;
+    }
+
+    private function varianceAccount(ValueEntry $valueEntry): ChartOfAccount
+    {
+        $setup = $this->generalPostingSetup($valueEntry);
+        $component = $this->normalizedCostComponent($valueEntry);
+
+        $account = match ($component) {
+            ManufacturingCostComponent::MaterialPriceVariance->value,
+            ManufacturingCostComponent::MaterialQuantityVariance->value => $setup->materialVarianceAccount,
+            ManufacturingCostComponent::CapacityRateVariance->value,
+            ManufacturingCostComponent::CapacityEfficiencyVariance->value => $setup->capacityVarianceAccount,
+            ManufacturingCostComponent::CapacityOverheadVariance->value => $setup->capacityOverheadVarianceAccount ?? $setup->manufacturingOverheadVarianceAccount,
+            ManufacturingCostComponent::StandardCostVariance->value,
+            ManufacturingCostComponent::OutputQuantityVariance->value,
+            ManufacturingCostComponent::RoundingVariance->value,
+            ManufacturingCostComponent::Variance->value => $setup->manufacturingOverheadVarianceAccount
+                ?? $setup->materialVarianceAccount
+                ?? $setup->capacityVarianceAccount,
+            default => $setup->manufacturingOverheadVarianceAccount,
+        };
+
+        if (! $account) {
+            throw new RuntimeException("Manufacturing variance account missing for value entry {$valueEntry->entry_no}.");
+        }
+
+        return $account;
+    }
+
+    private function isManufacturingVariance(ValueEntry $valueEntry): bool
+    {
+        return in_array($this->normalizedCostComponent($valueEntry), [
+            ManufacturingCostComponent::Variance->value,
+            ManufacturingCostComponent::MaterialPriceVariance->value,
+            ManufacturingCostComponent::MaterialQuantityVariance->value,
+            ManufacturingCostComponent::CapacityRateVariance->value,
+            ManufacturingCostComponent::CapacityEfficiencyVariance->value,
+            ManufacturingCostComponent::CapacityOverheadVariance->value,
+            ManufacturingCostComponent::OutputQuantityVariance->value,
+            ManufacturingCostComponent::RoundingVariance->value,
+            ManufacturingCostComponent::StandardCostVariance->value,
+        ], true);
+    }
+
+    private function normalizedCostComponent(ValueEntry $valueEntry): string
+    {
+        $component = strtolower((string) $valueEntry->cost_component);
+
+        return match ($component) {
+            'material' => ManufacturingCostComponent::DirectMaterial->value,
+            'capacity' => ManufacturingCostComponent::DirectCapacity->value,
+            'overhead' => ManufacturingCostComponent::CapacityOverhead->value,
+            default => $component,
+        };
+    }
+
+    private function assertSupportedManufacturingCostComponent(ValueEntry $valueEntry): void
+    {
+        if (! $this->isManufacturingValueEntry($valueEntry) || blank($valueEntry->cost_component)) {
+            return;
+        }
+
+        $supported = array_map(
+            fn (ManufacturingCostComponent $component): string => $component->value,
+            ManufacturingCostComponent::cases(),
+        );
+
+        if (! in_array($this->normalizedCostComponent($valueEntry), $supported, true)) {
+            throw new RuntimeException("Unsupported manufacturing cost component [{$valueEntry->cost_component}] for value entry {$valueEntry->entry_no}.");
+        }
+    }
+
+    private function isManufacturingValueEntry(ValueEntry $valueEntry): bool
+    {
+        return $valueEntry->source_module === 'manufacturing'
+            || filled($valueEntry->production_order_no)
+            || in_array($this->normalizedItemLedgerEntryType($valueEntry), ['CONSUMPTION', 'OUTPUT', 'CAPACITY', 'OVERHEAD'], true);
     }
 
     private function generalPostingSetup(ValueEntry $valueEntry): GeneralPostingSetup

@@ -10,22 +10,17 @@ use App\Models\FixedAsset;
 use App\Models\Manufacturing\CapExProject;
 use App\Models\Manufacturing\CapExProjectLine;
 use App\Models\Manufacturing\ProductionOrder;
-use App\Services\Finance\GeneralLedgerService;
 use App\Services\FixedAsset\FAPostingService;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
 class CapExProjectService
 {
-    protected GeneralLedgerService $gl;
-
     protected FAPostingService $faPostingService;
 
     public function __construct(
-        GeneralLedgerService $gl,
         FAPostingService $faPostingService
     ) {
-        $this->gl = $gl;
         $this->faPostingService = $faPostingService;
     }
 
@@ -442,30 +437,6 @@ class CapExProjectService
      */
     protected function postWipCapture(CapExProject $project, float $amount): void
     {
-        if ($amount <= 0) {
-            return;
-        }
-
-        $this->gl->post(
-            [
-                [
-                    'account_id' => $project->wip_gl_account_id,
-                    'debit' => $amount,
-                    'credit' => 0,
-                ],
-                [
-                    'account_id' => config('accounts.production_absorption'),
-                    'debit' => 0,
-                    'credit' => $amount,
-                ],
-            ],
-            [
-                'document_number' => $project->project_number,
-                'description' => 'WIP Cost Capture',
-                'dimensions' => [
-                    'project_id' => $project->id,
-                ],
-            ]
-        );
+        throw new DomainException('Deprecated manufacturing WIP capture is disabled. Production inventory accounting must flow through Value Entries.');
     }
 }

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Models\Manufacturing;
 
 use App\Enums\ItemLedgerEntryType;
+use App\Enums\ProductionCostSettlementClassification;
+use App\Enums\ProductionCostSettlementStatus;
 use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
 use App\Models\GeneralBusinessPostingGroup;
@@ -15,6 +17,7 @@ use App\Models\InventoryPostingGroup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
+use App\Models\ProductionOutputCostAllocation;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\WarehouseActivity;
@@ -96,6 +99,11 @@ class ProductionOrder extends Model
         'posted',
         'posted_at',
         'posted_by',
+        'cost_settled_at',
+        'cost_settled_by',
+        'cost_settlement_key',
+        'cost_settlement_status',
+        'cost_settlement_classification',
 
         // Finished Status
         'finished_at',
@@ -122,6 +130,9 @@ class ProductionOrder extends Model
         'scrap_percent' => 'decimal:2',
         'posted' => 'boolean',
         'posted_at' => 'datetime',
+        'cost_settled_at' => 'datetime',
+        'cost_settlement_status' => ProductionCostSettlementStatus::class,
+        'cost_settlement_classification' => ProductionCostSettlementClassification::class,
         'finished_at' => 'datetime',
         'reserved_from_stock' => 'boolean',
     ];
@@ -268,6 +279,11 @@ class ProductionOrder extends Model
     public function capacityLedgerEntries(): HasMany
     {
         return $this->hasMany(CapacityLedgerEntry::class, 'production_order_id');
+    }
+
+    public function outputCostAllocations(): HasMany
+    {
+        return $this->hasMany(ProductionOutputCostAllocation::class, 'production_order_id');
     }
 
     public function itemLedgerEntries(): MorphMany

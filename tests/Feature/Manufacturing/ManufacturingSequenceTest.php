@@ -1,20 +1,51 @@
 <?php
 
-use App\Models\Manufacturing\ProductionOrder;
+use App\Enums\AccountType;
+use App\Enums\IncomeBalanceType;
+use App\Enums\ItemLedgerEntryType;
+use App\Models\AccountingPeriod;
+use App\Models\ChartOfAccount;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
+use App\Models\GeneralPostingSetup;
+use App\Models\GeneralProductPostingGroup;
+use App\Models\InventoryPostingGroup;
+use App\Models\InventoryPostingSetup;
+use App\Models\Item;
+use App\Models\ItemLedgerEntry;
+use App\Models\Location;
+use App\Models\Manufacturing\CapExProject;
 use App\Models\Manufacturing\ProductionBom;
 use App\Models\Manufacturing\ProductionBomVersion;
+use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\Routing;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Models\Manufacturing\WorkCenter;
 use App\Models\Manufacturing\WorkCenterCalendar;
-use App\Models\Manufacturing\CapExProject;
-use App\Models\Item;
 use App\Models\User;
 use App\Services\Manufacturing\ProductionOrderService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Carbon\Carbon;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+});
 
 test('manufacturing sequence respects versions, scheduling, and capex integration', function () {
     $user = User::factory()->create();
@@ -23,28 +54,28 @@ test('manufacturing sequence respects versions, scheduling, and capex integratio
     $this->actingAs($user);
 
     // 1. Setup Resources
-    $genBusGroup = \App\Models\GeneralBusinessPostingGroup::create(['code' => 'MANUFACTURING', 'description' => 'Manufacturing']);
-    $genProdGroup = \App\Models\GeneralProductPostingGroup::create(['code' => 'RETAIL', 'description' => 'Retail']);
-    $invGroup = \App\Models\InventoryPostingGroup::create(['code' => 'FINISHED', 'description' => 'Finished Goods']);
-    
-    $wipAccount = \App\Models\ChartOfAccount::create([
+    $genBusGroup = GeneralBusinessPostingGroup::create(['code' => 'MANUFACTURING', 'description' => 'Manufacturing']);
+    $genProdGroup = GeneralProductPostingGroup::create(['code' => 'RETAIL', 'description' => 'Retail']);
+    $invGroup = InventoryPostingGroup::create(['code' => 'FINISHED', 'description' => 'Finished Goods']);
+
+    $wipAccount = ChartOfAccount::create([
         'account_number' => '1210',
         'name' => 'WIP Inventory',
         'account_category' => 'asset',
-        'account_type' => \App\Enums\AccountType::ASSET,
-        'income_balance' => \App\Enums\IncomeBalanceType::BALANCE_SHEET,
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
     ]);
 
-    $capexAccount = \App\Models\ChartOfAccount::create([
+    $capexAccount = ChartOfAccount::create([
         'account_number' => '1220',
         'name' => 'CapEx Assets',
         'account_category' => 'asset',
-        'account_type' => \App\Enums\AccountType::ASSET,
-        'income_balance' => \App\Enums\IncomeBalanceType::BALANCE_SHEET,
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
     ]);
 
     // Create Inventory Posting Setup
-    \App\Models\InventoryPostingSetup::create([
+    InventoryPostingSetup::create([
         'inventory_posting_group_id' => $invGroup->id,
         'location_id' => null,
         'inventory_account_id' => $capexAccount->id,
@@ -52,7 +83,7 @@ test('manufacturing sequence respects versions, scheduling, and capex integratio
     ]);
 
     // Create General Posting Setup
-    \App\Models\GeneralPostingSetup::create([
+    GeneralPostingSetup::create([
         'general_business_posting_group_id' => $genBusGroup->id,
         'general_product_posting_group_id' => $genProdGroup->id,
         'direct_cost_applied_account_id' => $capexAccount->id, // Reuse for test
@@ -101,11 +132,11 @@ test('manufacturing sequence respects versions, scheduling, and capex integratio
         'inventory_posting_group_id' => $invGroup->id,
     ]);
 
-    $location = \App\Models\Location::factory()->create(['code' => 'MAIN']);
+    $location = Location::factory()->create(['code' => 'MAIN']);
 
     // Add inventory for raw material
-    \App\Models\ItemLedgerEntry::create([
-        'entry_type' => \App\Enums\ItemLedgerEntryType::PURCHASE,
+    ItemLedgerEntry::create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
         'item_id' => $rawMaterial->id,
         'location_id' => $location->id,
         'general_product_posting_group_id' => $genProdGroup->id,
@@ -161,7 +192,7 @@ test('manufacturing sequence respects versions, scheduling, and capex integratio
         'run_time_unit' => 'MINUTES',
     ]);
 
-    $capex = \App\Models\Manufacturing\CapExProject::factory()->create([
+    $capex = CapExProject::factory()->create([
         'project_number' => 'CAPEX001',
         'description' => 'Investment Project',
         'budget_amount' => 10000,
@@ -205,7 +236,7 @@ test('manufacturing sequence respects versions, scheduling, and capex integratio
     // Wednesday starts 08:00. Remaining 9.5 hours (570 mins) used.
     // Wednesday shift ends 17:00 (9 hours/540 mins used).
     // Thursday? I didn't setup Thursday. Let's setup Thursday.
-    
+
     WorkCenterCalendar::create([
         'work_center_id' => $workCenter->id,
         'date' => '2026-04-23',
@@ -218,7 +249,7 @@ test('manufacturing sequence respects versions, scheduling, and capex integratio
     // 5. Refresh Order (Version Selection Verification)
     $service->refresh($order);
     $order->refresh();
-    
+
     $routingLine = $order->routingLines->first();
     expect($routingLine->starting_date_time->format('Y-m-d H:i'))->toBe('2026-04-20 16:30');
     // Total time: 600 mins.
@@ -232,14 +263,14 @@ test('manufacturing sequence respects versions, scheduling, and capex integratio
     // 7. Post Consumption (CapEx Integration Verification)
     $service->release($order, $user->id);
     $service->postConsumption($order, [['component_id' => $order->components->first()->id, 'quantity' => 20]], $user->id);
-    
+
     $capex->refresh();
     // 20 * 50 (unit cost) = 1000
-    expect((float)$capex->actual_amount)->toBe(1000.0);
+    expect((float) $capex->actual_amount)->toBe(1000.0);
 
     // 8. Post Capacity (CapEx and FA Integration Verification)
     $service->postCapacity($order, $routingLine->id, 0, 600, 1000, $user->id);
-    
+
     $capex->refresh();
-    expect((float)$capex->actual_amount)->toBe(2000.0);
+    expect((float) $capex->actual_amount)->toBe(2000.0);
 });

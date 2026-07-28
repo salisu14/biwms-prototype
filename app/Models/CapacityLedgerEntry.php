@@ -27,6 +27,8 @@ class CapacityLedgerEntry extends Model
         'document_number',
         'setup_time',
         'run_time',
+        'wait_time',
+        'queue_time',
         'stop_time',
         'setup_time_unit',
         'run_time_unit',
@@ -37,12 +39,18 @@ class CapacityLedgerEntry extends Model
         'unit_cost',
         'total_cost',
         'type',
+        'cost_state',
+        'idempotency_key',
+        'reversal_of_capacity_ledger_entry_id',
+        'costing_metadata',
     ];
 
     protected $casts = [
         'posting_date' => 'date',
         'setup_time' => 'decimal:4',
         'run_time' => 'decimal:4',
+        'wait_time' => 'decimal:8',
+        'queue_time' => 'decimal:8',
         'stop_time' => 'decimal:4',
         'output_quantity' => 'decimal:4',
         'scrap_quantity' => 'decimal:4',
@@ -50,6 +58,7 @@ class CapacityLedgerEntry extends Model
         'overhead_cost' => 'decimal:4',
         'unit_cost' => 'decimal:4',
         'total_cost' => 'decimal:4',
+        'costing_metadata' => 'array',
     ];
 
     /**
@@ -82,5 +91,13 @@ class CapacityLedgerEntry extends Model
     public function machineCenter(): BelongsTo
     {
         return $this->belongsTo(MachineCenter::class);
+    }
+
+    /**
+     * @return BelongsTo<self, $this>
+     */
+    public function reversalOfCapacityLedgerEntry(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reversal_of_capacity_ledger_entry_id');
     }
 }

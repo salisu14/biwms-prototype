@@ -6,8 +6,13 @@ use App\Enums\AccountType;
 use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\JournalBatchStatus;
+use App\Enums\JournalLineStatus;
+use App\Enums\ManufacturingCostComponent;
+use App\Enums\ProductionCostSettlementClassification;
+use App\Enums\ProductionCostSettlementStatus;
 use App\Enums\ProductionJournalEntryType;
 use App\Enums\ProductionOrderStatus;
+use App\Enums\ProductionOutputAllocationStatus;
 use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
 use App\Models\AccountingPeriod;
 use App\Models\CapacityLedgerEntry;
@@ -29,13 +34,19 @@ use App\Models\Permission;
 use App\Models\ProductionJournalBatch;
 use App\Models\ProductionJournalLine;
 use App\Models\ProductionJournalTemplate;
+use App\Models\ProductionOutputCostAllocation;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use App\Services\Manufacturing\ProductionCostSummaryService;
+use App\Services\Manufacturing\ProductionOrderCostSettlementService;
 use App\Services\Manufacturing\ProductionOrderService;
 use App\Services\Posting\ProductionJournalPostingRoutine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 
 uses(RefreshDatabase::class);
 
@@ -496,6 +507,10 @@ it('updates output value entry costs and marks the order posted when finishing',
         'account_type' => AccountType::ASSET,
         'income_balance' => IncomeBalanceType::BALANCE_SHEET,
     ]);
+    $businessGroup = GeneralBusinessPostingGroup::create([
+        'code' => 'MAN-FINISH',
+        'description' => 'Manufacturing Finish',
+    ]);
     $genProdGroup = GeneralProductPostingGroup::create([
         'code' => 'FINISH',
         'description' => 'Finished Goods',
@@ -511,6 +526,11 @@ it('updates output value entry costs and marks the order posted when finishing',
         'location_id' => $location->id,
         'inventory_account_id' => $inventoryAccount->id,
         'wip_account_id' => $wipAccount->id,
+    ]);
+    GeneralPostingSetup::create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $genProdGroup->id,
+        'inventory_adj_account_id' => $wipAccount->id,
     ]);
 
     $baseUom = UnitOfMeasure::query()->create([
@@ -572,6 +592,7 @@ it('updates output value entry costs and marks the order posted when finishing',
         'quantity_base' => 288,
         'unit_of_measure_code' => 'CT',
         'starting_date_time' => now(),
+        'general_business_posting_group_id' => $businessGroup->id,
         'general_product_posting_group_id' => $genProdGroup->id,
         'inventory_posting_group_id' => $invGroup->id,
         'costing_method' => 'FIFO',
@@ -637,6 +658,7 @@ it('updates output value entry costs and marks the order posted when finishing',
         ->and((float) $outputValueEntry->quantity)->toBe(288.0)
         ->and((float) $outputValueEntry->cost_amount_actual)->toBe(1296.0)
         ->and((float) $outputValueEntry->unit_cost)->toBe(4.5)
+        ->and($outputValueEntry->cost_component)->toBe(ManufacturingCostComponent::Output->value)
         ->and($outputValueEntry->production_order_no)->toBe('PO-FINISH-001')
         ->and($outputValueEntry->production_order_line_no)->toBe('10000')
         ->and($outputValueEntry->document_no)->toBe('PO-FINISH-001')
@@ -648,6 +670,18 @@ it('updates output value entry costs and marks the order posted when finishing',
             ->where('entry_type', ItemLedgerEntryType::OUTPUT)
             ->where('document_number', 'PO-FINISH-001')
             ->count())->toBe(1);
+
+    $allocation = ProductionOutputCostAllocation::query()
+        ->where('production_order_id', $order->id)
+        ->firstOrFail();
+
+    expect((float) $allocation->allocated_total_cost)->toBe(1296.0)
+        ->and((float) $allocation->allocated_material_cost)->toBe(1296.0)
+        ->and((float) $allocation->allocated_capacity_cost)->toBe(0.0)
+        ->and((float) $allocation->allocated_overhead_cost)->toBe(0.0)
+        ->and($allocation->allocation_status)->toBe(ProductionOutputAllocationStatus::Final)
+        ->and($allocation->finalized_at)->not->toBeNull()
+        ->and($order->cost_settled_at)->not->toBeNull();
 
     expect(fn () => app(ProductionOrderService::class)->finish($order->fresh(), $user->id))
         ->toThrow(Exception::class, 'Production order is already finished');
@@ -862,7 +896,7 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
         'quantity' => 1,
     ]], $user->id))->toThrow(Exception::class, 'Cannot consume more than the remaining component quantity');
 
-    app(ProductionOrderService::class)->postCapacity($order->fresh(), $routingLine->id, 0, 10, 250, $user->id);
+    app(ProductionOrderService::class)->postCapacity($order->fresh(), $routingLine->id, 0, 10, 250, $user->id, 'manual-capacity-line-1');
 
     $capacityEntry = CapacityLedgerEntry::query()
         ->where('production_order_id', $order->id)
@@ -880,15 +914,27 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
         ->and((float) $capacityEntry->overhead_cost)->toBe(50.0)
         ->and((float) $capacityEntry->total_cost)->toBe(300.0)
         ->and((float) $capacityValueEntry->cost_amount_actual)->toBe(250.0)
+        ->and($capacityValueEntry->cost_component)->toBe(ManufacturingCostComponent::DirectCapacity->value)
         ->and((float) $capacityValueEntry->direct_cost_amount)->toBe(250.0)
         ->and((float) $capacityValueEntry->overhead_amount)->toBe(0.0)
         ->and((float) $capacityOverheadValueEntry->cost_amount_actual)->toBe(50.0)
+        ->and($capacityOverheadValueEntry->cost_component)->toBe(ManufacturingCostComponent::CapacityOverhead->value)
         ->and((float) $capacityOverheadValueEntry->direct_cost_amount)->toBe(0.0)
         ->and((float) $capacityOverheadValueEntry->overhead_amount)->toBe(50.0)
         ->and($capacityValueEntry->production_order_no)->toBe('PO-REC-001')
         ->and($capacityValueEntry->production_order_line_no)->toBe('10000')
         ->and($capacityValueEntry->capacity_type)->toBe('WORK_CENTER')
         ->and($capacityValueEntry->capacity_no)->toBe('WC-REC');
+
+    app(ProductionOrderService::class)->postCapacity($order->fresh(), $routingLine->id, 0, 10, 250, $user->id, 'manual-capacity-line-1');
+
+    expect(CapacityLedgerEntry::query()
+        ->where('production_order_id', $order->id)
+        ->count())->toBe(1)
+        ->and(ValueEntry::query()
+            ->whereIn('item_ledger_entry_type', [8, 10])
+            ->where('source_no', (string) $capacityEntry->id)
+            ->count())->toBe(2);
 
     expect(fn () => app(ProductionOrderService::class)->postCapacity($order->fresh(), $routingLine->id, 0, 1, 25, $user->id))
         ->toThrow(Exception::class, 'Cannot post more capacity than the remaining operation time');
@@ -910,7 +956,19 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
         ->and((float) $outputEntry->cost_amount_actual)->toBe(1596.0)
         ->and((float) $outputValueEntry->cost_amount_actual)->toBe(1596.0)
         ->and((float) $outputValueEntry->unit_cost)->toBe(5.54166667)
+        ->and($outputValueEntry->cost_component)->toBe(ManufacturingCostComponent::Output->value)
         ->and((float) $finishedGood->fresh()->inventory)->toBe(288.0);
+
+    $allocation = ProductionOutputCostAllocation::query()
+        ->where('production_order_id', $order->id)
+        ->firstOrFail();
+
+    expect((float) $allocation->allocated_material_cost)->toBe(1296.0)
+        ->and((float) $allocation->allocated_capacity_cost)->toBe(250.0)
+        ->and((float) $allocation->allocated_overhead_cost)->toBe(50.0)
+        ->and((float) $allocation->allocated_total_cost)->toBe(1596.0)
+        ->and($allocation->allocation_status)->toBe(ProductionOutputAllocationStatus::Final)
+        ->and($allocation->source_identity_key)->not->toBeNull();
 
     $documentGlEntries = GlEntry::query()
         ->where('document_number', 'PO-REC-001')
@@ -933,6 +991,17 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
 
     expect(fn () => app(ProductionOrderService::class)->finish($order->fresh(), $user->id))
         ->toThrow(Exception::class, 'Production order is already finished');
+
+    expect(Artisan::call('biwms:manufacturing-cost-reconcile', [
+        '--production-order' => $order->id,
+        '--json' => true,
+    ]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    foreach ($report['findings'] as $findings) {
+        expect($findings)->toBeEmpty();
+    }
 });
 
 it('blocks production component consumption when component stock is insufficient', function () {
@@ -1003,6 +1072,637 @@ it('blocks production component consumption when component stock is insufficient
         ->exists()
     )->toBeFalse();
 });
+
+it('exports manufacturing cost reconciliation findings with severity and remediation', function (): void {
+    $exportPath = 'storage/app/testing/manufacturing-cost-reconcile-export.json';
+    File::delete(base_path($exportPath));
+
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $location = Location::factory()->create(['code' => 'MAIN']);
+    $productGroup = GeneralProductPostingGroup::create([
+        'code' => 'MFG-REC-EXP',
+        'description' => 'Manufacturing Reconcile Export',
+    ]);
+    $inventoryGroup = InventoryPostingGroup::create([
+        'code' => 'MFG-REC-EXP',
+        'description' => 'Manufacturing Reconcile Export',
+    ]);
+    $item = Item::factory()->create([
+        'item_code' => 'FG-MFG-REC-EXP',
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-MFG-REC-EXP',
+        'status' => ProductionOrderStatus::FINISHED,
+        'item_id' => $item->id,
+        'description' => 'Manufacturing reconcile export',
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+        'posted' => true,
+        'posted_at' => now(),
+        'posted_by' => $user->id,
+        'created_by' => $user->id,
+    ]);
+
+    $entry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $item->id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 100,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    ValueEntry::query()
+        ->where('item_ledger_entry_no', $entry->entry_number)
+        ->delete();
+
+    expect(Artisan::call('biwms:manufacturing-cost-reconcile', [
+        '--production-order' => $order->document_number,
+        '--details' => true,
+        '--export' => $exportPath,
+    ]))->toBe(0);
+
+    expect(File::exists(base_path($exportPath)))->toBeTrue();
+
+    $report = json_decode(File::get(base_path($exportPath)), true);
+
+    expect($report['findings']['output_without_value_entries'])->toHaveCount(1)
+        ->and($report['findings']['output_without_value_entries'][0]['classification'])->toBe('output_value_missing')
+        ->and($report['findings']['output_without_value_entries'][0]['severity'])->toBe('critical')
+        ->and($report['findings']['output_without_value_entries'][0]['suggested_remediation'])->toContain('controlled repost/reversal path')
+        ->and($report['findings']['finished_orders_without_cost_settlement'])->toHaveCount(1)
+        ->and($report['findings']['finished_orders_without_cost_settlement'][0]['classification'])->toBe('finished_order_not_cost_settled');
+});
+
+it('keeps production journal capacity posting idempotent by journal line source identity', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $inventoryAccount = ChartOfAccount::create([
+        'account_number' => '1200-JID',
+        'name' => 'Inventory Journal Idempotency',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $wipAccount = ChartOfAccount::create([
+        'account_number' => '1210-JID',
+        'name' => 'WIP Journal Idempotency',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $directAppliedAccount = ChartOfAccount::create([
+        'account_number' => '5100-JID',
+        'name' => 'Direct Applied Journal Idempotency',
+        'account_category' => 'direct_expense',
+        'account_type' => AccountType::EXPENSE,
+        'income_balance' => IncomeBalanceType::INCOME_STATEMENT,
+    ]);
+    $businessGroup = GeneralBusinessPostingGroup::create([
+        'code' => 'JID',
+        'description' => 'Journal Idempotency',
+    ]);
+    $productGroup = GeneralProductPostingGroup::create([
+        'code' => 'JID',
+        'description' => 'Journal Idempotency',
+    ]);
+    $inventoryGroup = InventoryPostingGroup::create([
+        'code' => 'JID',
+        'description' => 'Journal Idempotency',
+    ]);
+    $location = Location::factory()->create(['code' => 'MAIN']);
+
+    InventoryPostingSetup::create([
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'location_id' => $location->id,
+        'inventory_account_id' => $inventoryAccount->id,
+        'wip_account_id' => $wipAccount->id,
+    ]);
+    GeneralPostingSetup::create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'direct_cost_applied_account_id' => $directAppliedAccount->id,
+        'overhead_applied_account_id' => $directAppliedAccount->id,
+        'inventory_adj_account_id' => $directAppliedAccount->id,
+    ]);
+
+    $item = Item::factory()->create([
+        'item_code' => 'FG-JID',
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+    $workCenter = WorkCenter::factory()->create([
+        'direct_unit_cost' => 10,
+        'overhead_rate' => 0,
+        'indirect_cost_percent' => 0,
+    ]);
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-JID-001',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $item->id,
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+    ]);
+    $routingLine = $order->routingLines()->create([
+        'line_number' => 10000,
+        'operation_no' => '10',
+        'description' => 'Journal capacity',
+        'work_center_id' => $workCenter->id,
+        'setup_time' => 0,
+        'run_time' => 20,
+        'setup_time_unit' => 'MIN',
+        'run_time_unit' => 'MIN',
+        'status' => 'PLANNED',
+    ]);
+    $numberSeries = NumberSeries::create([
+        'code' => 'JID',
+        'description' => 'Journal Idempotency',
+        'prefix' => 'JID',
+        'starting_number' => 1,
+        'current_number' => 0,
+        'is_active' => true,
+    ]);
+    $template = ProductionJournalTemplate::create([
+        'name' => 'JID',
+        'description' => 'Journal Idempotency',
+        'number_series_id' => $numberSeries->id,
+        'absorb_overhead' => false,
+    ]);
+    $batch = ProductionJournalBatch::create([
+        'template_id' => $template->id,
+        'name' => 'JID',
+        'description' => 'Journal Idempotency',
+        'status' => JournalBatchStatus::RELEASED,
+        'production_order_id' => $order->id,
+    ]);
+    $line = ProductionJournalLine::create([
+        'batch_id' => $batch->id,
+        'line_no' => 10000,
+        'posting_date' => now(),
+        'entry_type' => ProductionJournalEntryType::Capacity,
+        'production_order_id' => $order->id,
+        'production_order_no' => $order->document_number,
+        'routing_line_id' => $routingLine->id,
+        'work_center_id' => $workCenter->id,
+        'setup_time' => 0,
+        'run_time' => 10,
+        'quantity' => 0,
+        'quantity_base' => 0,
+        'created_by' => $user->id,
+    ]);
+
+    $routine = app(ProductionJournalPostingRoutine::class);
+    expect($routine->post($batch)->success)->toBeTrue();
+
+    $batch->update(['status' => JournalBatchStatus::RELEASED]);
+    $line->update(['line_status' => 'open']);
+
+    expect($routine->post($batch->fresh('lines'))->success)->toBeTrue();
+
+    $capacityEntry = CapacityLedgerEntry::query()
+        ->where('production_order_id', $order->id)
+        ->firstOrFail();
+
+    expect(CapacityLedgerEntry::query()->where('production_order_id', $order->id)->count())->toBe(1)
+        ->and(ValueEntry::query()->where('source_no', (string) $capacityEntry->id)->count())->toBe(1)
+        ->and(GlEntry::query()->where('document_number', $order->document_number)->count())->toBe(2)
+        ->and((float) $routingLine->fresh()->actual_run_time)->toBe(10.0);
+});
+
+it('settlement readiness is scoped to the current order and blocks only current incomplete routing', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order, $otherOrder, $workCenter, $location] = createMinimalSettlementOrders($user);
+
+    $otherOrder->routingLines()->create([
+        'line_number' => 10000,
+        'operation_no' => '10',
+        'description' => 'Other incomplete line',
+        'work_center_id' => $workCenter->id,
+        'setup_time' => 0,
+        'run_time' => 10,
+        'setup_time_unit' => 'MIN',
+        'run_time_unit' => 'MIN',
+        'status' => 'PLANNED',
+    ]);
+
+    ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    $result = app(ProductionOrderCostSettlementService::class)->settle($order->fresh(), $user->id);
+
+    expect($result['settled'])->toBeTrue()
+        ->and($result['status'])->toBe(ProductionCostSettlementStatus::Settled->value)
+        ->and($order->fresh()->cost_settlement_status)->toBe(ProductionCostSettlementStatus::Settled);
+
+    [$blockedOrder,, $blockedWorkCenter, $blockedLocation] = createMinimalSettlementOrders($user, 'BLOCK');
+    $blockedOrder->routingLines()->create([
+        'line_number' => 10000,
+        'operation_no' => '10',
+        'description' => 'Current incomplete line',
+        'work_center_id' => $blockedWorkCenter->id,
+        'setup_time' => 0,
+        'run_time' => 10,
+        'setup_time_unit' => 'MIN',
+        'run_time_unit' => 'MIN',
+        'status' => 'PLANNED',
+    ]);
+    ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $blockedOrder->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $blockedOrder->item_id,
+        'location_id' => $blockedLocation->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $blockedOrder->general_product_posting_group_id,
+        'inventory_posting_group_id' => $blockedOrder->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $blockedOrder->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    $blockedResult = app(ProductionOrderCostSettlementService::class)->settle($blockedOrder->fresh(), $user->id);
+
+    expect($blockedResult['settled'])->toBeFalse()
+        ->and($blockedResult['status'])->toBe(ProductionCostSettlementStatus::NotReady->value)
+        ->and($blockedResult['classification'])->toBe(ProductionCostSettlementClassification::RequiredCapacityNotPosted->value);
+});
+
+it('settlement readiness accepts posted journal lines zero requirement components and blocks open journal lines', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order,, $workCenter, $location] = createMinimalSettlementOrders($user, 'JREADY');
+    $order->components()->create([
+        'line_number' => 10000,
+        'item_id' => $order->item_id,
+        'description' => 'Zero required component',
+        'unit_of_measure_code' => 'PCS',
+        'quantity_per' => 0,
+        'expected_quantity' => 0,
+        'expected_quantity_base' => 0,
+        'remaining_quantity' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+    ]);
+    ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    $numberSeries = NumberSeries::create([
+        'code' => 'JREADY',
+        'description' => 'Journal readiness',
+        'prefix' => 'JRD',
+        'starting_number' => 1,
+        'current_number' => 0,
+        'is_active' => true,
+    ]);
+    $template = ProductionJournalTemplate::create([
+        'name' => 'JREADY',
+        'description' => 'Journal readiness',
+        'number_series_id' => $numberSeries->id,
+        'absorb_overhead' => false,
+    ]);
+    $batch = ProductionJournalBatch::create([
+        'template_id' => $template->id,
+        'name' => 'JREADY',
+        'description' => 'Journal readiness',
+        'status' => JournalBatchStatus::RELEASED,
+        'production_order_id' => $order->id,
+    ]);
+    ProductionJournalLine::create([
+        'batch_id' => $batch->id,
+        'line_no' => 10000,
+        'posting_date' => now(),
+        'entry_type' => ProductionJournalEntryType::Capacity,
+        'production_order_id' => $order->id,
+        'production_order_no' => $order->document_number,
+        'work_center_id' => $workCenter->id,
+        'setup_time' => 0,
+        'run_time' => 0,
+        'quantity' => 0,
+        'quantity_base' => 0,
+        'line_status' => JournalLineStatus::POSTED,
+        'created_by' => $user->id,
+    ]);
+
+    expect(app(ProductionOrderCostSettlementService::class)->settle($order->fresh(), $user->id)['settled'])->toBeTrue();
+
+    [$openOrder,, $openWorkCenter, $openLocation] = createMinimalSettlementOrders($user, 'JOPEN');
+    ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $openOrder->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $openOrder->item_id,
+        'location_id' => $openLocation->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $openOrder->general_product_posting_group_id,
+        'inventory_posting_group_id' => $openOrder->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $openOrder->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $openBatch = ProductionJournalBatch::create([
+        'template_id' => $template->id,
+        'name' => 'JOPEN',
+        'description' => 'Journal open',
+        'status' => JournalBatchStatus::RELEASED,
+        'production_order_id' => $openOrder->id,
+    ]);
+    ProductionJournalLine::create([
+        'batch_id' => $openBatch->id,
+        'line_no' => 10000,
+        'posting_date' => now(),
+        'entry_type' => ProductionJournalEntryType::Capacity,
+        'production_order_id' => $openOrder->id,
+        'production_order_no' => $openOrder->document_number,
+        'work_center_id' => $openWorkCenter->id,
+        'setup_time' => 0,
+        'run_time' => 0,
+        'quantity' => 0,
+        'quantity_base' => 0,
+        'line_status' => JournalLineStatus::OPEN,
+        'created_by' => $user->id,
+    ]);
+
+    $result = app(ProductionOrderCostSettlementService::class)->settle($openOrder->fresh(), $user->id);
+
+    expect($result['settled'])->toBeFalse()
+        ->and($result['classification'])->toBe(ProductionCostSettlementClassification::UnresolvedProductionJournalLines->value);
+});
+
+it('excludes output and variance value entries from eligible accumulated production cost', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $productGroup = GeneralProductPostingGroup::create([
+        'code' => 'MFG-SUM',
+        'description' => 'Manufacturing Summary',
+    ]);
+    $inventoryGroup = InventoryPostingGroup::create([
+        'code' => 'MFG-SUM',
+        'description' => 'Manufacturing Summary',
+    ]);
+    $item = Item::factory()->create([
+        'item_code' => 'FG-MFG-SUM',
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-MFG-SUM',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $item->id,
+        'description' => 'Manufacturing summary',
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'created_by' => $user->id,
+    ]);
+
+    foreach ([
+        [ManufacturingCostComponent::DirectMaterial->value, 40],
+        [ManufacturingCostComponent::Output->value, 1000],
+        [ManufacturingCostComponent::StandardCostVariance->value, 25],
+    ] as $index => [$component, $amount]) {
+        ValueEntry::query()->create([
+            'entry_no' => 900000 + $index,
+            'item_ledger_entry_type' => 7,
+            'item_no' => $item->item_code,
+            'location_code' => 'MAIN',
+            'posting_date' => now(),
+            'document_type' => 'PRODUCTION_ORDER',
+            'document_no' => $order->document_number,
+            'document_line_no' => 10000 + $index,
+            'quantity' => 1,
+            'valued_quantity' => 1,
+            'cost_component' => $component,
+            'value_entry_state' => $component === ManufacturingCostComponent::StandardCostVariance->value ? 'variance' : 'actual',
+            'cost_amount_actual' => $amount,
+            'cost_amount_actual_acy' => $amount,
+            'source_module' => 'manufacturing',
+            'source_id' => $order->id,
+            'source_number' => $order->document_number,
+            'production_order_no' => $order->document_number,
+            'expected_cost' => false,
+        ]);
+    }
+
+    $summary = app(ProductionCostSummaryService::class)->summarize($order);
+
+    expect($summary['actual_material_cost'])->toBe(40.0)
+        ->and($summary['actual_output_cost'])->toBe(1000.0)
+        ->and($summary['variance'])->toBe(25.0)
+        ->and($summary['total_accumulated_cost'])->toBe(40.0);
+});
+
+it('rejects unsupported manufacturing cost components before gl posting', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order,,, $location] = createMinimalSettlementOrders($user, 'BADCOMP');
+    $entry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 1,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    $valueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $entry->entry_number)
+        ->firstOrFail();
+
+    $valueEntry->forceFill([
+        'cost_component' => 'mystery_factory_cost',
+        'source_module' => 'manufacturing',
+        'cost_amount_actual' => 1,
+    ])->save();
+
+    expect(fn () => app(ValueEntryAccountingOrchestrator::class)->post($valueEntry->fresh()))
+        ->toThrow(RuntimeException::class, 'Unsupported manufacturing cost component');
+
+    expect(Artisan::call('biwms:manufacturing-cost-reconcile', [
+        '--production-order' => $order->document_number,
+        '--json' => true,
+    ]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect($report['findings']['unsupported_manufacturing_cost_components'])->toHaveCount(1)
+        ->and($report['findings']['unsupported_manufacturing_cost_components'][0]['classification'])->toBe('unsupported_manufacturing_cost_component');
+});
+
+function createMinimalSettlementOrders(User $user, string $suffix = 'READY'): array
+{
+    $businessGroup = GeneralBusinessPostingGroup::create([
+        'code' => 'MFG-'.$suffix,
+        'description' => 'Manufacturing '.$suffix,
+    ]);
+    $productGroup = GeneralProductPostingGroup::create([
+        'code' => 'MFG-'.$suffix,
+        'description' => 'Manufacturing '.$suffix,
+    ]);
+    $inventoryGroup = InventoryPostingGroup::create([
+        'code' => 'MFG-'.$suffix,
+        'description' => 'Manufacturing '.$suffix,
+    ]);
+    $location = Location::factory()->create(['code' => 'MAIN-'.$suffix]);
+    $item = Item::factory()->create([
+        'item_code' => 'FG-'.$suffix,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+    $otherItem = Item::factory()->create([
+        'item_code' => 'FG-'.$suffix.'-OTHER',
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+    $workCenter = WorkCenter::factory()->create([
+        'direct_unit_cost' => 0,
+        'overhead_rate' => 0,
+        'indirect_cost_percent' => 0,
+    ]);
+
+    GeneralPostingSetup::create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+    ]);
+
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-'.$suffix,
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $item->id,
+        'description' => 'Settlement '.$suffix,
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+        'created_by' => $user->id,
+    ]);
+
+    $otherOrder = ProductionOrder::query()->create([
+        'document_number' => 'PO-'.$suffix.'-OTHER',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $otherItem->id,
+        'description' => 'Other settlement '.$suffix,
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+        'created_by' => $user->id,
+    ]);
+
+    return [$order, $otherOrder, $workCenter, $location];
+}
 
 function grantProductionPostingPermissions(User $user): void
 {

@@ -4,8 +4,10 @@ use App\Enums\AccountType;
 use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderStatus;
+use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
@@ -20,6 +22,24 @@ use App\Services\Manufacturing\ProductionOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+});
 
 test('finishing a released production order auto-posts output for remaining quantity', function () {
     $user = User::factory()->create();

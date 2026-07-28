@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Inventory;
 
+use App\Enums\ManufacturingCostComponent;
 use App\Models\CapacityLedgerEntry as InventoryCapacityLedgerEntry;
 use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\CapacityLedgerEntry;
@@ -170,7 +171,7 @@ class ValueEntryService
                 values: [
                     ...$baseValues,
                     'source_no' => (string) $entry->id,
-                    'cost_component' => 'capacity',
+                    'cost_component' => ManufacturingCostComponent::DirectCapacity->value,
                     'cost_amount_actual' => $directCostAmount,
                     'cost_amount_actual_acy' => $directCostAmount,
                     'direct_cost_amount' => $directCostAmount,
@@ -191,7 +192,7 @@ class ValueEntryService
                     values: [
                         ...$baseValues,
                         'source_no' => (string) $entry->id,
-                        'cost_component' => 'overhead',
+                        'cost_component' => ManufacturingCostComponent::CapacityOverhead->value,
                         'cost_amount_actual' => $overheadCostAmount,
                         'cost_amount_actual_acy' => $overheadCostAmount,
                         'direct_cost_amount' => 0,
@@ -407,8 +408,8 @@ class ValueEntryService
         return match (strtolower($entryType)) {
             'sale' => 'cogs',
             'purchase' => 'inventory',
-            'consumption' => 'material',
-            'output' => 'output',
+            'consumption' => ManufacturingCostComponent::DirectMaterial->value,
+            'output' => ManufacturingCostComponent::Output->value,
             'capacity' => 'capacity',
             'positive_adj', 'positive adjustment', 'positive adjmt.', 'negative_adj', 'negative adjustment', 'negative adjmt.' => 'adjustment',
             'transfer' => 'transfer',

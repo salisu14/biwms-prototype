@@ -121,6 +121,26 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
         $overheadCost = $line->batch->template->absorb_overhead
             ? $this->calculateOverhead($line, $workCenter)
             : 0;
+        $idempotencyKey = hash('sha256', implode('|', [
+            'production-journal-capacity',
+            $line->id,
+            $line->batch_id,
+            $line->line_no,
+            $line->production_order_id,
+            $line->entry_type?->value ?? (string) $line->entry_type,
+        ]));
+
+        $existingCapacityEntry = CapacityLedgerEntry::query()
+            ->where('idempotency_key', $idempotencyKey)
+            ->first();
+
+        if ($existingCapacityEntry) {
+            app(ValueEntryService::class)->ensureForCapacityLedgerEntry($existingCapacityEntry, $line->created_by);
+            app(ValueEntryAccountingOrchestrator::class)->postForCapacityLedgerEntry($existingCapacityEntry);
+            $this->updateLineStatus($line, 'posted', $existingCapacityEntry->id, CapacityLedgerEntry::class);
+
+            return;
+        }
 
         $capacityEntry = CapacityLedgerEntry::create([
             'work_center_id' => $line->work_center_id,
@@ -140,10 +160,28 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
             'overhead_cost' => $overheadCost,
             'total_cost' => $directCost + $overheadCost,
             'unit_cost' => $line->output_quantity > 0 ? ($directCost + $overheadCost) / $line->output_quantity : 0,
+            'cost_state' => 'actual',
+            'idempotency_key' => $idempotencyKey,
+            'costing_metadata' => [
+                'phase_1d_idempotent_capacity_posting' => true,
+                'source' => 'production_journal_line',
+                'production_journal_line_id' => $line->id,
+                'batch_id' => $line->batch_id,
+                'line_no' => $line->line_no,
+            ],
         ]);
 
         app(ValueEntryService::class)->ensureForCapacityLedgerEntry($capacityEntry, $line->created_by);
         app(ValueEntryAccountingOrchestrator::class)->postForCapacityLedgerEntry($capacityEntry);
+
+        if ($line->routingLine) {
+            $line->routingLine->actual_setup_time = (float) $line->routingLine->actual_setup_time + (float) ($line->setup_time ?? 0);
+            $line->routingLine->actual_run_time = (float) $line->routingLine->actual_run_time + (float) ($line->run_time ?? 0);
+            $line->routingLine->status = $line->routingLine->actual_run_time >= (float) $line->routingLine->run_time
+                ? 'COMPLETED'
+                : 'IN_PROGRESS';
+            $line->routingLine->save();
+        }
 
         $this->updateLineStatus($line, 'posted', $capacityEntry->id, CapacityLedgerEntry::class);
     }
