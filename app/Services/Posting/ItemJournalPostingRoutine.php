@@ -10,6 +10,7 @@ use App\Models\ItemJournalLine;
 use App\Models\ItemLedgerEntry;
 use App\Models\WarehouseEntry;
 use App\Services\Inventory\CostingService;
+use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 // use App\Services\Warehouse\WarehousePostingService;
@@ -96,6 +97,7 @@ class ItemJournalPostingRoutine extends AbstractJournalPostingRoutine
             'reason_code' => $line->reason_code,
         ]);
 
+        app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'item_journal', strict: false);
         app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
         app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 

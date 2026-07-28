@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Sales;
 
 use App\Data\Sales\SalesInvoiceData;
@@ -15,6 +17,7 @@ use App\Models\SalesInvoiceLine;
 use App\Models\SalesOrder;
 use App\Models\ValueEntry;
 use App\Services\AuditTrailService;
+use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
@@ -159,6 +162,7 @@ class SalesInvoiceService
 
                 if ($itemLedgerEntry) {
                     $itemLedgerEntryIds[$line->id] = $itemLedgerEntry->id;
+                    app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'sales_invoice', strict: false);
                     app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
                 }
             }

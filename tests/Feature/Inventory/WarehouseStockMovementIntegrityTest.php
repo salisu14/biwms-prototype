@@ -291,6 +291,7 @@ function warehouseMovementFixture(float $openingQuantity): array
         'blocked' => false,
     ]);
     $inventoryAccount = warehouseMovementAccount('13010', 'Warehouse Inventory', AccountCategory::INVENTORY);
+    $inTransitAccount = warehouseMovementAccount('13020', 'Warehouse Inventory In Transit', AccountCategory::INVENTORY);
     $adjustmentAccount = warehouseMovementAccount('51010', 'Warehouse Adjustment', AccountCategory::DIRECT_EXPENSE);
 
     foreach ([$sourceLocation, $destinationLocation] as $location) {
@@ -298,6 +299,7 @@ function warehouseMovementFixture(float $openingQuantity): array
             'location_id' => $location->id,
             'inventory_posting_group_id' => $inventoryPostingGroup->id,
             'inventory_account_id' => $inventoryAccount->id,
+            'inventory_in_transit_account_id' => $inTransitAccount->id,
             'wip_account_id' => $inventoryAccount->id,
         ]);
     }

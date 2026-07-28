@@ -1,0 +1,419 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Enums\AccountCategory;
+use App\Enums\AccountStructuralType;
+use App\Enums\CostingMethod;
+use App\Enums\IncomeBalanceType;
+use App\Enums\ItemLedgerEntryType;
+use App\Enums\ItemType;
+use App\Models\AccountingPeriod;
+use App\Models\ChartOfAccount;
+use App\Models\CostingPeriod;
+use App\Models\Customer;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
+use App\Models\GeneralPostingSetup;
+use App\Models\GeneralProductPostingGroup;
+use App\Models\GlEntry;
+use App\Models\InventoryPostingGroup;
+use App\Models\InventoryPostingSetup;
+use App\Models\Item;
+use App\Models\ItemApplicationEntry;
+use App\Models\ItemLedgerEntry;
+use App\Models\Location;
+use App\Models\PostedSalesInvoice;
+use App\Models\PostedSalesInvoiceLine;
+use App\Models\PurchaseInvoice;
+use App\Models\PurchaseInvoiceLine;
+use App\Models\User;
+use App\Models\ValueEntry;
+use App\Models\Vendor;
+use App\Services\Inventory\CostAdjustmentService;
+use App\Services\Inventory\ExpectedCostClearingService;
+use App\Services\Inventory\ItemApplicationService;
+use App\Services\Inventory\ReturnCostApplicationService;
+use App\Services\Inventory\StockMovementService;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
+
+uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+});
+
+it('applies outbound inventory fifo across multiple inbound layers and is idempotent', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $firstInbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 5, 50, 'IN-001', '2026-01-01');
+    $secondInbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 5, 100, 'IN-002', '2026-01-02');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -7, 0, 'OUT-001', '2026-01-03');
+
+    $applications = app(ItemApplicationService::class)->applyOutbound($outbound, 'test_fifo');
+    $retryApplications = app(ItemApplicationService::class)->applyOutbound($outbound->fresh(), 'test_fifo_retry');
+
+    expect($applications)->toHaveCount(2)
+        ->and($retryApplications)->toHaveCount(2)
+        ->and(ItemApplicationEntry::query()->count())->toBe(2)
+        ->and((float) $firstInbound->fresh()->remaining_quantity)->toBe(0.0)
+        ->and((float) $secondInbound->fresh()->remaining_quantity)->toBe(3.0)
+        ->and((float) $outbound->fresh()->cost_amount_actual)->toBe(90.0)
+        ->and(ItemApplicationEntry::query()->orderBy('id')->pluck('inbound_item_ledger_entry_id')->all())
+        ->toBe([$firstInbound->id, $secondInbound->id]);
+});
+
+it('applies average cost across open layers', function (): void {
+    $fixture = phase1cFixture(CostingMethod::AVERAGE);
+    phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 100, 'AVG-IN-001', '2026-01-01');
+    phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 300, 'AVG-IN-002', '2026-01-02');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -5, 0, 'AVG-OUT-001', '2026-01-03');
+
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'test_average');
+
+    expect((float) $outbound->fresh()->cost_amount_actual)->toBe(100.0)
+        ->and((float) ItemApplicationEntry::query()->sum('cost_amount'))->toBe(100.0);
+});
+
+it('uses exact original cost for linked sales returns', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 250, 'RET-IN-001', '2026-01-01');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -4, 0, 'RET-OUT-001', '2026-01-02');
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'test_return_original');
+
+    $postedInvoice = PostedSalesInvoice::query()->create([
+        'document_number' => 'PSI-RET-001',
+        'customer_id' => Customer::factory()->create()->id,
+        'customer_name' => 'Test Customer',
+        'posting_date' => '2026-01-02',
+        'document_date' => '2026-01-02',
+        'due_date' => '2026-01-31',
+        'total_amount' => 100,
+        'total_vat' => 0,
+        'grand_total' => 100,
+        'remaining_amount' => 100,
+        'status' => 'posted',
+        'posted_by' => User::factory()->create()->id,
+        'posted_at' => now(),
+    ]);
+
+    PostedSalesInvoiceLine::query()->create([
+        'posted_sales_invoice_id' => $postedInvoice->id,
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'item_description' => $fixture['item']->description,
+        'quantity' => 4,
+        'quantity_base' => 4,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'unit_price' => 25,
+        'line_amount' => 100,
+        'line_total' => 100,
+        'item_ledger_entry_id' => $outbound->id,
+        'posting_date' => '2026-01-02',
+    ]);
+
+    $returnEntry = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, 2, 0, 'SCM-RET-001', '2026-01-04');
+    $valueEntry = app(ReturnCostApplicationService::class)->applyExactOrFallbackCost($returnEntry, $outbound);
+
+    expect((float) $returnEntry->fresh()->cost_amount_actual)->toBe(50.0)
+        ->and((float) $valueEntry?->cost_amount_actual)->toBe(50.0)
+        ->and($valueEntry?->accounting_metadata['phase_1c_return_cost_source'])->toBe('exact_original_application')
+        ->and((float) $inbound->fresh()->remaining_quantity)->toBe(6.0);
+});
+
+it('clears posted expected cost partially and does not clear when expected gl is disabled', function (): void {
+    config(['accounts.post_expected_inventory_cost_to_gl' => true]);
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $receiptEntry = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 0, 'PR-EXP-001', '2026-01-01', expectedCost: 100);
+    $expectedEntry = ValueEntry::query()->where('item_ledger_entry_no', $receiptEntry->entry_number)->firstOrFail();
+    app(ValueEntryAccountingOrchestrator::class)->post($expectedEntry);
+
+    [$invoice, $line] = phase1cPurchaseInvoiceAndLine($fixture, 'PI-EXP-001', 4, 60);
+    $clearing = app(ExpectedCostClearingService::class)->clearForActualPurchaseInvoice($expectedEntry->fresh(), $invoice, $line, 4, 60);
+    $retryClearing = app(ExpectedCostClearingService::class)->clearForActualPurchaseInvoice($expectedEntry->fresh(), $invoice, $line, 4, 60);
+
+    expect($clearing)->not->toBeNull()
+        ->and($retryClearing?->id)->toBe($clearing?->id)
+        ->and((float) $clearing?->cost_amount_expected)->toBe(-40.0)
+        ->and($clearing?->gl_posted)->toBeTrue()
+        ->and(ValueEntry::query()->where('value_entry_state', 'clearing')->count())->toBe(1);
+
+    config(['accounts.post_expected_inventory_cost_to_gl' => false]);
+    [$secondInvoice, $secondLine] = phase1cPurchaseInvoiceAndLine($fixture, 'PI-EXP-002', 2, 30);
+
+    expect(app(ExpectedCostClearingService::class)->clearForActualPurchaseInvoice($expectedEntry->fresh(), $secondInvoice, $secondLine, 2, 30))->toBeNull();
+});
+
+it('posts transfer shipment and receipt through explicit in-transit account and fails when setup is missing', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO, createDestination: true);
+    phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 100, 'TR-IN-001', '2026-01-01');
+
+    $entries = app(StockMovementService::class)->transfer(
+        item: $fixture['item'],
+        sourceLocation: $fixture['location'],
+        destinationLocation: $fixture['destinationLocation'],
+        quantityBase: 4,
+        documentNumber: 'TR-1C-001',
+        postingDate: '2026-01-05',
+    );
+
+    expect(ValueEntry::query()->where('document_no', 'TR-1C-001')->where('gl_posted', true)->count())->toBe(2)
+        ->and(GlEntry::query()->where('document_number', 'TR-1C-001')->count())->toBe(4)
+        ->and((float) GlEntry::query()->where('document_number', 'TR-1C-001')->sum('debit_amount'))->toBe(80.0)
+        ->and((float) GlEntry::query()->where('document_number', 'TR-1C-001')->sum('credit_amount'))->toBe(80.0)
+        ->and((float) $entries['source']->fresh()->cost_amount_actual)->toBe(40.0);
+
+    $missingSetupFixture = phase1cFixture(CostingMethod::FIFO, createDestination: true, includeInTransit: false);
+    phase1cItemLedgerEntry($missingSetupFixture, ItemLedgerEntryType::PURCHASE, 5, 50, 'TR-IN-002', '2026-01-01');
+
+    expect(fn () => app(StockMovementService::class)->transfer(
+        item: $missingSetupFixture['item'],
+        sourceLocation: $missingSetupFixture['location'],
+        destinationLocation: $missingSetupFixture['destinationLocation'],
+        quantityBase: 1,
+        documentNumber: 'TR-1C-MISSING',
+        postingDate: '2026-01-05',
+    ))->toThrow(RuntimeException::class, 'Inventory in-transit account missing');
+});
+
+it('creates cost adjustment value entries from inbound cost changes and protects closed costing periods', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 100, 'ADJ-IN-001', '2026-01-01');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -4, 0, 'ADJ-OUT-001', '2026-01-02');
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'test_adjustment');
+
+    $dryRun = app(CostAdjustmentService::class)->adjustInboundCost($inbound, 150, 'Invoice cost increase', dryRun: true);
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound, 150, 'Invoice cost increase', dryRun: false);
+    $retry = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 150, 'Invoice cost increase', dryRun: false);
+
+    expect($dryRun['adjustments'][0]['adjustment_amount'])->toBe(20.0)
+        ->and($posted['adjustments'][0])->toBeInstanceOf(ValueEntry::class)
+        ->and($retry['adjustments'])->toHaveCount(0)
+        ->and(ValueEntry::query()->where('value_entry_state', 'adjustment')->count())->toBe(1);
+
+    CostingPeriod::query()->create([
+        'start_date' => '2026-02-01',
+        'end_date' => '2026-02-28',
+        'name' => 'Closed February',
+        'is_closed' => true,
+        'closed_at' => now(),
+    ]);
+
+    $closedInbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 1, 10, 'ADJ-CLOSED-001', '2026-02-10');
+
+    expect(fn () => app(CostAdjustmentService::class)->adjustInboundCost($closedInbound, 12, 'Closed period test', dryRun: false))
+        ->toThrow(RuntimeException::class, 'Cost adjustment is not allowed');
+});
+
+it('costing reconcile reports findings and exports json', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -1, 10, 'UNAPPLIED-001', '2026-01-03');
+    $exportPath = 'storage/app/reports/costing-reconcile-test.json';
+
+    expect(Artisan::call('biwms:costing-reconcile', ['--json' => true, '--export' => $exportPath]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect($report['outbound_without_applications'])->not->toBeEmpty()
+        ->and(file_exists(base_path($exportPath)))->toBeTrue();
+});
+
+/**
+ * @return array<string, mixed>
+ */
+function phase1cFixture(CostingMethod $costingMethod, bool $createDestination = false, bool $includeInTransit = true): array
+{
+    $inventoryAccount = phase1cAccount('13'.fake()->unique()->numerify('###'), 'Inventory', AccountCategory::INVENTORY);
+    $inTransitAccount = phase1cAccount('14'.fake()->unique()->numerify('###'), 'Inventory In Transit', AccountCategory::INVENTORY);
+    $cogsAccount = phase1cAccount('50'.fake()->unique()->numerify('###'), 'COGS', AccountCategory::COGS);
+    $purchaseAccount = phase1cAccount('21'.fake()->unique()->numerify('###'), 'Purchase Clearing', AccountCategory::LIABILITY);
+    $adjustmentAccount = phase1cAccount('51'.fake()->unique()->numerify('###'), 'Inventory Adjustment', AccountCategory::DIRECT_EXPENSE);
+    $wipAccount = phase1cAccount('15'.fake()->unique()->numerify('###'), 'WIP', AccountCategory::INVENTORY);
+
+    $businessGroup = GeneralBusinessPostingGroup::factory()->create(['code' => 'P1C'.fake()->unique()->numerify('###')]);
+    $productGroup = GeneralProductPostingGroup::query()->create([
+        'code' => 'P1C-PROD'.fake()->unique()->numerify('###'),
+        'description' => 'Phase 1C Product',
+        'blocked' => false,
+        'auto_create_vat_prod_posting_group' => false,
+    ]);
+    $inventoryGroup = InventoryPostingGroup::query()->create([
+        'code' => 'P1C-INV'.fake()->unique()->numerify('###'),
+        'description' => 'Phase 1C Inventory',
+        'blocked' => false,
+    ]);
+    $location = Location::factory()->create(['code' => 'P1CS'.fake()->unique()->numerify('##')]);
+    $destinationLocation = $createDestination ? Location::factory()->create(['code' => 'P1CD'.fake()->unique()->numerify('##')]) : null;
+
+    foreach (array_filter([$location, $destinationLocation]) as $setupLocation) {
+        InventoryPostingSetup::query()->create([
+            'location_id' => $setupLocation->id,
+            'inventory_posting_group_id' => $inventoryGroup->id,
+            'inventory_account_id' => $inventoryAccount->id,
+            'inventory_account_interim_id' => $inventoryAccount->id,
+            'inventory_in_transit_account_id' => $includeInTransit ? $inTransitAccount->id : null,
+            'wip_account_id' => $wipAccount->id,
+        ]);
+    }
+
+    GeneralPostingSetup::query()->create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'sales_account_id' => phase1cAccount('40'.fake()->unique()->numerify('###'), 'Sales', AccountCategory::REVENUE)->id,
+        'cogs_account_id' => $cogsAccount->id,
+        'inventory_adj_account_id' => $adjustmentAccount->id,
+        'inventory_account_id' => $inventoryAccount->id,
+        'purchase_account_id' => $purchaseAccount->id,
+        'direct_cost_applied_account_id' => phase1cAccount('52'.fake()->unique()->numerify('###'), 'Direct Cost Applied', AccountCategory::DIRECT_EXPENSE)->id,
+        'overhead_applied_account_id' => phase1cAccount('53'.fake()->unique()->numerify('###'), 'Overhead Applied', AccountCategory::DIRECT_EXPENSE)->id,
+        'blocked' => false,
+    ]);
+
+    $item = Item::factory()->create([
+        'item_code' => 'P1C-ITEM'.fake()->unique()->numerify('###'),
+        'description' => 'Phase 1C Item',
+        'item_type' => ItemType::RAW_MATERIAL,
+        'costing_method' => $costingMethod,
+        'unit_cost' => 10,
+        'standard_cost' => 12,
+        'inventory' => 0,
+        'location_id' => $location->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+    ]);
+    $vendor = Vendor::factory()->create();
+
+    return compact(
+        'inventoryAccount',
+        'inTransitAccount',
+        'cogsAccount',
+        'purchaseAccount',
+        'businessGroup',
+        'productGroup',
+        'inventoryGroup',
+        'location',
+        'destinationLocation',
+        'item',
+        'vendor',
+    );
+}
+
+function phase1cAccount(string $number, string $name, AccountCategory $category): ChartOfAccount
+{
+    return ChartOfAccount::query()->create([
+        'account_number' => $number,
+        'name' => $name,
+        'structural_type' => AccountStructuralType::POSTING,
+        'account_category' => $category,
+        'balance' => 0,
+        'direct_posting' => true,
+        'blocked' => false,
+        'income_balance' => $category->isBalanceSheet()
+            ? IncomeBalanceType::BALANCE_SHEET
+            : IncomeBalanceType::INCOME_STATEMENT,
+    ]);
+}
+
+/**
+ * @param  array<string, mixed>  $fixture
+ */
+function phase1cItemLedgerEntry(
+    array $fixture,
+    ItemLedgerEntryType $type,
+    float $quantity,
+    float $actualCost,
+    string $documentNumber,
+    string $postingDate,
+    float $expectedCost = 0
+): ItemLedgerEntry {
+    $entry = ItemLedgerEntry::query()->create([
+        'entry_type' => $type,
+        'document_type' => str_starts_with($documentNumber, 'PR') ? 'PURCHASE_RECEIPT' : 'PHASE_1C',
+        'document_number' => $documentNumber,
+        'document_line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'location_id' => $fixture['location']->id,
+        'quantity' => $quantity,
+        'remaining_quantity' => max(0, $quantity),
+        'cost_amount_actual' => $actualCost,
+        'cost_amount_expected' => $expectedCost,
+        'purchase_amount_actual' => $actualCost,
+        'general_business_posting_group_id' => $fixture['businessGroup']->id,
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+        'posting_date' => $postingDate,
+        'entry_date' => now(),
+        'open' => $quantity > 0,
+    ]);
+
+    if ($quantity > 0) {
+        $fixture['item']->increment('inventory', $quantity);
+    }
+
+    return $entry;
+}
+
+/**
+ * @param  array<string, mixed>  $fixture
+ * @return array{0: PurchaseInvoice, 1: PurchaseInvoiceLine}
+ */
+function phase1cPurchaseInvoiceAndLine(array $fixture, string $documentNumber, float $quantityBase, float $lineTotal): array
+{
+    $invoice = PurchaseInvoice::query()->create([
+        'document_number' => $documentNumber,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'posting_date' => '2026-01-05',
+        'document_date' => '2026-01-05',
+        'due_date' => '2026-02-05',
+        'status' => 'approved',
+        'total_amount' => $lineTotal,
+        'total_vat' => 0,
+        'grand_total' => $lineTotal,
+        'remaining_amount' => $lineTotal,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+    ]);
+
+    $line = PurchaseInvoiceLine::query()->create([
+        'purchase_invoice_id' => $invoice->id,
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'item_description' => $fixture['item']->description,
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+        'quantity' => $quantityBase,
+        'quantity_base' => $quantityBase,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'unit_cost' => $lineTotal / $quantityBase,
+        'unit_cost_lcy' => $lineTotal / $quantityBase,
+        'line_total' => $lineTotal,
+        'vat_percentage' => 0,
+        'vat_amount' => 0,
+        'vat_amount_lcy' => 0,
+        'amount_including_vat' => $lineTotal,
+        'amount_including_vat_lcy' => $lineTotal,
+        'posting_date' => $invoice->posting_date,
+    ]);
+
+    return [$invoice, $line];
+}

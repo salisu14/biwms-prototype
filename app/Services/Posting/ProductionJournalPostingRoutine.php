@@ -14,6 +14,7 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ProductionJournalLine;
 use App\Services\Inventory\CostingService;
+use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 
@@ -76,6 +77,7 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
             $component->save();
         }
 
+        app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'production_journal_consumption', strict: false);
         app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
         app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 
@@ -103,6 +105,7 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
             }
         }
 
+        app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'production_journal_scrap', strict: false);
         app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
         app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 

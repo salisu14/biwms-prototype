@@ -44,10 +44,6 @@ class ValueEntryAccountingOrchestrator
                 return null;
             }
 
-            if ($this->normalizedItemLedgerEntryType($lockedValueEntry) === 'TRANSFER') {
-                return null;
-            }
-
             $amount = $this->amountToPost($lockedValueEntry);
             if ($amount <= 0.0) {
                 return null;
@@ -100,7 +96,7 @@ class ValueEntryAccountingOrchestrator
                 'gl_entry_no' => $transaction->glEntries()->orderBy('id')->value('id'),
                 'gl_account_no' => $debitAccount->account_number,
                 'balancing_account_no' => $creditAccount->account_number,
-                'idempotency_key' => $this->idempotencyKey($lockedValueEntry),
+                'idempotency_key' => $lockedValueEntry->idempotency_key ?: $this->idempotencyKey($lockedValueEntry),
                 'accounting_metadata' => array_merge($lockedValueEntry->accounting_metadata ?? [], [
                     'phase_1b_owner' => 'value_entry',
                     'debit_account_id' => $debitAccount->id,
@@ -160,6 +156,9 @@ class ValueEntryAccountingOrchestrator
             'NEGATIVE_ADJUSTMENT' => [$this->inventoryAdjustmentAccount($valueEntry), $this->inventoryAccount($valueEntry)],
             'CONSUMPTION' => [$this->wipAccount($valueEntry), $this->inventoryAccount($valueEntry)],
             'OUTPUT' => [$this->inventoryAccount($valueEntry), $this->wipAccount($valueEntry)],
+            'TRANSFER' => (float) $valueEntry->quantity < 0
+                ? [$this->inventoryInTransitAccount($valueEntry), $this->inventoryAccount($valueEntry)]
+                : [$this->inventoryAccount($valueEntry), $this->inventoryInTransitAccount($valueEntry)],
             'CAPACITY' => [$this->wipAccount($valueEntry), $this->directCostAppliedAccount($valueEntry)],
             'OVERHEAD' => [$this->wipAccount($valueEntry), $this->overheadAppliedAccount($valueEntry)],
             default => throw new RuntimeException("Unsupported value entry type {$type} for G/L posting."),
@@ -183,6 +182,18 @@ class ValueEntryAccountingOrchestrator
         }
 
         return $setup->inventoryAccount;
+    }
+
+    private function inventoryInTransitAccount(ValueEntry $valueEntry): ChartOfAccount
+    {
+        $itemLedgerEntry = $this->itemLedgerEntry($valueEntry);
+        $setup = InventoryPostingSetup::getFor((int) $itemLedgerEntry->inventory_posting_group_id, $itemLedgerEntry->location_id);
+
+        if (! $setup?->inventoryInTransitAccount) {
+            throw new RuntimeException("Inventory in-transit account missing for value entry {$valueEntry->entry_no}.");
+        }
+
+        return $setup->inventoryInTransitAccount;
     }
 
     private function wipAccount(ValueEntry $valueEntry): ChartOfAccount

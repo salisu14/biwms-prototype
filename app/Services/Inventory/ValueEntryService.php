@@ -329,8 +329,16 @@ class ValueEntryService
             'vendor_no' => (string) ($invoice->vendor?->vendor_number ?? $invoice->vendor_id),
             'expected_cost' => false,
             'original_entry_no' => $expectedEntry->id,
+            'idempotency_key' => hash('sha256', implode('|', [
+                'purchase-actual-value-entry',
+                $receiptEntry->id,
+                $invoice->id,
+                $line->id,
+                DecimalMath::quantity($quantityBase),
+            ])),
             'accounting_metadata' => [
                 'phase_1b_actualized_from_expected_entry_id' => $expectedEntry->id,
+                'phase_1c_idempotent_actualization' => true,
                 'receipt_item_ledger_entry_id' => $receiptEntry->id,
                 'receipt_document_no' => $receiptEntry->document_number,
                 'receipt_document_line_no' => $receiptEntry->document_line_number,
@@ -347,6 +355,14 @@ class ValueEntryService
                 'phase_1b_last_actualization_document_no' => $invoice->document_number,
             ]),
         ])->save();
+
+        app(ExpectedCostClearingService::class)->clearForActualPurchaseInvoice(
+            expectedEntry: $expectedEntry->fresh(),
+            invoice: $invoice,
+            line: $line,
+            quantityBase: $quantityBase,
+            actualCostAmount: (float) $lineCost,
+        );
 
         return $actualEntry;
     }

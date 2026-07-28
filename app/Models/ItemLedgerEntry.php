@@ -11,6 +11,7 @@ use App\Services\Inventory\ValueEntryService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ItemLedgerEntry extends Model
 {
@@ -94,6 +95,16 @@ class ItemLedgerEntry extends Model
     public function appliedEntry(): BelongsTo
     {
         return $this->belongsTo(ItemLedgerEntry::class, 'applied_entry_id');
+    }
+
+    public function inboundApplications(): HasMany
+    {
+        return $this->hasMany(ItemApplicationEntry::class, 'inbound_item_ledger_entry_id');
+    }
+
+    public function outboundApplications(): HasMany
+    {
+        return $this->hasMany(ItemApplicationEntry::class, 'outbound_item_ledger_entry_id');
     }
 
     // Is positive entry (increase inventory)

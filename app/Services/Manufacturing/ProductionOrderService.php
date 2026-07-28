@@ -25,6 +25,7 @@ use App\Models\Manufacturing\RoutingVersion;
 use App\Models\User;
 use App\Services\AuditTrailService;
 use App\Services\Inventory\CostingService;
+use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
@@ -242,6 +243,7 @@ class ProductionOrderService
                     $order->capexProject->increment('actual_amount', $costAmountActual);
                 }
 
+                app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'production_consumption', strict: false);
                 app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
             }
         });

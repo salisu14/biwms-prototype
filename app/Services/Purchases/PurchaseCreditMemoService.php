@@ -20,6 +20,7 @@ use App\Models\ValueEntry;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Services\Approval\ApprovalTemplateService;
+use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
@@ -400,6 +401,7 @@ class PurchaseCreditMemoService
             'inventory_posting_group_id' => $item->inventory_posting_group_id,
         ]);
 
+        app(ItemApplicationService::class)->applyOutbound($entry, 'purchase_credit_memo', strict: false);
         $this->assertValueEntryCreated($entry, $memo->corrects_invoice_number, $memo->correctedInvoice?->posting_date);
         app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 

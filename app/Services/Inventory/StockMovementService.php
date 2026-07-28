@@ -70,8 +70,10 @@ class StockMovementService
                 postingDate: $postingDate,
             );
 
+            app(ItemApplicationService::class)->applyOutbound($sourceEntry, 'warehouse_transfer', strict: false);
             app(ValueEntryService::class)->ensureForItemLedgerEntry($sourceEntry);
             app(ValueEntryService::class)->ensureForItemLedgerEntry($destinationEntry);
+            app(TransferCostingService::class)->postCompleteTransfer($sourceEntry, $destinationEntry);
 
             return [
                 'source' => $sourceEntry,
@@ -118,6 +120,7 @@ class StockMovementService
                     postingDate: $receipt->receipt_date,
                     source: $receipt,
                 );
+                app(ItemApplicationService::class)->applyOutbound($entry, 'warehouse_shipment', strict: false);
                 app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 
                 $line->forceFill([

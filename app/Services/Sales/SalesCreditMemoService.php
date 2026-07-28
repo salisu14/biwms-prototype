@@ -13,10 +13,12 @@ use App\Models\ItemLedgerEntry;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesCreditMemoLine;
 use App\Models\PostedSalesInvoice;
+use App\Models\PostedSalesInvoiceLine;
 use App\Models\SalesCreditMemo;
 use App\Models\SalesCreditMemoLine;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Services\Inventory\ReturnCostApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
@@ -368,12 +370,36 @@ class SalesCreditMemoService
             'inventory_posting_group_id' => $item->inventory_posting_group_id,
         ]);
 
+        $originalOutboundEntry = $this->originalOutboundEntryForReturn($postedMemo, $line);
+        app(ReturnCostApplicationService::class)->applyExactOrFallbackCost($entry, $originalOutboundEntry);
         $this->assertValueEntryCreated($entry, $postedMemo->corrected_invoice_number, $postedMemo->posting_date);
         app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 
         $item->increment('inventory', $quantityBase);
 
         return $entry;
+    }
+
+    private function originalOutboundEntryForReturn(PostedSalesCreditMemo $postedMemo, SalesCreditMemoLine $line): ?ItemLedgerEntry
+    {
+        $postedInvoiceLine = null;
+
+        if ($line->sales_invoice_line_id) {
+            $postedInvoiceLine = PostedSalesInvoiceLine::query()->find($line->sales_invoice_line_id);
+        }
+
+        if (! $postedInvoiceLine && $postedMemo->corrected_invoice_id) {
+            $postedInvoiceLine = PostedSalesInvoiceLine::query()
+                ->where('posted_sales_invoice_id', $postedMemo->corrected_invoice_id)
+                ->where('item_id', $line->item_id)
+                ->first();
+        }
+
+        if (! $postedInvoiceLine?->item_ledger_entry_id) {
+            return null;
+        }
+
+        return ItemLedgerEntry::query()->find($postedInvoiceLine->item_ledger_entry_id);
     }
 
     private function quantityBase(SalesCreditMemoLine $line, Item $item): float

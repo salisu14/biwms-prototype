@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 // app/Models/InventoryPostingSetup.php
 
 namespace App\Models;
@@ -19,6 +21,10 @@ class InventoryPostingSetup extends Model
         'inventory_posting_group_id',
         'inventory_account_id',
         'inventory_account_interim_id',
+        'inventory_in_transit_account_id',
+        'transfer_gain_account_id',
+        'transfer_loss_account_id',
+        'transfer_variance_account_id',
         'wip_account_id',
     ];
 
@@ -43,6 +49,26 @@ class InventoryPostingSetup extends Model
         return $this->belongsTo(ChartOfAccount::class, 'inventory_account_interim_id');
     }
 
+    public function inventoryInTransitAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'inventory_in_transit_account_id');
+    }
+
+    public function transferGainAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'transfer_gain_account_id');
+    }
+
+    public function transferLossAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'transfer_loss_account_id');
+    }
+
+    public function transferVarianceAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'transfer_variance_account_id');
+    }
+
     public function wipAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class, 'wip_account_id');
@@ -64,7 +90,7 @@ class InventoryPostingSetup extends Model
             $specific = self::where('inventory_posting_group_id', $inventoryPostingGroupId)
                 ->where('location_id', $locationId)
                 ->first();
-            
+
             if ($specific) {
                 return $specific;
             }
