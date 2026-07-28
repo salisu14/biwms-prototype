@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use App\Models\Manufacturing\MachineCenter;
@@ -24,6 +26,9 @@ class ValueEntry extends Model
 
     private const FILLABLE_SOURCE_KEYS = [
         'source_type',
+        'source_module',
+        'source_id',
+        'source_number',
         'source_no',
         'source_line_no',
         'source_batch_name',
@@ -51,7 +56,11 @@ class ValueEntry extends Model
     private const FILLABLE_COST_KEYS = [
         'quantity',
         'invoiced_quantity',
+        'valued_quantity',
+        'remaining_quantity',
         'costing_method',
+        'cost_component',
+        'value_entry_state',
         'cost_amount_actual',
         'cost_amount_actual_acy',
         'cost_amount_expected',
@@ -99,7 +108,9 @@ class ValueEntry extends Model
 
     private const FILLABLE_GL_KEYS = [
         'gl_posted',
+        'posting_transaction_id',
         'gl_posting_date',
+        'gl_posted_at',
         'gl_entry_no',
         'gl_account_no',
         'balancing_account_no',
@@ -125,6 +136,9 @@ class ValueEntry extends Model
         'entry_type',
         'adjustment_entry_no',
         'original_entry_no',
+        'reversal_of_value_entry_id',
+        'idempotency_key',
+        'accounting_metadata',
         'original_document_no',
         'original_posting_date',
         'job_no',
@@ -153,8 +167,12 @@ class ValueEntry extends Model
         'cost_adjustment_date' => 'date',
         'original_posting_date' => 'date',
         'expiration_date' => 'date',
+        'business_id' => 'integer',
+        'source_id' => 'integer',
         'quantity' => 'decimal:8',
         'invoiced_quantity' => 'decimal:8',
+        'valued_quantity' => 'decimal:8',
+        'remaining_quantity' => 'decimal:8',
         'cost_amount_actual' => 'decimal:4',
         'cost_amount_actual_acy' => 'decimal:4',
         'cost_amount_expected' => 'decimal:4',
@@ -182,7 +200,9 @@ class ValueEntry extends Model
         'work_center_purch_ovhd_cost' => 'decimal:4',
         'shortcut_dimension_codes' => 'array',
         'dimension_set_id' => 'array',
+        'accounting_metadata' => 'array',
         'gl_posted' => 'boolean',
+        'posting_transaction_id' => 'integer',
         'cost_adjusted' => 'boolean',
         'cost_is_adjusted' => 'boolean',
         'cost_is_changed_by_user' => 'boolean',
@@ -228,13 +248,17 @@ class ValueEntry extends Model
 
     public function capacityLedgerEntry(): BelongsTo
     {
-        return $this->belongsTo(CapacityLedgerEntry::class, 'source_no', 'production_order_no')
-            ->where('source_type', 'PRODUCTION_ORDER');
+        return $this->belongsTo(CapacityLedgerEntry::class, 'source_id');
     }
 
     public function glEntry(): BelongsTo
     {
-        return $this->belongsTo(GLEntry::class, 'gl_entry_no');
+        return $this->belongsTo(GlEntry::class, 'gl_entry_no');
+    }
+
+    public function postingTransaction(): BelongsTo
+    {
+        return $this->belongsTo(PostingTransaction::class);
     }
 
     public function chartOfAccount(): BelongsTo
@@ -390,7 +414,7 @@ class ValueEntry extends Model
     /**
      * Post this value entry to General Ledger
      */
-    public function postToGL(): GLEntry
+    public function postToGL(): GlEntry
     {
         return app(ValueEntryAccountingService::class)->postToGL($this);
     }

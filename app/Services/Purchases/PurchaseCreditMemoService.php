@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Purchases;
 
 use App\Data\Purchases\PurchaseCreditMemoData;
@@ -18,6 +20,7 @@ use App\Models\ValueEntry;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Services\Approval\ApprovalTemplateService;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -398,6 +401,7 @@ class PurchaseCreditMemoService
         ]);
 
         $this->assertValueEntryCreated($entry, $memo->corrects_invoice_number, $memo->correctedInvoice?->posting_date);
+        app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 
         $item->decrement('inventory', $quantityBase);
 

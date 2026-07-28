@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Enums\AccountCategory;
@@ -17,6 +19,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 
 #[Signature('biwms:finance-reconcile {--json : Output machine-readable JSON} {--details : Show detailed diagnostic rows} {--export= : Write the JSON report to a file path}')]
 #[Description('Report BIWMS G/L and finance sub-ledger consistency issues.')]
@@ -34,6 +37,10 @@ class BiwmsFinanceReconcile extends Command
             'bank_ledger_gl_mismatches' => $this->bankLedgerGlMismatches(),
             'inventory_value_gl_mismatches' => $this->inventoryValueGlMismatches(),
             'missing_control_account_entries' => $this->missingControlAccountEntries(),
+            'value_entries_gl_posted_without_posting_transaction' => $this->valueEntriesGlPostedWithoutPostingTransaction(),
+            'value_entry_posting_transactions_without_value_entry' => $this->valueEntryPostingTransactionsWithoutValueEntry(),
+            'duplicate_gl_posting_for_value_entry' => $this->duplicateGlPostingForValueEntry(),
+            'source_and_value_entry_duplicate_inventory_value' => $this->sourceAndValueEntryDuplicateInventoryValue(),
         ];
 
         if ($exportPath = $this->option('export')) {
@@ -114,6 +121,44 @@ class BiwmsFinanceReconcile extends Command
             $entry['account_number'],
             number_format($entry['amount'], 2, '.', ''),
             $entry['source_hint'],
+        ));
+
+        $this->section('Value Entries marked G/L posted without PostingTransaction', $report['value_entries_gl_posted_without_posting_transaction'], $details, fn (array $entry): string => sprintf(
+            '[%s] value_entry=%s document=%s %s item=%s',
+            $entry['severity'],
+            $entry['value_entry_no'],
+            $entry['document_type'],
+            $entry['document_number'],
+            $entry['item_no'],
+        ));
+
+        $this->section('Value Entry PostingTransactions without related ValueEntry', $report['value_entry_posting_transactions_without_value_entry'], $details, fn (array $entry): string => sprintf(
+            '[%s] transaction=%s document=%s %s key=%s',
+            $entry['severity'],
+            $entry['posting_transaction_id'],
+            $entry['document_type'],
+            $entry['document_number'],
+            $entry['transaction_key'],
+        ));
+
+        $this->section('Duplicate G/L posting for Value Entries', $report['duplicate_gl_posting_for_value_entry'], $details, fn (array $entry): string => sprintf(
+            '[%s] value_entry=%s transaction=%s document=%s %s gl_lines=%s',
+            $entry['severity'],
+            $entry['value_entry_no'],
+            $entry['posting_transaction_id'],
+            $entry['document_type'],
+            $entry['document_number'],
+            $entry['gl_line_count'],
+        ));
+
+        $this->section('Source service and Value Entry duplicate inventory value postings', $report['source_and_value_entry_duplicate_inventory_value'], $details, fn (array $entry): string => sprintf(
+            '[%s] value_entry=%s document=%s %s item_ledger_entry_id=%s duplicate_gl_lines=%s',
+            $entry['severity'],
+            $entry['value_entry_no'],
+            $entry['document_type'],
+            $entry['document_number'],
+            $entry['item_ledger_entry_id'],
+            $entry['duplicate_gl_line_count'],
         ));
 
         return self::SUCCESS;
@@ -507,6 +552,158 @@ class BiwmsFinanceReconcile extends Command
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function valueEntriesGlPostedWithoutPostingTransaction(): array
+    {
+        if (! $this->valueEntryPostingMetadataExists()) {
+            return [];
+        }
+
+        return ValueEntry::query()
+            ->where('gl_posted', true)
+            ->whereNull('posting_transaction_id')
+            ->orderBy('entry_no')
+            ->limit(250)
+            ->get(['entry_no', 'document_type', 'document_no', 'item_no'])
+            ->map(fn (ValueEntry $entry): array => [
+                'value_entry_no' => $entry->entry_no,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_no,
+                'item_no' => $entry->item_no,
+                ...$this->findingMetadata(
+                    classification: 'value_entry_gl_posted_without_posting_transaction',
+                    severity: 'critical',
+                    suggestedRemediation: 'Trace the historical Value Entry and its G/L lines. Future postings must use ValueEntryAccountingOrchestrator; correct legacy rows only through an approved remediation plan.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function valueEntryPostingTransactionsWithoutValueEntry(): array
+    {
+        if (! $this->valueEntryPostingMetadataExists()) {
+            return [];
+        }
+
+        return DB::table('posting_transactions as pt')
+            ->where('pt.transaction_key', 'like', 'value-entry:%')
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('value_entries as ve')
+                    ->whereColumn('ve.posting_transaction_id', 'pt.id');
+            })
+            ->orderBy('pt.id')
+            ->limit(250)
+            ->get(['pt.id', 'pt.document_type', 'pt.document_number', 'pt.transaction_key'])
+            ->map(fn ($entry): array => [
+                'posting_transaction_id' => $entry->id,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'transaction_key' => $entry->transaction_key,
+                ...$this->findingMetadata(
+                    classification: 'posting_transaction_without_value_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the PostingTransaction and related G/L entries. Value-entry-owned transactions must remain linked to exactly one Value Entry.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function duplicateGlPostingForValueEntry(): array
+    {
+        if (! $this->valueEntryPostingMetadataExists()) {
+            return [];
+        }
+
+        return DB::table('value_entries as ve')
+            ->join('gl_entries as gl', 'gl.posting_transaction_id', '=', 've.posting_transaction_id')
+            ->whereNotNull('ve.posting_transaction_id')
+            ->groupBy('ve.entry_no', 've.posting_transaction_id', 've.document_type', 've.document_no')
+            ->havingRaw('COUNT(gl.id) > 2')
+            ->orderBy('ve.entry_no')
+            ->limit(250)
+            ->get([
+                've.entry_no',
+                've.posting_transaction_id',
+                've.document_type',
+                've.document_no',
+                DB::raw('COUNT(gl.id) as gl_line_count'),
+            ])
+            ->map(fn ($entry): array => [
+                'value_entry_no' => $entry->entry_no,
+                'posting_transaction_id' => $entry->posting_transaction_id,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_no,
+                'gl_line_count' => (int) $entry->gl_line_count,
+                ...$this->findingMetadata(
+                    classification: 'duplicate_gl_posting_for_value_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'A normal value-entry posting should produce one balanced two-line PostingTransaction. Review duplicated G/L lines and correct through approved reversal/remediation.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function sourceAndValueEntryDuplicateInventoryValue(): array
+    {
+        if (! $this->valueEntryPostingMetadataExists()) {
+            return [];
+        }
+
+        return DB::table('value_entries as ve')
+            ->join('item_ledger_entries as ile', 'ile.entry_number', '=', 've.item_ledger_entry_no')
+            ->join('gl_entries as gl', 'gl.item_ledger_entry_id', '=', 'ile.id')
+            ->where('ve.gl_posted', true)
+            ->whereNotNull('ve.posting_transaction_id')
+            ->whereColumn('gl.posting_transaction_id', '<>', 've.posting_transaction_id')
+            ->groupBy('ve.entry_no', 've.document_type', 've.document_no', 'ile.id')
+            ->orderBy('ve.entry_no')
+            ->limit(250)
+            ->get([
+                've.entry_no',
+                've.document_type',
+                've.document_no',
+                'ile.id as item_ledger_entry_id',
+                DB::raw('COUNT(gl.id) as duplicate_gl_line_count'),
+            ])
+            ->map(fn ($entry): array => [
+                'value_entry_no' => $entry->entry_no,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_no,
+                'item_ledger_entry_id' => $entry->item_ledger_entry_id,
+                'duplicate_gl_line_count' => (int) $entry->duplicate_gl_line_count,
+                ...$this->findingMetadata(
+                    classification: 'source_and_value_entry_duplicate_inventory_value',
+                    severity: 'critical',
+                    suggestedRemediation: 'The source service and Value Entry both appear to have posted inventory value for the same Item Ledger Entry. Keep the Value Entry posting and reverse/remediate the duplicate source-owned inventory value entry.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function valueEntryPostingMetadataExists(): bool
+    {
+        return Schema::hasTable('value_entries')
+            && Schema::hasTable('posting_transactions')
+            && Schema::hasColumn('value_entries', 'posting_transaction_id')
+            && Schema::hasColumn('gl_entries', 'posting_transaction_id');
     }
 
     private function glDebitMinusCredit(int $chartOfAccountId): float

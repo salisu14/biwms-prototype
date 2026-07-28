@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Purchase;
 
 use App\Enums\ApprovalStatus;
@@ -14,8 +16,11 @@ use App\Models\PurchaseInvoiceLine;
 use App\Models\PurchaseOrder;
 use App\Models\ValueEntry;
 use App\Models\VendorLedgerEntry;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -94,6 +99,12 @@ class PurchaseInvoiceService
                 $lineNo += 10;
                 $line = $row['line'];
                 $quantity = (float) $row['quantity'];
+                $conversionFactor = (float) ($line->qty_per_unit_of_measure ?? 0);
+                if ($conversionFactor <= 0) {
+                    $conversionFactor = (float) ($line->item?->getConversionFactorForUom($line->unit_of_measure ?: $line->item?->base_unit_of_measure) ?? 1);
+                }
+                $conversionFactor = $conversionFactor > 0 ? $conversionFactor : 1.0;
+                $quantityBase = $quantity * $conversionFactor;
                 $lineTotal = $quantity * (float) $line->unit_cost;
                 $vatAmount = $lineTotal * ((float) $line->vat_percentage / 100);
 
@@ -109,8 +120,8 @@ class PurchaseInvoiceService
                     'inventory_posting_group_id' => $line->item?->inventory_posting_group_id,
                     'quantity' => $quantity,
                     'unit_of_measure_code' => $line->unit_of_measure,
-                    'qty_per_unit_of_measure' => 1,
-                    'quantity_base' => $quantity,
+                    'qty_per_unit_of_measure' => $conversionFactor,
+                    'quantity_base' => $quantityBase,
                     'unit_cost' => $line->unit_cost,
                     'unit_cost_lcy' => $line->unit_cost,
                     'line_total' => $lineTotal,
@@ -165,10 +176,52 @@ class PurchaseInvoiceService
                     throw new \RuntimeException("Item is missing for purchase invoice line {$line->id}.");
                 }
 
-                $itemLedgerEntry = $this->createItemLedgerEntryForLine($invoice, $line);
+                $itemLedgerEntry = null;
+                $receiptItemLedgerEntries = $this->receiptItemLedgerEntriesForLine($line);
 
-                if ($itemLedgerEntry) {
+                if ($receiptItemLedgerEntries->isNotEmpty()) {
+                    $quantityBase = $this->quantityBase($line, $line->item);
+                    $remainingQuantityBase = $quantityBase;
+                    $lineUnitCostBase = $quantityBase > 0 ? (float) $line->line_total / $quantityBase : 0.0;
+
+                    foreach ($receiptItemLedgerEntries as $receiptItemLedgerEntry) {
+                        if ($remainingQuantityBase <= 0.0001) {
+                            break;
+                        }
+
+                        $availableReceiptQuantityBase = $this->remainingExpectedQuantityBase($receiptItemLedgerEntry);
+                        if ($availableReceiptQuantityBase <= 0) {
+                            continue;
+                        }
+
+                        $actualizedQuantityBase = min($remainingQuantityBase, $availableReceiptQuantityBase);
+                        $actualValueEntry = app(ValueEntryService::class)->actualizePurchaseReceiptForInvoiceLine(
+                            receiptEntry: $receiptItemLedgerEntry,
+                            invoice: $invoice,
+                            line: $line,
+                            quantityBase: $actualizedQuantityBase,
+                            costAmountActual: $actualizedQuantityBase * $lineUnitCostBase
+                        );
+
+                        app(ValueEntryAccountingOrchestrator::class)->post($actualValueEntry);
+                        $itemLedgerEntry ??= $receiptItemLedgerEntry;
+                        $remainingQuantityBase -= $actualizedQuantityBase;
+                    }
+
+                    if ($remainingQuantityBase > 0.0001) {
+                        throw new \RuntimeException('Purchase invoice quantity exceeds remaining received quantity available for actualization.');
+                    }
+
+                    if ($itemLedgerEntry) {
+                        $line->forceFill(['item_ledger_entry_id' => $itemLedgerEntry->id])->save();
+                    }
+                } else {
+                    $itemLedgerEntry = $this->createItemLedgerEntryForLine($invoice, $line);
+                }
+
+                if ($itemLedgerEntry && $receiptItemLedgerEntries->isEmpty()) {
                     $line->forceFill(['item_ledger_entry_id' => $itemLedgerEntry->id])->save();
+                    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
                 }
 
                 app(PostingService::class)->postPurchaseLine(
@@ -300,10 +353,6 @@ class PurchaseInvoiceService
             return null;
         }
 
-        if ($receiptEntry = $this->receiptItemLedgerEntryForLine($line)) {
-            return $receiptEntry;
-        }
-
         $quantityBase = $this->quantityBase($line, $item);
 
         if ($quantityBase <= 0) {
@@ -346,10 +395,13 @@ class PurchaseInvoiceService
         return $entry;
     }
 
-    private function receiptItemLedgerEntryForLine(PurchaseInvoiceLine $line): ?ItemLedgerEntry
+    /**
+     * @return Collection<int, ItemLedgerEntry>
+     */
+    private function receiptItemLedgerEntriesForLine(PurchaseInvoiceLine $line): Collection
     {
         if (! $line->po_line_id) {
-            return null;
+            return collect();
         }
 
         $line->loadMissing('purchaseOrderLine.purchaseOrder');
@@ -357,7 +409,7 @@ class PurchaseInvoiceService
         $order = $orderLine?->purchaseOrder;
 
         if (! $orderLine || ! $order) {
-            return null;
+            return collect();
         }
 
         return ItemLedgerEntry::query()
@@ -367,7 +419,19 @@ class PurchaseInvoiceService
             ->where('document_line_number', $orderLine->line_number)
             ->where('item_id', $line->item_id)
             ->orderBy('id')
+            ->get();
+    }
+
+    private function remainingExpectedQuantityBase(ItemLedgerEntry $receiptEntry): float
+    {
+        $expectedValueEntry = ValueEntry::query()
+            ->where('item_ledger_entry_no', $receiptEntry->entry_number)
+            ->where('document_no', $receiptEntry->document_number)
+            ->where('document_line_no', $receiptEntry->document_line_number)
+            ->where('value_entry_state', 'expected')
             ->first();
+
+        return abs((float) ($expectedValueEntry?->remaining_quantity ?? $receiptEntry->remaining_quantity ?? 0));
     }
 
     private function quantityBase(PurchaseInvoiceLine $line, Item $item): float

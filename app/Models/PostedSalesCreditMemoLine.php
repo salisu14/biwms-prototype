@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 // app/Models/PostedSalesCreditMemoLine.php
 
 namespace App\Models;
 
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -233,6 +236,7 @@ class PostedSalesCreditMemoLine extends Model
 
         // Update item inventory
         $this->item->increment('inventory', $actualQuantity);
+        app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 
         return $entry;
     }

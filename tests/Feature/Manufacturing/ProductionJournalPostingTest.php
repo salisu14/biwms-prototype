@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Enums\AccountType;
 use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
@@ -7,9 +9,11 @@ use App\Enums\JournalBatchStatus;
 use App\Enums\ProductionJournalEntryType;
 use App\Enums\ProductionOrderStatus;
 use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
+use App\Models\AccountingPeriod;
 use App\Models\CapacityLedgerEntry;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
@@ -34,6 +38,24 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+});
 
 test('production journal posting routine validates and posts consumption, capacity, output, and scrap correctly', function () {
     $user = User::factory()->create();
@@ -78,9 +100,11 @@ test('production journal posting routine validates and posts consumption, capaci
         'income_balance' => IncomeBalanceType::INCOME_STATEMENT,
     ]);
 
+    $location = Location::factory()->create(['code' => 'MAIN']);
+
     InventoryPostingSetup::create([
         'inventory_posting_group_id' => $invGroup->id,
-        'location_id' => null,
+        'location_id' => $location->id,
         'inventory_account_id' => $inventoryAccount->id,
         'wip_account_id' => $wipAccount->id,
     ]);
@@ -92,8 +116,6 @@ test('production journal posting routine validates and posts consumption, capaci
         'overhead_applied_account_id' => $cogsAccount->id,
         'inventory_adj_account_id' => $cogsAccount->id,
     ]);
-
-    $location = Location::factory()->create(['code' => 'MAIN']);
 
     // 2. Setup Items & Resources
     $fgItem = Item::create([
@@ -311,12 +333,53 @@ it('posts production output entered in order uom as base quantity', function () 
         'description' => 'Carton',
         'is_base_uom' => false,
     ]);
+    $inventoryAccount = ChartOfAccount::create([
+        'account_number' => '1200-UOM',
+        'name' => 'Inventory UOM',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $wipAccount = ChartOfAccount::create([
+        'account_number' => '1210-UOM',
+        'name' => 'WIP UOM',
+        'account_category' => 'asset',
+        'account_type' => AccountType::ASSET,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $businessGroup = GeneralBusinessPostingGroup::create([
+        'code' => 'MAN-UOM',
+        'description' => 'Manufacturing UOM',
+    ]);
+    $productGroup = GeneralProductPostingGroup::create([
+        'code' => 'FG-UOM',
+        'description' => 'Finished UOM',
+    ]);
+    $inventoryGroup = InventoryPostingGroup::create([
+        'code' => 'FG-UOM',
+        'description' => 'Finished UOM',
+    ]);
+    InventoryPostingSetup::create([
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'location_id' => $location->id,
+        'inventory_account_id' => $inventoryAccount->id,
+        'wip_account_id' => $wipAccount->id,
+    ]);
+    GeneralPostingSetup::create([
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_adj_account_id' => $wipAccount->id,
+        'direct_cost_applied_account_id' => $wipAccount->id,
+        'overhead_applied_account_id' => $wipAccount->id,
+    ]);
 
     $finishedGood = Item::factory()->create([
         'item_code' => 'FG-CT',
         'description' => 'Carton Finished Good',
         'unit_cost' => 3,
         'base_uom_id' => $baseUom->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
     ]);
 
     DB::table('item_uom_assignments')->insert([
@@ -349,6 +412,7 @@ it('posts production output entered in order uom as base quantity', function () 
         'quantity_base' => 288,
         'unit_of_measure_code' => 'CT',
         'starting_date_time' => now(),
+        'general_business_posting_group_id' => $businessGroup->id,
         'general_product_posting_group_id' => $finishedGood->general_product_posting_group_id,
         'inventory_posting_group_id' => $finishedGood->inventory_posting_group_id,
         'cost_rollup' => 3,
@@ -807,13 +871,20 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
         ->where('item_ledger_entry_type', 8)
         ->where('source_no', (string) $capacityEntry->id)
         ->firstOrFail();
+    $capacityOverheadValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_type', 10)
+        ->where('source_no', (string) $capacityEntry->id)
+        ->firstOrFail();
 
     expect((float) $capacityEntry->direct_cost)->toBe(250.0)
         ->and((float) $capacityEntry->overhead_cost)->toBe(50.0)
         ->and((float) $capacityEntry->total_cost)->toBe(300.0)
-        ->and((float) $capacityValueEntry->cost_amount_actual)->toBe(300.0)
+        ->and((float) $capacityValueEntry->cost_amount_actual)->toBe(250.0)
         ->and((float) $capacityValueEntry->direct_cost_amount)->toBe(250.0)
-        ->and((float) $capacityValueEntry->overhead_amount)->toBe(50.0)
+        ->and((float) $capacityValueEntry->overhead_amount)->toBe(0.0)
+        ->and((float) $capacityOverheadValueEntry->cost_amount_actual)->toBe(50.0)
+        ->and((float) $capacityOverheadValueEntry->direct_cost_amount)->toBe(0.0)
+        ->and((float) $capacityOverheadValueEntry->overhead_amount)->toBe(50.0)
         ->and($capacityValueEntry->production_order_no)->toBe('PO-REC-001')
         ->and($capacityValueEntry->production_order_line_no)->toBe('10000')
         ->and($capacityValueEntry->capacity_type)->toBe('WORK_CENTER')

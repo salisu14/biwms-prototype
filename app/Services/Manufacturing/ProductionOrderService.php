@@ -25,6 +25,7 @@ use App\Models\Manufacturing\RoutingVersion;
 use App\Models\User;
 use App\Services\AuditTrailService;
 use App\Services\Inventory\CostingService;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
 use App\Services\Posting\InventoryPostingResolverService;
@@ -241,14 +242,7 @@ class ProductionOrderService
                     $order->capexProject->increment('actual_amount', $costAmountActual);
                 }
 
-                // G/L Integration: Dr. WIP, Cr. Inventory
-                $this->createWipGlEntries(
-                    $order,
-                    $component->item,
-                    (float) $costAmountActual,
-                    $postingDate,
-                    "Consumption: {$component->item->description} ({$itemLedgerEntry->entry_number})"
-                );
+                app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
             }
         });
     }
@@ -323,6 +317,7 @@ class ProductionOrderService
             ]);
 
             $order->item?->increment('inventory', $quantityBase);
+            app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 
             if ($routingLineId) {
                 $routingLine = $order->routingLines()->find($routingLineId);
@@ -462,6 +457,7 @@ class ProductionOrderService
             ]);
 
             app(ValueEntryService::class)->ensureForCapacityLedgerEntry($capacityLedgerEntry, $userId);
+            app(ValueEntryAccountingOrchestrator::class)->postForCapacityLedgerEntry($capacityLedgerEntry);
 
             // Keep operation progress/status in sync regardless of caller (UI, API, jobs).
             $routingLine->actual_setup_time = (float) $routingLine->actual_setup_time + (float) $setupTime;
@@ -476,14 +472,6 @@ class ProductionOrderService
                 $order->capexProject->increment('actual_amount', $totalCost);
             }
 
-            // G/L Integration: Dr. WIP, Cr. Direct Cost Applied, Cr. Overhead Applied
-            $this->createCapacityGlEntries(
-                $order,
-                $cost,
-                $indirectCost,
-                now(),
-                "Capacity: {$routingLine->description}"
-            );
         });
     }
 
@@ -606,7 +594,10 @@ class ProductionOrderService
                     'cost_amount_actual' => $actualCostForEntry,
                 ]);
 
-                app(ValueEntryService::class)->ensureForItemLedgerEntry($entry->fresh());
+                $outputValueEntry = app(ValueEntryService::class)->ensureForItemLedgerEntry($entry->fresh());
+                if ($outputValueEntry) {
+                    app(ValueEntryAccountingOrchestrator::class)->post($outputValueEntry);
+                }
 
                 $totalInventoryCost = DecimalMath::add($totalInventoryCost, $actualCostForEntry, DecimalPrecision::AMOUNT_SCALE);
             }
@@ -618,11 +609,8 @@ class ProductionOrderService
                     'cost_amount' => DecimalMath::amount(DecimalMath::mul($order->quantity, $inventoryUnitCost, DecimalPrecision::AMOUNT_SCALE)),
                 ]);
 
-            // G/L Integration:
-            // 1. Move from WIP to Inventory (at the cost we recorded in Inventory)
-            $this->createFinishGlEntries($order, (float) $totalInventoryCost, $postingDate);
-
-            // 2. Clear remaining WIP by posting to Variance (if any)
+            // Output Value Entries own the WIP-to-finished-goods movement.
+            // Finish only records residual variance under the current Phase 1B boundary.
             $variance = DecimalMath::sub($totalActualCost, $totalInventoryCost, DecimalPrecision::AMOUNT_SCALE);
             if (! DecimalMath::isLessThanOrEqualToTolerance($variance, DecimalTolerance::AMOUNT)) {
                 $this->createVarianceGlEntries($order, (float) $variance, $postingDate);

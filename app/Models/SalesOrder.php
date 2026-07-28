@@ -9,8 +9,8 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
-use App\Enums\SourceType;
 use App\Services\DimensionManagementService;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
@@ -496,7 +496,7 @@ class SalesOrder extends Model implements Approvable
                         'open' => false,
                     ]);
 
-                    $this->postShipmentInventoryGlEntries($itemLedgerEntry->fresh(), $line);
+                    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry->fresh());
 
                     $line->item->decrement('inventory', $baseQuantityToShip);
                 }
@@ -628,80 +628,6 @@ class SalesOrder extends Model implements Approvable
     private function getShipmentDocumentNumber(): string
     {
         return 'SS-'.$this->order_number;
-    }
-
-    private function postShipmentInventoryGlEntries(ItemLedgerEntry $itemLedgerEntry, SalesOrderLine $line): void
-    {
-        $costAmount = abs((float) $itemLedgerEntry->cost_amount_actual);
-
-        if ($costAmount <= 0) {
-            return;
-        }
-
-        if (GlEntry::query()
-            ->where('document_type', 'SALES_ORDER_SHIPMENT')
-            ->where('document_number', $itemLedgerEntry->document_number)
-            ->where('item_ledger_entry_id', $itemLedgerEntry->id)
-            ->exists()) {
-            return;
-        }
-
-        $postingSetup = $line->getPostingSetup();
-        $cogsAccount = $postingSetup?->getCogsAccount();
-        $inventoryAccount = $line->item?->getInventoryAccount($itemLedgerEntry->location_id);
-
-        if (! $cogsAccount || ! $inventoryAccount) {
-            throw ValidationException::withMessages([
-                'inventory_accounts' => "Missing COGS or Inventory account for item {$line->item_code}.",
-            ]);
-        }
-
-        $postingService = app(PostingService::class);
-
-        $cogsEntry = $postingService->createGlEntry([
-            'chart_of_account_id' => $cogsAccount->id,
-            'general_business_posting_group_id' => $this->general_business_posting_group_id,
-            'debit_amount' => $costAmount,
-            'credit_amount' => 0,
-            'source_type' => SourceType::ITEM,
-            'source_number' => $line->item_code,
-            'document_type' => 'SALES_ORDER_SHIPMENT',
-            'document_number' => $itemLedgerEntry->document_number,
-            'posting_date' => $itemLedgerEntry->posting_date,
-            'document_date' => $itemLedgerEntry->posting_date,
-            'description' => "COGS {$line->item_description}",
-            'item_ledger_entry_id' => $itemLedgerEntry->id,
-            'sourceable_id' => $this->id,
-            'sourceable_type' => self::class,
-        ]);
-
-        $postingService->createGlEntry([
-            'chart_of_account_id' => $inventoryAccount->id,
-            'general_business_posting_group_id' => $this->general_business_posting_group_id,
-            'debit_amount' => 0,
-            'credit_amount' => $costAmount,
-            'source_type' => SourceType::ITEM,
-            'source_number' => $line->item_code,
-            'document_type' => 'SALES_ORDER_SHIPMENT',
-            'document_number' => $itemLedgerEntry->document_number,
-            'posting_date' => $itemLedgerEntry->posting_date,
-            'document_date' => $itemLedgerEntry->posting_date,
-            'description' => "Inventory {$line->item_description}",
-            'item_ledger_entry_id' => $itemLedgerEntry->id,
-            'sourceable_id' => $this->id,
-            'sourceable_type' => self::class,
-        ]);
-
-        ValueEntry::query()
-            ->where('item_ledger_entry_no', $itemLedgerEntry->entry_number)
-            ->where('document_no', $itemLedgerEntry->document_number)
-            ->update([
-                'gl_posted' => true,
-                'gl_posting_date' => now(),
-                'gl_entry_no' => $cogsEntry->id,
-                'gl_account_no' => $cogsAccount->account_number,
-                'balancing_account_no' => $inventoryAccount->account_number,
-            ]);
     }
 
     /**

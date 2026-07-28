@@ -5,8 +5,10 @@ use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Enums\PurchaseOrderStatus;
+use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
@@ -172,9 +174,15 @@ test('purchase receipt increases inventory and purchase invoice from receipt doe
         ->firstOrFail();
 
     expect((float) $receiptEntry->quantity)->toBe(144.0)
-        ->and((float) $receiptEntry->cost_amount_actual)->toBe(500.0)
+        ->and((float) $receiptEntry->cost_amount_actual)->toBe(0.0)
+        ->and((float) $receiptEntry->cost_amount_expected)->toBe(500.0)
         ->and((float) $fixture['item']->fresh()->inventory)->toBe(144.0)
-        ->and(ValueEntry::query()->where('item_ledger_entry_no', $receiptEntry->entry_number)->exists())->toBeTrue();
+        ->and(ValueEntry::query()
+            ->where('item_ledger_entry_no', $receiptEntry->entry_number)
+            ->where('value_entry_state', 'expected')
+            ->where('expected_cost', true)
+            ->where('gl_posted', false)
+            ->exists())->toBeTrue();
 
     $line->fresh()->update(['received_quantity' => 1]);
     app(PurchaseOrderService::class)->postReceipt($order->fresh());
@@ -186,7 +194,8 @@ test('purchase receipt increases inventory and purchase invoice from receipt doe
         ->firstOrFail();
 
     expect((float) $receiptEntry->quantity)->toBe(144.0)
-        ->and((float) $receiptEntry->cost_amount_actual)->toBe(500.0)
+        ->and((float) $receiptEntry->cost_amount_actual)->toBe(0.0)
+        ->and((float) $receiptEntry->cost_amount_expected)->toBe(500.0)
         ->and((float) $fixture['item']->fresh()->inventory)->toBe(288.0)
         ->and(ItemLedgerEntry::query()
             ->where('document_type', 'PURCHASE_RECEIPT')
@@ -208,6 +217,15 @@ test('purchase receipt increases inventory and purchase invoice from receipt doe
             ->where('document_number', 'PO-RECEIPT-001')
             ->count())->toBe(2)
         ->and((float) $fixture['item']->fresh()->inventory)->toBe(288.0);
+
+    expect((float) ValueEntry::query()
+        ->where('document_no', $invoice->document_number)
+        ->where('value_entry_state', 'actual')
+        ->sum('valued_quantity'))->toBe(288.0)
+        ->and((float) ValueEntry::query()
+            ->where('document_no', $invoice->document_number)
+            ->where('value_entry_state', 'actual')
+            ->sum('cost_amount_actual'))->toBe(1000.0);
 
     $receiptEntryIds = ItemLedgerEntry::query()
         ->where('document_type', 'PURCHASE_RECEIPT')
@@ -368,7 +386,7 @@ test('purchase invoice posting rejects missing exact posting setup and rolls bac
     ]);
 
     expect(fn () => app(PurchaseInvoiceService::class)->post($invoice))
-        ->toThrow(Exception::class, 'Posting setup missing');
+        ->toThrow(Exception::class, 'General posting setup missing');
 
     expect($invoice->fresh()->status)->toBe(ApprovalStatus::APPROVED)
         ->and(ItemLedgerEntry::query()->where('document_number', 'PI-MISSING-SETUP')->exists())->toBeFalse()
@@ -596,7 +614,7 @@ test('purchase credit memo posting requires permission and rolls back on missing
     grantPurchaseCreditMemoPostPermission($fixture['user']);
 
     expect(fn () => app(PurchaseCreditMemoService::class)->post($memo->fresh()))
-        ->toThrow(Exception::class, 'Posting setup missing');
+        ->toThrow(Exception::class, 'General posting setup missing');
 
     expect($memo->fresh()->status)->toBe(ApprovalStatus::APPROVED)
         ->and(ItemLedgerEntry::query()->where('document_number', 'PCM-MISSING-SETUP')->exists())->toBeFalse()
@@ -610,6 +628,23 @@ test('purchase credit memo posting requires permission and rolls back on missing
  */
 function purchasePostingFixture(bool $createGeneralPostingSetup = true): array
 {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate(
+        ['name' => 'FY2026'],
+        [
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-12-31',
+            'is_closed' => false,
+        ],
+    );
+
     $user = User::factory()->create();
     $location = Location::factory()->create(['code' => 'MAIN']);
 

@@ -647,14 +647,15 @@ class PostingService
 
         // Inventory item
         if ($item->isInventoryItem()) {
-            $inventoryAccount = $item->getInventoryAccount();
+            $purchaseAccount = $setup->getPurchaseAccount();
 
-            if (! $inventoryAccount) {
-                throw new \Exception("Inventory account missing for item {$item->item_code}");
+            if (! $purchaseAccount) {
+                $vendorRef = $vendor->vendor_code ?: $vendor->vendor_name ?: (string) $vendor->id;
+                throw new \Exception("Purchase clearing account missing in posting setup for vendor {$vendorRef} and item {$item->item_code}");
             }
 
             $entries[] = $this->createGlEntry([
-                'chart_of_account_id' => $inventoryAccount->id,
+                'chart_of_account_id' => $purchaseAccount->id,
                 'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
                 'debit_amount' => $lineTotal,
                 'credit_amount' => 0,
@@ -663,7 +664,7 @@ class PostingService
                 'document_type' => 'PURCHASE_INVOICE',
                 'document_number' => $documentNumber,
                 'posting_date' => $postingDate,
-                'description' => "Inventory receipt: {$description}",
+                'description' => "Purchase clearing: {$description}",
             ]);
         } else {
             $purchaseAccount = $setup->getPurchaseAccount();
@@ -894,9 +895,6 @@ class PostingService
                 }
 
                 $salesAccount = $postingSetup->getSalesAccount();
-                $cogsAccount = $postingSetup->getCogsAccount();
-                $inventoryAccount = $item->getInventoryAccount();
-
                 if (! $salesAccount) {
                     throw new \Exception("Missing sales account for item '{$itemDisplayName}'.");
                 }
@@ -914,9 +912,6 @@ class PostingService
                 $lineRevenue = $vatCalc['net_amount'];
                 $lineVat = $vatCalc['vat_amount'];
                 $lineTotalWithVat = $vatCalc['total_amount'];
-
-                $quantityBase = $this->quantityBaseForLine((float) $line->quantity, $line->unit_of_measure ?? null, $item);
-                $lineCost = $quantityBase * ($item->unit_cost ?? 0);
 
                 // 1. Accounts Receivable (Debit)
                 $entries[] = $this->createGlEntry([
@@ -959,39 +954,6 @@ class PostingService
                     ]);
                 }
 
-                // Inventory postings (only for inventory items)
-                if ($item->isInventoryItem()) {
-
-                    if (! $cogsAccount || ! $inventoryAccount) {
-                        throw new \Exception("Missing COGS or Inventory account for item '{$item->name}'.");
-                    }
-
-                    // 3. COGS (Debit)
-                    $entries[] = $this->createGlEntry([
-                        'chart_of_account_id' => $cogsAccount->id,
-                        'general_business_posting_group_id' => $customerGroupId,
-                        'debit_amount' => $lineCost,
-                        'credit_amount' => 0,
-                        'document_type' => 'SALES_INVOICE',
-                        'document_number' => $invoice->invoice_number,
-                        'posting_date' => $invoice->posting_date,
-                        'document_date' => $invoice->posting_date,
-                        'description' => "COGS {$item->description}",
-                    ]);
-
-                    // 4. Inventory (Credit)
-                    $entries[] = $this->createGlEntry([
-                        'chart_of_account_id' => $inventoryAccount->id,
-                        'general_business_posting_group_id' => $customerGroupId,
-                        'debit_amount' => 0,
-                        'credit_amount' => $lineCost,
-                        'document_type' => 'SALES_INVOICE',
-                        'document_number' => $invoice->invoice_number,
-                        'posting_date' => $invoice->posting_date,
-                        'document_date' => $invoice->posting_date,
-                        'description' => "Inventory decrease {$item->description}",
-                    ]);
-                }
             }
 
             return $entries;

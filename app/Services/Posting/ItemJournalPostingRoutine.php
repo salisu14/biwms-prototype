@@ -8,9 +8,10 @@ use App\Enums\JournalLineType;
 use App\Models\BinContent;
 use App\Models\ItemJournalLine;
 use App\Models\ItemLedgerEntry;
-use App\Models\ValueEntry;
 use App\Models\WarehouseEntry;
 use App\Services\Inventory\CostingService;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use App\Services\Inventory\ValueEntryService;
 // use App\Services\Warehouse\WarehousePostingService;
 use Illuminate\Support\Facades\Auth;
 
@@ -95,25 +96,8 @@ class ItemJournalPostingRoutine extends AbstractJournalPostingRoutine
             'reason_code' => $line->reason_code,
         ]);
 
-        // Create Value Entry (detailed cost)
-        $itemNo = (string) ($line->item?->item_code ?? $line->item_id);
-        $locationCode = (string) ($line->location?->code ?? $line->location_id ?? 'MAIN');
-
-        ValueEntry::create([
-            'item_ledger_entry_no' => (int) ($itemLedgerEntry->entry_number ?? $itemLedgerEntry->id),
-            'item_ledger_entry_type' => $this->mapValueEntryItemLedgerType($itemLedgerEntry->entry_type),
-            'item_no' => $itemNo,
-            'location_code' => $locationCode,
-            'posting_date' => $line->posting_date,
-            'entry_type' => $itemLedgerEntry->entry_type,
-            'document_no' => $line->document_no,
-            'quantity' => $itemLedgerEntry->quantity,
-            'unit_cost' => $unitCost,
-            'unit_cost_acy' => $unitCost,
-            'cost_amount_actual' => $totalCost,
-            'cost_amount_expected' => 0, // Adjust later if needed
-            'invoiced_quantity' => $itemLedgerEntry->quantity,
-        ]);
+        app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
+        app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 
         // Create Warehouse Entry if location uses bins
         if ($line->bin_id || $line->zone_id) {
@@ -122,9 +106,6 @@ class ItemJournalPostingRoutine extends AbstractJournalPostingRoutine
 
         // Update Bin Content
         $this->updateBinContent($line);
-
-        // Create GL Entries for inventory impact
-        $this->createInventoryGLEntries($line, $totalCost);
 
         $this->updateLineStatus($line, 'posted', $itemLedgerEntry->id, ItemLedgerEntry::class);
     }
@@ -216,12 +197,6 @@ class ItemJournalPostingRoutine extends AbstractJournalPostingRoutine
         }
     }
 
-    private function createInventoryGLEntries(ItemJournalLine $line, float $totalCost): void
-    {
-        // Implementation depends on your Inventory Posting Setup
-        // Debit/Credit Inventory Account vs. Offset Account
-    }
-
     private function getAvailableQuantity(ItemJournalLine $line): float
     {
         // Query BinContent or Item availability
@@ -239,20 +214,6 @@ class ItemJournalPostingRoutine extends AbstractJournalPostingRoutine
             JournalLineType::CONSUMPTION => 'consumption',
             JournalLineType::OUTPUT => 'output',
             default => 'adjustment',
-        };
-    }
-
-    private function mapValueEntryItemLedgerType(string $entryType): int
-    {
-        return match (strtolower($entryType)) {
-            'purchase' => 1,
-            'sale' => 2,
-            'positive_adj', 'positive adjustment', 'positive adjmt.' => 3,
-            'negative_adj', 'negative adjustment', 'negative adjmt.' => 4,
-            'transfer' => 5,
-            'consumption' => 6,
-            'output' => 7,
-            default => 0,
         };
     }
 }

@@ -1,9 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
+use App\Enums\AccountCategory;
+use App\Enums\AccountStructuralType;
+use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ShipmentStatus;
 use App\Enums\SourceDocument;
 use App\Enums\WarehouseReceiptStatus;
+use App\Models\AccountingPeriod;
+use App\Models\ChartOfAccount;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
+use App\Models\GeneralPostingSetup;
+use App\Models\GeneralProductPostingGroup;
+use App\Models\InventoryPostingGroup;
+use App\Models\InventoryPostingSetup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
@@ -15,6 +28,24 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+});
 
 it('moves stock between locations without changing total stock', function (): void {
     [$item, $sourceLocation, $destinationLocation] = warehouseMovementFixture(10);
@@ -247,12 +278,48 @@ function warehouseMovementFixture(float $openingQuantity): array
 {
     $sourceLocation = Location::factory()->create(['code' => 'SRC']);
     $destinationLocation = Location::factory()->create(['code' => 'DST']);
+    $generalBusinessPostingGroup = GeneralBusinessPostingGroup::factory()->create(['code' => 'WH']);
+    $generalProductPostingGroup = GeneralProductPostingGroup::query()->create([
+        'code' => 'WH-ITEM',
+        'description' => 'Warehouse Items',
+        'blocked' => false,
+        'auto_create_vat_prod_posting_group' => false,
+    ]);
+    $inventoryPostingGroup = InventoryPostingGroup::query()->create([
+        'code' => 'WH-ITEM',
+        'description' => 'Warehouse Items',
+        'blocked' => false,
+    ]);
+    $inventoryAccount = warehouseMovementAccount('13010', 'Warehouse Inventory', AccountCategory::INVENTORY);
+    $adjustmentAccount = warehouseMovementAccount('51010', 'Warehouse Adjustment', AccountCategory::DIRECT_EXPENSE);
+
+    foreach ([$sourceLocation, $destinationLocation] as $location) {
+        InventoryPostingSetup::query()->create([
+            'location_id' => $location->id,
+            'inventory_posting_group_id' => $inventoryPostingGroup->id,
+            'inventory_account_id' => $inventoryAccount->id,
+            'wip_account_id' => $inventoryAccount->id,
+        ]);
+    }
+
+    GeneralPostingSetup::query()->create([
+        'general_business_posting_group_id' => $generalBusinessPostingGroup->id,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_adj_account_id' => $adjustmentAccount->id,
+        'inventory_account_id' => $inventoryAccount->id,
+        'purchase_account_id' => $adjustmentAccount->id,
+        'cogs_account_id' => $adjustmentAccount->id,
+        'blocked' => false,
+    ]);
+
     $item = Item::factory()->create([
         'item_code' => 'WH-MOVE',
         'description' => 'Warehouse Movement Item',
         'inventory' => $openingQuantity,
         'unit_cost' => 10,
         'location_id' => $sourceLocation->id,
+        'general_product_posting_group_id' => $generalProductPostingGroup->id,
+        'inventory_posting_group_id' => $inventoryPostingGroup->id,
     ]);
 
     if ($openingQuantity > 0) {
@@ -267,6 +334,7 @@ function warehouseMovementFixture(float $openingQuantity): array
             'remaining_quantity' => $openingQuantity,
             'cost_amount_actual' => $openingQuantity * 10,
             'cost_amount_expected' => 0,
+            'general_business_posting_group_id' => $generalBusinessPostingGroup->id,
             'general_product_posting_group_id' => $item->general_product_posting_group_id,
             'inventory_posting_group_id' => $item->inventory_posting_group_id,
             'posting_date' => now(),
@@ -276,6 +344,24 @@ function warehouseMovementFixture(float $openingQuantity): array
     }
 
     return [$item, $sourceLocation, $destinationLocation];
+}
+
+function warehouseMovementAccount(string $number, string $name, AccountCategory $category): ChartOfAccount
+{
+    return ChartOfAccount::query()->firstOrCreate(
+        ['account_number' => $number],
+        [
+            'name' => $name,
+            'structural_type' => AccountStructuralType::POSTING,
+            'account_category' => $category,
+            'balance' => 0,
+            'direct_posting' => true,
+            'blocked' => false,
+            'income_balance' => $category->isBalanceSheet()
+                ? IncomeBalanceType::BALANCE_SHEET
+                : IncomeBalanceType::INCOME_STATEMENT,
+        ],
+    );
 }
 
 function locationLedgerQuantity(Item $item, Location $location): float

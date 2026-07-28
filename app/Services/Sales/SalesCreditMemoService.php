@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Sales;
 
 use App\Data\Sales\SalesCreditMemoData;
@@ -15,6 +17,7 @@ use App\Models\SalesCreditMemo;
 use App\Models\SalesCreditMemoLine;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -366,6 +369,7 @@ class SalesCreditMemoService
         ]);
 
         $this->assertValueEntryCreated($entry, $postedMemo->corrected_invoice_number, $postedMemo->posting_date);
+        app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 
         $item->increment('inventory', $quantityBase);
 

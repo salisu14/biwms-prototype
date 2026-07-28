@@ -29,6 +29,7 @@
         <env name="DB_DATABASE" value="biwmsprotodb"/>
         <env name="DB_SCHEMA" value="biwmsproto_test"/>
         <env name="DB_USERNAME" value="biwmsproto"/>
+        <env name="DB_PASSWORD" value="xY96G-XT8Uai341"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

@@ -15,6 +15,7 @@ use App\Models\SalesInvoiceLine;
 use App\Models\SalesOrder;
 use App\Models\ValueEntry;
 use App\Services\AuditTrailService;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use Illuminate\Support\Facades\Auth;
@@ -158,6 +159,7 @@ class SalesInvoiceService
 
                 if ($itemLedgerEntry) {
                     $itemLedgerEntryIds[$line->id] = $itemLedgerEntry->id;
+                    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
                 }
             }
 

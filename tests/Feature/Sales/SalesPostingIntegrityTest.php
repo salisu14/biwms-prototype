@@ -4,11 +4,13 @@ use App\Enums\ApprovalStatus;
 use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
+use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\CustomerPostingGroup;
 use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\GlEntry;
@@ -118,7 +120,7 @@ test('sales invoice posting rejects missing exact posting setup and rolls back l
     ]);
 
     expect(fn () => app(SalesInvoiceService::class)->post($invoice))
-        ->toThrow(Exception::class, 'No posting setup found');
+        ->toThrow(Exception::class, 'General posting setup missing');
 
     expect($invoice->fresh()->status)->toBe(ApprovalStatus::APPROVED)
         ->and(ItemLedgerEntry::query()->where('document_number', 'SI-MISSING-SETUP')->exists())->toBeFalse()
@@ -291,7 +293,7 @@ test('sales credit memo posting requires permission and rolls back on missing se
     grantSalesCreditMemoPostPermission($fixture['user']);
 
     expect(fn () => app(SalesCreditMemoService::class)->post($creditMemo->fresh()))
-        ->toThrow(Exception::class, 'Posting setup missing');
+        ->toThrow(Exception::class, 'General posting setup missing');
 
     expect($creditMemo->fresh()->status)->toBe(ApprovalStatus::APPROVED)
         ->and(ItemLedgerEntry::query()->where('document_number', 'SCM-MISSING-SETUP')->exists())->toBeFalse()
@@ -304,6 +306,23 @@ test('sales credit memo posting requires permission and rolls back on missing se
  */
 function salesPostingFixture(bool $createGeneralPostingSetup = true): array
 {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate(
+        ['name' => 'FY2026'],
+        [
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-12-31',
+            'is_closed' => false,
+        ],
+    );
+
     $user = User::factory()->create();
 
     $receivablesAccount = postingTestAccount('1100', 'Accounts Receivable', 'receivable', IncomeBalanceType::BALANCE_SHEET);

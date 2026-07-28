@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Purchase;
 
 use App\Data\Purchase\ApprovePurchaseOrderData;
@@ -19,6 +21,7 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
 use App\Models\WarehouseReceipt;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PutAwayWorksheetService;
@@ -409,7 +412,8 @@ class PurchaseOrderService
                 }
 
                 if ($line->item?->isInventoryItem()) {
-                    $this->createReceiptItemLedgerEntry($order, $line, $quantityToReceive);
+                    $receiptItemLedgerEntry = $this->createReceiptItemLedgerEntry($order, $line, $quantityToReceive);
+                    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($receiptItemLedgerEntry);
                 }
 
                 $receivedAny = true;
@@ -455,9 +459,9 @@ class PurchaseOrderService
             'entry_date' => now(),
             'source_id' => $order->id,
             'source_type' => PurchaseOrder::class,
-            'cost_amount_actual' => $lineCost,
-            'cost_amount_expected' => 0,
-            'purchase_amount_actual' => $lineCost,
+            'cost_amount_actual' => 0,
+            'cost_amount_expected' => $lineCost,
+            'purchase_amount_actual' => 0,
             'general_business_posting_group_id' => $order->general_business_posting_group_id,
             'general_product_posting_group_id' => $line->general_product_posting_group_id,
             'inventory_posting_group_id' => $item->inventory_posting_group_id,

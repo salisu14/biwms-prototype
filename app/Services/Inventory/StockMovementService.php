@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Inventory;
 
 use App\Enums\ItemLedgerEntryType;
@@ -68,6 +70,9 @@ class StockMovementService
                 postingDate: $postingDate,
             );
 
+            app(ValueEntryService::class)->ensureForItemLedgerEntry($sourceEntry);
+            app(ValueEntryService::class)->ensureForItemLedgerEntry($destinationEntry);
+
             return [
                 'source' => $sourceEntry,
                 'destination' => $destinationEntry,
@@ -113,6 +118,7 @@ class StockMovementService
                     postingDate: $receipt->receipt_date,
                     source: $receipt,
                 );
+                app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 
                 $line->forceFill([
                     'quantity_received' => (float) $line->quantity,
@@ -161,7 +167,7 @@ class StockMovementService
                     throw new \RuntimeException("Insufficient stock at location {$shipment->location->code} for item {$line->item->item_code}.");
                 }
 
-                $this->createItemLedgerEntry(
+                $entry = $this->createItemLedgerEntry(
                     item: $line->item,
                     location: $shipment->location,
                     entryType: ItemLedgerEntryType::NEGATIVE_ADJUSTMENT,
@@ -172,6 +178,7 @@ class StockMovementService
                     postingDate: $shipment->shipment_date,
                     source: $shipment,
                 );
+                app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 
                 $line->forceFill([
                     'quantity_shipped' => (float) $line->quantity,

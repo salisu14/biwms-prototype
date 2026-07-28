@@ -14,6 +14,7 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ProductionJournalLine;
 use App\Services\Inventory\CostingService;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 
 class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
@@ -75,8 +76,8 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
             $component->save();
         }
 
-        // Post to WIP Account (debit) vs. Inventory (credit)
-        $this->postWIPCost($line, (float) $itemLedgerEntry->cost_amount_actual);
+        app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
+        app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 
         $this->updateLineStatus($line, 'posted', $itemLedgerEntry->id, ItemLedgerEntry::class);
     }
@@ -102,8 +103,8 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
             }
         }
 
-        // Post WIP to FG transfer
-        $this->postWIPToFG($line, $totalCost);
+        app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
+        app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 
         $this->updateLineStatus($line, 'posted', $itemLedgerEntry->id, ItemLedgerEntry::class);
     }
@@ -139,9 +140,7 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
         ]);
 
         app(ValueEntryService::class)->ensureForCapacityLedgerEntry($capacityEntry, $line->created_by);
-
-        // Post to WIP (debit) vs. Direct Cost Account (credit)
-        $this->postCapacityToWIP($line, $directCost, $overheadCost);
+        app(ValueEntryAccountingOrchestrator::class)->postForCapacityLedgerEntry($capacityEntry);
 
         $this->updateLineStatus($line, 'posted', $capacityEntry->id, CapacityLedgerEntry::class);
     }
@@ -163,8 +162,8 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
             $component->save();
         }
 
-        // Post to WIP Account (debit) vs. Inventory (credit)
-        $this->postWIPCost($line, (float) $itemLedgerEntry->cost_amount_actual);
+        app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
+        app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 
         $this->updateLineStatus($line, 'posted', $itemLedgerEntry->id, ItemLedgerEntry::class);
     }
