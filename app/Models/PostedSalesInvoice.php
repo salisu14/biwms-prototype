@@ -135,6 +135,12 @@ class PostedSalesInvoice extends Model
             ->where('document_type', 'SALES_INVOICE');
     }
 
+    public function commissionCalculations(): HasMany
+    {
+        return $this->hasMany(CommissionCalculation::class, 'source_id')
+            ->where('source_type', self::class);
+    }
+
     // ==================== SCOPES ====================
 
     public function scopeNotCancelled($query)

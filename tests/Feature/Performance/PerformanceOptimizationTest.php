@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Resources\AttendanceLedgerEntries\AttendanceLedgerEntryResource;
+use App\Filament\Resources\CommissionLedgerEntries\CommissionLedgerEntryResource;
 use App\Filament\Resources\EmployeeAttendanceEvents\EmployeeAttendanceEventResource;
 use App\Filament\Resources\RecruitmentHistories\RecruitmentHistoryResource;
 use App\Filament\Resources\WorkforceRosterHistories\WorkforceRosterHistoryResource;
@@ -82,6 +83,7 @@ it('exports ranked performance audit findings without critical or high findings'
 it('keeps high-volume history ledger and event resources out of global search', function (): void {
     foreach ([
         AttendanceLedgerEntryResource::class,
+        CommissionLedgerEntryResource::class,
         EmployeeAttendanceEventResource::class,
         RecruitmentHistoryResource::class,
         WorkforceRosterHistoryResource::class,

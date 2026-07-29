@@ -21,6 +21,7 @@ use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
+use App\Services\Sales\ReferralCommissions\CommissionCalculationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -318,6 +319,10 @@ class SalesInvoiceService
                     'total_amount' => $grandTotal,
                 ],
             );
+
+            DB::afterCommit(function () use ($postedInvoice): void {
+                app(CommissionCalculationService::class)->calculateForPostedSalesInvoice($postedInvoice->fresh('lines.item'), Auth::id());
+            });
         });
     }
 

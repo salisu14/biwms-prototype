@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\CommissionCalculationBasis;
 use App\Enums\ReferralCommissionAssignmentStatus;
 use App\Enums\ReferralCommissionBasis;
 use App\Enums\ReferralCommissionMethod;
@@ -30,6 +31,7 @@ class ReferralCommissionPlan extends Model
         'description',
         'status',
         'commission_basis',
+        'calculation_basis',
         'commission_method',
         'commission_scope',
         'tier_basis',
@@ -57,6 +59,7 @@ class ReferralCommissionPlan extends Model
     protected $casts = [
         'status' => ReferralCommissionPlanStatus::class,
         'commission_basis' => ReferralCommissionBasis::class,
+        'calculation_basis' => CommissionCalculationBasis::class,
         'commission_method' => ReferralCommissionMethod::class,
         'commission_scope' => ReferralCommissionScope::class,
         'tier_basis' => ReferralCommissionTierBasis::class,

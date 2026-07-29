@@ -166,6 +166,23 @@ class PermissionsTableSeeder extends Seeder
             'factory.production_journal.reverse',
             'factory.production_progress.view',
 
+            // Sales referral commission accrual foundation
+            'sales.commission_calculation.view_any',
+            'sales.commission_calculation.view',
+            'sales.commission_calculation.calculate',
+            'sales.commission_calculation.recalculate',
+            'sales.commission_calculation.reverse',
+            'sales.commission_ledger.view_any',
+            'sales.commission_ledger.view',
+            'sales.commission_ledger.export',
+            'sales.commission_adjustment.view_any',
+            'sales.commission_adjustment.view',
+            'sales.commission_adjustment.create',
+            'sales.commission_adjustment.approve',
+            'sales.commission_adjustment.reverse',
+            'sales.referrer_commission_balance.view',
+            'sales.commission_reconcile.run',
+
             // HR
             'hr.employee.view_any', 'hr.employee.view', 'hr.employee.create', 'hr.employee.update', 'hr.employee.delete',
             'hr.employee_id_card.view', 'hr.employee_id_card.generate', 'hr.employee_id_card.download', 'hr.employee_id_card.regenerate', 'hr.employee_id_card.verify',
