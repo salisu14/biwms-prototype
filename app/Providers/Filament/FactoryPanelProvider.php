@@ -10,11 +10,14 @@ use App\Filament\Resources\Items\ItemResource;
 use App\Filament\Resources\MachineCenters\MachineCenterResource;
 use App\Filament\Resources\PriceLists\PriceListResource;
 use App\Filament\Resources\ProductionBoms\ProductionBomResource;
+use App\Filament\Resources\ProductionDowntimeReasons\ProductionDowntimeReasonResource;
 use App\Filament\Resources\ProductionJournalBatches\ProductionJournalBatchResource;
 use App\Filament\Resources\ProductionJournalTemplates\ProductionJournalTemplateResource;
+use App\Filament\Resources\ProductionOperationExecutions\ProductionOperationExecutionResource;
 use App\Filament\Resources\ProductionOrders\FinishedProductionOrderResource;
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
 use App\Filament\Resources\ProductionOrders\ReleasedProductionOrderResource;
+use App\Filament\Resources\ProductionScrapReasons\ProductionScrapReasonResource;
 use App\Filament\Resources\Routings\RoutingResource;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -54,7 +57,7 @@ class FactoryPanelProvider extends PanelProvider
             ->brandName('BIFLI Group')
             ->renderHook(
                 PanelsRenderHook::STYLES_AFTER,
-                fn(): string => <<<'HTML'
+                fn (): string => <<<'HTML'
                     <style>
                         html:not(.dark) .fi-body,
                         html:not(.dark) body {
@@ -72,6 +75,9 @@ class FactoryPanelProvider extends PanelProvider
                 ProductionOrderResource::class,
                 ReleasedProductionOrderResource::class,
                 FinishedProductionOrderResource::class,
+                ProductionOperationExecutionResource::class,
+                ProductionScrapReasonResource::class,
+                ProductionDowntimeReasonResource::class,
                 ProductionBomResource::class,
                 RoutingResource::class,
                 MachineCenterResource::class,

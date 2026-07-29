@@ -108,6 +108,11 @@ class ProductionOrderRoutingLine extends Model
         return $this->hasMany(CapacityLedgerEntry::class, 'routing_line_id');
     }
 
+    public function operationExecutions(): HasMany
+    {
+        return $this->hasMany(ProductionOperationExecution::class, 'routing_line_id');
+    }
+
     public function getTotalTimeMinutesAttribute(): float
     {
         $setup = $this->convertTimeToMinutes((float) $this->setup_time, (string) $this->setup_time_unit);

@@ -8,6 +8,7 @@ use App\Enums\FlushingMethod;
 use App\Enums\JournalLineStatus;
 use App\Enums\ProductionJournalEntryType;
 use App\Models\Manufacturing\MachineCenter;
+use App\Models\Manufacturing\ProductionOperationExecution;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderRoutingLine;
 use App\Models\Manufacturing\WorkCenter;
@@ -29,6 +30,7 @@ class ProductionJournalLine extends Model
         'production_order_no',
         'routing_line_no',
         'routing_line_id',
+        'production_operation_execution_id',
         'item_id',
         'item_no',
         'description',
@@ -70,6 +72,7 @@ class ProductionJournalLine extends Model
         'line_status',
         'item_ledger_entry_id',
         'capacity_ledger_entry_id',
+        'shop_floor_idempotency_key',
     ];
 
     protected $casts = [
@@ -112,6 +115,11 @@ class ProductionJournalLine extends Model
     public function routingLine(): BelongsTo
     {
         return $this->belongsTo(ProductionOrderRoutingLine::class, 'routing_line_id');
+    }
+
+    public function operationExecution(): BelongsTo
+    {
+        return $this->belongsTo(ProductionOperationExecution::class, 'production_operation_execution_id');
     }
 
     public function workCenter(): BelongsTo

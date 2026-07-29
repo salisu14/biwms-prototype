@@ -9,7 +9,6 @@ use App\Enums\ProductionJournalEntryType;
 use App\Enums\ProductionOrderStatus;
 use App\Models\Bin;
 use App\Models\CapacityLedgerEntry;
-use App\Models\InventoryPostingSetup;
 use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ProductionJournalLine;
@@ -24,6 +23,17 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
         private readonly ItemJournalPostingRoutine $itemPostingRoutine,
         private readonly CostingService $costingService
     ) {}
+
+    public function post(object $batch): PostingResult
+    {
+        $status = is_string($batch->status) ? $batch->status : ($batch->status->value ?? null);
+
+        if ($status === 'posted') {
+            return new PostingResult(true, [], []);
+        }
+
+        return parent::post($batch);
+    }
 
     /**
      * @param  ProductionJournalLine  $line
@@ -53,6 +63,10 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
      */
     protected function postLine(object $line): void
     {
+        if ($this->lineAlreadyPosted($line)) {
+            return;
+        }
+
         match ($line->entry_type) {
             ProductionJournalEntryType::Consumption => $this->postConsumption($line),
             ProductionJournalEntryType::Output => $this->postOutput($line),
@@ -63,6 +77,10 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
 
     private function postConsumption(ProductionJournalLine $line): void
     {
+        if ($this->reuseExistingItemLedgerEntry($line)) {
+            return;
+        }
+
         // Create Item Ledger Entry (negative)
         $itemLedgerEntry = $this->createItemLedgerEntry($line, 'negative');
 
@@ -86,6 +104,10 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
 
     private function postOutput(ProductionJournalLine $line): void
     {
+        if ($this->reuseExistingItemLedgerEntry($line)) {
+            return;
+        }
+
         // Create Item Ledger Entry (positive) for FG
         $itemLedgerEntry = $this->createItemLedgerEntry($line, 'positive');
 
@@ -105,7 +127,6 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
             }
         }
 
-        app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'production_journal_scrap', strict: false);
         app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
         app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
 
@@ -114,6 +135,10 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
 
     private function postCapacity(ProductionJournalLine $line): void
     {
+        if ($this->reuseExistingCapacityLedgerEntry($line)) {
+            return;
+        }
+
         $workCenter = $line->workCenter;
 
         // Calculate costs
@@ -188,6 +213,10 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
 
     private function postScrap(ProductionJournalLine $line): void
     {
+        if ($this->reuseExistingItemLedgerEntry($line)) {
+            return;
+        }
+
         // Create Item Ledger Entry (negative)
         $itemLedgerEntry = $this->createItemLedgerEntry($line, 'negative');
 
@@ -231,7 +260,7 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
                 item: $line->item,
                 location: $line->location,
                 lotNo: $line->lot_no,
-                asOfDate: $line->posting_date
+                asOfDate: $this->postingDateString($line)
             );
         }
 
@@ -246,7 +275,7 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
                 item: $line->item,
                 location: $line->location,
                 lotNo: $line->lot_no,
-                asOfDate: $line->posting_date
+                asOfDate: $this->postingDateString($line)
             );
         }
 
@@ -283,53 +312,17 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
         ]);
     }
 
-    private function postWIPCost(ProductionJournalLine $line, float $cost): void
+    private function postingDateString(ProductionJournalLine $line): ?string
     {
-        // GL Entry: Debit WIP, Credit Inventory
-        $this->createGeneralLedgerEntry([
-            'chart_of_account_id' => $this->resolveWipAccountId($line),
-            'posting_date' => $line->posting_date,
-            'document_number' => $line->production_order_no,
-            'document_type' => 'PRODUCTION_JOURNAL',
-            'document_date' => $line->posting_date,
-            'description' => "Consumption: {$line->item->description}",
-            'debit_amount' => $cost,
-            'credit_amount' => 0,
-            'amount_lcy' => $cost,
-        ]);
-    }
+        if ($line->posting_date === null) {
+            return null;
+        }
 
-    private function postWIPToFG(ProductionJournalLine $line, float $cost): void
-    {
-        // GL Entry: Debit FG Inventory, Credit WIP
-        $this->createGeneralLedgerEntry([
-            'chart_of_account_id' => $this->resolveInventoryAccountId($line),
-            'posting_date' => $line->posting_date,
-            'document_number' => $line->production_order_no,
-            'document_type' => 'PRODUCTION_JOURNAL',
-            'document_date' => $line->posting_date,
-            'description' => "Output: {$line->item->description}",
-            'debit_amount' => $cost,
-            'credit_amount' => 0,
-            'amount_lcy' => $cost,
-        ]);
+        if (is_string($line->posting_date)) {
+            return $line->posting_date;
+        }
 
-        $this->createGeneralLedgerEntry([
-            'chart_of_account_id' => $this->resolveWipAccountId($line),
-            'posting_date' => $line->posting_date,
-            'document_number' => $line->production_order_no,
-            'document_type' => 'PRODUCTION_JOURNAL',
-            'document_date' => $line->posting_date,
-            'description' => "WIP Transfer: {$line->item->description}",
-            'debit_amount' => 0,
-            'credit_amount' => $cost,
-            'amount_lcy' => -$cost,
-        ]);
-    }
-
-    private function postCapacityToWIP(ProductionJournalLine $line, float $directCost, float $overheadCost): void
-    {
-        // GL Entries for capacity absorption
+        return $line->posting_date->toDateString();
     }
 
     protected function updateLineStatus(object $line, string $status, ?int $postedEntryId = null, ?string $postedEntryType = null): void
@@ -344,46 +337,64 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
         $line->update($data);
     }
 
-    private function resolveWipAccountId(ProductionJournalLine $line): ?int
+    private function lineAlreadyPosted(ProductionJournalLine $line): bool
     {
-        // If the line has wip_account_id set, use it.
-        if ($line->wip_account_id) {
-            return (int) $line->wip_account_id;
+        $status = is_string($line->line_status) ? $line->line_status : ($line->line_status?->value ?? null);
+
+        if ($status !== 'posted') {
+            return false;
         }
 
-        // Try getting it from production order's inventory posting setup.
-        $postingGroupId = $line->productionOrder->inventory_posting_group_id;
-        if ($postingGroupId) {
-            $setup = InventoryPostingSetup::getFor((int) $postingGroupId, $line->location_id);
-            if ($setup && $setup->wip_account_id) {
-                return (int) $setup->wip_account_id;
-            }
+        if ($line->item_ledger_entry_id) {
+            return $this->reuseExistingItemLedgerEntry($line);
         }
 
-        // Try template default
-        if ($line->batch?->template?->default_wip_account_id) {
-            return (int) $line->batch->template->default_wip_account_id;
+        if ($line->capacity_ledger_entry_id) {
+            return $this->reuseExistingCapacityLedgerEntry($line);
         }
 
-        return null;
+        return true;
     }
 
-    private function resolveInventoryAccountId(ProductionJournalLine $line): ?int
+    private function reuseExistingItemLedgerEntry(ProductionJournalLine $line): bool
     {
-        // If the line has inventory_account_id set, use it.
-        if ($line->inventory_account_id) {
-            return (int) $line->inventory_account_id;
+        if (! $line->item_ledger_entry_id) {
+            return false;
         }
 
-        // Try getting it from item's inventory posting setup.
-        $item = $line->item;
-        if ($item && $item->inventory_posting_group_id) {
-            $setup = InventoryPostingSetup::getFor((int) $item->inventory_posting_group_id, $line->location_id);
-            if ($setup && $setup->inventory_account_id) {
-                return (int) $setup->inventory_account_id;
-            }
+        $itemLedgerEntry = ItemLedgerEntry::query()->find($line->item_ledger_entry_id);
+
+        if (! $itemLedgerEntry) {
+            return false;
         }
 
-        return null;
+        if ($line->entry_type === ProductionJournalEntryType::Consumption || $line->entry_type === ProductionJournalEntryType::Scrap) {
+            app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'production_journal_consumption', strict: false);
+        }
+
+        app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
+        app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
+        $this->updateLineStatus($line, 'posted', $itemLedgerEntry->id, ItemLedgerEntry::class);
+
+        return true;
+    }
+
+    private function reuseExistingCapacityLedgerEntry(ProductionJournalLine $line): bool
+    {
+        if (! $line->capacity_ledger_entry_id) {
+            return false;
+        }
+
+        $capacityLedgerEntry = CapacityLedgerEntry::query()->find($line->capacity_ledger_entry_id);
+
+        if (! $capacityLedgerEntry) {
+            return false;
+        }
+
+        app(ValueEntryService::class)->ensureForCapacityLedgerEntry($capacityLedgerEntry, $line->created_by);
+        app(ValueEntryAccountingOrchestrator::class)->postForCapacityLedgerEntry($capacityLedgerEntry);
+        $this->updateLineStatus($line, 'posted', $capacityLedgerEntry->id, CapacityLedgerEntry::class);
+
+        return true;
     }
 }

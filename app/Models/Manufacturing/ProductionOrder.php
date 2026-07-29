@@ -154,6 +154,11 @@ class ProductionOrder extends Model
             ->where('source_document', 'production_order');
     }
 
+    public function operationExecutions(): HasMany
+    {
+        return $this->hasMany(ProductionOperationExecution::class, 'production_order_id');
+    }
+
     public function location(): BelongsTo
     {
         return $this->belongsTo(Location::class, 'location_code', 'code');

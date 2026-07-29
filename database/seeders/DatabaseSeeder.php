@@ -45,6 +45,7 @@ class DatabaseSeeder extends Seeder
             RolesTableSeeder::class,
             UsersTableSeeder::class,
             RolePermissionSetSeeder::class,
+            ProductionShopFloorSetupSeeder::class,
             OverheadCostCategorySeeder::class,
             FAPostingGroupSeeder::class,
             DepreciationBookSeeder::class,

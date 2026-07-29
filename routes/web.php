@@ -15,6 +15,7 @@ use App\Http\Controllers\GroupSummaryPrintController;
 use App\Http\Controllers\Hr\EmployeeIdCardController;
 use App\Http\Controllers\Hr\EmployeePayslipController;
 use App\Http\Controllers\ItemLedgerSummaryPrintController;
+use App\Http\Controllers\Manufacturing\ProductionQualityAttachmentController;
 use App\Http\Controllers\PhysicalInventoryJournalPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
 use App\Http\Controllers\PurchaseStatisticsReportExportController;
@@ -92,6 +93,10 @@ Route::middleware(['web', 'auth'])->group(function (): void {
     Route::get('/admin/employee-payslips/download', [EmployeePayslipController::class, 'bulkDownload'])
         ->name('employee-payslips.bulk-download');
 });
+
+Route::get('/admin/production-quality-attachments/{attachment}/download', ProductionQualityAttachmentController::class)
+    ->name('production-quality-attachments.download')
+    ->middleware(['web', 'auth']);
 
 Route::get('/admin/sales-shipments/{shipment}/waybill', [WaybillController::class, 'print'])
     ->name('waybill.print')

@@ -43,3 +43,50 @@ it('does not let manufacturing services directly create inventory costing gl ent
 
     expect($violations)->toBeEmpty();
 });
+
+it('keeps shop floor and production journal posting off direct gl helpers', function (): void {
+    $productionJournalRoutine = File::get(app_path('Services/Posting/ProductionJournalPostingRoutine.php'));
+    $shopFloorService = File::get(app_path('Services/Manufacturing/ProductionOperationExecutionService.php'));
+    $shopFloorResource = File::get(app_path('Filament/Resources/ProductionOperationExecutions/ProductionOperationExecutionResource.php'));
+
+    expect($productionJournalRoutine)
+        ->not->toContain('createGeneralLedgerEntry')
+        ->toContain('ValueEntryAccountingOrchestrator')
+        ->and($shopFloorService)
+        ->not->toContain('GlEntry::create')
+        ->not->toContain('createGeneralLedgerEntry')
+        ->not->toContain('PostingService::class')
+        ->and($shopFloorResource)
+        ->not->toContain('GlEntry::create')
+        ->not->toContain('createGeneralLedgerEntry')
+        ->not->toContain('PostingService::class');
+});
+
+it('keeps manufacturing models and observers from posting accounting directly', function (): void {
+    $forbiddenPatterns = [
+        'GlEntry::create(',
+        '->createGlEntry(',
+        'createGeneralLedgerEntry',
+        'GeneralLedgerPostingKernel',
+        '->postTransaction(',
+    ];
+
+    $paths = [
+        ...collect(File::allFiles(app_path('Models/Manufacturing')))->all(),
+        ...collect(File::allFiles(app_path('Observers')))->filter(fn (SplFileInfo $file): bool => str_contains(File::get($file->getPathname()), 'Production'))->all(),
+    ];
+
+    $violations = collect($paths)
+        ->flatMap(function (SplFileInfo $file) use ($forbiddenPatterns): array {
+            $source = File::get($file->getPathname());
+
+            return collect($forbiddenPatterns)
+                ->filter(fn (string $pattern): bool => str_contains($source, $pattern))
+                ->map(fn (string $pattern): string => $file->getRelativePathname().': '.$pattern)
+                ->all();
+        })
+        ->values()
+        ->all();
+
+    expect($violations)->toBeEmpty();
+});
