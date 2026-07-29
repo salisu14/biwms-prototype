@@ -11,6 +11,7 @@ use App\Models\CapacityLedgerEntry as InventoryCapacityLedgerEntry;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralPostingSetup;
 use App\Models\InventoryPostingSetup;
+use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
 use App\Models\Manufacturing\CapacityLedgerEntry;
@@ -154,7 +155,7 @@ class ValueEntryAccountingOrchestrator
                 : [$this->wipAccount($valueEntry), $this->varianceAccount($valueEntry)];
         }
 
-        return match ($type) {
+        $accounts = match ($type) {
             'SALE' => str_contains($documentType, 'CREDIT_MEMO') || (float) $valueEntry->quantity > 0
                 ? [$this->inventoryAccount($valueEntry), $this->cogsAccount($valueEntry, true)]
                 : [$this->cogsAccount($valueEntry), $this->inventoryAccount($valueEntry)],
@@ -172,6 +173,12 @@ class ValueEntryAccountingOrchestrator
             'OVERHEAD' => [$this->wipAccount($valueEntry), $this->overheadAppliedAccount($valueEntry)],
             default => throw new RuntimeException("Unsupported value entry type {$type} for G/L posting."),
         };
+
+        if ($this->shouldReverseResolvedAccounts($valueEntry)) {
+            return [$accounts[1], $accounts[0]];
+        }
+
+        return $accounts;
     }
 
     private function amountToPost(ValueEntry $valueEntry): float
@@ -184,7 +191,9 @@ class ValueEntryAccountingOrchestrator
     private function inventoryAccount(ValueEntry $valueEntry): ChartOfAccount
     {
         $itemLedgerEntry = $this->itemLedgerEntry($valueEntry);
-        $setup = InventoryPostingSetup::getFor((int) $itemLedgerEntry->inventory_posting_group_id, $itemLedgerEntry->location_id);
+        $setup = $itemLedgerEntry
+            ? InventoryPostingSetup::getFor((int) $itemLedgerEntry->inventory_posting_group_id, $itemLedgerEntry->location_id)
+            : InventoryPostingSetup::getFor((int) $this->itemForValueEntry($valueEntry)->inventory_posting_group_id, $this->locationForValueEntry($valueEntry)?->id);
 
         if (! $setup?->inventoryAccount) {
             throw new RuntimeException("Inventory account missing for value entry {$valueEntry->entry_no}.");
@@ -220,7 +229,9 @@ class ValueEntryAccountingOrchestrator
         }
 
         $itemLedgerEntry = $this->itemLedgerEntry($valueEntry);
-        $setup = InventoryPostingSetup::getFor((int) $itemLedgerEntry->inventory_posting_group_id, $itemLedgerEntry->location_id);
+        $setup = $itemLedgerEntry
+            ? InventoryPostingSetup::getFor((int) $itemLedgerEntry->inventory_posting_group_id, $itemLedgerEntry->location_id)
+            : InventoryPostingSetup::getFor((int) $this->itemForValueEntry($valueEntry)->inventory_posting_group_id, $this->locationForValueEntry($valueEntry)?->id);
 
         if (! $setup?->wipAccount) {
             throw new RuntimeException("WIP account missing for value entry {$valueEntry->entry_no}.");
@@ -376,6 +387,15 @@ class ValueEntryAccountingOrchestrator
         }
 
         $itemLedgerEntry = $this->itemLedgerEntry($valueEntry);
+        if (! $itemLedgerEntry && $this->isManufacturingValueEntry($valueEntry)) {
+            $setup = $this->productionOrder($valueEntry)->getPostingSetup();
+
+            if (! $setup) {
+                throw new RuntimeException("General posting setup missing for value entry {$valueEntry->entry_no}.");
+            }
+
+            return $setup;
+        }
 
         $setup = GeneralPostingSetup::query()
             ->where('general_business_posting_group_id', $itemLedgerEntry->general_business_posting_group_id)
@@ -402,11 +422,11 @@ class ValueEntryAccountingOrchestrator
         return $setup;
     }
 
-    private function itemLedgerEntry(ValueEntry $valueEntry): ItemLedgerEntry
+    private function itemLedgerEntry(ValueEntry $valueEntry): ?ItemLedgerEntry
     {
         $itemLedgerEntry = $valueEntry->itemLedgerEntry;
 
-        if (! $itemLedgerEntry) {
+        if (! $itemLedgerEntry && ! $this->isManufacturingValueEntry($valueEntry)) {
             throw new RuntimeException("Item ledger entry missing for value entry {$valueEntry->entry_no}.");
         }
 
@@ -440,6 +460,32 @@ class ValueEntryAccountingOrchestrator
         return Location::query()
             ->where('code', $productionOrder->location_code)
             ->first();
+    }
+
+    private function locationForValueEntry(ValueEntry $valueEntry): ?Location
+    {
+        return Location::query()
+            ->where('code', $valueEntry->location_code)
+            ->first();
+    }
+
+    private function itemForValueEntry(ValueEntry $valueEntry): Item
+    {
+        $item = $valueEntry->item;
+
+        if (! $item) {
+            throw new RuntimeException("Item missing for value entry {$valueEntry->entry_no}.");
+        }
+
+        return $item;
+    }
+
+    private function shouldReverseResolvedAccounts(ValueEntry $valueEntry): bool
+    {
+        $amount = (float) ($valueEntry->expected_cost ? $valueEntry->cost_amount_expected : $valueEntry->cost_amount_actual);
+
+        return $amount < 0.0
+            && in_array((string) $valueEntry->value_entry_state, ['clearing', 'reversal', 'adjustment'], true);
     }
 
     private function idempotencyKey(ValueEntry $valueEntry): string

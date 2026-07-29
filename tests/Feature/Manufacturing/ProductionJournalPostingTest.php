@@ -13,6 +13,7 @@ use App\Enums\ProductionCostSettlementStatus;
 use App\Enums\ProductionJournalEntryType;
 use App\Enums\ProductionOrderStatus;
 use App\Enums\ProductionOutputAllocationStatus;
+use App\Enums\ProductionVarianceType;
 use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
 use App\Models\AccountingPeriod;
 use App\Models\CapacityLedgerEntry;
@@ -35,13 +36,18 @@ use App\Models\ProductionJournalBatch;
 use App\Models\ProductionJournalLine;
 use App\Models\ProductionJournalTemplate;
 use App\Models\ProductionOutputCostAllocation;
+use App\Models\ProductionVarianceCalculation;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Services\Inventory\ExpectedCostClearingService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use App\Services\Manufacturing\ExpectedManufacturingCostService;
 use App\Services\Manufacturing\ProductionCostSummaryService;
 use App\Services\Manufacturing\ProductionOrderCostSettlementService;
 use App\Services\Manufacturing\ProductionOrderService;
+use App\Services\Manufacturing\ProductionVarianceCalculationService;
+use App\Services\Manufacturing\ProductionVarianceValueEntryService;
 use App\Services\Posting\ProductionJournalPostingRoutine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -600,6 +606,7 @@ it('updates output value entry costs and marks the order posted when finishing',
         'cost_rollup' => 0,
         'flushing_method' => 'MANUAL',
         'location_code' => $location->code,
+        'created_by' => $user->id,
     ]);
 
     $order->lines()->create([
@@ -1627,8 +1634,253 @@ it('rejects unsupported manufacturing cost components before gl posting', functi
         ->and($report['findings']['unsupported_manufacturing_cost_components'][0]['classification'])->toBe('unsupported_manufacturing_cost_component');
 });
 
+it('creates idempotent expected manufacturing cost snapshots and expected value entries', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    [$order,, $workCenter] = createMinimalSettlementOrders($user, 'EXPECTED');
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-EXPECTED',
+        'unit_cost' => 7,
+        'standard_cost' => 8,
+        'costing_method' => 'STANDARD',
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+
+    $order->components()->create([
+        'line_number' => 10000,
+        'item_id' => $componentItem->id,
+        'description' => 'Expected raw material',
+        'unit_of_measure_code' => 'PCS',
+        'quantity_per' => 2,
+        'expected_quantity' => 20,
+        'expected_quantity_base' => 20,
+        'remaining_quantity' => 20,
+        'scrap_percent' => 10,
+        'unit_cost' => 7,
+    ]);
+    $order->routingLines()->create([
+        'line_number' => 10000,
+        'operation_no' => '10',
+        'work_center_id' => $workCenter->id,
+        'setup_time' => 1,
+        'run_time' => 2,
+        'setup_time_unit' => 'MINUTES',
+        'run_time_unit' => 'MINUTES',
+        'expected_output_quantity' => 1,
+        'direct_cost' => 5,
+        'overhead_cost' => 1,
+        'status' => 'PLANNED',
+    ]);
+
+    $result = app(ExpectedManufacturingCostService::class)->calculate($order, userId: $user->id);
+    $retry = app(ExpectedManufacturingCostService::class)->calculate($order->fresh(), userId: $user->id);
+
+    expect($retry['snapshot']->id)->toBe($result['snapshot']->id)
+        ->and((float) $result['snapshot']->expected_material_cost)->toBe(160.0)
+        ->and((float) $result['snapshot']->expected_capacity_cost)->toBe(15.0)
+        ->and((float) $result['snapshot']->expected_overhead_cost)->toBe(3.0)
+        ->and((float) $result['snapshot']->expected_total_cost)->toBe(178.0)
+        ->and(ValueEntry::query()->where('source_type', 'PRODUCTION_EXPECTED_COST')->where('production_order_no', $order->document_number)->count())->toBe(4)
+        ->and(ValueEntry::query()->where('cost_component', ManufacturingCostComponent::ExpectedDirectMaterial->value)->first()?->expected_cost)->toBeTrue();
+});
+
+it('clears manufacturing expected cost append only and idempotently', function (): void {
+    config(['accounts.post_expected_inventory_cost_to_gl' => false]);
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    [$order,,, $location] = createMinimalSettlementOrders($user, 'CLEARING');
+    createPostingAccountsForOrder($order, $location);
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-CLEARING',
+        'unit_cost' => 10,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+    $order->components()->create([
+        'line_number' => 10000,
+        'item_id' => $componentItem->id,
+        'description' => 'Clearing component',
+        'unit_of_measure_code' => 'PCS',
+        'quantity_per' => 1,
+        'expected_quantity' => 1,
+        'expected_quantity_base' => 1,
+        'remaining_quantity' => 0,
+        'unit_cost' => 10,
+    ]);
+
+    app(ExpectedManufacturingCostService::class)->calculate($order, userId: $user->id);
+    $expected = ValueEntry::query()
+        ->where('production_order_no', $order->document_number)
+        ->where('cost_component', ManufacturingCostComponent::ExpectedDirectMaterial->value)
+        ->firstOrFail();
+    $expected->forceFill(['gl_posted' => true])->save();
+
+    $actual = ValueEntry::query()->create([
+        'entry_no' => (ValueEntry::max('entry_no') ?? 0) + 1,
+        'item_ledger_entry_type' => 6,
+        'item_no' => 'RM-CLEARING',
+        'location_code' => $location->code,
+        'posting_date' => now()->toDateString(),
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_no' => $order->document_number,
+        'document_line_no' => 10000,
+        'quantity' => -1,
+        'valued_quantity' => -1,
+        'cost_component' => ManufacturingCostComponent::DirectMaterial->value,
+        'value_entry_state' => 'actual',
+        'cost_amount_actual' => 12,
+        'source_module' => 'manufacturing',
+        'source_id' => $order->id,
+        'source_no' => (string) $order->id,
+        'production_order_no' => $order->document_number,
+        'expected_cost' => false,
+    ]);
+
+    config(['accounts.post_expected_inventory_cost_to_gl' => true]);
+    $clearing = app(ExpectedCostClearingService::class)->clearForActualManufacturingCost($expected, $actual, 1, 10, $user->id);
+    $retry = app(ExpectedCostClearingService::class)->clearForActualManufacturingCost($expected->fresh(), $actual, 1, 10, $user->id);
+
+    expect($clearing)->not->toBeNull()
+        ->and($retry?->id)->toBe($clearing?->id)
+        ->and((float) $clearing?->cost_amount_expected)->toBe(-10.0)
+        ->and(ValueEntry::query()->where('value_entry_state', 'clearing')->count())->toBe(1)
+        ->and((float) $expected->fresh()->cost_amount_expected)->toBe(10.0);
+});
+
+it('calculates detailed production variances and posts eligible variance through value entries', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    [$order,, $workCenter, $location] = createMinimalSettlementOrders($user, 'VARIANCE');
+    createPostingAccountsForOrder($order, $location);
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-VARIANCE',
+        'unit_cost' => 10,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+    $order->components()->create([
+        'line_number' => 10000,
+        'item_id' => $componentItem->id,
+        'description' => 'Variance component',
+        'unit_of_measure_code' => 'PCS',
+        'quantity_per' => 10,
+        'expected_quantity' => 10,
+        'expected_quantity_base' => 10,
+        'remaining_quantity' => 0,
+        'unit_cost' => 10,
+    ]);
+    $order->routingLines()->create([
+        'line_number' => 10000,
+        'operation_no' => '10',
+        'work_center_id' => $workCenter->id,
+        'setup_time' => 0,
+        'run_time' => 10,
+        'expected_output_quantity' => 1,
+        'direct_cost' => 5,
+        'overhead_cost' => 1,
+        'actual_run_time' => 12,
+        'status' => 'COMPLETED',
+    ]);
+    app(ExpectedManufacturingCostService::class)->calculate($order, userId: $user->id);
+    manufacturingValueEntryForVariance($order, $componentItem, $location, ManufacturingCostComponent::DirectMaterial, -12, 132, 10000);
+    manufacturingValueEntryForVariance($order, $order->item, $location, ManufacturingCostComponent::DirectCapacity, 12, 72, 10000);
+    manufacturingValueEntryForVariance($order, $order->item, $location, ManufacturingCostComponent::CapacityOverhead, 12, 18, 10000);
+    ItemLedgerEntry::query()->create([
+        'entry_number' => 999001,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'quantity' => 1,
+        'remaining_quantity' => 1,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'cost_amount_actual' => 100,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    $calculations = app(ProductionVarianceCalculationService::class)->calculate($order, userId: $user->id);
+    $priceVariance = $calculations->firstWhere('variance_type', ProductionVarianceType::MaterialPrice);
+    $quantityVariance = $calculations->firstWhere('variance_type', ProductionVarianceType::MaterialQuantity);
+    $posted = app(ProductionVarianceValueEntryService::class)->postCalculation($priceVariance, $user->id);
+
+    expect($priceVariance)->not->toBeNull()
+        ->and((float) $priceVariance->variance_amount)->toBe(12.0)
+        ->and($quantityVariance)->not->toBeNull()
+        ->and((float) $quantityVariance->variance_amount)->toBe(20.0)
+        ->and($posted)->not->toBeNull()
+        ->and($posted?->cost_component)->toBe(ManufacturingCostComponent::MaterialPriceVariance->value)
+        ->and($priceVariance->fresh()->posted_value_entry_id)->toBe($posted?->id);
+});
+
+it('gates production costing actions with granular permissions', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    [$order] = createMinimalSettlementOrders($user, 'PERMS');
+
+    expect($user->can('calculateExpectedCost', $order))->toBeFalse()
+        ->and($user->can('settleProductionCost', $order))->toBeFalse()
+        ->and($user->can('adjustProductionCost', $order))->toBeFalse()
+        ->and($user->can('reverseProductionCost', $order))->toBeFalse();
+
+    foreach ([
+        'manufacturing.production_cost.calculate_expected',
+        'manufacturing.production_cost.settle',
+        'manufacturing.production_cost.adjust',
+        'manufacturing.production_cost.reverse',
+    ] as $permission) {
+        Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+    }
+
+    $user->givePermissionTo([
+        'manufacturing.production_cost.calculate_expected',
+        'manufacturing.production_cost.settle',
+        'manufacturing.production_cost.adjust',
+        'manufacturing.production_cost.reverse',
+    ]);
+
+    expect($user->can('calculateExpectedCost', $order))->toBeTrue()
+        ->and($user->can('settleProductionCost', $order))->toBeTrue()
+        ->and($user->can('adjustProductionCost', $order))->toBeTrue()
+        ->and($user->can('reverseProductionCost', $order))->toBeTrue();
+});
+
+it('manufacturing cost reconcile exposes enhanced classifications without writing data', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    [$order] = createMinimalSettlementOrders($user, 'RECONCILE2');
+    $before = [
+        'value_entries' => ValueEntry::query()->count(),
+        'variance_calculations' => ProductionVarianceCalculation::query()->count(),
+    ];
+
+    expect(Artisan::call('biwms:manufacturing-cost-reconcile', [
+        '--production-order' => $order->document_number,
+        '--json' => true,
+    ]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect($report['findings'])->toHaveKeys([
+        'expected_manufacturing_cost_missing',
+        'expected_material_cost_uncleared',
+        'material_price_variance_mismatch',
+        'missing_manufacturing_posting_account',
+        'manufacturing_gl_without_value_entry',
+    ])
+        ->and(ValueEntry::query()->count())->toBe($before['value_entries'])
+        ->and(ProductionVarianceCalculation::query()->count())->toBe($before['variance_calculations']);
+});
+
 function createMinimalSettlementOrders(User $user, string $suffix = 'READY'): array
 {
+    $userId = $user->getKey() ?: User::query()->value('id') ?: User::factory()->create()->getKey();
     $businessGroup = GeneralBusinessPostingGroup::create([
         'code' => 'MFG-'.$suffix,
         'description' => 'Manufacturing '.$suffix,
@@ -1679,7 +1931,7 @@ function createMinimalSettlementOrders(User $user, string $suffix = 'READY'): ar
         'cost_rollup' => 0,
         'flushing_method' => 'MANUAL',
         'location_code' => $location->code,
-        'created_by' => $user->id,
+        'created_by' => $userId,
     ]);
 
     $otherOrder = ProductionOrder::query()->create([
@@ -1698,10 +1950,72 @@ function createMinimalSettlementOrders(User $user, string $suffix = 'READY'): ar
         'cost_rollup' => 0,
         'flushing_method' => 'MANUAL',
         'location_code' => $location->code,
-        'created_by' => $user->id,
+        'created_by' => $userId,
     ]);
 
     return [$order, $otherOrder, $workCenter, $location];
+}
+
+function createPostingAccountsForOrder(ProductionOrder $order, Location $location): void
+{
+    $inventoryAccount = ChartOfAccount::factory()->create(['account_number' => 'INV-'.$order->id]);
+    $wipAccount = ChartOfAccount::factory()->create(['account_number' => 'WIP-'.$order->id]);
+    $appliedAccount = ChartOfAccount::factory()->create(['account_number' => 'APP-'.$order->id]);
+    $varianceAccount = ChartOfAccount::factory()->create(['account_number' => 'VAR-'.$order->id]);
+
+    InventoryPostingSetup::query()->updateOrCreate([
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'location_id' => $location->id,
+    ], [
+        'inventory_account_id' => $inventoryAccount->id,
+        'wip_account_id' => $wipAccount->id,
+    ]);
+
+    GeneralPostingSetup::query()->updateOrCreate([
+        'general_business_posting_group_id' => $order->general_business_posting_group_id,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+    ], [
+        'direct_cost_applied_account_id' => $appliedAccount->id,
+        'overhead_applied_account_id' => $appliedAccount->id,
+        'inventory_adj_account_id' => $appliedAccount->id,
+        'material_variance_account_id' => $varianceAccount->id,
+        'capacity_variance_account_id' => $varianceAccount->id,
+        'capacity_overhead_variance_account_id' => $varianceAccount->id,
+        'manufacturing_overhead_variance_account_id' => $varianceAccount->id,
+    ]);
+}
+
+function manufacturingValueEntryForVariance(
+    ProductionOrder $order,
+    Item $item,
+    Location $location,
+    ManufacturingCostComponent $component,
+    float $quantity,
+    float $amount,
+    int $lineNumber,
+    int $itemLedgerEntryType = 6
+): ValueEntry {
+    return ValueEntry::query()->create([
+        'entry_no' => (ValueEntry::max('entry_no') ?? 0) + 1,
+        'item_ledger_entry_type' => $itemLedgerEntryType,
+        'item_no' => $item->item_code,
+        'location_code' => $location->code,
+        'posting_date' => now()->toDateString(),
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_no' => $order->document_number,
+        'document_line_no' => $lineNumber,
+        'quantity' => $quantity,
+        'valued_quantity' => $quantity,
+        'cost_component' => $component->value,
+        'value_entry_state' => 'actual',
+        'cost_amount_actual' => $amount,
+        'source_module' => 'manufacturing',
+        'source_id' => $order->id,
+        'source_no' => (string) $order->id,
+        'source_line_no' => $lineNumber,
+        'production_order_no' => $order->document_number,
+        'expected_cost' => false,
+    ]);
 }
 
 function grantProductionPostingPermissions(User $user): void

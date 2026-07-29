@@ -10,14 +10,16 @@ enum ProductionCostSettlementStatus: string
     case Pending = 'pending';
     case Settled = 'settled';
     case AdjustmentRequired = 'adjustment_required';
+    case Reversed = 'reversed';
 
     public function canTransitionTo(self $next): bool
     {
         return match ($this) {
             self::NotReady => in_array($next, [self::NotReady, self::Pending, self::Settled], true),
             self::Pending => in_array($next, [self::Pending, self::Settled, self::NotReady], true),
-            self::Settled => in_array($next, [self::Settled, self::AdjustmentRequired], true),
-            self::AdjustmentRequired => in_array($next, [self::AdjustmentRequired, self::Settled], true),
+            self::Settled => in_array($next, [self::Settled, self::AdjustmentRequired, self::Reversed], true),
+            self::AdjustmentRequired => in_array($next, [self::AdjustmentRequired, self::Settled, self::Reversed], true),
+            self::Reversed => $next === self::Reversed,
         };
     }
 }

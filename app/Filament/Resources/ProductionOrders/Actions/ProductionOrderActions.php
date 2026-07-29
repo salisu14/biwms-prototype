@@ -4,8 +4,11 @@ namespace App\Filament\Resources\ProductionOrders\Actions;
 
 use App\Enums\ProductionOrderStatus;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Services\Manufacturing\ExpectedManufacturingCostService;
+use App\Services\Manufacturing\ProductionOrderCostSettlementService;
 use App\Services\Manufacturing\ProductionOrderService;
 use App\Support\DecimalFormatter;
+use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -123,6 +126,63 @@ class ProductionOrderActions
                     self::error($e);
                 }
             });
+    }
+
+    public static function calculateExpectedCost(): Action
+    {
+        return Action::make('calculateExpectedCost')
+            ->label('Calculate Expected Cost')
+            ->icon('heroicon-m-calculator')
+            ->color('gray')
+            ->visible(fn ($record): bool => auth()->user()?->can('calculateExpectedCost', $record) ?? false)
+            ->action(function (ProductionOrder $record): void {
+                try {
+                    $result = app(ExpectedManufacturingCostService::class)->calculate($record, userId: auth()->id());
+
+                    Notification::make()
+                        ->title('Expected manufacturing cost calculated')
+                        ->body('Snapshot #'.$result['snapshot']->id.' created or reused.')
+                        ->success()
+                        ->send();
+                } catch (\Exception $e) {
+                    self::error($e);
+                }
+            });
+    }
+
+    public static function settleProductionCost(): Action
+    {
+        return SensitiveActionPasswordConfirmation::protect(
+            Action::make('settleProductionCost')
+                ->label('Settle Cost')
+                ->icon('heroicon-m-scale')
+                ->color('warning')
+                ->visible(fn ($record): bool => auth()->user()?->can('settleProductionCost', $record) ?? false)
+                ->action(function (ProductionOrder $record): void {
+                    try {
+                        $result = app(ProductionOrderCostSettlementService::class)->settle($record, auth()->id());
+
+                        Notification::make()
+                            ->title($result['settled'] ? 'Production cost settled' : 'Production cost not ready')
+                            ->body('Status: '.($result['status'] ?? 'unknown'))
+                            ->color($result['settled'] ? 'success' : 'warning')
+                            ->send();
+                    } catch (\Exception $e) {
+                        self::error($e);
+                    }
+                }),
+        );
+    }
+
+    public static function viewCostReconciliation(): Action
+    {
+        return Action::make('viewCostReconciliation')
+            ->label('Cost Reconcile')
+            ->icon('heroicon-m-clipboard-document-check')
+            ->color('gray')
+            ->visible(fn ($record): bool => auth()->user()?->can('reconcileProductionCost', $record) ?? false)
+            ->url(fn (ProductionOrder $record): string => url('/admin').'?manufacturing-cost-reconcile='.$record->document_number)
+            ->openUrlInNewTab();
     }
 
     public static function reopen(): Action

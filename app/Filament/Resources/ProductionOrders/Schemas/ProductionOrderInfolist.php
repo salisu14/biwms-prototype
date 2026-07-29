@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProductionOrders\Schemas;
 
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderStatus;
+use App\Services\Manufacturing\ProductionCostSummaryService;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -246,6 +247,100 @@ class ProductionOrderInfolist
                             ->weight(FontWeight::Bold)
                             ->color('success')
                             ->placeholder('N/A'),
+                    ]),
+
+                Section::make('Production Costing')
+                    ->icon('heroicon-m-scale')
+                    ->visible(fn ($record): bool => auth()->user()?->can('viewProductionCost', $record) ?? false)
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
+                    ->schema([
+                        TextEntry::make('expected_material_cost')
+                            ->label('Expected Material')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['expected_material_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('actual_material_cost')
+                            ->label('Actual Material')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['actual_material_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('material_price_variance')
+                            ->label('Material Price Variance')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['material_price_variance'])
+                            ->money('NGN')
+                            ->color(fn ($state): string => abs((float) $state) > 0.01 ? 'warning' : 'success'),
+                        TextEntry::make('material_quantity_variance')
+                            ->label('Material Qty Variance')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['material_quantity_variance'])
+                            ->money('NGN')
+                            ->color(fn ($state): string => abs((float) $state) > 0.01 ? 'warning' : 'success'),
+                        TextEntry::make('expected_capacity_cost')
+                            ->label('Expected Capacity')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['expected_capacity_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('actual_capacity_cost')
+                            ->label('Actual Capacity')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['actual_capacity_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('capacity_rate_variance')
+                            ->label('Capacity Rate Variance')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['capacity_rate_variance'])
+                            ->money('NGN')
+                            ->color(fn ($state): string => abs((float) $state) > 0.01 ? 'warning' : 'success'),
+                        TextEntry::make('capacity_efficiency_variance')
+                            ->label('Capacity Efficiency Variance')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['capacity_efficiency_variance'])
+                            ->money('NGN')
+                            ->color(fn ($state): string => abs((float) $state) > 0.01 ? 'warning' : 'success'),
+                        TextEntry::make('expected_overhead_cost')
+                            ->label('Expected Overhead')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['expected_overhead_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('actual_overhead_cost')
+                            ->label('Actual Overhead')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['actual_overhead_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('capacity_overhead_variance')
+                            ->label('Overhead Variance')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['capacity_overhead_variance'])
+                            ->money('NGN')
+                            ->color(fn ($state): string => abs((float) $state) > 0.01 ? 'warning' : 'success'),
+                        TextEntry::make('total_production_variance')
+                            ->label('Total Variance')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['total_production_variance'])
+                            ->money('NGN')
+                            ->weight(FontWeight::Bold)
+                            ->color(fn ($state): string => abs((float) $state) > 0.01 ? 'warning' : 'success'),
+                        TextEntry::make('expected_output_cost')
+                            ->label('Expected Output')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['expected_output_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('actual_output_cost')
+                            ->label('Actual Output')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['actual_output_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('allocated_output_cost')
+                            ->label('Allocated Cost')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['allocated_output_cost'])
+                            ->money('NGN'),
+                        TextEntry::make('unallocated_cost')
+                            ->label('Unallocated Cost')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['unallocated_cost'])
+                            ->money('NGN')
+                            ->color(fn ($state): string => abs((float) $state) > 0.01 ? 'warning' : 'success'),
+                        TextEntry::make('uncleared_expected_cost')
+                            ->label('Uncleared Expected')
+                            ->state(fn ($record): float => (float) app(ProductionCostSummaryService::class)->summarize($record)['uncleared_expected_cost'])
+                            ->money('NGN')
+                            ->color(fn ($state): string => abs((float) $state) > 0.01 ? 'warning' : 'success'),
+                        TextEntry::make('cost_settlement_status')
+                            ->label('Settlement Status')
+                            ->badge(),
+                        TextEntry::make('cost_settlement_classification')
+                            ->label('Settlement Classification')
+                            ->badge(),
                     ]),
 
                 Section::make('Audit & Tracking')

@@ -95,4 +95,53 @@ class ProductionOrderPolicy extends AbstractPermissionPolicy
             'production_order_cancel',
         ]);
     }
+
+    public function viewProductionCost(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'manufacturing.production_cost.view',
+            'manufacturing.production_cost.view_details',
+            'factory.production_order.view',
+        ]);
+    }
+
+    public function calculateExpectedCost(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'manufacturing.production_cost.calculate_expected',
+            'manufacturing.expected_cost.calculate',
+        ]);
+    }
+
+    public function settleProductionCost(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'manufacturing.production_cost.settle',
+            'factory.production_order.finish',
+        ]);
+    }
+
+    public function adjustProductionCost(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'manufacturing.production_cost.adjust',
+            'manufacturing.capacity_cost.adjust',
+        ]);
+    }
+
+    public function reverseProductionCost(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'manufacturing.production_cost.reverse',
+            'manufacturing.production_variance.reverse',
+            'factory.production_order.reverse',
+        ]);
+    }
+
+    public function reconcileProductionCost(User $user, ProductionOrder $productionOrder): bool
+    {
+        return $this->canAny($user, [
+            'manufacturing.production_cost.reconcile',
+        ]);
+    }
 }

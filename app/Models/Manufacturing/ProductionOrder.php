@@ -17,7 +17,9 @@ use App\Models\InventoryPostingGroup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
+use App\Models\ProductionExpectedCostSnapshot;
 use App\Models\ProductionOutputCostAllocation;
+use App\Models\ProductionVarianceCalculation;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\WarehouseActivity;
@@ -172,6 +174,11 @@ class ProductionOrder extends Model
         return $this->belongsTo(ProductionBom::class, 'production_bom_id');
     }
 
+    public function productionBomVersion(): BelongsTo
+    {
+        return $this->belongsTo(ProductionBomVersion::class, 'production_bom_version_id');
+    }
+
     // ProductionOrder.php
     public function getPostingSetup(): ?GeneralPostingSetup
     {
@@ -284,6 +291,16 @@ class ProductionOrder extends Model
     public function outputCostAllocations(): HasMany
     {
         return $this->hasMany(ProductionOutputCostAllocation::class, 'production_order_id');
+    }
+
+    public function expectedCostSnapshots(): HasMany
+    {
+        return $this->hasMany(ProductionExpectedCostSnapshot::class, 'production_order_id');
+    }
+
+    public function varianceCalculations(): HasMany
+    {
+        return $this->hasMany(ProductionVarianceCalculation::class, 'production_order_id');
     }
 
     public function itemLedgerEntries(): MorphMany

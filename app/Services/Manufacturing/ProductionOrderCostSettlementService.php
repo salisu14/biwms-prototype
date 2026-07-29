@@ -14,6 +14,7 @@ use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ProductionJournalLine;
 use App\Models\ValueEntry;
 use App\Services\Inventory\CostingPeriodService;
+use App\Services\Inventory\ExpectedCostClearingService;
 use App\Support\DecimalMath;
 use App\Support\DecimalTolerance;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,6 +28,9 @@ class ProductionOrderCostSettlementService
         private readonly ProductionCostSummaryService $summaryService,
         private readonly ProductionOutputCostService $outputCostService,
         private readonly ProductionVarianceValueEntryService $varianceService,
+        private readonly ExpectedManufacturingCostService $expectedCostService,
+        private readonly ExpectedCostClearingService $expectedCostClearingService,
+        private readonly ProductionVarianceCalculationService $varianceCalculationService,
         private readonly CostingPeriodService $costingPeriodService,
     ) {}
 
@@ -55,6 +59,11 @@ class ProductionOrderCostSettlementService
             $this->costingPeriodService->assertAdjustmentAllowed($postingDate);
 
             $readiness = $this->evaluateReadiness($lockedOrder);
+            if ($readiness['classification'] === ProductionCostSettlementClassification::PendingExpectedCost) {
+                $this->expectedCostService->calculate($lockedOrder, null, $postingDate, $userId);
+                $readiness = $this->evaluateReadiness($lockedOrder->fresh());
+            }
+
             if ($readiness['status'] !== 'ready') {
                 $this->transitionSettlementState(
                     order: $lockedOrder,
@@ -89,22 +98,31 @@ class ProductionOrderCostSettlementService
                 );
             }
 
+            $this->clearExpectedCosts($lockedOrder, $userId);
+
             $summary = $this->summaryService->summarize($lockedOrder);
             $variance = round((float) $summary['total_accumulated_cost'] - (float) $summary['allocated_output_cost'], 4);
             $varianceClassification = $this->classifySettlementDifference($lockedOrder, $summary, $variance);
             $varianceEntry = null;
 
             if ($varianceClassification === ProductionCostSettlementClassification::TrueProductionVariance && abs($variance) > 0.0001) {
-                $varianceEntry = $this->varianceService->recordVariance(
-                    order: $lockedOrder,
-                    varianceAmount: $variance,
-                    component: $this->isStandardCosting($lockedOrder)
-                        ? ManufacturingCostComponent::StandardCostVariance
-                        : ManufacturingCostComponent::RoundingVariance,
-                    postingDate: $postingDate,
-                    userId: $userId,
-                    reason: 'Production order final cost settlement',
-                );
+                $calculations = $this->varianceCalculationService->calculate($lockedOrder, postingDate: $postingDate, userId: $userId);
+                foreach ($calculations as $calculation) {
+                    $varianceEntry = $this->varianceService->postCalculation($calculation, $userId) ?? $varianceEntry;
+                }
+
+                if (! $varianceEntry) {
+                    $varianceEntry = $this->varianceService->recordVariance(
+                        order: $lockedOrder,
+                        varianceAmount: $variance,
+                        component: $this->isStandardCosting($lockedOrder)
+                            ? ManufacturingCostComponent::StandardCostVariance
+                            : ManufacturingCostComponent::Variance,
+                        postingDate: $postingDate,
+                        userId: $userId,
+                        reason: 'Production order final cost settlement',
+                    );
+                }
             }
 
             $lockedOrder->forceFill([
@@ -145,6 +163,10 @@ class ProductionOrderCostSettlementService
             $reasons[] = ProductionCostSettlementClassification::PostingSetupMissing->value;
         }
 
+        if (! $order->expectedCostSnapshots()->exists()) {
+            $reasons[] = ProductionCostSettlementClassification::PendingExpectedCost->value;
+        }
+
         if (! DecimalMath::isLessThanOrEqualToTolerance($order->remaining_quantity, DecimalTolerance::QUANTITY)) {
             $reasons[] = ProductionCostSettlementClassification::RequiredOutputNotPosted->value;
         }
@@ -177,15 +199,6 @@ class ProductionOrderCostSettlementService
             $reasons[] = ProductionCostSettlementClassification::UnresolvedProductionJournalLines->value;
         }
 
-        $pendingExpectedCost = $this->manufacturingValueEntries($order)
-            ->where('expected_cost', true)
-            ->whereRaw('ABS(COALESCE(cost_amount_expected, 0)) > 0.0001')
-            ->exists();
-
-        if ($pendingExpectedCost) {
-            $reasons[] = ProductionCostSettlementClassification::PendingExpectedCost->value;
-        }
-
         if ($reasons !== []) {
             return [
                 'status' => 'not_ready',
@@ -203,6 +216,59 @@ class ProductionOrderCostSettlementService
         ];
     }
 
+    private function clearExpectedCosts(ProductionOrder $order, int $userId): void
+    {
+        if (! config('accounts.post_expected_inventory_cost_to_gl', false)) {
+            return;
+        }
+
+        $actualEntries = $this->manufacturingValueEntries($order)
+            ->where('expected_cost', false)
+            ->whereIn('cost_component', [
+                ManufacturingCostComponent::DirectMaterial->value,
+                ManufacturingCostComponent::DirectCapacity->value,
+                ManufacturingCostComponent::CapacityOverhead->value,
+                ManufacturingCostComponent::Output->value,
+                'material',
+                'capacity',
+                'overhead',
+                'output',
+            ])
+            ->get();
+
+        $expectedEntries = $this->manufacturingValueEntries($order)
+            ->where('expected_cost', true)
+            ->where('value_entry_state', 'expected')
+            ->whereRaw('ABS(COALESCE(cost_amount_expected, 0)) > 0.0001')
+            ->get();
+
+        foreach ($expectedEntries as $expectedEntry) {
+            $actualEntry = $actualEntries->first(fn (ValueEntry $entry): bool => $this->actualClearsExpected($expectedEntry, $entry));
+            if (! $actualEntry) {
+                continue;
+            }
+
+            $this->expectedCostClearingService->clearForActualManufacturingCost(
+                expectedEntry: $expectedEntry,
+                actualEntry: $actualEntry,
+                quantityBase: abs((float) ($actualEntry->valued_quantity ?: $actualEntry->quantity ?: $expectedEntry->quantity)),
+                amountToClear: min(abs((float) $expectedEntry->cost_amount_expected), abs((float) $actualEntry->cost_amount_actual)),
+                userId: $userId,
+            );
+        }
+    }
+
+    private function actualClearsExpected(ValueEntry $expectedEntry, ValueEntry $actualEntry): bool
+    {
+        return match ((string) $expectedEntry->cost_component) {
+            ManufacturingCostComponent::ExpectedDirectMaterial->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::DirectMaterial->value, 'material'], true),
+            ManufacturingCostComponent::ExpectedDirectCapacity->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::DirectCapacity->value, 'capacity'], true),
+            ManufacturingCostComponent::ExpectedCapacityOverhead->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::CapacityOverhead->value, 'overhead'], true),
+            ManufacturingCostComponent::ExpectedOutput->value => (string) $actualEntry->cost_component === ManufacturingCostComponent::Output->value,
+            default => false,
+        };
+    }
+
     /**
      * @param  array<string, mixed>  $summary
      */
@@ -218,6 +284,7 @@ class ProductionOrderCostSettlementService
 
         if ($this->manufacturingValueEntries($order)
             ->where('expected_cost', true)
+            ->where('value_entry_state', 'expected')
             ->whereRaw('ABS(COALESCE(cost_amount_expected, 0)) > 0.0001')
             ->exists()) {
             return ProductionCostSettlementClassification::PendingExpectedCost;

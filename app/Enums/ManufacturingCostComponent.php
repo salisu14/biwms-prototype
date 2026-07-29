@@ -9,6 +9,11 @@ enum ManufacturingCostComponent: string
     case DirectMaterial = 'direct_material';
     case DirectCapacity = 'direct_capacity';
     case CapacityOverhead = 'capacity_overhead';
+    case ExpectedDirectMaterial = 'expected_direct_material';
+    case ExpectedDirectCapacity = 'expected_direct_capacity';
+    case ExpectedCapacityOverhead = 'expected_capacity_overhead';
+    case ExpectedOutput = 'expected_output';
+    case ExpectedCostClearing = 'expected_cost_clearing';
     case MaterialOverhead = 'material_overhead';
     case Subcontracting = 'subcontracting';
     case Output = 'output';
@@ -29,6 +34,11 @@ enum ManufacturingCostComponent: string
             self::DirectMaterial => 'Direct Material',
             self::DirectCapacity => 'Direct Capacity',
             self::CapacityOverhead => 'Capacity Overhead',
+            self::ExpectedDirectMaterial => 'Expected Direct Material',
+            self::ExpectedDirectCapacity => 'Expected Direct Capacity',
+            self::ExpectedCapacityOverhead => 'Expected Capacity Overhead',
+            self::ExpectedOutput => 'Expected Output',
+            self::ExpectedCostClearing => 'Expected Cost Clearing',
             self::MaterialOverhead => 'Material Overhead',
             self::Subcontracting => 'Subcontracting',
             self::Output => 'Output',

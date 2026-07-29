@@ -8,6 +8,7 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\ManufacturingCostComponent;
 use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\ProductionVarianceCalculation;
 use App\Models\ValueEntry;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Support\DecimalMath;
@@ -115,5 +116,34 @@ class ProductionVarianceValueEntryService
 
             return $valueEntry->fresh();
         });
+    }
+
+    public function postCalculation(ProductionVarianceCalculation $calculation, ?int $userId = null): ?ValueEntry
+    {
+        if (abs((float) $calculation->variance_amount) <= 0.0001) {
+            return null;
+        }
+
+        if ($calculation->posted_value_entry_id) {
+            return $calculation->postedValueEntry;
+        }
+
+        $component = ManufacturingCostComponent::tryFrom((string) $calculation->cost_component)
+            ?? $calculation->variance_type->costComponent();
+
+        $valueEntry = $this->recordVariance(
+            order: $calculation->productionOrder,
+            varianceAmount: (float) $calculation->variance_amount,
+            component: $component,
+            postingDate: $calculation->posting_date,
+            userId: $userId ?? $calculation->calculated_by,
+            reason: 'Production variance: '.$calculation->variance_type->value,
+        );
+
+        if ($valueEntry) {
+            $calculation->forceFill(['posted_value_entry_id' => $valueEntry->id])->save();
+        }
+
+        return $valueEntry;
     }
 }

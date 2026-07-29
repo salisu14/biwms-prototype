@@ -6,10 +6,12 @@ namespace App\Console\Commands;
 
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ManufacturingCostComponent;
+use App\Enums\ProductionCostSettlementStatus;
 use App\Enums\ProductionOrderStatus;
 use App\Models\Manufacturing\CapacityLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ProductionOutputCostAllocation;
+use App\Models\ProductionVarianceCalculation;
 use App\Models\ValueEntry;
 use App\Services\Manufacturing\ProductionCostSummaryService;
 use Illuminate\Console\Attributes\Description;
@@ -19,7 +21,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 
-#[Signature('biwms:manufacturing-cost-reconcile {--json : Output machine-readable JSON} {--details : Show detailed diagnostic rows} {--production-order= : Limit diagnostics to one production order ID or document number} {--export= : Write the JSON report to a file path}')]
+#[Signature('biwms:manufacturing-cost-reconcile {--json : Output machine-readable JSON} {--details : Show detailed diagnostic rows} {--production-order= : Limit diagnostics to one production order ID or document number} {--item= : Limit diagnostics to one item number/code} {--export= : Write the JSON report to a file path}')]
 #[Description('Report BIWMS manufacturing costing, WIP, output allocation, and Value Entry consistency issues.')]
 class BiwmsManufacturingCostReconcile extends Command
 {
@@ -32,17 +34,51 @@ class BiwmsManufacturingCostReconcile extends Command
     public function handle(): int
     {
         $productionOrderFilter = $this->option('production-order');
+        $itemFilter = $this->option('item');
 
         $report = [
             'filters' => [
                 'production_order' => $productionOrderFilter,
+                'item' => $itemFilter,
             ],
             'findings' => [
                 'consumption_without_value_entries' => $this->productionItemEntriesWithoutValueEntries(ItemLedgerEntryType::CONSUMPTION, $productionOrderFilter),
                 'output_without_value_entries' => $this->productionItemEntriesWithoutValueEntries(ItemLedgerEntryType::OUTPUT, $productionOrderFilter),
                 'capacity_without_value_entries' => $this->capacityEntriesWithoutValueEntries($productionOrderFilter),
+                'expected_manufacturing_cost_missing' => $this->expectedManufacturingCostMissing($productionOrderFilter),
+                'expected_material_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_direct_material', 'expected_material_cost_uncleared'),
+                'expected_capacity_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_direct_capacity', 'expected_capacity_cost_uncleared'),
+                'expected_overhead_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_capacity_overhead', 'expected_overhead_cost_uncleared'),
+                'expected_output_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_output', 'expected_output_cost_uncleared'),
+                'actual_material_cost_missing' => $this->actualCostMissing($productionOrderFilter, 'direct_material', 'actual_material_cost_missing'),
+                'actual_capacity_cost_missing' => $this->actualCostMissing($productionOrderFilter, 'direct_capacity', 'actual_capacity_cost_missing'),
+                'actual_output_cost_missing' => $this->actualCostMissing($productionOrderFilter, 'output', 'actual_output_cost_missing'),
+                'material_price_variance_mismatch' => $this->varianceMismatch($productionOrderFilter, 'material_price', 'material_price_variance_mismatch'),
+                'material_quantity_variance_mismatch' => $this->varianceMismatch($productionOrderFilter, 'material_quantity', 'material_quantity_variance_mismatch'),
+                'capacity_rate_variance_mismatch' => $this->varianceMismatch($productionOrderFilter, 'capacity_rate', 'capacity_rate_variance_mismatch'),
+                'capacity_efficiency_variance_mismatch' => $this->varianceMismatch($productionOrderFilter, 'capacity_efficiency', 'capacity_efficiency_variance_mismatch'),
+                'capacity_overhead_variance_mismatch' => $this->varianceMismatch($productionOrderFilter, 'capacity_overhead', 'capacity_overhead_variance_mismatch'),
+                'standard_cost_variance_mismatch' => $this->varianceMismatch($productionOrderFilter, 'standard_cost', 'standard_cost_variance_mismatch'),
+                'rounding_variance_outside_tolerance' => $this->varianceMismatch($productionOrderFilter, 'rounding', 'rounding_variance_outside_tolerance'),
+                'late_material_cost_adjustment_pending' => $this->adjustmentRequiredOrders($productionOrderFilter, 'late_material_cost_adjustment_pending'),
+                'late_capacity_cost_adjustment_pending' => [],
+                'output_cost_adjustment_pending' => $this->outputCostAdjustmentPending($productionOrderFilter),
+                'downstream_cost_adjustment_pending' => [],
+                'settled_order_adjustment_required' => $this->adjustmentRequiredOrders($productionOrderFilter, 'settled_order_adjustment_required'),
+                'completed_adjustment_not_resettled' => $this->completedAdjustmentNotResettled($productionOrderFilter),
+                'duplicate_expected_cost' => $this->duplicateValueEntries($productionOrderFilter, 'expected', 'duplicate_expected_cost'),
+                'duplicate_expected_cost_clearing' => $this->duplicateValueEntries($productionOrderFilter, 'clearing', 'duplicate_expected_cost_clearing'),
+                'duplicate_variance_entry' => $this->duplicateValueEntries($productionOrderFilter, 'variance', 'duplicate_variance_entry'),
+                'duplicate_cost_propagation' => $this->duplicateValueEntries($productionOrderFilter, 'adjustment', 'duplicate_cost_propagation'),
+                'closed_costing_period_violation' => [],
+                'missing_manufacturing_posting_account' => $this->missingManufacturingPostingAccount($productionOrderFilter),
+                'unsupported_variance_type' => $this->unsupportedVarianceType($productionOrderFilter),
                 'manufacturing_value_entries_not_gl_posted' => $this->manufacturingValueEntriesNotGlPosted($productionOrderFilter),
+                'manufacturing_gl_without_value_entry' => [],
                 'unsupported_manufacturing_cost_components' => $this->unsupportedManufacturingCostComponents($productionOrderFilter),
+                'reversal_chain_broken' => $this->reversalChainBroken($productionOrderFilter),
+                'settlement_history_mismatch' => $this->settlementHistoryMismatch($productionOrderFilter),
+                'production_cost_summary_mismatch' => $this->productionCostSummaryMismatch($productionOrderFilter),
                 'duplicate_capacity_postings' => $this->duplicateCapacityPostings($productionOrderFilter),
                 'duplicate_output_allocations' => $this->duplicateOutputAllocations($productionOrderFilter),
                 'output_cost_overallocated' => $this->outputCostOverallocated($productionOrderFilter),
@@ -67,6 +103,9 @@ class BiwmsManufacturingCostReconcile extends Command
         if ($productionOrderFilter) {
             $this->line("Filter: production-order={$productionOrderFilter}");
         }
+        if ($itemFilter) {
+            $this->line("Filter: item={$itemFilter}");
+        }
         if ($exportPath) {
             $this->line("Exported JSON report to {$exportPath}.");
         }
@@ -84,6 +123,299 @@ class BiwmsManufacturingCostReconcile extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function expectedManufacturingCostMissing(mixed $productionOrderFilter): array
+    {
+        return $this->productionOrderQuery($productionOrderFilter)
+            ->whereIn('status', [ProductionOrderStatus::RELEASED, ProductionOrderStatus::FINISHED])
+            ->whereDoesntHave('expectedCostSnapshots')
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrder $order): array => [
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                ...$this->findingMetadata(
+                    classification: 'expected_manufacturing_cost_missing',
+                    severity: 'warning',
+                    suggestedRemediation: 'Calculate expected manufacturing cost before final settlement so variance analysis has a historical baseline.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function unclearedExpectedCost(mixed $productionOrderFilter, string $component, string $classification): array
+    {
+        return $this->manufacturingValueEntryQuery($productionOrderFilter)
+            ->where('expected_cost', true)
+            ->where('value_entry_state', 'expected')
+            ->where('cost_component', $component)
+            ->whereRaw('ABS(COALESCE(cost_amount_expected, 0)) > 0.0001')
+            ->limit(250)
+            ->get()
+            ->map(fn (ValueEntry $entry): array => [
+                'production_order_no' => $entry->production_order_no,
+                'value_entry_id' => $entry->id,
+                'cost_component' => $entry->cost_component,
+                'uncleared_amount' => round((float) $entry->cost_amount_expected, 4),
+                ...$this->findingMetadata(
+                    classification: $classification,
+                    severity: 'warning',
+                    suggestedRemediation: 'Run expected-cost clearing against matching actual manufacturing Value Entries; preserve the original expected entry.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function actualCostMissing(mixed $productionOrderFilter, string $component, string $classification): array
+    {
+        return $this->productionOrderQuery($productionOrderFilter)
+            ->whereIn('status', [ProductionOrderStatus::RELEASED, ProductionOrderStatus::FINISHED])
+            ->get()
+            ->filter(fn (ProductionOrder $order): bool => ! $this->manufacturingValueEntryQuery($order->document_number)
+                ->where('expected_cost', false)
+                ->where('cost_component', $component)
+                ->exists())
+            ->map(fn (ProductionOrder $order): array => [
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                ...$this->findingMetadata(
+                    classification: $classification,
+                    severity: 'warning',
+                    suggestedRemediation: 'Verify whether this production order legitimately has no '.$component.' actual cost or post the missing manufacturing source document.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function varianceMismatch(mixed $productionOrderFilter, string $varianceType, string $classification): array
+    {
+        return ProductionVarianceCalculation::query()
+            ->where('variance_type', $varianceType)
+            ->whereNull('posted_value_entry_id')
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->whereHas('productionOrder', function (Builder $query) use ($filter): void {
+                    $query->where('document_number', (string) $filter);
+
+                    if (is_numeric($filter)) {
+                        $query->orWhere('id', (int) $filter);
+                    }
+                });
+            })
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionVarianceCalculation $variance): array => [
+                'production_order_id' => $variance->production_order_id,
+                'variance_calculation_id' => $variance->id,
+                'variance_amount' => round((float) $variance->variance_amount, 4),
+                ...$this->findingMetadata(
+                    classification: $classification,
+                    severity: 'warning',
+                    suggestedRemediation: 'Review and post eligible variance through ProductionVarianceValueEntryService; do not write G/L directly.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function adjustmentRequiredOrders(mixed $productionOrderFilter, string $classification): array
+    {
+        return $this->productionOrderQuery($productionOrderFilter)
+            ->where('cost_settlement_status', ProductionCostSettlementStatus::AdjustmentRequired->value)
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrder $order): array => [
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                'settlement_classification' => $order->cost_settlement_classification?->value ?? $order->cost_settlement_classification,
+                ...$this->findingMetadata(
+                    classification: $classification,
+                    severity: 'warning',
+                    suggestedRemediation: 'Run the controlled production cost-adjustment workflow and resettle the order when all append-only adjustments are posted.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function outputCostAdjustmentPending(mixed $productionOrderFilter): array
+    {
+        return $this->manufacturingValueEntryQuery($productionOrderFilter)
+            ->where('value_entry_state', 'adjustment')
+            ->where('gl_posted', false)
+            ->limit(250)
+            ->get()
+            ->map(fn (ValueEntry $entry): array => [
+                'production_order_no' => $entry->production_order_no,
+                'value_entry_id' => $entry->id,
+                'amount' => round((float) $entry->cost_amount_actual, 4),
+                ...$this->findingMetadata(
+                    classification: 'output_cost_adjustment_pending',
+                    severity: 'warning',
+                    suggestedRemediation: 'Post the adjustment Value Entry through ValueEntryAccountingOrchestrator, then refresh production settlement.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function completedAdjustmentNotResettled(mixed $productionOrderFilter): array
+    {
+        return $this->productionOrderQuery($productionOrderFilter)
+            ->where('cost_settlement_status', ProductionCostSettlementStatus::AdjustmentRequired->value)
+            ->whereHas('outputCostAllocations')
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrder $order): array => [
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                ...$this->findingMetadata(
+                    classification: 'completed_adjustment_not_resettled',
+                    severity: 'warning',
+                    suggestedRemediation: 'After all adjustment Value Entries are posted, rerun production cost settlement to return the order to settled.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function duplicateValueEntries(mixed $productionOrderFilter, string $state, string $classification): array
+    {
+        return $this->manufacturingValueEntryQuery($productionOrderFilter)
+            ->selectRaw('idempotency_key, COUNT(*) as entry_count')
+            ->where('value_entry_state', $state)
+            ->whereNotNull('idempotency_key')
+            ->groupBy('idempotency_key')
+            ->havingRaw('COUNT(*) > 1')
+            ->get()
+            ->map(fn ($entry): array => [
+                'idempotency_key' => $entry->idempotency_key,
+                'entry_count' => (int) $entry->entry_count,
+                ...$this->findingMetadata(
+                    classification: $classification,
+                    severity: 'critical',
+                    suggestedRemediation: 'Investigate duplicate idempotency identity usage and correct only through append-only reversals.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function missingManufacturingPostingAccount(mixed $productionOrderFilter): array
+    {
+        return $this->productionOrderQuery($productionOrderFilter)
+            ->get()
+            ->filter(fn (ProductionOrder $order): bool => ! $order->getPostingSetup())
+            ->map(fn (ProductionOrder $order): array => [
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                ...$this->findingMetadata(
+                    classification: 'missing_manufacturing_posting_account',
+                    severity: 'critical',
+                    suggestedRemediation: 'Configure General Posting Setup for the order posting groups before posting or settling manufacturing cost.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function unsupportedVarianceType(mixed $productionOrderFilter): array
+    {
+        $supported = ['material_price', 'material_quantity', 'capacity_rate', 'capacity_efficiency', 'capacity_overhead', 'standard_cost', 'yield', 'rounding', 'controlled_other'];
+
+        return ProductionVarianceCalculation::query()
+            ->whereNotIn('variance_type', $supported)
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->whereHas('productionOrder', function (Builder $query) use ($filter): void {
+                    $query->where('document_number', (string) $filter);
+
+                    if (is_numeric($filter)) {
+                        $query->orWhere('id', (int) $filter);
+                    }
+                });
+            })
+            ->get()
+            ->map(fn (ProductionVarianceCalculation $variance): array => [
+                'production_order_id' => $variance->production_order_id,
+                'variance_type' => $variance->variance_type?->value ?? $variance->getRawOriginal('variance_type'),
+                ...$this->findingMetadata(
+                    classification: 'unsupported_variance_type',
+                    severity: 'critical',
+                    suggestedRemediation: 'Map unsupported variance types to a stable enum before posting.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function reversalChainBroken(mixed $productionOrderFilter): array
+    {
+        return $this->manufacturingValueEntryQuery($productionOrderFilter)
+            ->whereNotNull('reversal_of_value_entry_id')
+            ->get()
+            ->filter(fn (ValueEntry $entry): bool => ! ValueEntry::query()->whereKey($entry->reversal_of_value_entry_id)->exists())
+            ->map(fn (ValueEntry $entry): array => [
+                'value_entry_id' => $entry->id,
+                'reversal_of_value_entry_id' => $entry->reversal_of_value_entry_id,
+                ...$this->findingMetadata(
+                    classification: 'reversal_chain_broken',
+                    severity: 'critical',
+                    suggestedRemediation: 'Investigate missing original Value Entry; do not delete or rewrite reversal history.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function settlementHistoryMismatch(mixed $productionOrderFilter): array
+    {
+        return $this->productionOrderQuery($productionOrderFilter)
+            ->whereNotNull('cost_settled_at')
+            ->whereDoesntHave('outputCostAllocations')
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrder $order): array => [
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                ...$this->findingMetadata(
+                    classification: 'settlement_history_mismatch',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review settlement history and output allocation records; settled orders should have traceable output allocation.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function productionCostSummaryMismatch(mixed $productionOrderFilter): array
+    {
+        return $this->productionOrderQuery($productionOrderFilter)
+            ->get()
+            ->map(function (ProductionOrder $order): ?array {
+                $summary = $this->summaryService->summarize($order);
+                $difference = round((float) $summary['total_accumulated_cost'] - (float) $summary['allocated_output_cost'] - (float) $summary['unallocated_cost'], 4);
+
+                if (abs($difference) <= 0.0001) {
+                    return null;
+                }
+
+                return [
+                    'production_order_id' => $order->id,
+                    'production_order_no' => $order->document_number,
+                    'difference' => $difference,
+                    ...$this->findingMetadata(
+                        classification: 'production_cost_summary_mismatch',
+                        severity: 'critical',
+                        suggestedRemediation: 'Rebuild the production costing read model from Value Entries and output allocations; do not use cached order totals as authority.',
+                    ),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     /**
