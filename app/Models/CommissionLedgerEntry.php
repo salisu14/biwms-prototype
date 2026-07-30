@@ -109,4 +109,14 @@ class CommissionLedgerEntry extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    public function reviewLines(): HasMany
+    {
+        return $this->hasMany(CommissionReviewBatchLine::class);
+    }
+
+    public function settlementAllocations(): HasMany
+    {
+        return $this->hasMany(CommissionSettlementAllocation::class);
+    }
 }

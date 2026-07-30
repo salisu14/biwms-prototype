@@ -48,6 +48,29 @@ php artisan biwms:commission-reconcile --details --export=storage/app/reports/co
 
 The reconcile command is diagnostic only.
 
+## Review and Settlement Preparation
+
+Operator workflow:
+
+```text
+Open review period
+→ Generate batch
+→ Review exceptions
+→ Place or release holds
+→ Resolve disputes
+→ Submit
+→ Approve
+→ Lock
+→ Prepare settlement
+→ Submit settlement
+→ Approve settlement
+→ Lock for future Phase 6 payment
+```
+
+Review batches and settlement batches are separated by currency. Do not combine different currencies in one settlement total.
+
+Settlement preparation locks a snapshot for future payment but does not pay the Referrer and does not post to the General Ledger.
+
 ## Corrections
 
 Use credit memos, reversals, or controlled adjustment entries. Do not edit historical commission ledger entries.

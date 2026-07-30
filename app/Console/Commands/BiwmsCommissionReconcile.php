@@ -7,7 +7,14 @@ namespace App\Console\Commands;
 use App\Enums\CommissionCalculationStatus;
 use App\Enums\CommissionLedgerEntryType;
 use App\Models\CommissionCalculation;
+use App\Models\CommissionHold;
 use App\Models\CommissionLedgerEntry;
+use App\Models\CommissionReviewBatch;
+use App\Models\CommissionReviewBatchLine;
+use App\Models\CommissionReviewPeriod;
+use App\Models\CommissionSettlementAllocation;
+use App\Models\CommissionSettlementBatch;
+use App\Models\CommissionSettlementLine;
 use App\Models\PostedSalesInvoice;
 use App\Support\DecimalMath;
 use Illuminate\Console\Attributes\Description;
@@ -16,7 +23,7 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\File;
 
-#[Signature('biwms:commission-reconcile {--details : Show detailed diagnostic rows} {--business= : Filter by business ID} {--referrer= : Filter by referrer ID} {--customer= : Filter by customer ID} {--plan= : Filter by commission plan ID} {--source= : Filter by source document number} {--date-from= : Filter posting date from YYYY-MM-DD} {--date-to= : Filter posting date to YYYY-MM-DD} {--status= : Filter calculation status} {--json : Output machine-readable JSON} {--export= : Write JSON report to path}')]
+#[Signature('biwms:commission-reconcile {--details : Show detailed diagnostic rows} {--business= : Filter by business ID} {--referrer= : Filter by referrer ID} {--customer= : Filter by customer ID} {--plan= : Filter by commission plan ID} {--source= : Filter by source document number} {--date-from= : Filter posting date from YYYY-MM-DD} {--date-to= : Filter posting date to YYYY-MM-DD} {--status= : Filter calculation status} {--review-period= : Filter by commission review period ID} {--review-batch= : Filter by commission review batch ID} {--settlement-batch= : Filter by commission settlement batch ID} {--json : Output machine-readable JSON} {--export= : Write JSON report to path}')]
 #[Description('Report referral commission calculation, accrual, reversal, and ledger consistency issues without writing data.')]
 class BiwmsCommissionReconcile extends Command
 {
@@ -52,6 +59,27 @@ class BiwmsCommissionReconcile extends Command
                 'inactive_referrer_accrued' => [],
                 'cross_business_reference' => [],
                 'gross_profit_costing_pending' => [],
+                'overlapping_review_period' => $this->overlappingReviewPeriod(),
+                'review_period_invalid_dates' => $this->reviewPeriodInvalidDates(),
+                'review_batch_without_period' => $this->reviewBatchWithoutPeriod(),
+                'review_batch_total_mismatch' => $this->reviewBatchTotalMismatch(),
+                'review_line_without_ledger_entry' => $this->reviewLineWithoutLedgerEntry(),
+                'ledger_entry_in_multiple_active_review_batches' => $this->ledgerEntryInMultipleActiveReviewBatches(),
+                'review_line_amount_exceeds_available' => $this->reviewLineAmountExceedsAvailable(),
+                'approved_batch_with_pending_lines' => $this->approvedBatchWithPendingLines(),
+                'approved_batch_with_active_hold' => $this->approvedBatchWithActiveHold(),
+                'approved_batch_with_open_dispute' => $this->approvedBatchWithOpenDispute(),
+                'self_approved_review_batch' => $this->selfApprovedReviewBatch(),
+                'hold_amount_exceeds_available' => $this->holdAmountExceedsAvailable(),
+                'settlement_batch_without_approved_review' => $this->settlementBatchWithoutApprovedReview(),
+                'settlement_batch_total_mismatch' => $this->settlementBatchTotalMismatch(),
+                'settlement_line_total_mismatch' => $this->settlementLineTotalMismatch(),
+                'settlement_allocation_missing' => $this->settlementAllocationMissing(),
+                'settlement_allocation_duplicate' => $this->settlementAllocationDuplicate(),
+                'settlement_allocation_exceeds_available' => $this->settlementAllocationExceedsAvailable(),
+                'ledger_entry_in_multiple_active_settlement_batches' => $this->ledgerEntryInMultipleActiveSettlementBatches(),
+                'settlement_currency_mismatch' => $this->settlementCurrencyMismatch(),
+                'self_approved_settlement_batch' => $this->selfApprovedSettlementBatch(),
             ],
         ];
 
@@ -280,6 +308,279 @@ class BiwmsCommissionReconcile extends Command
             ->all();
     }
 
+    private function overlappingReviewPeriod(): array
+    {
+        return CommissionReviewPeriod::query()
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('commission_review_periods as other')
+                    ->whereColumn('other.business_id', 'commission_review_periods.business_id')
+                    ->whereColumn('other.id', '!=', 'commission_review_periods.id')
+                    ->whereColumn('other.period_start', '<=', 'commission_review_periods.period_end')
+                    ->whereColumn('other.period_end', '>=', 'commission_review_periods.period_start')
+                    ->where('other.status', '!=', 'cancelled');
+            })
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewPeriod $period): array => $this->finding('overlapping_review_period', 'critical', 'Commission review period overlaps another active period.', [
+                'commission_review_period_id' => $period->id,
+                'code' => $period->code,
+            ]))
+            ->all();
+    }
+
+    private function reviewPeriodInvalidDates(): array
+    {
+        return CommissionReviewPeriod::query()
+            ->whereColumn('period_start', '>', 'period_end')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewPeriod $period): array => $this->finding('review_period_invalid_dates', 'critical', 'Commission review period start date is after end date.', [
+                'commission_review_period_id' => $period->id,
+            ]))
+            ->all();
+    }
+
+    private function reviewBatchWithoutPeriod(): array
+    {
+        return $this->reviewBatchQuery()
+            ->whereDoesntHave('period')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewBatch $batch): array => $this->finding('review_batch_without_period', 'critical', 'Commission review batch has no review period.', [
+                'commission_review_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function reviewBatchTotalMismatch(): array
+    {
+        return $this->reviewBatchQuery()
+            ->with('lines')
+            ->limit(250)
+            ->get()
+            ->filter(fn (CommissionReviewBatch $batch): bool => DecimalMath::compare($batch->total_eligible_amount, $batch->lines->sum('approved_amount')) !== 0)
+            ->map(fn (CommissionReviewBatch $batch): array => $this->finding('review_batch_total_mismatch', 'critical', 'Review batch total does not match review line approved total.', [
+                'commission_review_batch_id' => $batch->id,
+                'batch_total' => (string) $batch->total_eligible_amount,
+                'line_total' => (string) $batch->lines->sum('approved_amount'),
+            ]))
+            ->values()
+            ->all();
+    }
+
+    private function reviewLineWithoutLedgerEntry(): array
+    {
+        return $this->reviewLineQuery()
+            ->whereDoesntHave('ledgerEntry')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewBatchLine $line): array => $this->finding('review_line_without_ledger_entry', 'critical', 'Commission review line has no source ledger entry.', [
+                'commission_review_batch_line_id' => $line->id,
+            ]))
+            ->all();
+    }
+
+    private function ledgerEntryInMultipleActiveReviewBatches(): array
+    {
+        return CommissionReviewBatchLine::query()
+            ->selectRaw('commission_ledger_entry_id, COUNT(*) as duplicate_count')
+            ->groupBy('commission_ledger_entry_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->limit(250)
+            ->get()
+            ->map(fn ($row): array => $this->finding('ledger_entry_in_multiple_active_review_batches', 'critical', 'Commission ledger entry appears in multiple review batches.', [
+                'commission_ledger_entry_id' => $row->commission_ledger_entry_id,
+                'duplicate_count' => $row->duplicate_count,
+            ]))
+            ->all();
+    }
+
+    private function reviewLineAmountExceedsAvailable(): array
+    {
+        return $this->reviewLineQuery()
+            ->whereColumn('approved_amount', '>', 'eligible_amount')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewBatchLine $line): array => $this->finding('review_line_amount_exceeds_available', 'critical', 'Review line approved amount exceeds eligible amount.', [
+                'commission_review_batch_line_id' => $line->id,
+            ]))
+            ->all();
+    }
+
+    private function approvedBatchWithPendingLines(): array
+    {
+        return $this->reviewBatchQuery()
+            ->whereIn('status', ['approved', 'locked'])
+            ->whereHas('lines', fn (Builder $query): Builder => $query->whereIn('review_status', ['pending', 'disputed']))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewBatch $batch): array => $this->finding('approved_batch_with_pending_lines', 'critical', 'Approved review batch has pending or disputed lines.', [
+                'commission_review_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function approvedBatchWithActiveHold(): array
+    {
+        return $this->reviewBatchQuery()
+            ->whereIn('status', ['approved', 'locked'])
+            ->whereHas('holds', fn (Builder $query): Builder => $query->where('status', 'active'))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewBatch $batch): array => $this->finding('approved_batch_with_active_hold', 'warning', 'Approved review batch has an active hold.', [
+                'commission_review_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function approvedBatchWithOpenDispute(): array
+    {
+        return $this->reviewBatchQuery()
+            ->whereIn('status', ['approved', 'locked'])
+            ->whereHas('disputes', fn (Builder $query): Builder => $query->whereIn('status', ['open', 'under_review', 'awaiting_information']))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewBatch $batch): array => $this->finding('approved_batch_with_open_dispute', 'warning', 'Approved review batch has an open dispute.', [
+                'commission_review_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function selfApprovedReviewBatch(): array
+    {
+        return $this->reviewBatchQuery()
+            ->whereNotNull('submitted_by')
+            ->whereColumn('submitted_by', 'approved_by')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionReviewBatch $batch): array => $this->finding('self_approved_review_batch', 'critical', 'Commission review batch was approved by its submitter.', [
+                'commission_review_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function holdAmountExceedsAvailable(): array
+    {
+        return CommissionHold::query()
+            ->whereHas('line', fn (Builder $query): Builder => $query->whereColumn('commission_holds.amount', '>', 'commission_review_batch_lines.eligible_amount'))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionHold $hold): array => $this->finding('hold_amount_exceeds_available', 'critical', 'Commission hold exceeds line eligible amount.', [
+                'commission_hold_id' => $hold->id,
+            ]))
+            ->all();
+    }
+
+    private function settlementBatchWithoutApprovedReview(): array
+    {
+        return $this->settlementBatchQuery()
+            ->whereHas('reviewBatch', fn (Builder $query): Builder => $query->whereNotIn('status', ['approved', 'locked']))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionSettlementBatch $batch): array => $this->finding('settlement_batch_without_approved_review', 'critical', 'Settlement batch does not reference an approved review batch.', [
+                'commission_settlement_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function settlementBatchTotalMismatch(): array
+    {
+        return $this->settlementBatchQuery()
+            ->with('lines')
+            ->limit(250)
+            ->get()
+            ->filter(fn (CommissionSettlementBatch $batch): bool => DecimalMath::compare($batch->total_net_amount, $batch->lines->sum('net_settlement_amount')) !== 0)
+            ->map(fn (CommissionSettlementBatch $batch): array => $this->finding('settlement_batch_total_mismatch', 'critical', 'Settlement batch total does not match settlement line total.', [
+                'commission_settlement_batch_id' => $batch->id,
+            ]))
+            ->values()
+            ->all();
+    }
+
+    private function settlementLineTotalMismatch(): array
+    {
+        return CommissionSettlementLine::query()
+            ->with('allocations')
+            ->limit(250)
+            ->get()
+            ->filter(fn (CommissionSettlementLine $line): bool => DecimalMath::compare($line->net_settlement_amount, $line->allocations->sum('allocated_amount')) !== 0)
+            ->map(fn (CommissionSettlementLine $line): array => $this->finding('settlement_line_total_mismatch', 'critical', 'Settlement line total does not match allocation total.', [
+                'commission_settlement_line_id' => $line->id,
+            ]))
+            ->values()
+            ->all();
+    }
+
+    private function settlementAllocationMissing(): array
+    {
+        return CommissionSettlementLine::query()
+            ->whereDoesntHave('allocations')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionSettlementLine $line): array => $this->finding('settlement_allocation_missing', 'critical', 'Settlement line has no ledger allocations.', [
+                'commission_settlement_line_id' => $line->id,
+            ]))
+            ->all();
+    }
+
+    private function settlementAllocationDuplicate(): array
+    {
+        return CommissionSettlementAllocation::query()
+            ->selectRaw('commission_ledger_entry_id, COUNT(*) as duplicate_count')
+            ->groupBy('commission_ledger_entry_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->limit(250)
+            ->get()
+            ->map(fn ($row): array => $this->finding('settlement_allocation_duplicate', 'critical', 'Commission ledger entry appears in multiple settlement allocations.', [
+                'commission_ledger_entry_id' => $row->commission_ledger_entry_id,
+                'duplicate_count' => $row->duplicate_count,
+            ]))
+            ->all();
+    }
+
+    private function settlementAllocationExceedsAvailable(): array
+    {
+        return CommissionSettlementAllocation::query()
+            ->whereHas('ledgerEntry', fn (Builder $query): Builder => $query->whereColumn('commission_settlement_allocations.allocated_amount', '>', 'commission_ledger_entries.amount'))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionSettlementAllocation $allocation): array => $this->finding('settlement_allocation_exceeds_available', 'critical', 'Settlement allocation exceeds source ledger amount.', [
+                'commission_settlement_allocation_id' => $allocation->id,
+            ]))
+            ->all();
+    }
+
+    private function ledgerEntryInMultipleActiveSettlementBatches(): array
+    {
+        return $this->settlementAllocationDuplicate();
+    }
+
+    private function settlementCurrencyMismatch(): array
+    {
+        return CommissionSettlementAllocation::query()
+            ->whereHas('ledgerEntry', fn (Builder $query): Builder => $query->whereColumn('commission_settlement_allocations.currency_code', '!=', 'commission_ledger_entries.currency_code'))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionSettlementAllocation $allocation): array => $this->finding('settlement_currency_mismatch', 'critical', 'Settlement allocation currency does not match ledger entry currency.', [
+                'commission_settlement_allocation_id' => $allocation->id,
+            ]))
+            ->all();
+    }
+
+    private function selfApprovedSettlementBatch(): array
+    {
+        return $this->settlementBatchQuery()
+            ->whereNotNull('prepared_by')
+            ->whereColumn('prepared_by', 'approved_by')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionSettlementBatch $batch): array => $this->finding('self_approved_settlement_batch', 'critical', 'Commission settlement batch was approved by its preparer.', [
+                'commission_settlement_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
     private function calculationQuery(): Builder
     {
         return CommissionCalculation::query()
@@ -302,6 +603,31 @@ class BiwmsCommissionReconcile extends Command
             ->when($this->option('source'), fn (Builder $query, string $source): Builder => $query->where('source_number', $source))
             ->when($this->option('date-from'), fn (Builder $query, string $date): Builder => $query->whereDate('posting_date', '>=', $date))
             ->when($this->option('date-to'), fn (Builder $query, string $date): Builder => $query->whereDate('posting_date', '<=', $date));
+    }
+
+    private function reviewBatchQuery(): Builder
+    {
+        return CommissionReviewBatch::query()
+            ->when($this->option('business'), fn (Builder $query, string $id): Builder => $query->where('business_id', $id))
+            ->when($this->option('review-period'), fn (Builder $query, string $id): Builder => $query->where('commission_review_period_id', $id))
+            ->when($this->option('review-batch'), fn (Builder $query, string $id): Builder => $query->whereKey($id));
+    }
+
+    private function reviewLineQuery(): Builder
+    {
+        return CommissionReviewBatchLine::query()
+            ->when($this->option('business'), fn (Builder $query, string $id): Builder => $query->where('business_id', $id))
+            ->when($this->option('referrer'), fn (Builder $query, string $id): Builder => $query->where('referrer_id', $id))
+            ->when($this->option('review-batch'), fn (Builder $query, string $id): Builder => $query->where('commission_review_batch_id', $id));
+    }
+
+    private function settlementBatchQuery(): Builder
+    {
+        return CommissionSettlementBatch::query()
+            ->when($this->option('business'), fn (Builder $query, string $id): Builder => $query->where('business_id', $id))
+            ->when($this->option('review-period'), fn (Builder $query, string $id): Builder => $query->where('commission_review_period_id', $id))
+            ->when($this->option('review-batch'), fn (Builder $query, string $id): Builder => $query->where('commission_review_batch_id', $id))
+            ->when($this->option('settlement-batch'), fn (Builder $query, string $id): Builder => $query->whereKey($id));
     }
 
     private function finding(string $classification, string $severity, string $message, array $context): array

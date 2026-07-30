@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\GlEntry;
 use App\Models\InventoryPostingGroup;
@@ -463,6 +464,8 @@ it('opening inventory seeder refuses production environment', function (): void 
  */
 function openingInventoryTestItem(array $itemAttributes = []): array
 {
+    ensureOpeningInventoryAccountingPeriod();
+
     $location = Location::factory()->create(['code' => 'OPENING-TEST']);
     $baseUom = UnitOfMeasure::query()->create([
         'uom_code' => 'PCS',
@@ -494,6 +497,8 @@ function openingInventoryManifestItem(
     string $legacyCacheQuantity,
     string $unitCost,
 ): array {
+    ensureOpeningInventoryAccountingPeriod();
+
     $rawLocation = Location::query()->firstOrCreate([
         'code' => 'GBS-RAWMAT',
     ], [
@@ -561,11 +566,24 @@ function openingInventoryManifestItem(
     return [$item->fresh('baseUom'), $baseUom];
 }
 
+function ensureOpeningInventoryAccountingPeriod(): void
+{
+    AccountingPeriod::query()->firstOrCreate([
+        'name' => 'FY'.now()->year,
+    ], [
+        'start_date' => now()->startOfYear()->toDateString(),
+        'end_date' => now()->endOfYear()->toDateString(),
+        'is_closed' => false,
+    ]);
+}
+
 /**
  * @return array{items: array<string, Item>, bom: ProductionBom, routing: Routing}
  */
 function openingInventoryProductionLikeFixture(): array
 {
+    ensureOpeningInventoryAccountingPeriod();
+
     $user = User::factory()->create();
     auth()->login($user);
     $rawLocation = Location::query()->firstOrCreate([

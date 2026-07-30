@@ -6,6 +6,7 @@ namespace App\Filament\Resources\Referrers\Schemas;
 
 use App\Models\Referrer;
 use App\Models\ReferrerCommissionPlanAssignment;
+use App\Services\Sales\ReferralCommissions\ReferrerCommissionApprovalBalanceService;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -69,6 +70,17 @@ class ReferrerInfolist
                         ]),
                 ]),
 
+                Section::make('Commission Review & Settlement Readiness')
+                    ->description('Ledger and allocation-derived balances by currency.')
+                    ->columns(2)
+                    ->schema([
+                        TextEntry::make('approval_ready_balances')
+                            ->label('Balances')
+                            ->state(fn (Referrer $record): string => self::approvalBalances($record))
+                            ->markdown()
+                            ->columnSpanFull(),
+                    ]),
+
                 Section::make('Notes')
                     ->collapsed()
                     ->schema([
@@ -82,5 +94,29 @@ class ReferrerInfolist
         return $referrer->activeCommissionPlanAssignment()
             ->with('plan')
             ->first();
+    }
+
+    private static function approvalBalances(Referrer $referrer): string
+    {
+        $balances = app(ReferrerCommissionApprovalBalanceService::class)->balances(['referrer_id' => $referrer->id]);
+
+        if ($balances === []) {
+            return 'No commission review balances yet.';
+        }
+
+        return collect($balances)
+            ->map(function (array $balance, string $currency): string {
+                return "**{$currency}**  \n"
+                    ."Open accrual: {$balance['open_accrual']}  \n"
+                    ."Under review: {$balance['under_review']}  \n"
+                    ."Held: {$balance['held']}  \n"
+                    ."Disputed: {$balance['disputed']}  \n"
+                    ."Forfeited: {$balance['forfeited']}  \n"
+                    ."Approved: {$balance['approved']}  \n"
+                    ."Allocated for future settlement: {$balance['allocated_to_settlement']}  \n"
+                    ."Locked for future payment: {$balance['locked_for_future_payment']}  \n"
+                    ."Net unallocated: {$balance['net_unallocated']}";
+            })
+            ->implode("\n\n");
     }
 }
