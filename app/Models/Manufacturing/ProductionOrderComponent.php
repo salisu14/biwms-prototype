@@ -15,6 +15,7 @@ use App\Support\DecimalTolerance;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProductionOrderComponent extends Model
 {
@@ -64,6 +65,9 @@ class ProductionOrderComponent extends Model
         'bom_level',
         'bom_path',
         'source_bom_code',
+        'hierarchy_node_id',
+        'is_manufactured_requirement',
+        'required_supply_quantity_base',
     ];
 
     protected $casts = [
@@ -79,6 +83,8 @@ class ProductionOrderComponent extends Model
         'total_cost' => 'decimal:4',
         'due_date' => 'date',
         'bom_level' => 'integer',
+        'is_manufactured_requirement' => 'boolean',
+        'required_supply_quantity_base' => 'decimal:8',
     ];
 
     public function warehouseRequests()
@@ -128,6 +134,26 @@ class ProductionOrderComponent extends Model
     public function unitOfMeasure(): BelongsTo
     {
         return $this->belongsTo(UnitOfMeasure::class, 'unit_of_measure_code', 'uom_code');
+    }
+
+    public function hierarchyNode(): BelongsTo
+    {
+        return $this->belongsTo(ProductionHierarchyNode::class, 'hierarchy_node_id');
+    }
+
+    public function supplyLinks(): HasMany
+    {
+        return $this->hasMany(ProductionOrderSupplyLink::class, 'parent_component_id');
+    }
+
+    public function materialReservations(): HasMany
+    {
+        return $this->hasMany(ProductionMaterialReservation::class);
+    }
+
+    public function generatedChildOrders(): HasMany
+    {
+        return $this->hasMany(ProductionOrder::class, 'source_production_order_component_id');
     }
 
     public function routingLine()

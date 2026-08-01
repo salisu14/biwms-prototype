@@ -7,6 +7,7 @@ namespace App\Models\Manufacturing;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionCostSettlementClassification;
 use App\Enums\ProductionCostSettlementStatus;
+use App\Enums\ProductionOrderOrigin;
 use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
 use App\Models\GeneralBusinessPostingGroup;
@@ -31,6 +32,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class ProductionOrder extends Model
@@ -94,6 +96,14 @@ class ProductionOrder extends Model
         'scrap_percent',
 
         // Planning
+        'parent_production_order_id',
+        'root_production_order_id',
+        'production_level',
+        'hierarchy_path',
+        'order_origin',
+        'source_production_order_component_id',
+        'planning_group_id',
+        'hierarchy_planning_version',
         'planning_level',
         'priority',
 
@@ -121,6 +131,7 @@ class ProductionOrder extends Model
 
     protected $casts = [
         'status' => ProductionOrderStatus::class,
+        'order_origin' => ProductionOrderOrigin::class,
         'source_type' => ProductionOrderSourceType::class,
         'quantity' => 'decimal:8',
         'quantity_base' => 'decimal:8',
@@ -137,6 +148,8 @@ class ProductionOrder extends Model
         'cost_settlement_classification' => ProductionCostSettlementClassification::class,
         'finished_at' => 'datetime',
         'reserved_from_stock' => 'boolean',
+        'production_level' => 'integer',
+        'hierarchy_planning_version' => 'integer',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -266,6 +279,51 @@ class ProductionOrder extends Model
     public function components(): HasMany
     {
         return $this->hasMany(ProductionOrderComponent::class, 'production_order_id');
+    }
+
+    public function parentProductionOrder(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_production_order_id');
+    }
+
+    public function childProductionOrders(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_production_order_id');
+    }
+
+    public function rootProductionOrder(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'root_production_order_id');
+    }
+
+    public function sourceProductionOrderComponent(): BelongsTo
+    {
+        return $this->belongsTo(ProductionOrderComponent::class, 'source_production_order_component_id');
+    }
+
+    public function productionHierarchies(): HasMany
+    {
+        return $this->hasMany(ProductionHierarchy::class, 'root_production_order_id');
+    }
+
+    public function productionHierarchy(): HasOne
+    {
+        return $this->hasOne(ProductionHierarchy::class, 'root_production_order_id')->latestOfMany('planning_version');
+    }
+
+    public function supplyLinksAsParent(): HasMany
+    {
+        return $this->hasMany(ProductionOrderSupplyLink::class, 'parent_production_order_id');
+    }
+
+    public function supplyLinksAsChild(): HasMany
+    {
+        return $this->hasMany(ProductionOrderSupplyLink::class, 'child_production_order_id');
+    }
+
+    public function materialReservations(): HasMany
+    {
+        return $this->hasMany(ProductionMaterialReservation::class);
     }
 
     public function routingLines(): HasMany

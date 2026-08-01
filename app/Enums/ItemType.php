@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 // app/Enums/ItemType.php
 
 namespace App\Enums;
@@ -7,17 +9,18 @@ namespace App\Enums;
 enum ItemType: string
 {
     case RAW_MATERIAL = 'RAW_MATERIAL';
+    case SEMI_FINISHED = 'SEMI_FINISHED';
     case FINISHED_GOOD = 'FINISHED_GOOD';
     case PACKAGING = 'PACKAGING';
     case SPARE_PART = 'SPARE_PART';
     case SERVICE = 'SERVICE';
-
-    const string INVENTORY = 'INVENTORY';
+    case INVENTORY = 'INVENTORY';
 
     public function label(): string
     {
         return match ($this) {
             self::RAW_MATERIAL => 'Raw Material',
+            self::SEMI_FINISHED => 'Semi-Finished',
             self::FINISHED_GOOD => 'Finished Good',
             self::PACKAGING => 'Packaging Material',
             self::SPARE_PART => 'Spare Part',
@@ -30,6 +33,7 @@ enum ItemType: string
     {
         return match ($this) {
             self::RAW_MATERIAL => 'Materials used in production or manufacturing',
+            self::SEMI_FINISHED => 'Intermediate output consumed by a higher-level production order',
             self::FINISHED_GOOD => 'Completed products ready for sale',
             self::PACKAGING => 'Materials used for packaging finished goods',
             self::SPARE_PART => 'Replacement parts for equipment maintenance',
@@ -42,6 +46,7 @@ enum ItemType: string
     {
         return match ($this) {
             self::RAW_MATERIAL => 'heroicon-m-beaker',
+            self::SEMI_FINISHED => 'heroicon-m-cog-8-tooth',
             self::FINISHED_GOOD => 'heroicon-m-check-badge',
             self::PACKAGING => 'heroicon-m-archive-box',
             self::SPARE_PART => 'heroicon-m-wrench',
@@ -54,6 +59,7 @@ enum ItemType: string
     {
         return match ($this) {
             self::RAW_MATERIAL => 'warning',
+            self::SEMI_FINISHED => 'info',
             self::FINISHED_GOOD => 'success',
             self::PACKAGING => 'info',
             self::SPARE_PART => 'secondary',
@@ -68,7 +74,7 @@ enum ItemType: string
 
     public function requiresBatchTracking(): bool
     {
-        return in_array($this, [self::RAW_MATERIAL, self::FINISHED_GOOD, self::PACKAGING]);
+        return in_array($this, [self::RAW_MATERIAL, self::SEMI_FINISHED, self::FINISHED_GOOD, self::PACKAGING]);
     }
 
     public static function values(): array
@@ -89,6 +95,7 @@ enum ItemType: string
     {
         return [
             self::RAW_MATERIAL->value,
+            self::SEMI_FINISHED->value,
             self::FINISHED_GOOD->value,
             self::PACKAGING->value,
             self::SPARE_PART->value,
