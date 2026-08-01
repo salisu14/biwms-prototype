@@ -189,6 +189,7 @@ docs/hr-workforce-scheduling-roster.md
 docs/hr-performance-appraisal-management.md
 docs/hr-recruitment-onboarding-confirmation.md
 docs/hr-filament-resource-guide.md
+docs/user-guides/opening-inventory.md
 docs/performance-audit.md
 ```
 
@@ -240,7 +241,7 @@ php artisan biwms:inventory-reconcile
 php artisan biwms:inventory-reconcile --details
 ```
 
-The command is diagnostic-first and report-only. It does not correct data automatically and intentionally has no `--fix` option. It reports cached item stock vs ledger sum mismatches, negative ledger stock, open item ledger entries, missing Value Entries, Value Entry mismatches, posted inventory document lines missing Item Ledger Entries, purchase receipt lines invoiced above received quantity, duplicate direct purchase invoice inventory entries, and posted purchase invoices missing vendor ledger entries. Use the default output for counts; use `--details` to inspect item IDs, item codes, document numbers, linked ledger entry IDs, value entry numbers, and location/lot/serial context.
+The command is diagnostic-first and report-only. It does not correct data automatically and intentionally has no `--fix` option. It reports cached item stock vs ledger sum mismatches, negative ledger stock, open item ledger entries, missing Value Entries, Value Entry mismatches, posted inventory document lines missing Item Ledger Entries, opening inventory ledger/value/accounting gaps, purchase receipt lines invoiced above received quantity, duplicate direct purchase invoice inventory entries, and posted purchase invoices missing vendor ledger entries. Use the default output for counts; use `--details` to inspect item IDs, item codes, document numbers, linked ledger entry IDs, value entry numbers, and location/lot/serial context.
 
 Inventory reconciliation investigation guide:
 

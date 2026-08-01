@@ -4,7 +4,14 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Enums\AccountCategory;
+use App\Enums\AccountStructuralType;
+use App\Enums\IncomeBalanceType;
 use App\Models\AccountingPeriod;
+use App\Models\Business;
+use App\Models\ChartOfAccount;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralPostingSetup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
@@ -12,6 +19,7 @@ use App\Models\OpeningInventory;
 use App\Services\Inventory\OpeningInventoryService;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use RuntimeException;
 
 class OpeningInventorySeeder extends Seeder
@@ -63,11 +71,13 @@ class OpeningInventorySeeder extends Seeder
         $this->ensureAccountingPeriod($postingDate);
 
         $defaultLocation = Location::query()->orderBy('id')->firstOrFail();
+        $business = $this->business();
         $items = Item::query()
             ->with('baseUom')
             ->whereIn('item_code', array_keys(self::OPENING_QUANTITIES))
             ->get()
             ->keyBy('item_code');
+        $this->ensureOpeningPostingSetups($items);
 
         $lines = [];
         foreach (self::OPENING_QUANTITIES as $itemCode => $quantity) {
@@ -92,6 +102,7 @@ class OpeningInventorySeeder extends Seeder
             source: 'SEED_OPENING_STOCK',
             postingDate: $postingDate->toDateString(),
             lines: $lines,
+            businessId: $business->id,
             description: 'Seeded demo opening inventory with item, value, and G/L opening-balance entries.',
         );
 
@@ -122,5 +133,61 @@ class OpeningInventorySeeder extends Seeder
             'end_date' => $postingDate->copy()->endOfYear()->toDateString(),
             'is_closed' => false,
         ]);
+    }
+
+    private function business(): Business
+    {
+        return Business::query()->firstOrCreate(
+            ['code' => 'BIWMS'],
+            [
+                'name' => 'BIWMS',
+                'is_active' => true,
+            ],
+        );
+    }
+
+    /**
+     * @param  Collection<string, Item>  $items
+     */
+    private function ensureOpeningPostingSetups($items): void
+    {
+        $businessPostingGroup = GeneralBusinessPostingGroup::query()->firstOrCreate(
+            ['code' => 'OPENING'],
+            [
+                'description' => 'Opening Inventory',
+                'default_vat_business_posting_group_id' => null,
+                'auto_create_vat_bus_posting_group' => false,
+                'blocked' => false,
+            ],
+        );
+
+        $openingEquityAccount = ChartOfAccount::query()->firstOrCreate(
+            ['account_number' => '30100'],
+            [
+                'name' => 'Opening Balance Equity',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::EQUITY,
+                'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+                'direct_posting' => true,
+                'blocked' => false,
+            ],
+        );
+
+        $items->each(function (Item $item) use ($businessPostingGroup, $openingEquityAccount): void {
+            if (! $item->general_product_posting_group_id) {
+                return;
+            }
+
+            GeneralPostingSetup::query()->updateOrCreate(
+                [
+                    'general_business_posting_group_id' => $businessPostingGroup->id,
+                    'general_product_posting_group_id' => $item->general_product_posting_group_id,
+                ],
+                [
+                    'inventory_adj_account_id' => $openingEquityAccount->id,
+                    'blocked' => false,
+                ],
+            );
+        });
     }
 }

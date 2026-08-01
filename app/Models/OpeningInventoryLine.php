@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use RuntimeException;
 
 class OpeningInventoryLine extends Model
 {
@@ -30,6 +31,21 @@ class OpeningInventoryLine extends Model
         'unit_cost' => 'decimal:8',
         'amount' => 'decimal:4',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $line): void {
+            if (in_array($line->openingInventory?->status, [OpeningInventory::STATUS_POSTED, OpeningInventory::STATUS_CANCELLED], true)) {
+                throw new RuntimeException("Finalized opening inventory line {$line->line_number} is immutable.");
+            }
+        });
+
+        static::deleting(function (self $line): void {
+            if (in_array($line->openingInventory?->status, [OpeningInventory::STATUS_POSTED, OpeningInventory::STATUS_CANCELLED], true)) {
+                throw new RuntimeException("Finalized opening inventory line {$line->line_number} cannot be deleted.");
+            }
+        });
+    }
 
     public function openingInventory(): BelongsTo
     {

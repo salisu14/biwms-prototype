@@ -76,6 +76,8 @@ class PermissionsTableSeeder extends Seeder
             'fixed_asset.acquire', 'fixed_asset.depreciate', 'fixed_asset.dispose',
 
             // Warehouse
+            'inventory.opening_inventory.view_any', 'inventory.opening_inventory.view', 'inventory.opening_inventory.create', 'inventory.opening_inventory.update', 'inventory.opening_inventory.delete',
+            'inventory.opening_inventory.post', 'inventory.opening_inventory.cancel',
             'warehouse.receipt.view_any', 'warehouse.receipt.view', 'warehouse.receipt.create', 'warehouse.receipt.update', 'warehouse.receipt.delete',
             'warehouse.inventory_adjustment_journal.submit', 'warehouse.inventory_adjustment_journal.approve', 'warehouse.inventory_adjustment_journal.reject',
             'warehouse.inventory_adjustment_journal.reopen', 'warehouse.inventory_adjustment_journal.post', 'warehouse.inventory_adjustment_journal.reverse', 'warehouse.inventory_adjustment_journal.cancel',

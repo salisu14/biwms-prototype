@@ -3,7 +3,10 @@
 declare(strict_types=1);
 
 use App\Models\AccountingPeriod;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralPostingSetup;
 use App\Models\GlEntry;
 use App\Models\InventoryPostingGroup;
 use App\Models\InventoryPostingSetup;
@@ -92,6 +95,7 @@ it('posting the same opening inventory document twice does not duplicate ledger 
             'quantity' => '10.00000000',
             'unit_cost' => '2.50000000',
         ]],
+        businessId: openingInventoryTestBusiness()->id,
     );
 
     app(OpeningInventoryService::class)->post($document);
@@ -135,6 +139,7 @@ it('posts opening inventory with item scoped alternate unit conversion and match
             'quantity' => '1.00000000',
             'unit_cost' => '850.00000000',
         ]],
+        businessId: openingInventoryTestBusiness()->id,
     );
 
     app(OpeningInventoryService::class)->post($document);
@@ -193,6 +198,7 @@ it('posts opening inventory using item specific bag to grams conversion', functi
             'quantity' => '3.00000000',
             'unit_cost' => '0.05000000',
         ]],
+        businessId: openingInventoryTestBusiness()->id,
     );
 
     app(OpeningInventoryService::class)->post($document);
@@ -235,6 +241,7 @@ it('rolls back opening inventory posting when value entry creation fails', funct
             'quantity' => '10.00000000',
             'unit_cost' => '2.50000000',
         ]],
+        businessId: openingInventoryTestBusiness()->id,
     );
 
     expect(fn () => app(OpeningInventoryService::class)->post($document))
@@ -484,6 +491,8 @@ function openingInventoryTestItem(array $itemAttributes = []): array
         ...$itemAttributes,
     ]);
 
+    ensureOpeningInventoryPostingSetup($item, $location);
+
     return [$item->fresh('baseUom'), $location];
 }
 
@@ -555,6 +564,8 @@ function openingInventoryManifestItem(
         'unit_cost' => $unitCost,
     ]);
 
+    ensureOpeningInventoryPostingSetup($item, $location, $inventoryAccount);
+
     ItemUomAssignment::query()->create([
         'item_id' => $item->id,
         'uom_id' => $baseUom->id,
@@ -574,6 +585,55 @@ function ensureOpeningInventoryAccountingPeriod(): void
         'start_date' => now()->startOfYear()->toDateString(),
         'end_date' => now()->endOfYear()->toDateString(),
         'is_closed' => false,
+    ]);
+}
+
+function openingInventoryTestBusiness(): Business
+{
+    return Business::query()->firstOrCreate(
+        ['code' => 'BIWMS'],
+        [
+            'name' => 'BIWMS',
+            'is_active' => true,
+        ],
+    );
+}
+
+function ensureOpeningInventoryPostingSetup(Item $item, Location $location, ?ChartOfAccount $inventoryAccount = null): void
+{
+    $inventoryAccount ??= ChartOfAccount::factory()->create([
+        'account_number' => 'OPEN-INV-'.$item->id,
+        'name' => 'Opening Inventory '.$item->item_code,
+    ]);
+
+    $openingEquityAccount = ChartOfAccount::query()->firstOrCreate([
+        'account_number' => '30100',
+    ], [
+        'name' => 'Opening Balance Equity',
+        'direct_posting' => true,
+        'blocked' => false,
+    ]);
+
+    InventoryPostingSetup::query()->updateOrCreate([
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'location_id' => $location->id,
+    ], [
+        'inventory_account_id' => $inventoryAccount->id,
+    ]);
+
+    $businessPostingGroup = GeneralBusinessPostingGroup::query()->firstOrCreate([
+        'code' => 'OPENING',
+    ], [
+        'description' => 'Opening Inventory',
+        'blocked' => false,
+    ]);
+
+    GeneralPostingSetup::query()->updateOrCreate([
+        'general_business_posting_group_id' => $businessPostingGroup->id,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+    ], [
+        'inventory_adj_account_id' => $openingEquityAccount->id,
+        'blocked' => false,
     ]);
 }
 
@@ -745,6 +805,8 @@ function openingInventoryProductionItem(
         'conversion_factor' => '1.000000000000',
         'is_default' => true,
     ]);
+
+    ensureOpeningInventoryPostingSetup($item, $location);
 
     return $item->fresh('baseUom');
 }

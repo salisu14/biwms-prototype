@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\InventoryPostingSetup;
 use App\Models\Item;
@@ -96,6 +97,7 @@ class BiwmsInventoryOpeningRepair extends Command
                 'quantity' => $finding['difference'],
                 'unit_cost' => $finding['unit_cost'],
             ])->all(),
+            businessId: $this->business()->id,
             description: 'Controlled repair for cache-only opening inventory mismatches.',
         );
 
@@ -208,6 +210,7 @@ class BiwmsInventoryOpeningRepair extends Command
                 'quantity' => $finding['source_quantity'] ?? $finding['approved_physical_quantity'],
                 'unit_cost' => $finding['approved_base_unit_cost'],
             ])->all(),
+            businessId: $this->business()->id,
             description: 'Operator-approved physical opening inventory correction.',
         );
 
@@ -215,6 +218,17 @@ class BiwmsInventoryOpeningRepair extends Command
         $this->info("Applied approved physical opening inventory repair via {$document->document_number}.");
 
         return self::SUCCESS;
+    }
+
+    private function business(): Business
+    {
+        return Business::query()->firstOrCreate(
+            ['code' => 'BIWMS'],
+            [
+                'name' => 'BIWMS',
+                'is_active' => true,
+            ],
+        );
     }
 
     /**

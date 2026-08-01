@@ -51,6 +51,18 @@ class BiwmsInventoryReconcile extends Command
         $postedOpeningDocumentsWithoutLedger = $this->requiredTableExists('opening_inventory_lines')
             ? $this->postedOpeningDocumentsWithoutLedger()
             : [];
+        $openingLineLedgerMismatches = $this->requiredTableExists('opening_inventory_lines')
+            ? $this->openingLineLedgerMismatches()
+            : [];
+        $openingValueEntryOwnershipGaps = $this->requiredTableExists('opening_inventory_lines')
+            ? $this->openingValueEntryOwnershipGaps()
+            : [];
+        $openingCrossBusinessReferences = $this->requiredTableExists('opening_inventory_lines')
+            ? $this->openingCrossBusinessReferences()
+            : [];
+        $openingStatusLedgerContradictions = $this->requiredTableExists('opening_inventory_lines')
+            ? $this->openingStatusLedgerContradictions()
+            : [];
 
         $report = [
             'schema_findings' => $schemaFindings,
@@ -74,6 +86,10 @@ class BiwmsInventoryReconcile extends Command
             'transfer_source_destination_mismatches' => $transferSourceDestinationMismatches,
             'duplicate_opening_inventory_entries' => $duplicateOpeningInventoryEntries,
             'posted_opening_documents_without_ledger' => $postedOpeningDocumentsWithoutLedger,
+            'opening_line_ledger_mismatches' => $openingLineLedgerMismatches,
+            'opening_value_entry_ownership_gaps' => $openingValueEntryOwnershipGaps,
+            'opening_cross_business_references' => $openingCrossBusinessReferences,
+            'opening_status_ledger_contradictions' => $openingStatusLedgerContradictions,
         ];
 
         if ($exportPath = $this->option('export')) {
@@ -276,6 +292,42 @@ class BiwmsInventoryReconcile extends Command
             $entry['document_number'],
             $entry['line_number'],
             $entry['item_id'],
+        ));
+        $this->section('Opening line ledger mismatches', $openingLineLedgerMismatches, $details, fn (array $entry): string => sprintf(
+            '[%s] %s line=%s item=%s line_qty=%s ledger_qty=%s line_amount=%s value_cost=%s',
+            $entry['severity'],
+            $entry['document_number'],
+            $entry['line_number'],
+            $entry['item_id'],
+            number_format($entry['line_quantity_base'], 4, '.', ''),
+            number_format($entry['ledger_quantity'], 4, '.', ''),
+            number_format($entry['line_amount'], 4, '.', ''),
+            number_format($entry['value_cost_amount'], 4, '.', ''),
+        ));
+        $this->section('Opening value entry ownership gaps', $openingValueEntryOwnershipGaps, $details, fn (array $entry): string => sprintf(
+            '[%s] %s line=%s item=%s issue=%s',
+            $entry['severity'],
+            $entry['document_number'],
+            $entry['line_number'],
+            $entry['item_id'],
+            $entry['issue'],
+        ));
+        $this->section('Opening cross-business references', $openingCrossBusinessReferences, $details, fn (array $entry): string => sprintf(
+            '[%s] %s line=%s document_business=%s item_business=%s location_business=%s',
+            $entry['severity'],
+            $entry['document_number'],
+            $entry['line_number'],
+            $entry['document_business_id'] ?? 'GLOBAL',
+            $entry['item_business_id'] ?? 'GLOBAL',
+            $entry['location_business_id'] ?? 'GLOBAL',
+        ));
+        $this->section('Opening status and ledger contradictions', $openingStatusLedgerContradictions, $details, fn (array $entry): string => sprintf(
+            '[%s] %s status=%s line=%s issue=%s',
+            $entry['severity'],
+            $entry['document_number'],
+            $entry['status'],
+            $entry['line_number'] ?? 'N/A',
+            $entry['issue'],
         ));
 
         return self::SUCCESS;
@@ -1342,6 +1394,231 @@ class BiwmsInventoryReconcile extends Command
                     classification: 'opening_document_posted_without_ledger',
                     severity: 'critical',
                     suggestedRemediation: 'Reopen the controlled opening-inventory repair plan. A posted opening document must not remain without matching item-ledger records.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function openingLineLedgerMismatches(): array
+    {
+        return DB::table('opening_inventory_lines as oil')
+            ->join('opening_inventories as oi', 'oi.id', '=', 'oil.opening_inventory_id')
+            ->join('item_ledger_entries as ile', 'ile.id', '=', 'oil.item_ledger_entry_id')
+            ->leftJoin('value_entries as ve', function ($join): void {
+                $join->on('ve.item_ledger_entry_no', '=', 'ile.entry_number')
+                    ->on('ve.document_no', '=', 'ile.document_number')
+                    ->on('ve.document_line_no', '=', 'ile.document_line_number');
+            })
+            ->where('oi.status', OpeningInventory::STATUS_POSTED)
+            ->where(function ($query): void {
+                $query->whereRaw('ABS(oil.quantity_base - ile.quantity) > 0.0001')
+                    ->orWhereRaw('ABS(oil.amount - COALESCE(ve.cost_amount_actual, 0)) > 0.0001');
+            })
+            ->orderBy('oi.document_number')
+            ->limit(250)
+            ->get([
+                'oi.id as opening_inventory_id',
+                'oi.document_number',
+                'oil.line_number',
+                'oil.item_id',
+                'oil.quantity_base as line_quantity_base',
+                'oil.amount as line_amount',
+                'ile.quantity as ledger_quantity',
+                DB::raw('COALESCE(ve.cost_amount_actual, 0) as value_cost_amount'),
+            ])
+            ->map(fn ($entry): array => [
+                'opening_inventory_id' => $entry->opening_inventory_id,
+                'document_number' => $entry->document_number,
+                'line_number' => $entry->line_number,
+                'item_id' => $entry->item_id,
+                'line_quantity_base' => round((float) $entry->line_quantity_base, 4),
+                'ledger_quantity' => round((float) $entry->ledger_quantity, 4),
+                'line_amount' => round((float) $entry->line_amount, 4),
+                'value_cost_amount' => round((float) $entry->value_cost_amount, 4),
+                ...$this->findingMetadata(
+                    classification: 'opening_line_ledger_mismatch',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review the opening line, Item Ledger Entry, and Value Entry. Correct only through an approved controlled opening-inventory remediation; do not edit posted rows directly.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function openingValueEntryOwnershipGaps(): array
+    {
+        return DB::table('opening_inventory_lines as oil')
+            ->join('opening_inventories as oi', 'oi.id', '=', 'oil.opening_inventory_id')
+            ->join('item_ledger_entries as ile', 'ile.id', '=', 'oil.item_ledger_entry_id')
+            ->leftJoin('value_entries as ve', function ($join): void {
+                $join->on('ve.item_ledger_entry_no', '=', 'ile.entry_number')
+                    ->on('ve.document_no', '=', 'ile.document_number')
+                    ->on('ve.document_line_no', '=', 'ile.document_line_number');
+            })
+            ->where('oi.status', OpeningInventory::STATUS_POSTED)
+            ->where(function ($query): void {
+                $query->whereNull('ve.id')
+                    ->orWhere('ve.gl_posted', false)
+                    ->orWhereNull('ve.posting_transaction_id');
+            })
+            ->orderBy('oi.document_number')
+            ->limit(250)
+            ->get([
+                'oi.id as opening_inventory_id',
+                'oi.document_number',
+                'oil.line_number',
+                'oil.item_id',
+                've.id as value_entry_id',
+                've.gl_posted',
+                've.posting_transaction_id',
+            ])
+            ->map(function ($entry): array {
+                $issue = match (true) {
+                    $entry->value_entry_id === null => 'missing_value_entry',
+                    ! (bool) $entry->gl_posted => 'value_entry_not_gl_posted',
+                    $entry->posting_transaction_id === null => 'missing_posting_transaction',
+                    default => 'unknown',
+                };
+
+                return [
+                    'opening_inventory_id' => $entry->opening_inventory_id,
+                    'document_number' => $entry->document_number,
+                    'line_number' => $entry->line_number,
+                    'item_id' => $entry->item_id,
+                    'value_entry_id' => $entry->value_entry_id,
+                    'issue' => $issue,
+                    ...$this->findingMetadata(
+                        classification: 'opening_value_entry_accounting_gap',
+                        severity: 'critical',
+                        suggestedRemediation: 'Opening inventory accounting must be owned by Value Entries. Repost through the approved service path or prepare a reviewed posting-transaction remediation.'
+                    ),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function openingCrossBusinessReferences(): array
+    {
+        $itemsBusinessColumn = DB::getSchemaBuilder()->hasColumn('items', 'business_id');
+        $locationsBusinessColumn = DB::getSchemaBuilder()->hasColumn('locations', 'business_id');
+
+        if (! $itemsBusinessColumn && ! $locationsBusinessColumn) {
+            return [];
+        }
+
+        $query = DB::table('opening_inventory_lines as oil')
+            ->join('opening_inventories as oi', 'oi.id', '=', 'oil.opening_inventory_id')
+            ->join('items as i', 'i.id', '=', 'oil.item_id')
+            ->join('locations as l', 'l.id', '=', 'oil.location_id')
+            ->whereNotNull('oi.business_id');
+
+        $query->where(function ($query) use ($itemsBusinessColumn, $locationsBusinessColumn): void {
+            if ($itemsBusinessColumn) {
+                $query->orWhere(function ($query): void {
+                    $query->whereNotNull('i.business_id')
+                        ->whereColumn('i.business_id', '!=', 'oi.business_id');
+                });
+            }
+
+            if ($locationsBusinessColumn) {
+                $query->orWhere(function ($query): void {
+                    $query->whereNotNull('l.business_id')
+                        ->whereColumn('l.business_id', '!=', 'oi.business_id');
+                });
+            }
+        });
+
+        return $query
+            ->orderBy('oi.document_number')
+            ->limit(250)
+            ->get([
+                'oi.id as opening_inventory_id',
+                'oi.document_number',
+                'oi.business_id as document_business_id',
+                'oil.line_number',
+                DB::raw($itemsBusinessColumn ? 'i.business_id as item_business_id' : 'NULL as item_business_id'),
+                DB::raw($locationsBusinessColumn ? 'l.business_id as location_business_id' : 'NULL as location_business_id'),
+            ])
+            ->map(fn ($entry): array => [
+                'opening_inventory_id' => $entry->opening_inventory_id,
+                'document_number' => $entry->document_number,
+                'line_number' => $entry->line_number,
+                'document_business_id' => $entry->document_business_id,
+                'item_business_id' => $entry->item_business_id,
+                'location_business_id' => $entry->location_business_id,
+                ...$this->findingMetadata(
+                    classification: 'opening_cross_business_reference',
+                    severity: 'critical',
+                    suggestedRemediation: 'Move the line to the correct business document or create a reviewed correction. Opening inventory must not mix business-scoped master data.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function openingStatusLedgerContradictions(): array
+    {
+        $draftWithLedger = DB::table('opening_inventory_lines as oil')
+            ->join('opening_inventories as oi', 'oi.id', '=', 'oil.opening_inventory_id')
+            ->whereIn('oi.status', [OpeningInventory::STATUS_DRAFT, OpeningInventory::STATUS_CANCELLED])
+            ->where(function ($query): void {
+                $query->whereNotNull('oil.item_ledger_entry_id')
+                    ->orWhereExists(function ($query): void {
+                        $query->selectRaw('1')
+                            ->from('item_ledger_entries as ile')
+                            ->whereColumn('ile.source_id', 'oi.id')
+                            ->where('ile.source_type', OpeningInventory::class)
+                            ->whereColumn('ile.document_line_number', 'oil.line_number');
+                    });
+            })
+            ->limit(250)
+            ->get([
+                'oi.id as opening_inventory_id',
+                'oi.document_number',
+                'oi.status',
+                'oil.line_number',
+                DB::raw("'draft_or_cancelled_document_has_ledger' as issue"),
+            ]);
+
+        $postedUnlinkedLines = DB::table('opening_inventory_lines as oil')
+            ->join('opening_inventories as oi', 'oi.id', '=', 'oil.opening_inventory_id')
+            ->where('oi.status', OpeningInventory::STATUS_POSTED)
+            ->whereNull('oil.item_ledger_entry_id')
+            ->limit(250)
+            ->get([
+                'oi.id as opening_inventory_id',
+                'oi.document_number',
+                'oi.status',
+                'oil.line_number',
+                DB::raw("'posted_document_contains_unposted_line' as issue"),
+            ]);
+
+        return $draftWithLedger
+            ->merge($postedUnlinkedLines)
+            ->map(fn ($entry): array => [
+                'opening_inventory_id' => $entry->opening_inventory_id,
+                'document_number' => $entry->document_number,
+                'status' => $entry->status,
+                'line_number' => $entry->line_number,
+                'issue' => $entry->issue,
+                ...$this->findingMetadata(
+                    classification: 'opening_status_ledger_contradiction',
+                    severity: 'critical',
+                    suggestedRemediation: 'Review document status and ledger links. Draft/cancelled documents must not own ledger records, and posted documents must have fully linked lines.'
                 ),
             ])
             ->values()

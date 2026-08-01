@@ -8,6 +8,8 @@ use App\Enums\AccountCategory;
 use App\Enums\AccountStructuralType;
 use App\Enums\IncomeBalanceType;
 use App\Models\ChartOfAccount;
+use App\Models\GeneralBusinessPostingGroup;
+use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
 use App\Models\InventoryPostingGroup;
 use App\Models\InventoryPostingSetup;
@@ -348,12 +350,14 @@ class BiwmsProductionOpeningItemMasterPrepare extends Command
             ['code' => 'PACKAGING'],
             ['description' => 'Packaging'],
         );
-        GeneralProductPostingGroup::query()->firstOrCreate(
+        $rawProductGroup = GeneralProductPostingGroup::query()->firstOrCreate(
             ['code' => 'RAW'],
             ['description' => 'Raw Materials'],
         );
 
         $this->ensureOpeningEquityAccount();
+        $this->ensureOpeningAdjustmentSetup($packagingProductGroup);
+        $this->ensureOpeningAdjustmentSetup($rawProductGroup);
         $this->ensureInventoryPostingSetup($packagingPostingGroup, $packagingLocation);
         $this->ensureInventoryPostingSetup($rawPostingGroup, $rawLocation);
 
@@ -452,6 +456,43 @@ class BiwmsProductionOpeningItemMasterPrepare extends Command
                 'account_category' => AccountCategory::EQUITY,
                 'income_balance' => IncomeBalanceType::BALANCE_SHEET,
                 'direct_posting' => true,
+                'blocked' => false,
+            ],
+        );
+    }
+
+    private function ensureOpeningAdjustmentSetup(GeneralProductPostingGroup $productPostingGroup): void
+    {
+        $businessPostingGroup = GeneralBusinessPostingGroup::query()->firstOrCreate(
+            ['code' => 'OPENING'],
+            [
+                'description' => 'Opening Inventory',
+                'default_vat_business_posting_group_id' => null,
+                'auto_create_vat_bus_posting_group' => false,
+                'blocked' => false,
+            ],
+        );
+
+        $openingEquityAccount = ChartOfAccount::query()
+            ->where('account_number', '30100')
+            ->first()
+            ?? ChartOfAccount::query()->create([
+                'account_number' => '30100',
+                'name' => 'Opening Balance Equity',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::EQUITY,
+                'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+                'direct_posting' => true,
+                'blocked' => false,
+            ]);
+
+        GeneralPostingSetup::query()->updateOrCreate(
+            [
+                'general_business_posting_group_id' => $businessPostingGroup->id,
+                'general_product_posting_group_id' => $productPostingGroup->id,
+            ],
+            [
+                'inventory_adj_account_id' => $openingEquityAccount->id,
                 'blocked' => false,
             ],
         );

@@ -632,6 +632,11 @@ class AdminPanelProvider extends PanelProvider
                                     ->url('/admin/items')
                                     ->isActiveWhen(fn () => request()->is('admin/items*')),
 
+                                NavigationItem::make('Opening Inventories')
+                                    ->icon('heroicon-o-cube')
+                                    ->url('/admin/opening-inventories')
+                                    ->isActiveWhen(fn () => request()->is('admin/opening-inventories*')),
+
                                 NavigationItem::make('Categories')
                                     ->icon('heroicon-o-tag')
                                     ->url('/admin/categories')
