@@ -7,6 +7,7 @@ namespace App\Filament\Resources\Referrers\Schemas;
 use App\Models\Referrer;
 use App\Models\ReferrerCommissionPlanAssignment;
 use App\Services\Sales\ReferralCommissions\ReferrerCommissionApprovalBalanceService;
+use App\Services\Sales\ReferralCommissions\ReferrerCommissionPaymentBalanceService;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -81,6 +82,17 @@ class ReferrerInfolist
                             ->columnSpanFull(),
                     ]),
 
+                Section::make('Commission Payment Balance')
+                    ->description('Settlement and payment-application derived balances.')
+                    ->columns(2)
+                    ->schema([
+                        TextEntry::make('payment_ready_balances')
+                            ->label('Payment Balances')
+                            ->state(fn (Referrer $record): string => self::paymentBalances($record))
+                            ->markdown()
+                            ->columnSpanFull(),
+                    ]),
+
                 Section::make('Notes')
                     ->collapsed()
                     ->schema([
@@ -117,6 +129,24 @@ class ReferrerInfolist
                     ."Locked for future payment: {$balance['locked_for_future_payment']}  \n"
                     ."Net unallocated: {$balance['net_unallocated']}";
             })
+            ->implode("\n\n");
+    }
+
+    private static function paymentBalances(Referrer $referrer): string
+    {
+        $balances = app(ReferrerCommissionPaymentBalanceService::class)->balances(['referrer_id' => $referrer->id]);
+
+        if ($balances === []) {
+            return 'No commission payment balances yet.';
+        }
+
+        return collect($balances)
+            ->map(fn (array $balance): string => "**{$balance['referrer_name']}**  \n"
+                ."Settled: {$balance['settled_amount']}  \n"
+                ."Paid: {$balance['paid_amount']}  \n"
+                ."Payment reversed: {$balance['payment_reversed_amount']}  \n"
+                ."Outstanding: {$balance['outstanding_amount']}  \n"
+                ."Recovery required: {$balance['recovery_required_amount']}")
             ->implode("\n\n");
     }
 }

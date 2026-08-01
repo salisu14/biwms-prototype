@@ -88,6 +88,26 @@ class NumberSeriesSeeder extends Seeder
                 'year' => 2026,
                 'module' => 'finance',
             ],
+            [
+                'code' => 'COMM-LIAB',
+                'description' => 'Commission Liability Postings',
+                'prefix' => 'CLP',
+                'starting_number' => 1,
+                'ending_number' => 999999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'sales',
+            ],
+            [
+                'code' => 'COMM-PAY',
+                'description' => 'Commission Payment Batches',
+                'prefix' => 'CPB',
+                'starting_number' => 1,
+                'ending_number' => 999999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'sales',
+            ],
         ];
 
         foreach ($series as $s) {

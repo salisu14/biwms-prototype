@@ -85,4 +85,14 @@ class CommissionSettlementBatch extends Model
     {
         return $this->hasMany(CommissionSettlementAllocation::class);
     }
+
+    public function liabilityPosting(): HasMany
+    {
+        return $this->hasMany(CommissionLiabilityPosting::class);
+    }
+
+    public function paymentBatches(): HasMany
+    {
+        return $this->hasMany(CommissionPaymentBatch::class);
+    }
 }

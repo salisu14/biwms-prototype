@@ -6,9 +6,17 @@ namespace App\Console\Commands;
 
 use App\Enums\CommissionCalculationStatus;
 use App\Enums\CommissionLedgerEntryType;
+use App\Enums\CommissionLiabilityPostingStatus;
+use App\Enums\CommissionPaymentApplicationType;
+use App\Enums\CommissionPaymentBatchStatus;
+use App\Models\BankAccountLedgerEntry;
 use App\Models\CommissionCalculation;
 use App\Models\CommissionHold;
 use App\Models\CommissionLedgerEntry;
+use App\Models\CommissionLiabilityPosting;
+use App\Models\CommissionPaymentApplication;
+use App\Models\CommissionPaymentBatch;
+use App\Models\CommissionPaymentLine;
 use App\Models\CommissionReviewBatch;
 use App\Models\CommissionReviewBatchLine;
 use App\Models\CommissionReviewPeriod;
@@ -22,8 +30,9 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 
-#[Signature('biwms:commission-reconcile {--details : Show detailed diagnostic rows} {--business= : Filter by business ID} {--referrer= : Filter by referrer ID} {--customer= : Filter by customer ID} {--plan= : Filter by commission plan ID} {--source= : Filter by source document number} {--date-from= : Filter posting date from YYYY-MM-DD} {--date-to= : Filter posting date to YYYY-MM-DD} {--status= : Filter calculation status} {--review-period= : Filter by commission review period ID} {--review-batch= : Filter by commission review batch ID} {--settlement-batch= : Filter by commission settlement batch ID} {--json : Output machine-readable JSON} {--export= : Write JSON report to path}')]
+#[Signature('biwms:commission-reconcile {--details : Show detailed diagnostic rows} {--business= : Filter by business ID} {--referrer= : Filter by referrer ID} {--customer= : Filter by customer ID} {--plan= : Filter by commission plan ID} {--source= : Filter by source document number} {--date-from= : Filter posting date from YYYY-MM-DD} {--date-to= : Filter posting date to YYYY-MM-DD} {--status= : Filter calculation status} {--review-period= : Filter by commission review period ID} {--review-batch= : Filter by commission review batch ID} {--settlement-batch= : Filter by commission settlement batch ID} {--payment-batch= : Filter by commission payment batch ID} {--payment-status= : Filter by commission payment batch status} {--payment-method= : Filter by commission payment method} {--json : Output machine-readable JSON} {--export= : Write JSON report to path}')]
 #[Description('Report referral commission calculation, accrual, reversal, and ledger consistency issues without writing data.')]
 class BiwmsCommissionReconcile extends Command
 {
@@ -80,6 +89,7 @@ class BiwmsCommissionReconcile extends Command
                 'ledger_entry_in_multiple_active_settlement_batches' => $this->ledgerEntryInMultipleActiveSettlementBatches(),
                 'settlement_currency_mismatch' => $this->settlementCurrencyMismatch(),
                 'self_approved_settlement_batch' => $this->selfApprovedSettlementBatch(),
+                ...$this->phaseSixFindings(),
             ],
         ];
 
@@ -581,6 +591,368 @@ class BiwmsCommissionReconcile extends Command
             ->all();
     }
 
+    private function phaseSixFindings(): array
+    {
+        $keys = [
+            'locked_settlement_without_liability',
+            'duplicate_liability_posting',
+            'liability_total_mismatch',
+            'liability_gl_missing',
+            'payment_batch_without_settlement',
+            'payment_batch_currency_mismatch',
+            'payment_batch_total_mismatch',
+            'payment_line_total_mismatch',
+            'payment_without_approval',
+            'payment_without_liability',
+            'payment_amount_exceeds_outstanding',
+            'duplicate_payment_application',
+            'payment_application_missing',
+            'payment_application_exceeds_allocation',
+            'payment_without_bank_or_cash_entry',
+            'payment_gl_missing',
+            'payment_posted_but_batch_not_posted',
+            'negative_outstanding',
+            'overpayment_detected',
+            'payment_reversal_without_original',
+            'self_approved_payment_batch',
+            'cross_business_payment_reference',
+        ];
+
+        if (! Schema::hasTable('commission_liability_postings') || ! Schema::hasTable('commission_payment_batches')) {
+            return array_fill_keys($keys, []);
+        }
+
+        return [
+            'locked_settlement_without_liability' => $this->lockedSettlementWithoutLiability(),
+            'duplicate_liability_posting' => $this->duplicateLiabilityPosting(),
+            'liability_total_mismatch' => $this->liabilityTotalMismatch(),
+            'liability_gl_missing' => $this->liabilityGlMissing(),
+            'payment_batch_without_settlement' => $this->paymentBatchWithoutSettlement(),
+            'payment_batch_currency_mismatch' => $this->paymentBatchCurrencyMismatch(),
+            'payment_batch_total_mismatch' => $this->paymentBatchTotalMismatch(),
+            'payment_line_total_mismatch' => $this->paymentLineTotalMismatch(),
+            'payment_without_approval' => $this->paymentWithoutApproval(),
+            'payment_without_liability' => $this->paymentWithoutLiability(),
+            'payment_amount_exceeds_outstanding' => $this->paymentAmountExceedsOutstanding(),
+            'duplicate_payment_application' => $this->duplicatePaymentApplication(),
+            'payment_application_missing' => $this->paymentApplicationMissing(),
+            'payment_application_exceeds_allocation' => $this->paymentApplicationExceedsAllocation(),
+            'payment_without_bank_or_cash_entry' => $this->paymentWithoutBankOrCashEntry(),
+            'payment_gl_missing' => $this->paymentGlMissing(),
+            'payment_posted_but_batch_not_posted' => $this->paymentPostedButBatchNotPosted(),
+            'negative_outstanding' => $this->negativeOutstanding(),
+            'overpayment_detected' => $this->overpaymentDetected(),
+            'payment_reversal_without_original' => $this->paymentReversalWithoutOriginal(),
+            'self_approved_payment_batch' => $this->selfApprovedPaymentBatch(),
+            'cross_business_payment_reference' => $this->crossBusinessPaymentReference(),
+        ];
+    }
+
+    private function lockedSettlementWithoutLiability(): array
+    {
+        return $this->settlementBatchQuery()
+            ->where('status', 'locked')
+            ->whereDoesntHave('liabilityPosting', fn (Builder $query): Builder => $query->where('status', CommissionLiabilityPostingStatus::Posted))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionSettlementBatch $batch): array => $this->finding('locked_settlement_without_liability', 'critical', 'Locked commission settlement has no posted liability recognition.', [
+                'commission_settlement_batch_id' => $batch->id,
+                'settlement_number' => $batch->settlement_number,
+            ]))
+            ->all();
+    }
+
+    private function duplicateLiabilityPosting(): array
+    {
+        return CommissionLiabilityPosting::query()
+            ->selectRaw('commission_settlement_batch_id, COUNT(*) as duplicate_count')
+            ->groupBy('commission_settlement_batch_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->limit(250)
+            ->get()
+            ->map(fn ($row): array => $this->finding('duplicate_liability_posting', 'critical', 'Multiple commission liability postings exist for one settlement.', [
+                'commission_settlement_batch_id' => $row->commission_settlement_batch_id,
+                'duplicate_count' => $row->duplicate_count,
+            ]))
+            ->all();
+    }
+
+    private function liabilityTotalMismatch(): array
+    {
+        return CommissionLiabilityPosting::query()
+            ->with('settlementBatch')
+            ->where('status', CommissionLiabilityPostingStatus::Posted)
+            ->limit(250)
+            ->get()
+            ->filter(fn (CommissionLiabilityPosting $posting): bool => DecimalMath::compare($posting->net_liability_amount, $posting->settlementBatch?->total_net_amount ?? 0) !== 0)
+            ->map(fn (CommissionLiabilityPosting $posting): array => $this->finding('liability_total_mismatch', 'critical', 'Commission liability posting total does not match locked settlement total.', [
+                'commission_liability_posting_id' => $posting->id,
+                'commission_settlement_batch_id' => $posting->commission_settlement_batch_id,
+                'liability_amount' => (string) $posting->net_liability_amount,
+                'settlement_amount' => (string) ($posting->settlementBatch?->total_net_amount ?? 0),
+            ]))
+            ->values()
+            ->all();
+    }
+
+    private function liabilityGlMissing(): array
+    {
+        return CommissionLiabilityPosting::query()
+            ->where('status', CommissionLiabilityPostingStatus::Posted)
+            ->whereDoesntHave('postingTransaction.glEntries')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionLiabilityPosting $posting): array => $this->finding('liability_gl_missing', 'critical', 'Posted commission liability has no G/L entries.', [
+                'commission_liability_posting_id' => $posting->id,
+                'document_number' => $posting->document_number,
+            ]))
+            ->all();
+    }
+
+    private function paymentBatchWithoutSettlement(): array
+    {
+        return $this->paymentBatchQuery()
+            ->whereDoesntHave('settlementBatch')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentBatch $batch): array => $this->finding('payment_batch_without_settlement', 'critical', 'Commission payment batch references a missing settlement.', [
+                'commission_payment_batch_id' => $batch->id,
+                'batch_number' => $batch->batch_number,
+            ]))
+            ->all();
+    }
+
+    private function paymentBatchCurrencyMismatch(): array
+    {
+        return $this->paymentBatchQuery()
+            ->whereHas('settlementBatch', fn (Builder $query): Builder => $query->whereColumn('commission_payment_batches.currency_code', '!=', 'commission_settlement_batches.currency_code'))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentBatch $batch): array => $this->finding('payment_batch_currency_mismatch', 'critical', 'Commission payment batch currency differs from settlement currency.', [
+                'commission_payment_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function paymentBatchTotalMismatch(): array
+    {
+        return $this->paymentBatchQuery()
+            ->with('lines')
+            ->limit(250)
+            ->get()
+            ->filter(fn (CommissionPaymentBatch $batch): bool => DecimalMath::compare($batch->total_amount, $batch->lines->sum('payment_amount')) !== 0)
+            ->map(fn (CommissionPaymentBatch $batch): array => $this->finding('payment_batch_total_mismatch', 'critical', 'Commission payment batch total does not match line payment total.', [
+                'commission_payment_batch_id' => $batch->id,
+                'batch_total' => (string) $batch->total_amount,
+                'line_total' => (string) $batch->lines->sum('payment_amount'),
+            ]))
+            ->values()
+            ->all();
+    }
+
+    private function paymentLineTotalMismatch(): array
+    {
+        return CommissionPaymentLine::query()
+            ->whereColumn('payment_amount', '>', 'approved_amount')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentLine $line): array => $this->finding('payment_line_total_mismatch', 'critical', 'Commission payment line exceeds approved settlement amount.', [
+                'commission_payment_line_id' => $line->id,
+            ]))
+            ->all();
+    }
+
+    private function paymentWithoutApproval(): array
+    {
+        return $this->paymentBatchQuery()
+            ->whereIn('status', [CommissionPaymentBatchStatus::Posted, CommissionPaymentBatchStatus::Reversed])
+            ->whereNull('approved_at')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentBatch $batch): array => $this->finding('payment_without_approval', 'critical', 'Commission payment batch was posted without approval timestamp.', [
+                'commission_payment_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function paymentWithoutLiability(): array
+    {
+        return $this->paymentBatchQuery()
+            ->whereIn('status', [CommissionPaymentBatchStatus::Posted, CommissionPaymentBatchStatus::Reversed])
+            ->whereDoesntHave('settlementBatch.liabilityPosting', fn (Builder $query): Builder => $query->where('status', CommissionLiabilityPostingStatus::Posted))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentBatch $batch): array => $this->finding('payment_without_liability', 'critical', 'Commission payment was posted before liability recognition.', [
+                'commission_payment_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function paymentAmountExceedsOutstanding(): array
+    {
+        return CommissionPaymentLine::query()
+            ->whereRaw('payment_amount > (approved_amount - previously_paid_amount)')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentLine $line): array => $this->finding('payment_amount_exceeds_outstanding', 'critical', 'Commission payment line exceeds outstanding amount at preparation.', [
+                'commission_payment_line_id' => $line->id,
+            ]))
+            ->all();
+    }
+
+    private function duplicatePaymentApplication(): array
+    {
+        return CommissionPaymentApplication::query()
+            ->selectRaw('commission_payment_line_id, commission_settlement_allocation_id, application_type, COUNT(*) as duplicate_count')
+            ->groupBy('commission_payment_line_id', 'commission_settlement_allocation_id', 'application_type')
+            ->havingRaw('COUNT(*) > 1')
+            ->limit(250)
+            ->get()
+            ->map(fn ($row): array => $this->finding('duplicate_payment_application', 'critical', 'Duplicate commission payment application exists for one line/allocation/type.', [
+                'commission_payment_line_id' => $row->commission_payment_line_id,
+                'commission_settlement_allocation_id' => $row->commission_settlement_allocation_id,
+                'application_type' => $row->application_type,
+            ]))
+            ->all();
+    }
+
+    private function paymentApplicationMissing(): array
+    {
+        return CommissionPaymentLine::query()
+            ->where('status', 'posted')
+            ->whereDoesntHave('applications')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentLine $line): array => $this->finding('payment_application_missing', 'critical', 'Posted commission payment line has no settlement application.', [
+                'commission_payment_line_id' => $line->id,
+            ]))
+            ->all();
+    }
+
+    private function paymentApplicationExceedsAllocation(): array
+    {
+        return CommissionSettlementAllocation::query()
+            ->withSum(['paymentApplications as payment_total' => fn (Builder $query): Builder => $query->where('application_type', CommissionPaymentApplicationType::Payment)], 'applied_amount')
+            ->withSum(['paymentApplications as reversal_total' => fn (Builder $query): Builder => $query->where('application_type', CommissionPaymentApplicationType::Reversal)], 'applied_amount')
+            ->limit(250)
+            ->get()
+            ->filter(fn (CommissionSettlementAllocation $allocation): bool => ((float) ($allocation->payment_total ?? 0) - (float) ($allocation->reversal_total ?? 0)) - (float) $allocation->allocated_amount > 0.0001)
+            ->map(fn (CommissionSettlementAllocation $allocation): array => $this->finding('payment_application_exceeds_allocation', 'critical', 'Commission payment applications exceed settlement allocation amount.', [
+                'commission_settlement_allocation_id' => $allocation->id,
+                'allocated_amount' => (string) $allocation->allocated_amount,
+                'paid_amount' => (float) ($allocation->payment_total ?? 0) - (float) ($allocation->reversal_total ?? 0),
+            ]))
+            ->values()
+            ->all();
+    }
+
+    private function paymentWithoutBankOrCashEntry(): array
+    {
+        return $this->paymentBatchQuery()
+            ->where('status', CommissionPaymentBatchStatus::Posted)
+            ->limit(250)
+            ->get()
+            ->filter(function (CommissionPaymentBatch $batch): bool {
+                if ($batch->bank_account_id) {
+                    return ! BankAccountLedgerEntry::query()
+                        ->where('source_type', 'commission_payment')
+                        ->where('source_id', $batch->id)
+                        ->exists();
+                }
+
+                return false;
+            })
+            ->map(fn (CommissionPaymentBatch $batch): array => $this->finding('payment_without_bank_or_cash_entry', 'critical', 'Posted commission payment has no matching bank/cash ledger record.', [
+                'commission_payment_batch_id' => $batch->id,
+            ]))
+            ->values()
+            ->all();
+    }
+
+    private function paymentGlMissing(): array
+    {
+        return $this->paymentBatchQuery()
+            ->where('status', CommissionPaymentBatchStatus::Posted)
+            ->whereDoesntHave('postingTransaction.glEntries')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentBatch $batch): array => $this->finding('payment_gl_missing', 'critical', 'Posted commission payment batch has no G/L entries.', [
+                'commission_payment_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function paymentPostedButBatchNotPosted(): array
+    {
+        return CommissionPaymentApplication::query()
+            ->whereHas('batch', fn (Builder $query): Builder => $query->whereNotIn('status', [CommissionPaymentBatchStatus::Posted, CommissionPaymentBatchStatus::PartiallyReversed, CommissionPaymentBatchStatus::Reversed]))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentApplication $application): array => $this->finding('payment_posted_but_batch_not_posted', 'critical', 'Commission payment application exists under an unposted batch.', [
+                'commission_payment_application_id' => $application->id,
+            ]))
+            ->all();
+    }
+
+    private function negativeOutstanding(): array
+    {
+        return $this->overpaymentDetected();
+    }
+
+    private function overpaymentDetected(): array
+    {
+        return CommissionSettlementLine::query()
+            ->withSum(['paymentLines as paid_total' => fn (Builder $query): Builder => $query->where('status', 'posted')], 'payment_amount')
+            ->limit(250)
+            ->get()
+            ->filter(fn (CommissionSettlementLine $line): bool => (float) ($line->paid_total ?? 0) - (float) $line->net_settlement_amount > 0.0001)
+            ->map(fn (CommissionSettlementLine $line): array => $this->finding('overpayment_detected', 'critical', 'Commission payments exceed locked settlement line amount.', [
+                'commission_settlement_line_id' => $line->id,
+                'net_settlement_amount' => (string) $line->net_settlement_amount,
+                'paid_amount' => (string) ($line->paid_total ?? 0),
+            ]))
+            ->values()
+            ->all();
+    }
+
+    private function paymentReversalWithoutOriginal(): array
+    {
+        return CommissionPaymentApplication::query()
+            ->where('application_type', CommissionPaymentApplicationType::Reversal)
+            ->whereNull('reverses_application_id')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentApplication $application): array => $this->finding('payment_reversal_without_original', 'critical', 'Commission payment reversal application has no original application reference.', [
+                'commission_payment_application_id' => $application->id,
+            ]))
+            ->all();
+    }
+
+    private function selfApprovedPaymentBatch(): array
+    {
+        return $this->paymentBatchQuery()
+            ->whereNotNull('prepared_by')
+            ->whereColumn('prepared_by', 'approved_by')
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentBatch $batch): array => $this->finding('self_approved_payment_batch', 'critical', 'Commission payment batch was approved by its preparer.', [
+                'commission_payment_batch_id' => $batch->id,
+            ]))
+            ->all();
+    }
+
+    private function crossBusinessPaymentReference(): array
+    {
+        return CommissionPaymentLine::query()
+            ->whereHas('batch', fn (Builder $query): Builder => $query->whereColumn('commission_payment_lines.business_id', '!=', 'commission_payment_batches.business_id'))
+            ->limit(250)
+            ->get()
+            ->map(fn (CommissionPaymentLine $line): array => $this->finding('cross_business_payment_reference', 'critical', 'Commission payment line business does not match payment batch business.', [
+                'commission_payment_line_id' => $line->id,
+            ]))
+            ->all();
+    }
+
     private function calculationQuery(): Builder
     {
         return CommissionCalculation::query()
@@ -628,6 +1000,16 @@ class BiwmsCommissionReconcile extends Command
             ->when($this->option('review-period'), fn (Builder $query, string $id): Builder => $query->where('commission_review_period_id', $id))
             ->when($this->option('review-batch'), fn (Builder $query, string $id): Builder => $query->where('commission_review_batch_id', $id))
             ->when($this->option('settlement-batch'), fn (Builder $query, string $id): Builder => $query->whereKey($id));
+    }
+
+    private function paymentBatchQuery(): Builder
+    {
+        return CommissionPaymentBatch::query()
+            ->when($this->option('business'), fn (Builder $query, string $id): Builder => $query->where('business_id', $id))
+            ->when($this->option('settlement-batch'), fn (Builder $query, string $id): Builder => $query->where('commission_settlement_batch_id', $id))
+            ->when($this->option('payment-batch'), fn (Builder $query, string $id): Builder => $query->whereKey($id))
+            ->when($this->option('payment-status'), fn (Builder $query, string $status): Builder => $query->where('status', $status))
+            ->when($this->option('payment-method'), fn (Builder $query, string $method): Builder => $query->where('payment_method', $method));
     }
 
     private function finding(string $classification, string $severity, string $message, array $context): array

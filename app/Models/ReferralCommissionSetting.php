@@ -24,6 +24,10 @@ class ReferralCommissionSetting extends Model
         'allow_commission_on_free_items',
         'allow_commission_for_inactive_referrer',
         'commission_currency_id',
+        'commission_expense_account_id',
+        'commission_payable_account_id',
+        'commission_rounding_account_id',
+        'commission_payment_clearing_account_id',
         'minimum_eligible_sale_amount',
         'commission_decimal_places',
         'rounding_mode',
@@ -60,6 +64,26 @@ class ReferralCommissionSetting extends Model
     public function commissionCurrency(): BelongsTo
     {
         return $this->belongsTo(Currency::class, 'commission_currency_id');
+    }
+
+    public function commissionExpenseAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'commission_expense_account_id');
+    }
+
+    public function commissionPayableAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'commission_payable_account_id');
+    }
+
+    public function commissionRoundingAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'commission_rounding_account_id');
+    }
+
+    public function commissionPaymentClearingAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'commission_payment_clearing_account_id');
     }
 
     public function createdBy(): BelongsTo

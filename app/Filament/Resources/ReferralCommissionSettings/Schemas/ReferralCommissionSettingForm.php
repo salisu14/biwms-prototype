@@ -53,6 +53,30 @@ class ReferralCommissionSettingForm
                     TextInput::make('commission_decimal_places')->numeric()->minValue(0)->maxValue(6)->default(4)->required(),
                     TextInput::make('rounding_mode')->maxLength(100),
                 ]),
+            Section::make('Posting Accounts')
+                ->columns(['default' => 1, 'md' => 2])
+                ->schema([
+                    Select::make('commission_expense_account_id')
+                        ->label('Commission Expense Account')
+                        ->relationship('commissionExpenseAccount', 'name')
+                        ->searchable()
+                        ->preload(),
+                    Select::make('commission_payable_account_id')
+                        ->label('Commission Payable Account')
+                        ->relationship('commissionPayableAccount', 'name')
+                        ->searchable()
+                        ->preload(),
+                    Select::make('commission_rounding_account_id')
+                        ->label('Commission Rounding Account')
+                        ->relationship('commissionRoundingAccount', 'name')
+                        ->searchable()
+                        ->preload(),
+                    Select::make('commission_payment_clearing_account_id')
+                        ->label('Commission Payment Clearing Account')
+                        ->relationship('commissionPaymentClearingAccount', 'name')
+                        ->searchable()
+                        ->preload(),
+                ]),
             Section::make('Notes')
                 ->schema([
                     Textarea::make('notes')->rows(4)->columnSpanFull(),

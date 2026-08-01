@@ -27,6 +27,16 @@ use App\Filament\Resources\AttendancePayrollReviewBatchLines\AttendancePayrollRe
 use App\Filament\Resources\AttendancePayrollRules\AttendancePayrollRuleResource;
 use App\Filament\Resources\AttendanceReviewItems\AttendanceReviewItemResource;
 use App\Filament\Resources\AttendanceReviewPeriods\AttendanceReviewPeriodResource;
+use App\Filament\Resources\CommissionCalculations\CommissionCalculationResource;
+use App\Filament\Resources\CommissionDisputes\CommissionDisputeResource;
+use App\Filament\Resources\CommissionHolds\CommissionHoldResource;
+use App\Filament\Resources\CommissionLedgerEntries\CommissionLedgerEntryResource;
+use App\Filament\Resources\CommissionLiabilityPostings\CommissionLiabilityPostingResource;
+use App\Filament\Resources\CommissionPaymentBatches\CommissionPaymentBatchResource;
+use App\Filament\Resources\CommissionReviewBatches\CommissionReviewBatchResource;
+use App\Filament\Resources\CommissionReviewPeriods\CommissionReviewPeriodResource;
+use App\Filament\Resources\CommissionSettlementBatches\CommissionSettlementBatchResource;
+use App\Filament\Resources\CustomerReferrals\CustomerReferralResource;
 use App\Filament\Resources\EmployeeAttendanceDays\EmployeeAttendanceDayResource;
 use App\Filament\Resources\EmployeeAttendanceEvents\EmployeeAttendanceEventResource;
 use App\Filament\Resources\EmployeeConfirmationDecisions\EmployeeConfirmationDecisionResource;
@@ -88,6 +98,10 @@ use App\Filament\Resources\RecruitmentRequisitions\RecruitmentRequisitionResourc
 use App\Filament\Resources\RecruitmentScreeningTemplates\RecruitmentScreeningTemplateResource;
 use App\Filament\Resources\RecruitmentSelectionReviews\RecruitmentSelectionReviewResource;
 use App\Filament\Resources\RecruitmentVacancies\RecruitmentVacancyResource;
+use App\Filament\Resources\ReferralCommissionPlans\ReferralCommissionPlanResource;
+use App\Filament\Resources\ReferralCommissionSettings\ReferralCommissionSettingResource;
+use App\Filament\Resources\ReferrerCommissionPlanAssignments\ReferrerCommissionPlanAssignmentResource;
+use App\Filament\Resources\Referrers\ReferrerResource;
 use App\Filament\Resources\WorkforceRosterAssignments\WorkforceRosterAssignmentResource;
 use App\Filament\Resources\WorkforceRosterHistories\WorkforceRosterHistoryResource;
 use App\Filament\Resources\WorkforceRosterPeriods\WorkforceRosterPeriodResource;
@@ -618,6 +632,127 @@ class AdminPanelProvider extends PanelProvider
                                     ->icon('heroicon-o-document-check')
                                     ->url(SalesHistory::getUrl(panel: 'admin'))
                                     ->isActiveWhen(fn () => request()->routeIs('filament.admin.pages.sales-history')),
+                            ])
+                    )
+
+                    ->group(
+                        NavigationGroup::make('Referrals & Commission')
+                            ->collapsible()
+                            ->items([
+                                NavigationItem::make('Referrers')
+                                    ->icon('heroicon-o-user-plus')
+                                    ->visible(fn (): bool => ReferrerResource::canViewAny())
+                                    ->url(ReferrerResource::getUrl(panel: 'admin'))
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is('admin/referrers*')
+                                    ),
+
+                                NavigationItem::make('Customer Referrals')
+                                    ->icon('heroicon-o-link')
+                                    ->visible(fn (): bool => CustomerReferralResource::canViewAny())
+                                    ->url(CustomerReferralResource::getUrl(panel: 'admin'))
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is('admin/customer-referrals*')
+                                    ),
+
+                                NavigationItem::make('Referral Commission Settings')
+                                    ->icon('heroicon-o-cog-6-tooth')
+                                    ->visible(
+                                        fn (): bool => ReferralCommissionSettingResource::canViewAny()
+                                    )
+                                    ->url(
+                                        ReferralCommissionSettingResource::getUrl(panel: 'admin')
+                                    )
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is(
+                                            'admin/referral-commission-settings*'
+                                        )
+                                    ),
+
+                                NavigationItem::make('Referral Commission Plans')
+                                    ->icon('heroicon-o-document-text')
+                                    ->visible(
+                                        fn (): bool => ReferralCommissionPlanResource::canViewAny()
+                                    )
+                                    ->url(
+                                        ReferralCommissionPlanResource::getUrl(panel: 'admin')
+                                    )
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is(
+                                            'admin/referral-commission-plans*'
+                                        )
+                                    ),
+
+                                NavigationItem::make('Referrer Commission Plan Assignments')
+                                    ->icon('heroicon-o-link')
+                                    ->visible(
+                                        fn (): bool => ReferrerCommissionPlanAssignmentResource::canViewAny()
+                                    )
+                                    ->url(
+                                        ReferrerCommissionPlanAssignmentResource::getUrl(panel: 'admin')
+                                    )
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is(
+                                            'admin/referrer-commission-plan-assignments*'
+                                        )
+                                    ),
+
+                                NavigationItem::make('Commission Calculations')
+                                    ->icon('heroicon-o-calculator')
+                                    ->visible(fn (): bool => CommissionCalculationResource::canViewAny())
+                                    ->url(CommissionCalculationResource::getUrl(panel: 'admin'))
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is('admin/commission-calculations*')
+                                    ),
+
+                                NavigationItem::make('Commission Ledger')
+                                    ->icon('heroicon-o-book-open')
+                                    ->visible(fn (): bool => CommissionLedgerEntryResource::canViewAny())
+                                    ->url(CommissionLedgerEntryResource::getUrl(panel: 'admin'))
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is('admin/commission-ledger-entries*')
+                                    ),
+
+                                NavigationItem::make('Review Periods')
+                                    ->icon('heroicon-o-calendar-date-range')
+                                    ->visible(fn (): bool => CommissionReviewPeriodResource::canViewAny())
+                                    ->url(CommissionReviewPeriodResource::getUrl(panel: 'admin')),
+
+                                NavigationItem::make('Review Batches')
+                                    ->icon('heroicon-o-clipboard-document-check')
+                                    ->visible(fn (): bool => CommissionReviewBatchResource::canViewAny())
+                                    ->url(CommissionReviewBatchResource::getUrl(panel: 'admin')),
+
+                                NavigationItem::make('Commission Holds')
+                                    ->icon('heroicon-o-pause-circle')
+                                    ->visible(fn (): bool => CommissionHoldResource::canViewAny())
+                                    ->url(CommissionHoldResource::getUrl(panel: 'admin')),
+
+                                NavigationItem::make('Commission Disputes')
+                                    ->icon('heroicon-o-exclamation-triangle')
+                                    ->visible(fn (): bool => CommissionDisputeResource::canViewAny())
+                                    ->url(CommissionDisputeResource::getUrl(panel: 'admin')),
+
+                                NavigationItem::make('Settlement Batches')
+                                    ->icon('heroicon-o-banknotes')
+                                    ->visible(fn (): bool => CommissionSettlementBatchResource::canViewAny())
+                                    ->url(CommissionSettlementBatchResource::getUrl(panel: 'admin')),
+
+                                NavigationItem::make('Commission Liabilities')
+                                    ->icon('heroicon-o-clipboard-document-check')
+                                    ->visible(fn (): bool => CommissionLiabilityPostingResource::canViewAny())
+                                    ->url(CommissionLiabilityPostingResource::getUrl(panel: 'admin'))
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is('admin/commission-liability-postings*')
+                                    ),
+
+                                NavigationItem::make('Commission Payments')
+                                    ->icon('heroicon-o-credit-card')
+                                    ->visible(fn (): bool => CommissionPaymentBatchResource::canViewAny())
+                                    ->url(CommissionPaymentBatchResource::getUrl(panel: 'admin'))
+                                    ->isActiveWhen(
+                                        fn (): bool => request()->is('admin/commission-payment-batches*')
+                                    ),
                             ])
                     )
 

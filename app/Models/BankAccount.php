@@ -76,6 +76,11 @@ class BankAccount extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function ledgerEntries(): HasMany
+    {
+        return $this->hasMany(BankAccountLedgerEntry::class);
+    }
+
     public function receipts(): HasMany
     {
         return $this->hasMany(Payment::class)->where('payment_direction', 'RECEIPT');

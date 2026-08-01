@@ -1,76 +1,38 @@
 # Referrer Commission User Guide
 
-## What Creates Commission
+## Setup
 
-Commission is calculated from Posted Sales Invoices only. Draft documents and sales orders do not accrue commission.
+Configure Referral Commission Settings before processing commission payments:
 
-## Before Posting
+1. Enable referral commissions.
+2. Select the commission currency.
+3. Configure commission expense and payable accounts.
+4. Configure a bank account or petty cash fund for payment.
 
-Confirm these setup records exist:
+## Payment Process
 
-- active referrer;
-- active primary customer referral;
-- active commission plan;
-- active plan assignment for the referrer;
-- valid plan effective dates.
+1. Confirm the settlement batch is locked.
+2. Post commission liability for the locked settlement.
+3. Create a commission payment batch from the locked settlement.
+4. Prepare and submit the payment batch.
+5. A different authorized user approves the batch.
+6. Post the approved batch.
 
-## Reviewing Calculations
+Posted payment batches are immutable. Corrections must be made by reversal.
 
-Use Sales > Commission Calculations to review evaluated posted invoices.
+## Notes
 
-Statuses:
+- Partial payments are allowed and outstanding amounts are derived from payment applications.
+- Bank and cheque payments require a bank account. Cash payments require a petty cash fund.
+- Mobile money, wallet, and other methods are not enabled until finance setup provides a safe ledger path.
+- Full bank details are not shown in normal payment tables; payment lines keep masked beneficiary references.
 
-- `pending` means created but not completed;
-- `ineligible` means no valid referral or plan was found;
-- `accrued` means ledger entries were created;
-- `failed` means a calculation requirement was missing or invalid;
-- `reversed` means the accrual has been reversed by later entries.
+## Reconciliation
 
-## Reviewing Ledger Entries
-
-Use Sales > Commission Ledger Entries to review append-only accrual, reversal, and adjustment entries.
-
-Balances should be read from the commission ledger, not from manually maintained fields.
-
-## Reconcile
-
-Finance or Sales administrators can run:
+Use:
 
 ```bash
 php artisan biwms:commission-reconcile --details
 ```
 
-For an exportable audit file:
-
-```bash
-php artisan biwms:commission-reconcile --details --export=storage/app/reports/commission-reconcile.json
-```
-
-The reconcile command is diagnostic only.
-
-## Review and Settlement Preparation
-
-Operator workflow:
-
-```text
-Open review period
-→ Generate batch
-→ Review exceptions
-→ Place or release holds
-→ Resolve disputes
-→ Submit
-→ Approve
-→ Lock
-→ Prepare settlement
-→ Submit settlement
-→ Approve settlement
-→ Lock for future Phase 6 payment
-```
-
-Review batches and settlement batches are separated by currency. Do not combine different currencies in one settlement total.
-
-Settlement preparation locks a snapshot for future payment but does not pay the Referrer and does not post to the General Ledger.
-
-## Corrections
-
-Use credit memos, reversals, or controlled adjustment entries. Do not edit historical commission ledger entries.
+Review critical findings before paying commissions. Do not manually edit commission ledger entries, payment applications, or posted batches.

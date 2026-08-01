@@ -29,10 +29,12 @@ use App\Models\VendorPostingGroup;
 use App\Services\BankAccountLedgerService;
 use App\Services\Finance\PaymentService;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 
+uses(RefreshDatabase::class);
+
 beforeEach(function () {
-    $this->refreshPostgresTestingDatabase();
     GeneralLedgerSetup::query()->updateOrCreate(
         ['company_name' => 'Default Company'],
         [

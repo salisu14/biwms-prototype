@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use RuntimeException;
 
 class CommissionSettlementAllocation extends Model
@@ -45,5 +46,10 @@ class CommissionSettlementAllocation extends Model
     public function ledgerEntry(): BelongsTo
     {
         return $this->belongsTo(CommissionLedgerEntry::class, 'commission_ledger_entry_id');
+    }
+
+    public function paymentApplications(): HasMany
+    {
+        return $this->hasMany(CommissionPaymentApplication::class);
     }
 }

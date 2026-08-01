@@ -1,14 +1,49 @@
-# Referrer Commission
+# Referrer Commission Architecture
 
-Referrer commission management is implemented in phases.
+BIWMS referrer commission is ledger-driven and append-only.
 
-- Phase 1 and Phase 2 manage referrers and customer referral history.
-- Phase 3 manages commission settings, plans, tiers, and assignments.
-- Phase 4 calculates and accrues commission from posted sales invoices.
-- Phase 5 reviews, approves, and prepares accrued commissions for future settlement.
+## Lifecycle
 
-For Phase 4 details, see [Referrer Commission Phase 4](referrer-commission-phase-4.md).
+Posted Sales -> Calculation -> Ledger Accrual -> Review -> Settlement Snapshot -> Liability Posting -> Payment Batch -> Payment Applications -> Bank/Cash and G/L Posting
 
-For Phase 5 details, see [Referrer Commission Phase 5](referrer-commission-phase-5.md).
+## Source of Truth
 
-For operator guidance, see [Referrer Commission User Guide](user-guides/referrer-commission.md).
+- Commission calculations explain how commission was earned.
+- Commission ledger entries record accrual, reversal, liability, payment, and payment reversal history.
+- Settlement batches are locked snapshots of approved payable amounts.
+- Payment applications link actual payments to settlement allocations.
+- Referrer balances are derived from settlement lines and payment applications.
+
+No mutable balance field on the referrer is authoritative.
+
+## Accounting
+
+Liability recognition:
+
+- Dr Commission Expense
+- Cr Commission Payable
+
+Payment:
+
+- Dr Commission Payable
+- Cr Bank or Cash
+
+All accounting entries must go through the central posting kernel via `GeneralLedgerService`.
+
+## Number Series
+
+Phase 6 prefers configured `COMM-LIAB` and `COMM-PAY` number series. If those series are absent or invalid, services use deterministic controlled fallback numbers so retries remain idempotent.
+
+## Security
+
+Commission payment approval, posting, cancellation, and reversal require explicit permissions. Sensitive actions require password confirmation in Filament.
+
+## Reconciliation
+
+Run commission reconciliation after setup changes, before payment runs, and during month-end close:
+
+```bash
+php artisan biwms:commission-reconcile --details
+```
+
+The command is diagnostic only.

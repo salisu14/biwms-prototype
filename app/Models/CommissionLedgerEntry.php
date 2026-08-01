@@ -119,4 +119,9 @@ class CommissionLedgerEntry extends Model
     {
         return $this->hasMany(CommissionSettlementAllocation::class);
     }
+
+    public function paymentApplications(): HasMany
+    {
+        return $this->hasMany(CommissionPaymentApplication::class);
+    }
 }

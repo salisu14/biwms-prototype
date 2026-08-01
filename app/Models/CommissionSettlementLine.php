@@ -45,8 +45,18 @@ class CommissionSettlementLine extends Model
         return $this->belongsTo(CommissionSettlementBatch::class, 'commission_settlement_batch_id');
     }
 
+    public function referrer(): BelongsTo
+    {
+        return $this->belongsTo(Referrer::class);
+    }
+
     public function allocations(): HasMany
     {
         return $this->hasMany(CommissionSettlementAllocation::class);
+    }
+
+    public function paymentLines(): HasMany
+    {
+        return $this->hasMany(CommissionPaymentLine::class);
     }
 }
