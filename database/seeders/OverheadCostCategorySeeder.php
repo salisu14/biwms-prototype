@@ -13,21 +13,24 @@ class OverheadCostCategorySeeder extends Seeder
     public function run(): void
     {
         $categories = [
-            ['code' => 'indirect_labor', 'name' => 'Indirect Labor', 'is_active' => true],
-            ['code' => 'maintenance',    'name' => 'Maintenance',    'is_active' => true],
-            ['code' => 'utilities',      'name' => 'Utilities',      'is_active' => true],
-            ['code' => 'rent',           'name' => 'Rent/Lease',     'is_active' => true],
-            ['code' => 'depreciation',   'name' => 'Depreciation',   'is_active' => true],
-            ['code' => 'insurance',      'name' => 'Insurance',      'is_active' => true],
-            ['code' => 'other',          'name' => 'Other Indirect', 'is_active' => true],
-            ['code' => 'taxes',          'name' => 'Taxes & Fees',   'is_active' => true],
-            ['code' => 'supplies',       'name' => 'Indirect Supplies', 'is_active' => true],
+            ['code' => 'INDIRECT_LABOR', 'name' => 'Indirect Labor', 'is_active' => true],
+            ['code' => 'MAINTENANCE', 'name' => 'Maintenance', 'is_active' => true],
+            ['code' => 'UTILITIES', 'name' => 'Utilities', 'is_active' => true],
+            ['code' => 'RENT', 'name' => 'Rent/Lease', 'is_active' => true],
+            ['code' => 'DEPRECIATION', 'name' => 'Depreciation', 'is_active' => true],
+            ['code' => 'INSURANCE', 'name' => 'Insurance', 'is_active' => true],
+            ['code' => 'OTHER', 'name' => 'Other Indirect', 'is_active' => true],
+            ['code' => 'TAXES', 'name' => 'Taxes & Fees', 'is_active' => true],
+            ['code' => 'SUPPLIES', 'name' => 'Indirect Supplies', 'is_active' => true],
         ];
 
         foreach ($categories as $category) {
-            OverheadCostCategory::updateOrCreate(
+            OverheadCostCategory::query()->updateOrCreate(
                 ['code' => $category['code']],
-                $category
+                [
+                    'name' => $category['name'],
+                    'is_active' => $category['is_active'],
+                ],
             );
         }
     }

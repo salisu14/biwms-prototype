@@ -1,41 +1,30 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
-class DatabaseSeeder extends Seeder
+class ProductionGoLiveSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
-     * Seed the application's database.
+     * Run the database seeds.
      */
     public function run(): void
     {
         $this->call([
             /*
-             * Core reference data
+             * Core reference and organizational setup
              */
             LocationSeeder::class,
             UnitOfMeasureSeeder::class,
             CurrencySeeder::class,
             ReasonCodeSeeder::class,
-            NumberSeriesSeeder::class,
 
             /*
-             * Accounting foundation
+             * Financial foundation
              */
             ChartOfAccountSeeder::class,
-
-            /*
-             * Do not run GlAccountSeeder here because it creates duplicate
-             * account numbers already present after ChartOfAccountSeeder.
-             */
-            // GlAccountSeeder::class,
+            //            GlAccountSeeder::class,
 
             /*
              * VAT and posting groups
@@ -48,9 +37,9 @@ class DatabaseSeeder extends Seeder
             CustomerPostingGroupSeeder::class,
 
             /*
-             * Posting setups
+             * Posting setup
              *
-             * These depend on accounts, posting groups and locations.
+             * These must run after accounts, posting groups and locations.
              */
             GeneralPostingSetupSeeder::class,
             InventoryPostingSetupSeeder::class,
@@ -60,6 +49,7 @@ class DatabaseSeeder extends Seeder
              */
             CategorySeeder::class,
             ItemSeeder::class,
+            NumberSeriesSeeder::class,
 
             /*
              * Payroll and HR setup
@@ -83,31 +73,12 @@ class DatabaseSeeder extends Seeder
             FAClassSeeder::class,
 
             /*
-             * Security setup
-             *
-             * Permissions must exist before role-permission assignment.
+             * Security
              */
             PermissionsTableSeeder::class,
             RolesTableSeeder::class,
             UsersTableSeeder::class,
             RolePermissionSetSeeder::class,
-
-            /*
-             * Intentionally excluded production/demo data:
-             *
-             * CustomerSeeder::class,
-             * VendorSeeder::class,
-             * FixedAssetSampleSeeder::class,
-             * BalanceSheetAccountScheduleSeeder::class,
-             * ProfitAndLossAccountScheduleSeeder::class,
-             * CashFlowStatementAccountScheduleSeeder::class,
-             */
         ]);
-
-        if (! app()->environment('production')) {
-            $this->call([
-                OpeningInventorySeeder::class,
-            ]);
-        }
     }
 }
