@@ -1,89 +1,100 @@
 <?php
 
-// app/Enums/CategoryType.php
+declare(strict_types=1);
 
 namespace App\Enums;
 
 enum CategoryType: string
 {
-    case THERAPEUTIC = 'THERAPEUTIC';
-    case BOTANICAL = 'BOTANICAL';
-    case REGULATORY = 'REGULATORY';
-    case FORM = 'FORM';
-    case SOURCE = 'SOURCE';
-    case PROCESSING = 'PROCESSING';
+    case FINISHED_GOOD = 'FINISHED_GOOD';
+    case SEMI_FINISHED = 'SEMI_FINISHED';
+    case RAW_MATERIAL = 'RAW_MATERIAL';
+    case PACKAGING = 'PACKAGING';
+    case CONSUMABLE = 'CONSUMABLE';
+    case SPARE_PART = 'SPARE_PART';
 
     public function label(): string
     {
         return match ($this) {
-            self::THERAPEUTIC => 'Therapeutic Category',
-            self::BOTANICAL => 'Botanical/Part Used',
-            self::REGULATORY => 'Regulatory Classification',
-            self::FORM => 'Dosage Form',
-            self::SOURCE => 'Source/Origin',
-            self::PROCESSING => 'Processing Type',
+            self::FINISHED_GOOD => 'Finished Goods',
+            self::SEMI_FINISHED => 'Semi-Finished Goods',
+            self::RAW_MATERIAL => 'Raw Materials',
+            self::PACKAGING => 'Packaging Materials',
+            self::CONSUMABLE => 'Consumables and Supplies',
+            self::SPARE_PART => 'Maintenance and Spare Parts',
         };
     }
 
     public function color(): string
     {
         return match ($this) {
-            self::THERAPEUTIC => 'bg-green-100 text-green-800',
-            self::BOTANICAL => 'bg-amber-100 text-amber-800',
-            self::REGULATORY => 'bg-blue-100 text-blue-800',
-            self::FORM => 'bg-purple-100 text-purple-800',
-            self::SOURCE => 'bg-teal-100 text-teal-800',
-            self::PROCESSING => 'bg-pink-100 text-pink-800',
+            self::FINISHED_GOOD => 'success',
+            self::SEMI_FINISHED => 'info',
+            self::RAW_MATERIAL => 'warning',
+            self::PACKAGING => 'primary',
+            self::CONSUMABLE => 'gray',
+            self::SPARE_PART => 'warning',
         };
     }
 
     public function icon(): string
     {
         return match ($this) {
-            self::THERAPEUTIC => 'heart-pulse',
-            self::BOTANICAL => 'leaf',
-            self::REGULATORY => 'shield-alt',
-            self::FORM => 'capsules',
-            self::SOURCE => 'globe',
-            self::PROCESSING => 'flask',
+            self::FINISHED_GOOD => 'heroicon-o-check-badge',
+            self::SEMI_FINISHED => 'heroicon-o-arrow-path-rounded-square',
+            self::RAW_MATERIAL => 'heroicon-o-beaker',
+            self::PACKAGING => 'heroicon-o-archive-box',
+            self::CONSUMABLE => 'heroicon-o-squares-plus',
+            self::SPARE_PART => 'heroicon-o-wrench',
         };
     }
 
     public function description(): string
     {
         return match ($this) {
-            self::THERAPEUTIC => 'Health benefit categories (immune, cardiovascular, etc.)',
-            self::BOTANICAL => 'Plant part used (root, leaf, flower, bark)',
-            self::REGULATORY => 'FDA/EMA classification (supplement, drug, cosmetic)',
-            self::FORM => 'Final product form (tincture, capsule, tablet, tea)',
-            self::SOURCE => 'Cultivation method (organic, wildcrafted, conventional)',
-            self::PROCESSING => 'Manufacturing method (extract, whole herb, standardized)',
+            self::FINISHED_GOOD => 'Completed products ready for sale, storage or distribution',
+            self::SEMI_FINISHED => 'Manufactured intermediate products awaiting further processing',
+            self::RAW_MATERIAL => 'Materials and ingredients consumed during manufacturing',
+            self::PACKAGING => 'Primary, secondary and tertiary packaging materials',
+            self::CONSUMABLE => 'Operational supplies consumed during business activities',
+            self::SPARE_PART => 'Maintenance, repair and equipment replacement materials',
         };
     }
 
     public function allowsMultiple(): bool
     {
-        return match ($this) {
-            self::THERAPEUTIC => true,  // Can be both immune and anti-inflammatory
-            self::BOTANICAL => false,   // Only one part per item
-            self::REGULATORY => false,  // Only one regulatory path
-            self::FORM => false,        // Only one dosage form
-            self::SOURCE => false,      // Only one source type
-            self::PROCESSING => false,  // Only one processing type
-        };
+        return false;
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public static function selectOptions(): array
+    {
+        $options = [];
+
+        foreach (self::cases() as $case) {
+            $options[$case->value] = $case->label();
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public static function options(): array
     {
-        return collect(self::cases())
-            ->map(fn ($case) => [
+        return array_map(
+            static fn (self $case): array => [
                 'value' => $case->value,
                 'label' => $case->label(),
                 'color' => $case->color(),
                 'icon' => $case->icon(),
                 'description' => $case->description(),
                 'allows_multiple' => $case->allowsMultiple(),
-            ])
-            ->toArray();
+            ],
+            self::cases(),
+        );
     }
 }

@@ -1,10 +1,12 @@
-use App\Models\Employee;
-use App\Models\DefaultDimension;
-use App\Models\DimensionValue;
-use App\Models\Dimension;
+<?php
+
+declare(strict_types=1);
+
 use App\Enums\EmployeeAssignmentType;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Models\DefaultDimension;
+use App\Models\Employee;
 use Database\Seeders\OrgDimensionSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
