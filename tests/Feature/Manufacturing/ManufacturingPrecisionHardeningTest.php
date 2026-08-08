@@ -255,7 +255,7 @@ it('explodes precise BOM quantities and preserves consumption ledger precision',
 
     expect($consumptionEntry->quantity)->toBe('-0.00002011')
         ->and($valueEntry->quantity)->toBe('-0.00002011')
-        ->and($valueEntry->unit_cost)->toBe('-1.23456789')
+        ->and($valueEntry->unit_cost)->toBe('1.23456789')
         ->and($tinyComponent->fresh()->actual_quantity_consumed)->toBe('0.00002011')
         ->and($tinyComponent->fresh()->remaining_quantity)->toBe('0.00000000');
 });

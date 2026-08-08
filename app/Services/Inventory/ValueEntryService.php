@@ -29,14 +29,22 @@ class ValueEntryService
             $costAmountExpected = DecimalMath::amount($entry->cost_amount_expected);
             $isExpectedCost = DecimalMath::isZero($costAmountActual) && ! DecimalMath::isZero($costAmountExpected);
             $valuationAmount = $isExpectedCost ? $costAmountExpected : $costAmountActual;
-            $unitCost = ! DecimalMath::isZero($quantity)
-                ? DecimalMath::div($valuationAmount, $quantity, DecimalPrecision::UNIT_COST_SCALE)
+            $absoluteQuantity = DecimalMath::abs($quantity, DecimalPrecision::QUANTITY_SCALE);
+            $unitCost = ! DecimalMath::isZero($absoluteQuantity)
+                ? DecimalMath::div(
+                    DecimalMath::abs($valuationAmount, DecimalPrecision::AMOUNT_SCALE),
+                    $absoluteQuantity,
+                    DecimalPrecision::UNIT_COST_SCALE
+                )
                 : DecimalMath::unitCost('0');
+            $applicationUnitCost = $this->outboundApplicationUnitCost($entry);
+
+            if ($applicationUnitCost !== null) {
+                $unitCost = $applicationUnitCost;
+            }
 
             if (! $isExpectedCost && DecimalMath::isZero($unitCost) && ! DecimalMath::isZero($quantity) && ! DecimalMath::isZero($entry->item?->unit_cost ?? 0)) {
-                $unitCost = DecimalMath::compare($quantity, '0') < 0
-                    ? DecimalMath::unitCost(DecimalMath::of($entry->item?->unit_cost)->negated())
-                    : DecimalMath::unitCost($entry->item?->unit_cost);
+                $unitCost = DecimalMath::unitCost($entry->item?->unit_cost);
             }
             $productionOrder = $entry->source instanceof ProductionOrder ? $entry->source : null;
             $entryType = strtolower($this->entryTypeValue($entry->entry_type));
@@ -240,6 +248,40 @@ class ValueEntryService
             ...$lookup,
             ...$values,
         ]);
+    }
+
+    private function outboundApplicationUnitCost(ItemLedgerEntry $entry): ?string
+    {
+        if (DecimalMath::compare($entry->quantity, '0') >= 0) {
+            return null;
+        }
+
+        $applications = $entry->outboundApplications()
+            ->where('is_reversed', false)
+            ->get(['applied_quantity', 'unit_cost', 'cost_amount']);
+
+        if ($applications->isEmpty()) {
+            return null;
+        }
+
+        $distinctUnitCosts = $applications
+            ->pluck('unit_cost')
+            ->map(fn (mixed $unitCost): string => DecimalMath::unitCost($unitCost))
+            ->unique()
+            ->values();
+
+        if ($distinctUnitCosts->count() === 1) {
+            return $distinctUnitCosts->first();
+        }
+
+        $appliedQuantity = $applications->sum(fn (mixed $application): float => abs((float) $application->applied_quantity));
+        if ($appliedQuantity <= 0.00000001) {
+            return null;
+        }
+
+        $appliedCost = $applications->sum(fn (mixed $application): float => abs((float) $application->cost_amount));
+
+        return DecimalMath::unitCost($appliedCost / $appliedQuantity);
     }
 
     public function actualizePurchaseReceiptForInvoiceLine(
