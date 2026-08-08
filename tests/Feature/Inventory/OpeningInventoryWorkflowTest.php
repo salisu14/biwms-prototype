@@ -8,6 +8,10 @@ use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Filament\Resources\OpeningInventories\OpeningInventoryResource;
+use App\Filament\Resources\OpeningInventories\Pages\CreateOpeningInventory;
+use App\Filament\Resources\OpeningInventories\Pages\EditOpeningInventory;
+use App\Filament\Resources\OpeningInventories\Pages\ListOpeningInventories;
+use App\Filament\Resources\OpeningInventories\Pages\ViewOpeningInventory;
 use App\Models\AccountingPeriod;
 use App\Models\Business;
 use App\Models\ChartOfAccount;
@@ -36,6 +40,7 @@ use Database\Seeders\PermissionsTableSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
 
 uses(RefreshDatabase::class);
@@ -68,6 +73,63 @@ it('renders opening inventory Filament list create edit and view pages', functio
         ->get(OpeningInventoryResource::getUrl('view', ['record' => $document]))
         ->assertSuccessful()
         ->assertSee('OPEN-FILAMENT-001');
+});
+
+it('creates a draft opening inventory through the Filament create page and redirects to the record', function (): void {
+    $user = openingInventoryWorkflowSuperAdmin();
+    $fixture = openingInventoryWorkflowFixture();
+
+    $component = Livewire::actingAs($user)
+        ->test(CreateOpeningInventory::class)
+        ->fillForm(openingInventoryWorkflowFilamentPayload($fixture, 'OPEN-FILAMENT-CREATE-001'))
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $document = OpeningInventory::query()
+        ->where('document_number', 'OPEN-FILAMENT-CREATE-001')
+        ->firstOrFail();
+
+    $component->assertRedirect(OpeningInventoryResource::getUrl('view', ['record' => $document]));
+
+    expect($document->business_id)->toBe($fixture['business']->id)
+        ->and($document->status)->toBe(OpeningInventory::STATUS_DRAFT)
+        ->and($document->lines()->count())->toBe(2)
+        ->and($document->lines()->pluck('line_number')->all())->toBe([10000, 20000]);
+});
+
+it('edits an existing draft through Filament while preserving persisted line identities', function (): void {
+    $user = openingInventoryWorkflowSuperAdmin();
+    $fixture = openingInventoryWorkflowFixture();
+    $document = app(OpeningInventoryService::class)->createDraft(
+        documentNumber: 'OPEN-FILAMENT-EDIT-001',
+        source: 'MANUAL',
+        postingDate: '2026-08-01',
+        lines: [
+            openingInventoryWorkflowLine($fixture, quantity: '2.00000000'),
+            openingInventoryWorkflowLine($fixture, quantity: '3.00000000'),
+        ],
+        businessId: $fixture['business']->id,
+        createdBy: $user->id,
+    );
+    $lineIds = $document->lines()->orderBy('line_number')->pluck('id')->all();
+
+    Livewire::actingAs($user)
+        ->test(EditOpeningInventory::class, ['record' => $document->getRouteKey()])
+        ->fillForm(openingInventoryWorkflowFilamentPayload($fixture, 'OPEN-FILAMENT-EDIT-001', [
+            [
+                'id' => $lineIds[0],
+                ...openingInventoryWorkflowLine($fixture, quantity: '5.00000000'),
+            ],
+            [
+                'id' => $lineIds[1],
+                ...openingInventoryWorkflowLine($fixture, quantity: '7.00000000'),
+            ],
+        ]))
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($document->fresh()->lines()->orderBy('line_number')->pluck('id')->all())->toBe($lineIds)
+        ->and($document->fresh()->lines()->orderBy('line_number')->pluck('quantity')->all())->toBe(['5.00000000', '7.00000000']);
 });
 
 it('creates draft opening inventory and synchronizes draft lines through the service', function (): void {
@@ -105,6 +167,131 @@ it('creates draft opening inventory and synchronizes draft lines through the ser
     expect($updated->lines)->toHaveCount(1)
         ->and($updated->lines->first()->quantity)->toBe('5.00000000')
         ->and(OpeningInventoryLine::query()->where('opening_inventory_id', $document->id)->count())->toBe(1);
+});
+
+it('repeatedly saves, changes quantity, and reorders draft lines without duplicate line number collisions', function (): void {
+    $fixture = openingInventoryWorkflowFixture();
+    $document = app(OpeningInventoryService::class)->createDraft(
+        documentNumber: 'OPEN-REORDER-001',
+        source: 'MANUAL',
+        postingDate: '2026-08-01',
+        lines: [
+            openingInventoryWorkflowLine($fixture, quantity: '1.00000000'),
+            openingInventoryWorkflowLine($fixture, quantity: '2.00000000'),
+            openingInventoryWorkflowLine($fixture, quantity: '3.00000000'),
+        ],
+        businessId: $fixture['business']->id,
+        createdBy: $fixture['user']->id,
+    );
+
+    $originalLines = $document->lines()->orderBy('line_number')->get();
+
+    app(OpeningInventoryService::class)->updateDraft($document, [
+        'document_number' => 'OPEN-REORDER-001',
+        'business_id' => $fixture['business']->id,
+        'posting_date' => '2026-08-01',
+        'source' => 'MANUAL',
+    ], [
+        ['id' => $originalLines[0]->id, ...openingInventoryWorkflowLine($fixture, quantity: '1.00000000')],
+        ['id' => $originalLines[1]->id, ...openingInventoryWorkflowLine($fixture, quantity: '2.00000000')],
+        ['id' => $originalLines[2]->id, ...openingInventoryWorkflowLine($fixture, quantity: '3.00000000')],
+    ]);
+
+    $updated = app(OpeningInventoryService::class)->updateDraft($document->fresh(), [
+        'document_number' => 'OPEN-REORDER-001',
+        'business_id' => $fixture['business']->id,
+        'posting_date' => '2026-08-01',
+        'source' => 'MANUAL',
+    ], [
+        ['id' => $originalLines[2]->id, ...openingInventoryWorkflowLine($fixture, quantity: '30.00000000')],
+        openingInventoryWorkflowLine($fixture, quantity: '4.00000000'),
+        ['id' => $originalLines[0]->id, ...openingInventoryWorkflowLine($fixture, quantity: '10.00000000')],
+    ]);
+
+    $lines = $updated->lines()->orderBy('line_number')->get();
+
+    expect($lines)->toHaveCount(3)
+        ->and($lines->pluck('line_number')->all())->toBe([10000, 20000, 30000])
+        ->and($lines->pluck('id')->contains($originalLines[1]->id))->toBeFalse()
+        ->and($lines->pluck('id')->contains($originalLines[2]->id))->toBeTrue()
+        ->and($lines->pluck('id')->contains($originalLines[0]->id))->toBeTrue()
+        ->and($lines->pluck('quantity')->all())->toBe(['30.00000000', '4.00000000', '10.00000000'])
+        ->and(OpeningInventoryLine::query()
+            ->select('line_number')
+            ->where('opening_inventory_id', $document->id)
+            ->groupBy('line_number')
+            ->havingRaw('count(*) > 1')
+            ->exists())->toBeFalse();
+});
+
+it('posts an existing production style draft with multiple persisted lines after idempotent line sync', function (): void {
+    $fixture = openingInventoryWorkflowFixture();
+    $document = OpeningInventory::query()->create([
+        'business_id' => $fixture['business']->id,
+        'document_number' => 'OPEN-PROD-DRAFT-01',
+        'posting_date' => '2026-08-01',
+        'status' => OpeningInventory::STATUS_DRAFT,
+        'source' => 'MANUAL',
+        'created_by' => $fixture['user']->id,
+    ]);
+    $first = OpeningInventoryLine::query()->create([
+        'opening_inventory_id' => $document->id,
+        'line_number' => 10000,
+        ...openingInventoryWorkflowLine($fixture, quantity: '2.00000000'),
+        'quantity_base' => '2.00000000',
+        'amount' => '5.0000',
+    ]);
+    $second = OpeningInventoryLine::query()->create([
+        'opening_inventory_id' => $document->id,
+        'line_number' => 20000,
+        ...openingInventoryWorkflowLine($fixture, quantity: '3.00000000'),
+        'quantity_base' => '3.00000000',
+        'amount' => '7.5000',
+    ]);
+
+    app(OpeningInventoryService::class)->updateDraft($document, [
+        'document_number' => 'OPEN-PROD-DRAFT-01',
+        'business_id' => $fixture['business']->id,
+        'posting_date' => '2026-08-01',
+        'source' => 'MANUAL',
+    ], [
+        ['id' => $second->id, ...openingInventoryWorkflowLine($fixture, quantity: '3.00000000')],
+        ['id' => $first->id, ...openingInventoryWorkflowLine($fixture, quantity: '2.00000000')],
+    ]);
+
+    app(OpeningInventoryService::class)->post($document->fresh(), $fixture['user']->id);
+
+    expect($document->fresh()->status)->toBe(OpeningInventory::STATUS_POSTED)
+        ->and(ItemLedgerEntry::query()->where('source_type', OpeningInventory::class)->where('source_id', $document->id)->count())->toBe(2)
+        ->and($document->fresh()->lines()->whereNotNull('item_ledger_entry_id')->count())->toBe(2);
+});
+
+it('posts opening inventory from view table and edit Filament flows', function (): void {
+    $user = openingInventoryWorkflowSuperAdmin();
+    $fixture = openingInventoryWorkflowFixture();
+    $passwordConfirmation = ['security_password_confirmation' => 'password'];
+
+    $viewDocument = openingInventoryWorkflowDocument('OPEN-VIEW-POST-01', $fixture);
+    Livewire::actingAs($user)
+        ->test(ViewOpeningInventory::class, ['record' => $viewDocument->getRouteKey()])
+        ->callAction('post', data: $passwordConfirmation)
+        ->assertHasNoActionErrors();
+
+    $tableDocument = openingInventoryWorkflowDocument('OPEN-TABLE-POST-01', $fixture);
+    Livewire::actingAs($user)
+        ->test(ListOpeningInventories::class)
+        ->callTableAction('post', $tableDocument, data: $passwordConfirmation)
+        ->assertHasNoTableActionErrors();
+
+    $editDocument = openingInventoryWorkflowDocument('OPEN-EDIT-POST-01', $fixture);
+    Livewire::actingAs($user)
+        ->test(EditOpeningInventory::class, ['record' => $editDocument->getRouteKey()])
+        ->callAction('post', data: $passwordConfirmation)
+        ->assertHasNoActionErrors();
+
+    expect($viewDocument->fresh()->status)->toBe(OpeningInventory::STATUS_POSTED)
+        ->and($tableDocument->fresh()->status)->toBe(OpeningInventory::STATUS_POSTED)
+        ->and($editDocument->fresh()->status)->toBe(OpeningInventory::STATUS_POSTED);
 });
 
 it('uses item UOM assignment for base quantity and amount calculation', function (): void {
@@ -537,6 +724,26 @@ function openingInventoryWorkflowLine(
         'unit_of_measure_id' => $unitOfMeasureId ?? $fixture['baseUom']->id,
         'quantity' => $quantity,
         'unit_cost' => $unitCost,
+    ];
+}
+
+/**
+ * @param  array<string, mixed>  $fixture
+ * @param  array<int, array<string, mixed>>|null  $lines
+ * @return array<string, mixed>
+ */
+function openingInventoryWorkflowFilamentPayload(array $fixture, string $documentNumber, ?array $lines = null): array
+{
+    return [
+        'document_number' => $documentNumber,
+        'business_id' => $fixture['business']->id,
+        'posting_date' => '2026-08-01',
+        'source' => 'MANUAL',
+        'description' => 'Filament workflow test',
+        'lines' => $lines ?? [
+            openingInventoryWorkflowLine($fixture, quantity: '2.00000000'),
+            openingInventoryWorkflowLine($fixture, quantity: '3.00000000'),
+        ],
     ];
 }
 

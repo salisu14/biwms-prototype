@@ -27,9 +27,9 @@ class ItemSeeder extends Seeder
      *
      * Important:
      * - This seeder does not establish inventory quantities.
-     * - New items start with stock = 0.
-     * - Existing item stock is never reset when this seeder is rerun.
-     * - Actual physical stock must be posted through Opening Inventory.
+     * - New items start with inventory = 0.
+     * - Existing item inventory is never reset when this seeder is rerun.
+     * - Actual physical inventory must be posted through Opening Inventory.
      */
     public function run(): void
     {
