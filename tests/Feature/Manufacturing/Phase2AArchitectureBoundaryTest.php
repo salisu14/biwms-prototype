@@ -2,42 +2,19 @@
 
 declare(strict_types=1);
 
-use App\Services\Manufacturing\ProductionChildOrderGenerationService;
-use App\Services\Manufacturing\ProductionHierarchyExplosionService;
+use App\Services\Manufacturing\ChildProductionOrderGenerationService;
+use App\Services\Manufacturing\MultiLevelBomExplosionService;
+use App\Services\Manufacturing\MultiLevelProductionPlanningService;
+use App\Services\Manufacturing\ProductionHierarchyService;
+use App\Services\Manufacturing\ProductionMaterialReservationService;
 use Illuminate\Support\Facades\File;
 
-it('keeps phase 2a point 1 as schema and domain foundation only', function (): void {
-    $forbiddenRuntimePatterns = [
-        'explodeHierarchy(',
-        'generateChildOrders(',
-        'createReservationsForHierarchy(',
-        'releaseReservations(',
-        'postHierarchyCost(',
-        'settleHierarchyCost(',
-    ];
-
-    $paths = collect([
-        app_path('Models/Manufacturing/ProductionHierarchy.php'),
-        app_path('Models/Manufacturing/ProductionHierarchyNode.php'),
-        app_path('Models/Manufacturing/ProductionOrderSupplyLink.php'),
-        app_path('Models/Manufacturing/ProductionMaterialReservation.php'),
-    ]);
-
-    $violations = $paths
-        ->flatMap(function (string $path) use ($forbiddenRuntimePatterns): array {
-            $source = File::get($path);
-
-            return collect($forbiddenRuntimePatterns)
-                ->filter(fn (string $pattern): bool => str_contains($source, $pattern))
-                ->map(fn (string $pattern): string => basename($path).': '.$pattern)
-                ->all();
-        })
-        ->values()
-        ->all();
-
-    expect($violations)->toBeEmpty()
-        ->and(class_exists(ProductionHierarchyExplosionService::class))->toBeFalse()
-        ->and(class_exists(ProductionChildOrderGenerationService::class))->toBeFalse();
+it('keeps phase 2a runtime as planning-only services', function (): void {
+    expect(class_exists(MultiLevelBomExplosionService::class))->toBeTrue()
+        ->and(class_exists(ProductionHierarchyService::class))->toBeTrue()
+        ->and(class_exists(ChildProductionOrderGenerationService::class))->toBeTrue()
+        ->and(class_exists(ProductionMaterialReservationService::class))->toBeTrue()
+        ->and(class_exists(MultiLevelProductionPlanningService::class))->toBeTrue();
 });
 
 it('keeps new phase 2a manufacturing models away from direct inventory value or gl posting', function (): void {
@@ -56,6 +33,11 @@ it('keeps new phase 2a manufacturing models away from direct inventory value or 
         app_path('Models/Manufacturing/ProductionHierarchyNode.php'),
         app_path('Models/Manufacturing/ProductionOrderSupplyLink.php'),
         app_path('Models/Manufacturing/ProductionMaterialReservation.php'),
+        app_path('Services/Manufacturing/MultiLevelBomExplosionService.php'),
+        app_path('Services/Manufacturing/ProductionHierarchyService.php'),
+        app_path('Services/Manufacturing/ChildProductionOrderGenerationService.php'),
+        app_path('Services/Manufacturing/ProductionMaterialReservationService.php'),
+        app_path('Services/Manufacturing/MultiLevelProductionPlanningService.php'),
     ];
 
     $violations = collect($paths)

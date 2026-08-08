@@ -14,6 +14,7 @@ class ViewProductionOrder extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            ProductionOrderActions::planMultiLevelProduction(),
             ProductionOrderActions::release(),
             ProductionOrderActions::postOutput(),
             ProductionOrderActions::finish(),

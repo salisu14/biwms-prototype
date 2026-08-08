@@ -7,9 +7,16 @@ namespace App\Console\Commands;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ManufacturingCostComponent;
 use App\Enums\ProductionCostSettlementStatus;
+use App\Enums\ProductionHierarchyNodeType;
 use App\Enums\ProductionOrderStatus;
+use App\Enums\ProductionReservationStatus;
+use App\Enums\ProductionReservationType;
+use App\Enums\ProductionSupplyLinkStatus;
+use App\Enums\ProductionSupplyType;
 use App\Models\Manufacturing\CapacityLedgerEntry;
+use App\Models\Manufacturing\ProductionHierarchyNode;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Models\Manufacturing\ProductionOrderComponent;
 use App\Models\ProductionOutputCostAllocation;
 use App\Models\ProductionVarianceCalculation;
 use App\Models\ValueEntry;
@@ -85,6 +92,9 @@ class BiwmsManufacturingCostReconcile extends Command
                 'finished_orders_with_unallocated_cost' => $this->finishedOrdersWithUnallocatedCost($productionOrderFilter),
                 'finished_orders_without_cost_settlement' => $this->finishedOrdersWithoutCostSettlement($productionOrderFilter),
                 'settled_orders_with_open_wip' => $this->settledOrdersWithOpenWip($productionOrderFilter),
+                'phase_2a2_manufactured_node_without_child_order' => $this->manufacturedNodesWithoutChildOrders($productionOrderFilter),
+                'phase_2a2_generated_child_without_supply_link' => $this->generatedChildOrdersWithoutSupplyLinks($productionOrderFilter),
+                'phase_2a2_manufactured_component_without_reservation' => $this->manufacturedComponentsWithoutReservations($productionOrderFilter),
             ],
         ];
 
@@ -774,6 +784,129 @@ class BiwmsManufacturingCostReconcile extends Command
                     }
                 });
             });
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function manufacturedNodesWithoutChildOrders(mixed $productionOrderFilter): array
+    {
+        return ProductionHierarchyNode::query()
+            ->where('node_type', ProductionHierarchyNodeType::ManufacturedComponent->value)
+            ->whereNull('production_order_id')
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->whereHas('rootProductionOrder', function (Builder $query) use ($filter): void {
+                    $query->where('document_number', (string) $filter);
+
+                    if (is_numeric($filter)) {
+                        $query->orWhere('id', (int) $filter);
+                    }
+                });
+            })
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionHierarchyNode $node): array => [
+                'production_hierarchy_node_id' => $node->id,
+                'root_production_order_id' => $node->root_production_order_id,
+                'node_path' => $node->node_path,
+                'item_no' => $node->item_no,
+                'required_quantity_base' => round((float) $node->required_quantity_base, 8),
+                ...$this->findingMetadata(
+                    classification: 'phase_2a2_manufactured_node_without_child_order',
+                    severity: 'critical',
+                    suggestedRemediation: 'Run multi-level production planning again after confirming the child item has a certified BOM and number series setup.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function generatedChildOrdersWithoutSupplyLinks(mixed $productionOrderFilter): array
+    {
+        return ProductionOrder::query()
+            ->whereNotNull('source_production_order_component_id')
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->where(function (Builder $query) use ($filter): void {
+                    $query->where('document_number', (string) $filter)
+                        ->orWhereHas('rootProductionOrder', function (Builder $query) use ($filter): void {
+                            $query->where('document_number', (string) $filter);
+
+                            if (is_numeric($filter)) {
+                                $query->orWhere('id', (int) $filter);
+                            }
+                        });
+
+                    if (is_numeric($filter)) {
+                        $query->orWhere('id', (int) $filter);
+                    }
+                });
+            })
+            ->whereDoesntHave('supplyLinksAsChild', function (Builder $query): void {
+                $query->where('supply_type', ProductionSupplyType::GeneratedChildOrder->value)
+                    ->where('status', '!=', ProductionSupplyLinkStatus::Cancelled->value);
+            })
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrder $order): array => [
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                'source_production_order_component_id' => $order->source_production_order_component_id,
+                ...$this->findingMetadata(
+                    classification: 'phase_2a2_generated_child_without_supply_link',
+                    severity: 'critical',
+                    suggestedRemediation: 'Rebuild the Phase 2A.2 hierarchy from the root order so the child supply link is recreated idempotently.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function manufacturedComponentsWithoutReservations(mixed $productionOrderFilter): array
+    {
+        return ProductionOrderComponent::query()
+            ->where('is_manufactured_requirement', true)
+            ->whereDoesntHave('materialReservations', function (Builder $query): void {
+                $query->where('reservation_type', ProductionReservationType::ChildOutput->value)
+                    ->where('status', '!=', ProductionReservationStatus::Cancelled->value);
+            })
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->where(function (Builder $query) use ($filter): void {
+                    $query->whereHas('productionOrder.rootProductionOrder', function (Builder $query) use ($filter): void {
+                        $query->where('document_number', (string) $filter);
+
+                        if (is_numeric($filter)) {
+                            $query->orWhere('id', (int) $filter);
+                        }
+                    })->orWhereHas('productionOrder', function (Builder $query) use ($filter): void {
+                        $query->where('document_number', (string) $filter);
+
+                        if (is_numeric($filter)) {
+                            $query->orWhere('id', (int) $filter);
+                        }
+                    });
+                });
+            })
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrderComponent $component): array => [
+                'production_order_component_id' => $component->id,
+                'production_order_id' => $component->production_order_id,
+                'item_id' => $component->item_id,
+                'expected_quantity_base' => round((float) $component->expected_quantity_base, 8),
+                ...$this->findingMetadata(
+                    classification: 'phase_2a2_manufactured_component_without_reservation',
+                    severity: 'warning',
+                    suggestedRemediation: 'Re-run multi-level planning so the manufactured component demand is linked to child output reservation.',
+                ),
+            ])
+            ->values()
+            ->all();
     }
 
     private function manufacturingValueEntryQuery(mixed $productionOrderFilter): Builder

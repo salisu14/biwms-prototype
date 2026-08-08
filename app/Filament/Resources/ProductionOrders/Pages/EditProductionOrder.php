@@ -15,6 +15,7 @@ class EditProductionOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            ProductionOrderActions::planMultiLevelProduction(),
             ProductionOrderActions::release(),
             ProductionOrderActions::postOutput(),
             ProductionOrderActions::finish(),

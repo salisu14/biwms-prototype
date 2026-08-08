@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ProductionOrders\Actions;
 use App\Enums\ProductionOrderStatus;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Services\Manufacturing\ExpectedManufacturingCostService;
+use App\Services\Manufacturing\MultiLevelProductionPlanningService;
 use App\Services\Manufacturing\ProductionOrderCostSettlementService;
 use App\Services\Manufacturing\ProductionOrderService;
 use App\Support\DecimalFormatter;
@@ -25,6 +26,49 @@ class ProductionOrderActions
                 try {
                     app(ProductionOrderService::class)->refresh($record);
                     Notification::make()->title('Production Order Refreshed')->success()->send();
+                } catch (\Exception $e) {
+                    self::error($e);
+                }
+            });
+    }
+
+    public static function planMultiLevelProduction(): Action
+    {
+        return Action::make('planMultiLevelProduction')
+            ->label('Plan Multi-Level')
+            ->icon('heroicon-m-squares-plus')
+            ->color('info')
+            ->modalHeading('Plan Multi-Level Production')
+            ->modalDescription(function (ProductionOrder $record): string {
+                try {
+                    $preview = app(MultiLevelProductionPlanningService::class)->preview($record);
+
+                    return sprintf(
+                        'Preview: %d hierarchy node(s), %d manufactured component(s), max depth %d. Planning creates child production orders, supply links, and reservations only.',
+                        $preview['node_count'],
+                        $preview['manufactured_count'],
+                        $preview['max_depth'],
+                    );
+                } catch (\Exception $e) {
+                    return $e->getMessage();
+                }
+            })
+            ->requiresConfirmation()
+            ->visible(fn ($record): bool => $record instanceof ProductionOrder && $record->status->isEditable())
+            ->action(function (ProductionOrder $record): void {
+                try {
+                    $result = app(MultiLevelProductionPlanningService::class)->plan($record, auth()->id());
+
+                    Notification::make()
+                        ->title('Multi-level production planned')
+                        ->body(sprintf(
+                            '%d hierarchy node(s), %d generated child order(s), %d manufactured component(s).',
+                            $result['node_count'],
+                            $result['child_order_count'],
+                            $result['manufactured_component_count'],
+                        ))
+                        ->success()
+                        ->send();
                 } catch (\Exception $e) {
                     self::error($e);
                 }
