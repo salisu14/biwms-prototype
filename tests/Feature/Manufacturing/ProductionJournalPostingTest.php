@@ -889,7 +889,7 @@ it('reconciles consumption capacity wip value entries and finish gl for an order
         ->and((float) $consumptionEntry->cost_amount_actual)->toBe(1296.0)
         ->and((float) $consumptionValueEntry->quantity)->toBe(-288.0)
         ->and((float) $consumptionValueEntry->cost_amount_actual)->toBe(1296.0)
-        ->and((float) $consumptionValueEntry->unit_cost)->toBe(-4.5)
+        ->and((float) $consumptionValueEntry->unit_cost)->toBe(4.5)
         ->and($consumptionValueEntry->production_order_no)->toBe('PO-REC-001')
         ->and($consumptionValueEntry->production_order_component_line_no)->toBe('10000')
         ->and($consumptionValueEntry->item_no)->toBe('RM-REC')
