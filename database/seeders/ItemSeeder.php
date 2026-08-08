@@ -27,9 +27,9 @@ class ItemSeeder extends Seeder
      *
      * Important:
      * - This seeder does not establish inventory quantities.
-     * - New items start with stock = 0.
-     * - Existing item stock is never reset when this seeder is rerun.
-     * - Actual physical stock must be posted through Opening Inventory.
+     * - New items start with inventory = 0.
+     * - Existing item inventory is never reset when this seeder is rerun.
+     * - Actual physical inventory must be posted through Opening Inventory.
      */
     public function run(): void
     {
@@ -226,10 +226,10 @@ class ItemSeeder extends Seeder
                 'item_type' => ItemType::RAW_MATERIAL->value,
                 'costing_method' => CostingMethod::STANDARD->value,
                 'inventory_method' => InventoryMethod::FIFO->value,
-                'unit_cost' => 20000.00,
-                'standard_cost' => 20000.00,
+                'unit_cost' => 0.40,
+                'standard_cost' => 0.40,
                 'last_direct_cost' => 0.00,
-                'unit_price' => 20000.00,
+                'unit_price' => 0.40,
                 'reorder_point' => 0.00,
                 'reorder_quantity' => 0.00,
                 'location_id' => $rawMaterialLocation->id,

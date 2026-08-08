@@ -20,6 +20,8 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class OpeningInventoriesTable
 {
@@ -128,8 +130,22 @@ class OpeningInventoriesTable
                         ->color('success')
                         ->visible(fn (OpeningInventory $record): bool => auth()->user()?->can('post', $record) === true)
                         ->action(function (OpeningInventory $record): void {
-                            app(OpeningInventoryService::class)->post($record, auth()->id());
-                            Notification::make()->title('Opening inventory posted')->success()->send();
+                            try {
+                                app(OpeningInventoryService::class)->post($record, auth()->id());
+                                Notification::make()->title('Opening inventory posted')->success()->send();
+                            } catch (Throwable $exception) {
+                                Log::error('Opening inventory table post failed.', [
+                                    'opening_inventory_id' => $record->getKey(),
+                                    'document_number' => $record->document_number,
+                                    'exception' => $exception,
+                                ]);
+
+                                Notification::make()
+                                    ->title('Opening inventory was not posted.')
+                                    ->body($exception->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
                         })
                 ),
                 SensitiveActionPasswordConfirmation::protect(
@@ -138,8 +154,22 @@ class OpeningInventoriesTable
                         ->color('danger')
                         ->visible(fn (OpeningInventory $record): bool => auth()->user()?->can('cancel', $record) === true)
                         ->action(function (OpeningInventory $record): void {
-                            app(OpeningInventoryService::class)->cancelDraft($record, auth()->id());
-                            Notification::make()->title('Opening inventory cancelled')->success()->send();
+                            try {
+                                app(OpeningInventoryService::class)->cancelDraft($record, auth()->id());
+                                Notification::make()->title('Opening inventory cancelled')->success()->send();
+                            } catch (Throwable $exception) {
+                                Log::error('Opening inventory table cancel failed.', [
+                                    'opening_inventory_id' => $record->getKey(),
+                                    'document_number' => $record->document_number,
+                                    'exception' => $exception,
+                                ]);
+
+                                Notification::make()
+                                    ->title('Opening inventory was not cancelled.')
+                                    ->body($exception->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
                         })
                 ),
                 DeleteAction::make()

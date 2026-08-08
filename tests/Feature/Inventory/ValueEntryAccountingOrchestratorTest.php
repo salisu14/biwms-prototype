@@ -22,7 +22,9 @@ use App\Models\Location;
 use App\Models\PostingTransaction;
 use App\Models\ValueEntry;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use App\Services\Inventory\ValueEntryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -61,9 +63,70 @@ it('posts sales shipment value entries through one balanced posting transaction'
 
     $postedValueEntry = $valueEntry->fresh();
     expect($postedValueEntry->gl_posted)->toBeTrue()
+        ->and((float) $postedValueEntry->unit_cost)->toBe(25.0)
         ->and($postedValueEntry->posting_transaction_id)->toBe($transaction->id)
         ->and($postedValueEntry->gl_account_no)->toBe($fixture['cogsAccount']->account_number)
         ->and($postedValueEntry->balancing_account_no)->toBe($fixture['inventoryAccount']->account_number);
+});
+
+it('normalizes value entry unit cost as positive economic cost across inventory movements', function (): void {
+    $fixture = valueEntryAccountingFixture();
+
+    $cases = [
+        [ItemLedgerEntryType::SALE, -5.0, 125.0, 0.0, 'SALES_ORDER_SHIPMENT', 25.0],
+        [ItemLedgerEntryType::PURCHASE, 5.0, 125.0, 0.0, 'PURCHASE_INVOICE', 25.0],
+        [ItemLedgerEntryType::PURCHASE, 5.0, 0.0, 125.0, 'PURCHASE_RECEIPT', 25.0],
+        [ItemLedgerEntryType::PURCHASE, -5.0, 125.0, 0.0, 'PURCHASE_CREDIT_MEMO', 25.0],
+        [ItemLedgerEntryType::POSITIVE_ADJUSTMENT, 3.0, 30.0, 0.0, 'INVENTORY_ADJUSTMENT', 10.0],
+        [ItemLedgerEntryType::NEGATIVE_ADJUSTMENT, -3.0, 30.0, 0.0, 'INVENTORY_ADJUSTMENT', 10.0],
+        [ItemLedgerEntryType::TRANSFER, -4.0, 40.0, 0.0, 'WAREHOUSE_TRANSFER', 10.0],
+        [ItemLedgerEntryType::TRANSFER, 4.0, 40.0, 0.0, 'WAREHOUSE_TRANSFER', 10.0],
+        [ItemLedgerEntryType::CONSUMPTION, -2.0, 50.0, 0.0, 'PRODUCTION_ORDER', 25.0],
+        [ItemLedgerEntryType::OUTPUT, 2.0, 50.0, 0.0, 'PRODUCTION_ORDER', 25.0],
+    ];
+
+    foreach ($cases as [$entryType, $quantity, $actualCost, $expectedCost, $documentType, $expectedUnitCost]) {
+        $itemLedgerEntry = valueEntryAccountingItemLedgerEntry($fixture, $entryType, $quantity, $actualCost, $documentType, $expectedCost);
+        $valueEntry = ValueEntry::query()->where('item_ledger_entry_no', $itemLedgerEntry->entry_number)->firstOrFail();
+
+        expect((float) $valueEntry->quantity)->toBe($quantity)
+            ->and((float) $valueEntry->cost_amount_actual)->toBe($actualCost)
+            ->and((float) $valueEntry->cost_amount_expected)->toBe($expectedCost)
+            ->and((float) $valueEntry->unit_cost)->toBe($expectedUnitCost);
+    }
+});
+
+it('keeps value entry unit cost aligned with item application economic unit cost', function (): void {
+    $fixture = valueEntryAccountingFixture();
+    valueEntryAccountingItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 250, 'PURCHASE_INVOICE');
+    $outbound = valueEntryAccountingItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -4, 0, 'PRODUCTION_ORDER');
+
+    $applications = app(ItemApplicationService::class)->applyOutbound($outbound, 'unit_cost_sign_regression');
+    $valueEntry = app(ValueEntryService::class)->ensureForItemLedgerEntry($outbound->fresh());
+
+    expect($applications)->toHaveCount(1)
+        ->and((float) $applications[0]->unit_cost)->toBe(25.0)
+        ->and((float) $outbound->fresh()->cost_amount_actual)->toBe(100.0)
+        ->and((float) $valueEntry?->quantity)->toBe(-4.0)
+        ->and((float) $valueEntry?->cost_amount_actual)->toBe(100.0)
+        ->and((float) $valueEntry?->unit_cost)->toBe(25.0);
+});
+
+it('keeps prod 00003 style consumption unit cost positive at high precision', function (): void {
+    $fixture = valueEntryAccountingFixture();
+    $itemLedgerEntry = valueEntryAccountingItemLedgerEntry(
+        $fixture,
+        ItemLedgerEntryType::CONSUMPTION,
+        -17.065728,
+        13285.6692,
+        'PRODUCTION_ORDER',
+    );
+
+    $valueEntry = ValueEntry::query()->where('item_ledger_entry_no', $itemLedgerEntry->entry_number)->firstOrFail();
+
+    expect($valueEntry->quantity)->toBe('-17.06572800')
+        ->and($valueEntry->cost_amount_actual)->toBe('13285.6692')
+        ->and($valueEntry->unit_cost)->toBe('778.49999719');
 });
 
 it('keeps expected cost value entries out of gl unless explicitly enabled', function (): void {
