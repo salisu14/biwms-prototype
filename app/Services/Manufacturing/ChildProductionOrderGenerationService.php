@@ -90,7 +90,7 @@ class ChildProductionOrderGenerationService
             'scrap_percent' => data_get($lineMetadata, 'scrap_percent', '0'),
             'flushing_method' => data_get($lineMetadata, 'flushing_method', 'MANUAL'),
             'routing_link_code' => data_get($lineMetadata, 'routing_link_code'),
-            'location_code' => data_get($lineMetadata, 'location_code'),
+            'location_code' => data_get($lineMetadata, 'location_code') ?: $productionOrder->location_code,
             'bin_code' => data_get($lineMetadata, 'bin_code'),
             'bom_level' => $node->level,
             'bom_path' => $node->node_path,

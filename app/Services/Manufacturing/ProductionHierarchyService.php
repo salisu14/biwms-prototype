@@ -100,6 +100,37 @@ class ProductionHierarchyService
         if ($order->itemLedgerEntries()->exists() || $order->capacityLedgerEntries()->exists()) {
             throw new RuntimeException('Production orders with ledger activity cannot be replanned.');
         }
+
+        $rootOrderId = $order->root_production_order_id ?: $order->id;
+        $memberOrderIds = ProductionOrder::query()
+            ->where('id', $rootOrderId)
+            ->orWhere('root_production_order_id', $rootOrderId)
+            ->pluck('id');
+
+        $hasMemberLedgerActivity = ProductionOrder::query()
+            ->whereIn('id', $memberOrderIds)
+            ->where(function ($query): void {
+                $query->whereHas('itemLedgerEntries')
+                    ->orWhereHas('capacityLedgerEntries');
+            })
+            ->exists();
+
+        if ($hasMemberLedgerActivity) {
+            throw new RuntimeException('Production hierarchy cannot be replanned after root or child ledger activity exists.');
+        }
+
+        $hasIrreversibleReservationActivity = ProductionMaterialReservation::query()
+            ->whereIn('production_order_id', $memberOrderIds)
+            ->where(function ($query): void {
+                $query->whereRaw('coalesce(quantity_base, 0) <> coalesce(remaining_quantity_base, 0)')
+                    ->orWhereNotNull('child_output_item_ledger_entry_id')
+                    ->orWhereNotNull('consumed_at');
+            })
+            ->exists();
+
+        if ($hasIrreversibleReservationActivity) {
+            throw new RuntimeException('Production hierarchy cannot be destructively replanned after reservation fulfilment or consumption.');
+        }
     }
 
     /**

@@ -16,6 +16,7 @@ class EditProductionOrder extends EditRecord
     {
         return [
             ProductionOrderActions::planMultiLevelProduction(),
+            ProductionOrderActions::refreshHierarchyStatus(),
             ProductionOrderActions::release(),
             ProductionOrderActions::postOutput(),
             ProductionOrderActions::finish(),

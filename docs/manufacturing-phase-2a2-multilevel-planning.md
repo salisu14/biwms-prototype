@@ -45,3 +45,65 @@ Planning can be safely retried while the root order remains simulated/planned/fi
 - manufactured component demands without child-output reservations.
 
 These checks are diagnostic only and do not repair data.
+
+## Phase 2A.3 Execution Lifecycle
+
+The executable lifecycle is inventory-mediated:
+
+1. Release and execute generated child production orders with the existing production order workflow.
+2. Child output posts finished/semi-finished inventory through normal Item Ledger, Value Entry, and G/L posting.
+3. `ProductionSupplyFulfilmentService` derives supplied quantity from child output ledger totals and caps fulfilment at parent demand.
+4. Parent production consumes the semi-finished item through normal production consumption.
+5. `ProductionReservationConsumptionService` validates available child supply and derives reservation consumed/remaining quantities from the parent component.
+6. `ProductionHierarchyProgressService` synchronizes hierarchy and node progress from orders, supply links, and reservations.
+
+No child output is moved directly into parent WIP. Cost flows through inventory:
+
+- Child: raw material and capacity cost -> child WIP -> semi-finished inventory.
+- Parent: semi-finished inventory -> parent WIP -> finished goods inventory.
+
+This keeps WIP and Value Entries attributable to their own production orders.
+
+## Partial Supply And Consumption
+
+Partial output and partial consumption are allowed.
+
+Example:
+
+- Parent demand: `100 kg`.
+- Child output: `60 kg`.
+- Parent consumes: `40 kg`.
+- Supply link: required `100`, supplied `60`, consumed `40`, remaining available `20`.
+- Reservation: quantity `100`, remaining `60`, status `partially_consumed`.
+
+Later child output continues fulfilment without duplicating prior supply because fulfilment is recalculated from child output ledger totals.
+
+## Overproduction And Underproduction
+
+If child output exceeds parent demand, the supply link is capped at demand and the excess remains ordinary inventory.
+
+If the child finishes short, the supply link remains short and reconciliation reports the underproduction. Parent finishing remains blocked until manufactured demand is resolved or corrected through a controlled planning/business workflow.
+
+## Replanning And Cancellation
+
+Destructive hierarchy replanning is allowed only before operational activity. Replanning is blocked after any root/child member has ledger activity or irreversible reservation fulfilment/consumption.
+
+Cancelling planning reservations releases commitment only. It does not delete or rewrite item ledger history.
+
+## Reconciliation
+
+`php artisan biwms:manufacturing-cost-reconcile --details` includes Phase 2A.3 diagnostics for:
+
+- child output posted but supply not synchronized;
+- supplied quantity exceeding parent demand;
+- child finished with supply shortage;
+- reservation availability mismatch;
+- reservation consumption exceeding available supply;
+- cancelled supply links with active reservations;
+- parent finished with unresolved manufactured demand.
+
+The command remains report-only.
+
+## Limitation
+
+Hierarchy-aware exact item application to a generated child output layer is not forced in Phase 2A.3. Parent consumption uses the existing item application architecture. When the generated child output is the available inbound layer, normal FIFO/specific costing provides the expected trace. Deeper genealogy and operation-level exact hand-off are reserved for Phase 2B.

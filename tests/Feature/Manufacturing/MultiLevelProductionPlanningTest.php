@@ -2,11 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Enums\ProductionOrderOrigin;
 use App\Enums\ProductionOrderStatus;
 use App\Enums\ProductionReservationType;
 use App\Enums\ProductionSupplyType;
+use App\Models\AccountingPeriod;
+use App\Models\ChartOfAccount;
+use App\Models\GeneralLedgerSetup;
+use App\Models\GeneralPostingSetup;
+use App\Models\InventoryPostingSetup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
@@ -18,14 +24,35 @@ use App\Models\Manufacturing\ProductionMaterialReservation;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderComponent;
 use App\Models\Manufacturing\ProductionOrderSupplyLink;
+use App\Models\Permission;
 use App\Models\User;
 use App\Models\ValueEntry;
 use App\Services\Manufacturing\MultiLevelBomExplosionService;
 use App\Services\Manufacturing\MultiLevelProductionPlanningService;
 use App\Services\Manufacturing\ProductionOrderNumberSeriesSetupService;
+use App\Services\Manufacturing\ProductionOrderService;
+use App\Services\Manufacturing\ProductionSupplyFulfilmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    GeneralLedgerSetup::query()->updateOrCreate(
+        ['company_name' => 'Default Company'],
+        [
+            'allow_posting_from' => '2026-01-01',
+            'allow_posting_to' => '2026-12-31',
+        ],
+    );
+
+    AccountingPeriod::query()->firstOrCreate([
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-12-31',
+    ], [
+        'name' => 'FY2026',
+        'is_closed' => false,
+    ]);
+});
 
 it('explodes multi-level BOMs and creates child orders, supply links, and reservations without ledger side effects', function (): void {
     $context = manufacturingPlanningFixture();
@@ -170,6 +197,119 @@ it('reports phase 2a2 planning diagnostics through manufacturing cost reconcile'
         ->expectsOutputToContain('Phase 2a2 generated child without supply link');
 });
 
+it('updates child supply and reservation availability when generated child output is posted', function (): void {
+    $context = manufacturingPlanningFixture();
+    grantManufacturingPlanningPostingPermissions($context['user']);
+    $result = app(MultiLevelProductionPlanningService::class)->plan($context['root_order'], $context['user']->id);
+    $extractOrder = manufacturingPlanningChildOrder('SFG-EXTRACT');
+    createManufacturingPlanningPostingAccounts($extractOrder);
+    $extractOrder->update(['status' => ProductionOrderStatus::RELEASED]);
+
+    app(ProductionOrderService::class)->postOutput($extractOrder->fresh(), 1, $context['user']->id);
+    app(ProductionOrderService::class)->postOutput($extractOrder->fresh(), 1, $context['user']->id);
+
+    $link = $extractOrder->supplyLinksAsChild()->firstOrFail();
+    $reservation = $link->materialReservations()->firstOrFail();
+
+    expect((float) $link->fresh()->produced_quantity_base)->toBe(2.0)
+        ->and((float) $link->fresh()->supplied_quantity_base)->toBe(2.0)
+        ->and((float) $reservation->fresh()->quantity_base)->toBe(2.0)
+        ->and((float) data_get($reservation->fresh()->metadata, 'available_quantity_base'))->toBe(2.0)
+        ->and($result['hierarchy']->fresh()->supplyLinks()->count())->toBe(2);
+});
+
+it('supports partial child output and blocks parent overconsumption beyond available child supply', function (): void {
+    $context = manufacturingPlanningFixture();
+    grantManufacturingPlanningPostingPermissions($context['user']);
+    app(MultiLevelProductionPlanningService::class)->plan($context['root_order'], $context['user']->id);
+    $rootOrder = $context['root_order']->fresh();
+    $extractOrder = manufacturingPlanningChildOrder('SFG-EXTRACT');
+    createManufacturingPlanningPostingAccounts($extractOrder);
+    createManufacturingPlanningPostingAccounts($rootOrder);
+    $extractOrder->update(['status' => ProductionOrderStatus::RELEASED]);
+    $rootOrder->update(['status' => ProductionOrderStatus::RELEASED]);
+
+    app(ProductionOrderService::class)->postOutput($extractOrder->fresh(), 1, $context['user']->id);
+
+    $extractComponent = $rootOrder->components()
+        ->whereHas('item', fn ($query) => $query->where('item_code', 'SFG-EXTRACT'))
+        ->firstOrFail();
+
+    expect(fn () => app(ProductionOrderService::class)->postConsumption($rootOrder->fresh(), [[
+        'component_id' => $extractComponent->id,
+        'quantity' => 2,
+    ]], $context['user']->id))->toThrow(RuntimeException::class, 'Cannot consume more hierarchy child supply than is available');
+
+    app(ProductionOrderService::class)->postConsumption($rootOrder->fresh(), [[
+        'component_id' => $extractComponent->id,
+        'quantity' => 1,
+    ]], $context['user']->id);
+
+    $reservation = $extractComponent->fresh()->materialReservations()->firstOrFail();
+
+    expect((float) $reservation->remaining_quantity_base)->toBe(1.0)
+        ->and((float) data_get($reservation->metadata, 'consumed_quantity_base'))->toBe(1.0);
+});
+
+it('blocks parent finish while manufactured child demand remains unresolved', function (): void {
+    $context = manufacturingPlanningFixture();
+    grantManufacturingPlanningPostingPermissions($context['user']);
+    app(MultiLevelProductionPlanningService::class)->plan($context['root_order'], $context['user']->id);
+    $rootOrder = $context['root_order']->fresh();
+    createManufacturingPlanningPostingAccounts($rootOrder);
+    $rootOrder->update(['status' => ProductionOrderStatus::RELEASED]);
+
+    expect(fn () => app(ProductionOrderService::class)->finish($rootOrder->fresh(), $context['user']->id))
+        ->toThrow(RuntimeException::class, 'Child supply is not fully available');
+});
+
+it('caps child overproduction supply to parent demand and leaves excess as ordinary inventory', function (): void {
+    $context = manufacturingPlanningFixture();
+    app(MultiLevelProductionPlanningService::class)->plan($context['root_order'], $context['user']->id);
+    $extractOrder = manufacturingPlanningChildOrder('SFG-EXTRACT');
+    $link = $extractOrder->supplyLinksAsChild()->firstOrFail();
+    $location = Location::query()->where('code', 'MAIN-PHASE2A')->firstOrFail();
+
+    ItemLedgerEntry::query()->create([
+        'entry_number' => 880001,
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'Production Order',
+        'document_number' => $extractOrder->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $extractOrder->item_id,
+        'location_id' => $location->id,
+        'quantity' => 3,
+        'remaining_quantity' => 3,
+        'cost_amount_actual' => 30,
+        'general_product_posting_group_id' => $extractOrder->general_product_posting_group_id,
+        'inventory_posting_group_id' => $extractOrder->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'source_type' => ProductionOrder::class,
+        'source_id' => $extractOrder->id,
+    ]);
+
+    app(ProductionSupplyFulfilmentService::class)->syncChildOutputSupply($extractOrder->fresh());
+
+    expect((float) $link->fresh()->produced_quantity_base)->toBe(3.0)
+        ->and((float) $link->fresh()->supplied_quantity_base)->toBe(2.0)
+        ->and((float) data_get($link->fresh()->metadata, 'excess_output_quantity_base'))->toBe(1.0);
+});
+
+it('keeps single-level production order output behaviour unchanged', function (): void {
+    $context = manufacturingPlanningFixture();
+    grantManufacturingPlanningPostingPermissions($context['user']);
+    $singleLevelOrder = manufacturingPlanningOrder('PROD-SINGLE-001', $context['finished_item'], $context['finished_bom'], 1);
+    createManufacturingPlanningPostingAccounts($singleLevelOrder);
+    $singleLevelOrder->update(['status' => ProductionOrderStatus::RELEASED]);
+
+    app(ProductionOrderService::class)->postOutput($singleLevelOrder->fresh(), 1, $context['user']->id);
+
+    expect($singleLevelOrder->fresh()->supplyLinksAsChild()->count())->toBe(0)
+        ->and($singleLevelOrder->fresh()->supplyLinksAsParent()->count())->toBe(0)
+        ->and((float) $singleLevelOrder->fresh()->itemLedgerEntries()->where('entry_type', ItemLedgerEntryType::OUTPUT)->sum('quantity'))->toBe(1.0);
+});
+
 /**
  * @return array<string, mixed>
  */
@@ -178,6 +318,7 @@ function manufacturingPlanningFixture(): array
     $user = User::factory()->create();
     test()->actingAs($user);
     app(ProductionOrderNumberSeriesSetupService::class)->ensure();
+    Location::factory()->create(['code' => 'MAIN-PHASE2A']);
 
     $finished = manufacturingPlanningItem('FG-CARTON', ItemType::FINISHED_GOOD);
     $extract = manufacturingPlanningItem('SFG-EXTRACT', ItemType::SEMI_FINISHED);
@@ -227,6 +368,7 @@ function manufacturingPlanningFixture(): array
     return [
         'user' => $user,
         'finished_item' => $finished,
+        'finished_bom' => $finishedBom,
         'root_order' => $rootOrder,
     ];
 }
@@ -262,8 +404,68 @@ function manufacturingPlanningOrder(string $documentNumber, Item $item, Producti
         'quantity_base' => $quantity,
         'unit_of_measure_code' => 'PCS',
         'production_bom_id' => $bom->id,
+        'location_code' => 'MAIN-PHASE2A',
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
         'production_level' => 0,
         'hierarchy_path' => '1',
         'hierarchy_planning_version' => 1,
     ]));
+}
+
+function manufacturingPlanningChildOrder(string $itemCode): ProductionOrder
+{
+    return ProductionOrder::query()
+        ->whereHas('item', fn ($query) => $query->where('item_code', $itemCode))
+        ->where('order_origin', ProductionOrderOrigin::GeneratedChild)
+        ->firstOrFail();
+}
+
+function grantManufacturingPlanningPostingPermissions(User $user): void
+{
+    foreach (['factory.production_order.post_output', 'factory.production_order.finish'] as $permission) {
+        Permission::query()->firstOrCreate([
+            'name' => $permission,
+            'guard_name' => 'web',
+        ]);
+    }
+
+    $user->givePermissionTo([
+        'factory.production_order.post_output',
+        'factory.production_order.finish',
+    ]);
+}
+
+function createManufacturingPlanningPostingAccounts(ProductionOrder $order): void
+{
+    $location = Location::query()->firstOrCreate(['code' => 'MAIN-PHASE2A'], ['name' => 'Main Phase 2A']);
+    $inventoryAccount = ChartOfAccount::factory()->create(['account_number' => 'P2A-INV-'.$order->id]);
+    $wipAccount = ChartOfAccount::factory()->create(['account_number' => 'P2A-WIP-'.$order->id]);
+    $appliedAccount = ChartOfAccount::factory()->create(['account_number' => 'P2A-APP-'.$order->id]);
+    $varianceAccount = ChartOfAccount::factory()->create(['account_number' => 'P2A-VAR-'.$order->id]);
+
+    InventoryPostingSetup::query()->updateOrCreate([
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'location_id' => $location->id,
+    ], [
+        'inventory_account_id' => $inventoryAccount->id,
+        'wip_account_id' => $wipAccount->id,
+    ]);
+
+    if (! $order->general_business_posting_group_id || ! $order->general_product_posting_group_id) {
+        return;
+    }
+
+    GeneralPostingSetup::query()->updateOrCreate([
+        'general_business_posting_group_id' => $order->general_business_posting_group_id,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+    ], [
+        'direct_cost_applied_account_id' => $appliedAccount->id,
+        'overhead_applied_account_id' => $appliedAccount->id,
+        'inventory_adj_account_id' => $appliedAccount->id,
+        'material_variance_account_id' => $varianceAccount->id,
+        'capacity_variance_account_id' => $varianceAccount->id,
+        'capacity_overhead_variance_account_id' => $varianceAccount->id,
+        'manufacturing_overhead_variance_account_id' => $varianceAccount->id,
+    ]);
 }

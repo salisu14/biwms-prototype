@@ -67,6 +67,7 @@ class ProductionOrdersTable
             ->recordActions([
                 ActionGroup::make([
                     ProductionOrderActions::planMultiLevelProduction(),
+                    ProductionOrderActions::refreshHierarchyStatus(),
                     ProductionOrderActions::refresh(),
                     ProductionOrderActions::release(),
                     ProductionOrderActions::postOutput(),

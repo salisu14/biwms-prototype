@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProductionOrders\Schemas;
 
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderStatus;
+use App\Services\Manufacturing\MultiLevelProductionReadinessService;
 use App\Services\Manufacturing\ProductionCostSummaryService;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -341,6 +342,62 @@ class ProductionOrderInfolist
                         TextEntry::make('cost_settlement_classification')
                             ->label('Settlement Classification')
                             ->badge(),
+                    ]),
+
+                Section::make('Multi-Level Execution')
+                    ->icon('heroicon-m-squares-plus')
+                    ->visible(fn ($record): bool => $record->productionHierarchies()->exists()
+                        || $record->supplyLinksAsParent()->exists()
+                        || $record->supplyLinksAsChild()->exists())
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
+                    ->schema([
+                        TextEntry::make('production_hierarchy_status')
+                            ->label('Hierarchy Status')
+                            ->state(fn ($record): string => (string) ($record->productionHierarchy?->status?->value ?? $record->rootProductionOrder?->productionHierarchy?->status?->value ?? 'not planned'))
+                            ->badge(),
+                        TextEntry::make('child_orders_count')
+                            ->label('Child Orders')
+                            ->state(fn ($record): int => $record->childProductionOrders()->count())
+                            ->badge()
+                            ->color('info'),
+                        TextEntry::make('child_supply_required')
+                            ->label('Required Supply')
+                            ->state(fn ($record): float => (float) $record->supplyLinksAsParent()->sum('required_quantity_base') + (float) $record->supplyLinksAsChild()->sum('required_quantity_base'))
+                            ->numeric(4),
+                        TextEntry::make('child_supply_supplied')
+                            ->label('Supplied')
+                            ->state(fn ($record): float => (float) $record->supplyLinksAsParent()->sum('supplied_quantity_base') + (float) $record->supplyLinksAsChild()->sum('supplied_quantity_base'))
+                            ->numeric(4)
+                            ->color('success'),
+                        TextEntry::make('child_supply_consumed')
+                            ->label('Consumed')
+                            ->state(fn ($record): float => (float) $record->supplyLinksAsParent()->sum('consumed_quantity_base') + (float) $record->supplyLinksAsChild()->sum('consumed_quantity_base'))
+                            ->numeric(4)
+                            ->color('warning'),
+                        TextEntry::make('generated_from_parent')
+                            ->label('Generated From')
+                            ->state(fn ($record): string => $record->parentProductionOrder?->document_number ?? 'Root / standalone')
+                            ->placeholder('Root / standalone'),
+                        TextEntry::make('source_component_line')
+                            ->label('Supplying Component')
+                            ->state(fn ($record): string => $record->sourceProductionOrderComponent?->line_number
+                                ? '#'.$record->sourceProductionOrderComponent->line_number.' '.$record->sourceProductionOrderComponent?->item?->item_code
+                                : '—'),
+                        TextEntry::make('hierarchy_blocking_reason')
+                            ->label('Blocking Reason')
+                            ->state(function ($record): string {
+                                $readiness = app(MultiLevelProductionReadinessService::class)->completionReadiness($record);
+
+                                return $readiness['ready']
+                                    ? 'Ready'
+                                    : (string) ($readiness['reasons'][0]['message'] ?? 'Review hierarchy demand');
+                            })
+                            ->color(fn (string $state): string => $state === 'Ready' ? 'success' : 'warning')
+                            ->columnSpanFull(),
                     ]),
 
                 Section::make('Audit & Tracking')

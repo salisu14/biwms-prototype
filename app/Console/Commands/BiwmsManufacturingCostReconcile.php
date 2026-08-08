@@ -15,8 +15,10 @@ use App\Enums\ProductionSupplyLinkStatus;
 use App\Enums\ProductionSupplyType;
 use App\Models\Manufacturing\CapacityLedgerEntry;
 use App\Models\Manufacturing\ProductionHierarchyNode;
+use App\Models\Manufacturing\ProductionMaterialReservation;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderComponent;
+use App\Models\Manufacturing\ProductionOrderSupplyLink;
 use App\Models\ProductionOutputCostAllocation;
 use App\Models\ProductionVarianceCalculation;
 use App\Models\ValueEntry;
@@ -95,6 +97,13 @@ class BiwmsManufacturingCostReconcile extends Command
                 'phase_2a2_manufactured_node_without_child_order' => $this->manufacturedNodesWithoutChildOrders($productionOrderFilter),
                 'phase_2a2_generated_child_without_supply_link' => $this->generatedChildOrdersWithoutSupplyLinks($productionOrderFilter),
                 'phase_2a2_manufactured_component_without_reservation' => $this->manufacturedComponentsWithoutReservations($productionOrderFilter),
+                'phase_2a3_child_output_supply_mismatch' => $this->childOutputSupplyMismatch($productionOrderFilter),
+                'phase_2a3_supply_exceeds_parent_demand' => $this->supplyExceedsParentDemand($productionOrderFilter),
+                'phase_2a3_child_finished_with_supply_shortage' => $this->childFinishedWithSupplyShortage($productionOrderFilter),
+                'phase_2a3_reservation_available_mismatch' => $this->reservationAvailableMismatch($productionOrderFilter),
+                'phase_2a3_reservation_consumption_exceeds_available' => $this->reservationConsumptionExceedsAvailable($productionOrderFilter),
+                'phase_2a3_cancelled_link_with_active_reservation' => $this->cancelledLinkWithActiveReservation($productionOrderFilter),
+                'phase_2a3_parent_finished_with_unresolved_child_demand' => $this->parentFinishedWithUnresolvedChildDemand($productionOrderFilter),
             ],
         ];
 
@@ -907,6 +916,287 @@ class BiwmsManufacturingCostReconcile extends Command
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function childOutputSupplyMismatch(mixed $productionOrderFilter): array
+    {
+        return $this->phase2aSupplyLinkQuery($productionOrderFilter)
+            ->with('childProductionOrder')
+            ->get()
+            ->map(function (ProductionOrderSupplyLink $link): ?array {
+                $childOutput = $this->childOutputQuantityBase($link);
+                $expectedSupplied = min((float) $childOutput, (float) $link->required_quantity_base);
+                $difference = round($expectedSupplied - (float) $link->supplied_quantity_base, 8);
+
+                if (abs($difference) <= 0.00000001) {
+                    return null;
+                }
+
+                return [
+                    'supply_link_id' => $link->id,
+                    'child_production_order_id' => $link->child_production_order_id,
+                    'child_output_quantity_base' => round((float) $childOutput, 8),
+                    'supplied_quantity_base' => round((float) $link->supplied_quantity_base, 8),
+                    'difference' => $difference,
+                    ...$this->findingMetadata(
+                        classification: 'phase_2a3_child_output_supply_mismatch',
+                        severity: 'critical',
+                        suggestedRemediation: 'Run hierarchy status refresh or retry output fulfilment sync; do not edit item ledger or supply quantities manually.',
+                    ),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function supplyExceedsParentDemand(mixed $productionOrderFilter): array
+    {
+        return $this->phase2aSupplyLinkQuery($productionOrderFilter)
+            ->whereRaw('coalesce(supplied_quantity_base, 0) > coalesce(required_quantity_base, 0) + 0.00000001')
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrderSupplyLink $link): array => [
+                'supply_link_id' => $link->id,
+                'required_quantity_base' => round((float) $link->required_quantity_base, 8),
+                'supplied_quantity_base' => round((float) $link->supplied_quantity_base, 8),
+                ...$this->findingMetadata(
+                    classification: 'phase_2a3_supply_exceeds_parent_demand',
+                    severity: 'critical',
+                    suggestedRemediation: 'Treat excess child output as ordinary inventory and cap parent supply fulfilment to the original demand.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function childFinishedWithSupplyShortage(mixed $productionOrderFilter): array
+    {
+        return $this->phase2aSupplyLinkQuery($productionOrderFilter)
+            ->whereHas('childProductionOrder', fn (Builder $query) => $query->where('status', ProductionOrderStatus::FINISHED->value))
+            ->whereRaw('coalesce(supplied_quantity_base, 0) + 0.00000001 < coalesce(required_quantity_base, 0)')
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrderSupplyLink $link): array => [
+                'supply_link_id' => $link->id,
+                'child_production_order_id' => $link->child_production_order_id,
+                'required_quantity_base' => round((float) $link->required_quantity_base, 8),
+                'supplied_quantity_base' => round((float) $link->supplied_quantity_base, 8),
+                ...$this->findingMetadata(
+                    classification: 'phase_2a3_child_finished_with_supply_shortage',
+                    severity: 'warning',
+                    suggestedRemediation: 'Review underproduction and create controlled additional supply or revise parent demand through approved planning.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function reservationAvailableMismatch(mixed $productionOrderFilter): array
+    {
+        return $this->phase2aReservationQuery($productionOrderFilter)
+            ->with('productionOrderSupplyLink')
+            ->get()
+            ->map(function (ProductionMaterialReservation $reservation): ?array {
+                $link = $reservation->productionOrderSupplyLink;
+                if (! $link) {
+                    return null;
+                }
+
+                $expectedAvailable = min((float) $link->supplied_quantity_base, (float) $reservation->quantity_base);
+                $metadataAvailable = (float) data_get($reservation->metadata, 'available_quantity_base', 0);
+
+                if (abs($expectedAvailable - $metadataAvailable) <= 0.00000001) {
+                    return null;
+                }
+
+                return [
+                    'reservation_id' => $reservation->id,
+                    'supply_link_id' => $link->id,
+                    'expected_available_quantity_base' => round($expectedAvailable, 8),
+                    'metadata_available_quantity_base' => round($metadataAvailable, 8),
+                    ...$this->findingMetadata(
+                        classification: 'phase_2a3_reservation_available_mismatch',
+                        severity: 'warning',
+                        suggestedRemediation: 'Refresh hierarchy status so reservation availability metadata is derived from the current supply link.',
+                    ),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function reservationConsumptionExceedsAvailable(mixed $productionOrderFilter): array
+    {
+        return $this->phase2aReservationQuery($productionOrderFilter)
+            ->with('productionOrderSupplyLink')
+            ->get()
+            ->map(function (ProductionMaterialReservation $reservation): ?array {
+                $link = $reservation->productionOrderSupplyLink;
+                if (! $link) {
+                    return null;
+                }
+
+                $available = min((float) $link->supplied_quantity_base, (float) $reservation->quantity_base);
+                $consumed = (float) $reservation->quantity_base - (float) $reservation->remaining_quantity_base;
+
+                if ($consumed <= $available + 0.00000001) {
+                    return null;
+                }
+
+                return [
+                    'reservation_id' => $reservation->id,
+                    'supply_link_id' => $link->id,
+                    'available_quantity_base' => round($available, 8),
+                    'consumed_quantity_base' => round($consumed, 8),
+                    ...$this->findingMetadata(
+                        classification: 'phase_2a3_reservation_consumption_exceeds_available',
+                        severity: 'critical',
+                        suggestedRemediation: 'Investigate parent consumption against child output supply and correct through controlled reversal/repost.',
+                    ),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function cancelledLinkWithActiveReservation(mixed $productionOrderFilter): array
+    {
+        return $this->phase2aReservationQuery($productionOrderFilter)
+            ->whereHas('productionOrderSupplyLink', fn (Builder $query) => $query->where('status', ProductionSupplyLinkStatus::Cancelled->value))
+            ->whereNotIn('status', [
+                ProductionReservationStatus::Released->value,
+                ProductionReservationStatus::Cancelled->value,
+                ProductionReservationStatus::Expired->value,
+            ])
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionMaterialReservation $reservation): array => [
+                'reservation_id' => $reservation->id,
+                'supply_link_id' => $reservation->production_order_supply_link_id,
+                ...$this->findingMetadata(
+                    classification: 'phase_2a3_cancelled_link_with_active_reservation',
+                    severity: 'critical',
+                    suggestedRemediation: 'Release or cancel the reservation through the hierarchy workflow; do not delete the supply link.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function parentFinishedWithUnresolvedChildDemand(mixed $productionOrderFilter): array
+    {
+        return ProductionOrderComponent::query()
+            ->where('is_manufactured_requirement', true)
+            ->whereHas('productionOrder', function (Builder $query) use ($productionOrderFilter): void {
+                $query->where('status', ProductionOrderStatus::FINISHED->value)
+                    ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                        $query->where(function (Builder $query) use ($filter): void {
+                            $query->where('document_number', (string) $filter);
+
+                            if (is_numeric($filter)) {
+                                $query->orWhere('id', (int) $filter);
+                            }
+                        });
+                    });
+            })
+            ->whereRaw('coalesce(actual_quantity_consumed, 0) + 0.00000001 < coalesce(required_supply_quantity_base, expected_quantity_base, 0)')
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOrderComponent $component): array => [
+                'production_order_component_id' => $component->id,
+                'production_order_id' => $component->production_order_id,
+                'required_quantity_base' => round((float) ($component->required_supply_quantity_base ?? $component->expected_quantity_base), 8),
+                'actual_quantity_consumed' => round((float) $component->actual_quantity_consumed, 8),
+                ...$this->findingMetadata(
+                    classification: 'phase_2a3_parent_finished_with_unresolved_child_demand',
+                    severity: 'critical',
+                    suggestedRemediation: 'Reopen through controlled workflow and resolve manufactured component consumption before settlement.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function childOutputQuantityBase(ProductionOrderSupplyLink $link): string
+    {
+        $child = $link->childProductionOrder;
+        if (! $child) {
+            return '0.00000000';
+        }
+
+        return (string) $child->itemLedgerEntries()
+            ->where('entry_type', ItemLedgerEntryType::OUTPUT)
+            ->where('item_id', $link->item_id)
+            ->sum('quantity');
+    }
+
+    private function phase2aSupplyLinkQuery(mixed $productionOrderFilter): Builder
+    {
+        return ProductionOrderSupplyLink::query()
+            ->where('supply_type', ProductionSupplyType::GeneratedChildOrder->value)
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $this->phase2aSupplyFilter($query, $filter);
+            });
+    }
+
+    private function phase2aReservationQuery(mixed $productionOrderFilter): Builder
+    {
+        return ProductionMaterialReservation::query()
+            ->where('reservation_type', ProductionReservationType::ChildOutput->value)
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->whereHas('productionOrderSupplyLink', function (Builder $query) use ($filter): void {
+                    $this->phase2aSupplyFilter($query, $filter);
+                });
+            });
+    }
+
+    private function phase2aSupplyFilter(Builder $query, mixed $filter): void
+    {
+        $query->where(function (Builder $query) use ($filter): void {
+            $query->whereHas('rootProductionOrder', function (Builder $query) use ($filter): void {
+                $query->where('document_number', (string) $filter);
+
+                if (is_numeric($filter)) {
+                    $query->orWhere('id', (int) $filter);
+                }
+            })->orWhereHas('parentProductionOrder', function (Builder $query) use ($filter): void {
+                $query->where('document_number', (string) $filter);
+
+                if (is_numeric($filter)) {
+                    $query->orWhere('id', (int) $filter);
+                }
+            })->orWhereHas('childProductionOrder', function (Builder $query) use ($filter): void {
+                $query->where('document_number', (string) $filter);
+
+                if (is_numeric($filter)) {
+                    $query->orWhere('id', (int) $filter);
+                }
+            });
+        });
     }
 
     private function manufacturingValueEntryQuery(mixed $productionOrderFilter): Builder

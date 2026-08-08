@@ -88,6 +88,8 @@ class ProductionOrderService
 
             // Create Warehouse Picks for components
             $this->pickService->createPicksForProductionOrder($order);
+
+            app(ProductionHierarchyProgressService::class)->syncForOrder($order->fresh());
         });
 
         return $order->fresh();
@@ -175,6 +177,8 @@ class ProductionOrderService
                     throw new \Exception('Cannot consume more than the remaining component quantity');
                 }
 
+                app(ProductionReservationConsumptionService::class)->assertComponentConsumptionAllowed($component, $quantityBase);
+
                 $actualUnitCost = DecimalMath::unitCost($this->costingService->getUnitCost(
                     $component->item,
                     $component->location,
@@ -232,6 +236,8 @@ class ProductionOrderService
                     : DecimalMath::quantity('0');
                 $component->save();
 
+                app(ProductionReservationConsumptionService::class)->syncComponentConsumption($component->fresh());
+
                 // Update CapEx Project if linked
                 if ($order->capex_project_id && $order->capexProject) {
                     $order->capexProject->increment('actual_amount', $costAmountActual);
@@ -240,6 +246,8 @@ class ProductionOrderService
                 app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'production_consumption', strict: false);
                 app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
             }
+
+            app(ProductionHierarchyProgressService::class)->syncForOrder($order->fresh());
         });
     }
 
@@ -360,6 +368,9 @@ class ProductionOrderService
                     'item_ledger_entry_id' => $itemLedgerEntry->id,
                 ],
             );
+
+            app(ProductionSupplyFulfilmentService::class)->syncChildOutputSupply($order->fresh());
+            app(ProductionHierarchyProgressService::class)->syncForOrder($order->fresh());
         });
     }
 
@@ -602,6 +613,7 @@ class ProductionOrderService
             $this->autoPostRemainingCapacity($order, $userId);
             $order = $order->fresh();
 
+            app(MultiLevelProductionReadinessService::class)->assertCanFinish($order);
             $this->validateBeforeFinish($order);
 
             // ✅ FIXED: Cast to float to prevent math errors
@@ -676,6 +688,9 @@ class ProductionOrderService
                     'total_inventory_cost' => $totalInventoryCost,
                 ],
             );
+
+            app(ProductionSupplyFulfilmentService::class)->syncChildOutputSupply($order->fresh());
+            app(ProductionHierarchyProgressService::class)->syncForOrder($order->fresh());
         });
 
         return $order->fresh();

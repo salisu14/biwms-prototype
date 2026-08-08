@@ -6,6 +6,7 @@ use App\Enums\ProductionOrderStatus;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Services\Manufacturing\ExpectedManufacturingCostService;
 use App\Services\Manufacturing\MultiLevelProductionPlanningService;
+use App\Services\Manufacturing\ProductionHierarchyProgressService;
 use App\Services\Manufacturing\ProductionOrderCostSettlementService;
 use App\Services\Manufacturing\ProductionOrderService;
 use App\Support\DecimalFormatter;
@@ -67,6 +68,31 @@ class ProductionOrderActions
                             $result['child_order_count'],
                             $result['manufactured_component_count'],
                         ))
+                        ->success()
+                        ->send();
+                } catch (\Exception $e) {
+                    self::error($e);
+                }
+            });
+    }
+
+    public static function refreshHierarchyStatus(): Action
+    {
+        return Action::make('refreshHierarchyStatus')
+            ->label('Refresh Hierarchy')
+            ->icon('heroicon-m-arrow-path-rounded-square')
+            ->color('gray')
+            ->visible(fn ($record): bool => $record instanceof ProductionOrder && (
+                $record->productionHierarchies()->exists()
+                || $record->supplyLinksAsChild()->exists()
+                || $record->supplyLinksAsParent()->exists()
+            ))
+            ->action(function (ProductionOrder $record): void {
+                try {
+                    app(ProductionHierarchyProgressService::class)->syncForOrder($record);
+
+                    Notification::make()
+                        ->title('Hierarchy status refreshed')
                         ->success()
                         ->send();
                 } catch (\Exception $e) {
