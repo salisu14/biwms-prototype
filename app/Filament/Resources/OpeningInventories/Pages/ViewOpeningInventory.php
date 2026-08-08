@@ -12,6 +12,8 @@ use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ViewOpeningInventory extends ViewRecord
 {
@@ -28,8 +30,22 @@ class ViewOpeningInventory extends ViewRecord
                     ->color('success')
                     ->visible(fn (OpeningInventory $record): bool => auth()->user()?->can('post', $record) === true)
                     ->action(function (OpeningInventory $record): void {
-                        app(OpeningInventoryService::class)->post($record, auth()->id());
-                        Notification::make()->title('Opening inventory posted')->success()->send();
+                        try {
+                            app(OpeningInventoryService::class)->post($record, auth()->id());
+                            Notification::make()->title('Opening inventory posted')->success()->send();
+                        } catch (Throwable $exception) {
+                            Log::error('Opening inventory Filament post failed.', [
+                                'opening_inventory_id' => $record->getKey(),
+                                'document_number' => $record->document_number,
+                                'exception' => $exception,
+                            ]);
+
+                            Notification::make()
+                                ->title('Opening inventory was not posted.')
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->send();
+                        }
                     })
             ),
             SensitiveActionPasswordConfirmation::protect(
@@ -38,8 +54,22 @@ class ViewOpeningInventory extends ViewRecord
                     ->color('danger')
                     ->visible(fn (OpeningInventory $record): bool => auth()->user()?->can('cancel', $record) === true)
                     ->action(function (OpeningInventory $record): void {
-                        app(OpeningInventoryService::class)->cancelDraft($record, auth()->id());
-                        Notification::make()->title('Opening inventory cancelled')->success()->send();
+                        try {
+                            app(OpeningInventoryService::class)->cancelDraft($record, auth()->id());
+                            Notification::make()->title('Opening inventory cancelled')->success()->send();
+                        } catch (Throwable $exception) {
+                            Log::error('Opening inventory Filament cancel failed.', [
+                                'opening_inventory_id' => $record->getKey(),
+                                'document_number' => $record->document_number,
+                                'exception' => $exception,
+                            ]);
+
+                            Notification::make()
+                                ->title('Opening inventory was not cancelled.')
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->send();
+                        }
                     })
             ),
         ];

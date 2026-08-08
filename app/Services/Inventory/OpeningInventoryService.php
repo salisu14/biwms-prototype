@@ -17,6 +17,7 @@ use App\Services\AuditTrailService;
 use App\Services\PostingDateValidator;
 use App\Support\DecimalMath;
 use App\Support\DecimalPrecision;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -203,8 +204,16 @@ class OpeningInventoryService
             throw ValidationException::withMessages(['lines' => 'Opening inventory must contain at least one line.']);
         }
 
+        $existingLines = OpeningInventoryLine::query()
+            ->where('opening_inventory_id', $document->id)
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        $preparedLines = [];
         $retainedLineIds = [];
         $serialNumbers = [];
+        $seenLineIds = [];
 
         foreach (array_values($lines) as $index => $line) {
             $normalized = $this->normalizeLine($document, $line, ($index + 1) * 10000);
@@ -218,43 +227,93 @@ class OpeningInventoryService
                 $serialNumbers[$serialKey] = true;
             }
 
-            $lineId = isset($line['id']) ? (int) $line['id'] : null;
-            $openingInventoryLine = $lineId
-                ? OpeningInventoryLine::query()
-                    ->where('opening_inventory_id', $document->id)
-                    ->whereKey($lineId)
-                    ->first()
-                : null;
+            $lineId = $this->lineIdFromFormState($line['id'] ?? null);
 
-            if ($openingInventoryLine) {
-                if ($openingInventoryLine->item_ledger_entry_id !== null) {
-                    throw new RuntimeException("Opening inventory line {$openingInventoryLine->line_number} has ledger records and cannot be updated.");
+            if ($lineId !== null) {
+                if (isset($seenLineIds[$lineId])) {
+                    throw ValidationException::withMessages(['lines' => 'Opening inventory contains a duplicated persisted line reference.']);
                 }
 
-                $openingInventoryLine->fill($normalized);
-                $openingInventoryLine->save();
-            } else {
-                $openingInventoryLine = OpeningInventoryLine::query()->create([
-                    'opening_inventory_id' => $document->id,
-                    ...$normalized,
-                ]);
+                $seenLineIds[$lineId] = true;
+
+                if (! $existingLines->has($lineId)) {
+                    throw ValidationException::withMessages(['lines' => 'Opening inventory line identity is invalid for this document.']);
+                }
+
+                $retainedLineIds[] = $lineId;
             }
 
-            $retainedLineIds[] = $openingInventoryLine->id;
+            $preparedLines[] = [
+                'id' => $lineId,
+                'attributes' => $normalized,
+            ];
         }
 
-        OpeningInventoryLine::query()
-            ->where('opening_inventory_id', $document->id)
-            ->whereNotIn('id', $retainedLineIds)
-            ->whereNull('item_ledger_entry_id')
-            ->delete();
+        $removedLines = $this->removedLines($existingLines, $retainedLineIds);
 
-        if (OpeningInventoryLine::query()
-            ->where('opening_inventory_id', $document->id)
-            ->whereNotIn('id', $retainedLineIds)
-            ->exists()) {
+        if ($removedLines->contains(fn (OpeningInventoryLine $line): bool => $line->item_ledger_entry_id !== null)) {
             throw new RuntimeException("Opening inventory {$document->document_number} contains posted lines that cannot be removed.");
         }
+
+        foreach ($existingLines as $existingLine) {
+            if (in_array((int) $existingLine->id, $retainedLineIds, true) && $existingLine->item_ledger_entry_id !== null) {
+                throw new RuntimeException("Opening inventory line {$existingLine->line_number} has ledger records and cannot be updated.");
+            }
+        }
+
+        foreach ($removedLines as $removedLine) {
+            $removedLine->delete();
+        }
+
+        foreach ($existingLines as $existingLine) {
+            if (! in_array((int) $existingLine->id, $retainedLineIds, true)) {
+                continue;
+            }
+
+            $existingLine->forceFill(['line_number' => -1 * (int) $existingLine->id])->save();
+        }
+
+        foreach ($preparedLines as $preparedLine) {
+            $lineId = $preparedLine['id'];
+            $attributes = $preparedLine['attributes'];
+
+            if ($lineId !== null) {
+                /** @var OpeningInventoryLine $openingInventoryLine */
+                $openingInventoryLine = $existingLines->get($lineId);
+                $openingInventoryLine->fill($attributes);
+                $openingInventoryLine->save();
+
+                continue;
+            }
+
+            OpeningInventoryLine::query()->create([
+                'opening_inventory_id' => $document->id,
+                ...$attributes,
+            ]);
+        }
+    }
+
+    private function lineIdFromFormState(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $id = (int) $value;
+
+        return $id > 0 ? $id : null;
+    }
+
+    /**
+     * @param  Collection<int, OpeningInventoryLine>  $existingLines
+     * @param  array<int, int>  $retainedLineIds
+     * @return Collection<int, OpeningInventoryLine>
+     */
+    private function removedLines(Collection $existingLines, array $retainedLineIds): Collection
+    {
+        return $existingLines->reject(
+            fn (OpeningInventoryLine $line): bool => in_array((int) $line->id, $retainedLineIds, true)
+        );
     }
 
     /**

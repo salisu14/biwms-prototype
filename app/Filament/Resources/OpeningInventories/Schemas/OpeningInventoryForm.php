@@ -13,6 +13,7 @@ use App\Services\NumberSeriesService;
 use App\Support\DecimalMath;
 use App\Support\DecimalPrecision;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -50,10 +51,20 @@ class OpeningInventoryForm
 
                         Select::make('business_id')
                             ->label('Business')
-                            ->relationship('business', 'name', fn (Builder $query): Builder => $query->where('is_active', true))
-                            ->default(fn (): ?int => session('active_business_id') ?: Business::query()->where('is_active', true)->value('id'))
+                            ->relationship(
+                                'business',
+                                'name',
+                                fn (Builder $query): Builder => $query->where('is_active', true),
+                            )
+                            ->default(
+                                fn (): ?int => session('active_business_id')
+                                    ?: Business::query()
+                                        ->where('is_active', true)
+                                        ->value('id')
+                            )
                             ->searchable()
                             ->preload()
+                            ->required()
                             ->disabled(fn (?OpeningInventory $record): bool => $record !== null)
                             ->dehydrated(),
 
@@ -101,7 +112,11 @@ class OpeningInventoryForm
                             ])
                             ->disabled(fn (?OpeningInventory $record): bool => $record?->status !== null && $record->status !== OpeningInventory::STATUS_DRAFT)
                             ->schema([
-                                TextInput::make('id')->hidden()->dehydrated(),
+                                Hidden::make('id')
+                                    ->dehydrated(),
+
+                                Hidden::make('line_number')
+                                    ->dehydrated(),
 
                                 Select::make('item_id')
                                     ->label('Item')
