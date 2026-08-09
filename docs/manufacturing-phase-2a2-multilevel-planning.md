@@ -100,7 +100,12 @@ Cancelling planning reservations releases commitment only. It does not delete or
 - reservation availability mismatch;
 - reservation consumption exceeding available supply;
 - cancelled supply links with active reservations;
-- parent finished with unresolved manufactured demand.
+- parent finished with unresolved manufactured demand;
+- parent consumption exceeding supplied child output;
+- hierarchy status mismatch;
+- orphan supply links or reservations;
+- duplicate active reservations;
+- child output consumed before child output cost is available.
 
 The command remains report-only.
 

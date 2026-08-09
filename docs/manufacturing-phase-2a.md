@@ -63,6 +63,18 @@ Implemented:
 
 Phase 2A is complete at the boundary of multi-level BOM/order hierarchy plus inventory-mediated child-to-parent execution.
 
+The completion pass proves:
+
+- a three-level herbal hierarchy executes end to end;
+- raw material cost flows into child output inventory;
+- child output inventory cost flows into parent WIP through item application;
+- parent/root WIP remains separated from child raw-material Value Entries;
+- partial supply and partial consumption remain cumulative and idempotent;
+- overproduction is capped for parent fulfilment while excess remains inventory;
+- underproduction blocks parent finish and is reported diagnostically;
+- unsafe replanning after ledger/reservation activity is rejected;
+- Phase 2A services do not bypass Value Entry or G/L posting ownership.
+
 Still intentionally deferred to Phase 2B or later:
 
 - routing-to-routing dependencies between orders;
@@ -71,3 +83,5 @@ Still intentionally deferred to Phase 2B or later:
 - advanced lot genealogy and production genealogy graph;
 - alternate routing dependency logic;
 - advanced WIP transfer orchestration.
+
+See `docs/manufacturing-phase-2a-completion.md` for the completion scenario, cost-flow assertions, reconciliation coverage, and known limitations.
