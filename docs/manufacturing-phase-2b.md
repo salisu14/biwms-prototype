@@ -97,11 +97,17 @@ The command is report-only and checks:
 - Genealogy is read from item application and ledger records at query time.
 - No automatic historical backfill is performed.
 
-## Phase 2C Not Started
+## Phase 2C
 
-The following remain deferred:
+Phase 2C adds APS Lite scheduling, finite-capacity planning, alternate resource selection, campaigns, and production schedule reconciliation.
 
-- finite capacity scheduling across dependency graphs;
+See:
+
+- `docs/manufacturing-phase-2c.md`
+- `docs/manufacturing-phase-2c-architecture.md`
+
+The following remain deferred beyond Phase 2C:
+
 - alternate routing dependency optimization;
 - durable genealogy graph materialization;
 - advanced WIP transfer orchestration;
