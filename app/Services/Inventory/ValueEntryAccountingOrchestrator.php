@@ -115,15 +115,7 @@ class ValueEntryAccountingOrchestrator
 
     public function postForItemLedgerEntry(ItemLedgerEntry $itemLedgerEntry): ?PostingTransaction
     {
-        $valueEntry = ValueEntry::query()
-            ->where('item_ledger_entry_no', $itemLedgerEntry->entry_number)
-            ->where('document_no', $itemLedgerEntry->document_number)
-            ->where('document_line_no', $itemLedgerEntry->document_line_number)
-            ->first();
-
-        if (! $valueEntry) {
-            $valueEntry = app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry);
-        }
+        $valueEntry = app(ValueEntryService::class)->ensureForItemLedgerEntry($itemLedgerEntry->fresh());
 
         return $valueEntry ? $this->post($valueEntry) : null;
     }
