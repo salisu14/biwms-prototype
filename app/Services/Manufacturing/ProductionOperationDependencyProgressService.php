@@ -51,8 +51,11 @@ class ProductionOperationDependencyProgressService
                 ->findOrFail($dependency->id);
 
             $finding = $this->readinessService->findingForDependency($locked);
-            $fulfilledQuantityBase = DecimalMath::quantity($locked->supplyLink?->supplied_quantity_base ?? $locked->fulfilled_quantity_base);
             $requiredQuantityBase = DecimalMath::quantity($locked->required_quantity_base);
+            $fulfilledQuantityBase = $this->cappedQuantity(
+                $locked->supplyLink?->supplied_quantity_base ?? $locked->fulfilled_quantity_base,
+                $requiredQuantityBase,
+            );
             $status = match ($finding['classification']) {
                 ProductionOperationDependencyReadiness::Ready->value => DecimalMath::compare($fulfilledQuantityBase, $requiredQuantityBase) >= 0
                     ? ProductionOperationDependencyStatus::Fulfilled
@@ -87,9 +90,9 @@ class ProductionOperationDependencyProgressService
         }
 
         $link = $dependency->supplyLink;
-        $quantityAvailableBase = DecimalMath::quantity($link?->supplied_quantity_base ?? $dependency->fulfilled_quantity_base);
-        $quantityTransferredBase = DecimalMath::quantity($link?->consumed_quantity_base ?? 0);
         $quantityRequiredBase = DecimalMath::quantity($handoff->quantity_required_base);
+        $quantityAvailableBase = $this->cappedQuantity($link?->supplied_quantity_base ?? $dependency->fulfilled_quantity_base, $quantityRequiredBase);
+        $quantityTransferredBase = $this->cappedQuantity($link?->consumed_quantity_base ?? 0, $quantityRequiredBase);
         $qualityBlocked = (array) ($dependency->metadata['last_readiness'] ?? []) !== []
             && ($dependency->metadata['last_readiness']['classification'] ?? null) === ProductionOperationDependencyReadiness::WaitingForQualityRelease->value;
 
@@ -110,5 +113,13 @@ class ProductionOperationDependencyProgressService
             'quality_status' => $qualityBlocked ? 'blocked' : 'released_or_not_required',
             'last_synced_at' => now(),
         ])->save();
+    }
+
+    private function cappedQuantity(mixed $quantityBase, mixed $requiredQuantityBase): string
+    {
+        $quantity = DecimalMath::quantity($quantityBase);
+        $required = DecimalMath::quantity($requiredQuantityBase);
+
+        return DecimalMath::compare($quantity, $required) > 0 ? $required : $quantity;
     }
 }
