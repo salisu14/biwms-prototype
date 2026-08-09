@@ -26,7 +26,6 @@ class ProductionOperationDependencyReadinessService
             ->where('downstream_routing_line_id', $routingLine->id)
             ->whereNotIn('status', [
                 ProductionOperationDependencyStatus::Cancelled->value,
-                ProductionOperationDependencyStatus::Invalid->value,
             ])
             ->orderBy('sequence')
             ->get()
@@ -84,7 +83,11 @@ class ProductionOperationDependencyReadinessService
             ProductionOperationDependencyType::SupplyAvailableToStart,
             ProductionOperationDependencyType::QualityReleasedToStart,
         ], true)) {
-            $fulfilledQuantityBase = DecimalMath::quantity($dependency->supplyLink?->supplied_quantity_base ?? $dependency->fulfilled_quantity_base);
+            $requiredQuantityBase = DecimalMath::quantity($dependency->required_quantity_base);
+            $fulfilledQuantityBase = $this->cappedQuantity(
+                $dependency->supplyLink?->supplied_quantity_base ?? $dependency->fulfilled_quantity_base,
+                $requiredQuantityBase,
+            );
             $minimumStartQuantityBase = DecimalMath::quantity($dependency->minimum_start_quantity_base ?: $dependency->required_quantity_base);
 
             if (! DecimalMath::isPositive($fulfilledQuantityBase)) {
@@ -138,9 +141,20 @@ class ProductionOperationDependencyReadinessService
             'downstream_routing_line_id' => $dependency->downstream_routing_line_id,
             'required_quantity_base' => (string) $dependency->required_quantity_base,
             'minimum_start_quantity_base' => (string) ($dependency->minimum_start_quantity_base ?: $dependency->required_quantity_base),
-            'fulfilled_quantity_base' => (string) ($dependency->supplyLink?->supplied_quantity_base ?? $dependency->fulfilled_quantity_base),
+            'fulfilled_quantity_base' => $this->cappedQuantity(
+                $dependency->supplyLink?->supplied_quantity_base ?? $dependency->fulfilled_quantity_base,
+                $dependency->required_quantity_base,
+            ),
             'reason' => $reason,
             'remediation' => $remediation,
         ];
+    }
+
+    private function cappedQuantity(mixed $quantityBase, mixed $requiredQuantityBase): string
+    {
+        $quantity = DecimalMath::quantity($quantityBase);
+        $required = DecimalMath::quantity($requiredQuantityBase);
+
+        return DecimalMath::compare($quantity, $required) > 0 ? $required : $quantity;
     }
 }

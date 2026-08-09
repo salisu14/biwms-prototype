@@ -22,7 +22,9 @@
 `ProductionOperationDependencyGenerationService`
 
 - generates dependencies from Phase 2A child-order supply links;
-- maps child final operation to the parent component operation;
+- maps child final operation to the parent component operation through `routing_link_code`;
+- permits unmapped inference only when the parent order has one routing line;
+- reports ambiguous mapping as an unresolved planning issue instead of falling back to the first parent operation;
 - checks graph cycles before completing generation;
 - creates matching handoff records idempotently.
 
@@ -36,6 +38,7 @@
 
 - synchronizes dependency fulfilled quantity and status from supply-link availability;
 - synchronizes handoff available and consumed quantities;
+- caps dependency and handoff availability/consumption at the required quantity so overproduction does not overfulfil a dependency;
 - is called after child supply fulfilment and parent reservation consumption.
 
 `ProductionGenealogyService`

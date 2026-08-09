@@ -14,6 +14,7 @@ use App\Models\Manufacturing\ProductionOperationDependency;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderRoutingLine;
 use App\Models\Manufacturing\ProductionOrderSupplyLink;
+use App\Support\DecimalMath;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -61,7 +62,8 @@ class ProductionOperationDependencyGenerationService
         }
 
         $upstreamOperation = $this->lastRoutingLine($link->childProductionOrder);
-        $downstreamOperation = $this->componentRoutingLine($link) ?? $this->firstRoutingLine($link->parentProductionOrder);
+        $downstreamResolution = $this->resolveDownstreamOperation($link);
+        $downstreamOperation = $downstreamResolution['operation'];
 
         if (! $upstreamOperation || ! $downstreamOperation) {
             throw new RuntimeException('Cannot generate operation dependency without upstream and downstream routing operations.');
@@ -89,17 +91,13 @@ class ProductionOperationDependencyGenerationService
                 'status' => ProductionOperationDependencyStatus::Planned,
                 'required_quantity_base' => $link->required_quantity_base,
                 'minimum_start_quantity_base' => $link->required_quantity_base,
-                'fulfilled_quantity_base' => $link->supplied_quantity_base,
+                'fulfilled_quantity_base' => $this->cappedQuantity($link->supplied_quantity_base, $link->required_quantity_base),
                 'sequence' => $sequence,
                 'source' => 'phase_2b_supply_link',
                 'metadata' => [
                     'phase_2b' => true,
-                    'mapping' => $link->parentComponent?->routing_link_code
-                        ? 'component_routing_link_code'
-                        : 'fallback_parent_first_operation',
-                    'limitation' => $link->parentComponent?->routing_link_code
-                        ? null
-                        : 'Production components are not operation-mapped; dependency uses parent first executable operation.',
+                    'mapping' => $downstreamResolution['mapping'],
+                    'limitation' => $downstreamResolution['limitation'],
                 ],
                 'created_by' => $userId,
                 'updated_by' => $userId,
@@ -178,8 +176,8 @@ class ProductionOperationDependencyGenerationService
                 'item_id' => $link->item_id,
                 'child_output_item_ledger_entry_id' => $link->materialReservations()->value('child_output_item_ledger_entry_id'),
                 'quantity_required_base' => $link->required_quantity_base,
-                'quantity_available_base' => $link->supplied_quantity_base,
-                'quantity_transferred_base' => $link->consumed_quantity_base,
+                'quantity_available_base' => $this->cappedQuantity($link->supplied_quantity_base, $link->required_quantity_base),
+                'quantity_transferred_base' => $this->cappedQuantity($link->consumed_quantity_base, $link->required_quantity_base),
                 'status' => ProductionIntermediateHandoffStatus::Planned,
                 'last_synced_at' => now(),
                 'metadata' => ['phase_2b' => true, 'source' => 'production_supply_link'],
@@ -189,9 +187,49 @@ class ProductionOperationDependencyGenerationService
         );
     }
 
-    private function firstRoutingLine(ProductionOrder $productionOrder): ?ProductionOrderRoutingLine
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function unresolvedMappingForSupplyLink(ProductionOrderSupplyLink $link): ?array
     {
-        return $productionOrder->routingLines()->orderBy('line_number')->first();
+        try {
+            $link->loadMissing(['parentProductionOrder.routingLines', 'parentComponent.routingLine']);
+            $this->resolveDownstreamOperation($link);
+
+            return null;
+        } catch (RuntimeException $exception) {
+            return [
+                'classification' => 'unresolved_dependency_mapping',
+                'severity' => 'critical',
+                'production_hierarchy_id' => $link->production_hierarchy_id,
+                'production_order_supply_link_id' => $link->id,
+                'parent_production_order_id' => $link->parent_production_order_id,
+                'parent_component_id' => $link->parent_component_id,
+                'child_production_order_id' => $link->child_production_order_id,
+                'item_id' => $link->item_id,
+                'message' => 'Dependency mapping requires review.',
+                'details' => $exception->getMessage(),
+                'remediation' => 'Assign the parent component to a routing operation or reduce the parent order to one unambiguous operation before regenerating dependencies.',
+            ];
+        }
+    }
+
+    private function singleRoutingLine(ProductionOrder $productionOrder): ?ProductionOrderRoutingLine
+    {
+        $routingLines = $productionOrder->routingLines()
+            ->orderBy('line_number')
+            ->limit(2)
+            ->get();
+
+        if ($routingLines->count() === 1) {
+            return $routingLines->first();
+        }
+
+        if ($routingLines->count() === 0) {
+            throw new RuntimeException('Dependency mapping requires review: parent production order has no routing operations.');
+        }
+
+        throw new RuntimeException('Dependency mapping requires review: parent component is not mapped to a routing operation and the parent production order has multiple possible downstream operations.');
     }
 
     private function lastRoutingLine(ProductionOrder $productionOrder): ?ProductionOrderRoutingLine
@@ -201,7 +239,57 @@ class ProductionOperationDependencyGenerationService
 
     private function componentRoutingLine(ProductionOrderSupplyLink $link): ?ProductionOrderRoutingLine
     {
-        return $link->parentComponent?->routingLine;
+        $component = $link->parentComponent;
+        if (! $component) {
+            return null;
+        }
+
+        $routingLinkCode = trim((string) $component->routing_link_code);
+        if ($routingLinkCode === '') {
+            return null;
+        }
+
+        $routingLine = ProductionOrderRoutingLine::query()
+            ->where('production_order_id', $component->production_order_id)
+            ->where('routing_link_code', $routingLinkCode)
+            ->orderBy('line_number')
+            ->first();
+        if (! $routingLine) {
+            throw new RuntimeException("Dependency mapping requires review: parent component routing link code [{$routingLinkCode}] does not match a parent routing operation.");
+        }
+
+        return $routingLine;
+    }
+
+    /**
+     * @return array{operation: ProductionOrderRoutingLine, mapping: string, limitation: ?string}
+     */
+    private function resolveDownstreamOperation(ProductionOrderSupplyLink $link): array
+    {
+        $componentOperation = $this->componentRoutingLine($link);
+        if ($componentOperation) {
+            return [
+                'operation' => $componentOperation,
+                'mapping' => 'component_routing_link_code',
+                'limitation' => null,
+            ];
+        }
+
+        $singleOperation = $this->singleRoutingLine($link->parentProductionOrder);
+
+        return [
+            'operation' => $singleOperation,
+            'mapping' => 'single_parent_operation',
+            'limitation' => 'Parent component is not operation-mapped, but the parent production order has exactly one routing operation.',
+        ];
+    }
+
+    private function cappedQuantity(mixed $quantityBase, mixed $requiredQuantityBase): string
+    {
+        $quantity = DecimalMath::quantity($quantityBase);
+        $required = DecimalMath::quantity($requiredQuantityBase);
+
+        return DecimalMath::compare($quantity, $required) > 0 ? $required : $quantity;
     }
 
     private function idempotencyKey(ProductionOrderSupplyLink $link, ProductionOrderRoutingLine $upstreamOperation, ProductionOrderRoutingLine $downstreamOperation): string

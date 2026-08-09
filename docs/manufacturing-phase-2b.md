@@ -36,9 +36,10 @@ Phase 2B respects the existing accounting ownership boundary:
 2. Phase 2B generates operation dependencies from generated child-order supply links.
 3. The child order's final routing line becomes the upstream operation.
 4. The parent component's `routing_link_code` maps to the downstream parent operation when available.
-5. If no component operation mapping exists, the parent order's first routing line is used and the limitation is recorded in dependency metadata.
-6. Shop-floor start checks the downstream routing line dependency readiness.
-7. Child output supply and parent consumption synchronize dependency and handoff progress.
+5. If no component operation mapping exists, generation may infer the downstream operation only when the parent order has exactly one routing line.
+6. If the parent has multiple possible downstream operations, generation stops with `Dependency mapping requires review` and does not create a misleading dependency.
+7. Shop-floor start checks the downstream routing line dependency readiness.
+8. Child output supply and parent consumption synchronize dependency and handoff progress.
 
 ## Readiness Rules
 
@@ -88,14 +89,28 @@ The command is report-only and checks:
 - missing ledger references for genealogy;
 - cancelled upstream orders with ready dependencies;
 - completed downstream operations with unresolved dependencies.
+- unresolved dependency mappings;
+- fulfilled dependencies with insufficient upstream supply;
+- quality-blocked dependencies marked ready;
+- downstream operations completed before dependencies were satisfied;
+- orphan dependencies and handoffs;
+- dependency status drift.
 
 ## Current Limitations
 
-- Minimum start quantity currently defaults to the full required quantity. Partial-start governance is represented by fields but not expanded into Phase 2C scheduling rules.
-- Dependency generation uses `routing_link_code` where present and otherwise falls back to the parent first routing line.
+- Minimum start quantity currently defaults to the full required quantity. The field supports controlled partial starts when explicitly lowered by approved planning rules.
+- Dependency generation uses `routing_link_code` where present and otherwise allows only single-operation inference. Ambiguous parent routing must be corrected by assigning the component to an operation.
 - Handoffs are visibility and reconciliation records, not warehouse movement documents.
 - Genealogy is read from item application and ledger records at query time.
 - No automatic historical backfill is performed.
+
+## Phase 2B Completion Status
+
+The hardening pass makes dependency generation safe for multi-section production. Bulk/intermediate output can no longer silently feed the first parent operation when the intended downstream operation is ambiguous.
+
+Partial handoffs are cumulative and idempotent. Available and consumed handoff quantities are capped at the dependency required quantity while the underlying supply link can still retain the physical produced quantity for diagnostics.
+
+Cancellation and quality holds remain execution gates. Invalid or upstream-cancelled dependencies continue to block downstream readiness until the dependency is cancelled or replanned; cancelled dependencies are excluded from active readiness.
 
 ## Phase 2C
 

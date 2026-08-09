@@ -7,12 +7,15 @@ namespace App\Console\Commands;
 use App\Enums\ProductionOperationDependencyReadiness;
 use App\Enums\ProductionOperationDependencyStatus;
 use App\Enums\ProductionOperationExecutionStatus;
+use App\Enums\ProductionSupplyType;
 use App\Models\Manufacturing\ProductionHierarchy;
 use App\Models\Manufacturing\ProductionIntermediateHandoff;
 use App\Models\Manufacturing\ProductionOperationDependency;
 use App\Models\Manufacturing\ProductionOperationExecution;
+use App\Models\Manufacturing\ProductionOrderSupplyLink;
 use App\Services\Manufacturing\ProductionOperationDependencyGenerationService;
 use App\Services\Manufacturing\ProductionOperationDependencyReadinessService;
+use App\Support\DecimalMath;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -53,16 +56,23 @@ class BiwmsManufacturingHierarchyReconcile extends Command
         }
 
         $report = [
+            'unresolved_dependency_mapping' => $this->unresolvedDependencyMappings(),
             'dependency_without_valid_upstream_operation' => $this->dependenciesMissingOperation('upstream'),
             'dependency_without_valid_downstream_operation' => $this->dependenciesMissingOperation('downstream'),
             'dependency_cycle' => $this->dependencyCycles(),
             'duplicate_active_dependency' => $this->duplicateActiveDependencies(),
+            'dependency_marked_fulfilled_with_insufficient_supply' => $this->fulfilledWithInsufficientSupply(),
+            'quality_blocked_dependency_marked_ready' => $this->qualityBlockedMarkedReady(),
             'dependency_fulfilled_while_upstream_incomplete' => $this->fulfilledWhileUpstreamIncomplete(),
             'dependency_blocked_though_ready' => $this->blockedThoughReady(),
+            'dependency_status_drift' => $this->dependencyStatusDrift(),
             'downstream_operation_started_before_dependency_satisfied' => $this->downstreamStartedBeforeReady(),
+            'downstream_operation_completed_before_dependency_satisfied' => $this->downstreamCompletedBeforeReady(),
             'child_output_available_dependency_not_updated' => $this->childOutputAvailableButNotUpdated(),
             'handoff_quantity_exceeds_child_output' => $this->handoffAvailableExceedsDependency(),
             'handoff_consumed_exceeds_available' => $this->handoffConsumedExceedsAvailable(),
+            'orphan_handoff' => $this->orphanHandoffs(),
+            'orphan_dependency' => $this->orphanDependencies(),
             'genealogy_reference_missing' => $this->handoffsWithMissingLedgerReference(),
             'cancelled_upstream_with_active_ready_dependency' => $this->cancelledUpstreamWithReadyDependency(),
             'completed_downstream_with_unresolved_required_dependency' => $this->completedDownstreamWithUnresolvedDependency(),
@@ -90,6 +100,35 @@ class BiwmsManufacturingHierarchyReconcile extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function unresolvedDependencyMappings(): array
+    {
+        $generationService = app(ProductionOperationDependencyGenerationService::class);
+
+        return ProductionOrderSupplyLink::query()
+            ->with(['parentProductionOrder.routingLines', 'parentComponent.routingLine'])
+            ->where('supply_type', ProductionSupplyType::GeneratedChildOrder->value)
+            ->whereNotNull('child_production_order_id')
+            ->get()
+            ->filter(function (ProductionOrderSupplyLink $link): bool {
+                $hasActiveDependency = ProductionOperationDependency::query()
+                    ->where('production_order_supply_link_id', $link->id)
+                    ->whereNotIn('status', [
+                        ProductionOperationDependencyStatus::Cancelled->value,
+                        ProductionOperationDependencyStatus::Invalid->value,
+                    ])
+                    ->exists();
+
+                return ! $hasActiveDependency;
+            })
+            ->map(fn (ProductionOrderSupplyLink $link): ?array => $generationService->unresolvedMappingForSupplyLink($link))
+            ->filter()
+            ->values()
+            ->all();
     }
 
     /**
@@ -168,6 +207,79 @@ class BiwmsManufacturingHierarchyReconcile extends Command
     /**
      * @return array<int, array<string, mixed>>
      */
+    private function fulfilledWithInsufficientSupply(): array
+    {
+        return ProductionOperationDependency::query()
+            ->with('supplyLink')
+            ->where('status', ProductionOperationDependencyStatus::Fulfilled->value)
+            ->get()
+            ->filter(function (ProductionOperationDependency $dependency): bool {
+                $suppliedQuantityBase = DecimalMath::quantity($dependency->supplyLink?->supplied_quantity_base ?? $dependency->fulfilled_quantity_base);
+
+                return DecimalMath::compare($suppliedQuantityBase, $dependency->required_quantity_base) < 0;
+            })
+            ->map(fn (ProductionOperationDependency $dependency): array => $this->finding('dependency_marked_fulfilled_with_insufficient_supply', 'critical', $dependency, 'Dependency is fulfilled but upstream supply is below the required quantity.'))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function qualityBlockedMarkedReady(): array
+    {
+        return ProductionOperationDependency::query()
+            ->whereIn('status', [
+                ProductionOperationDependencyStatus::Ready->value,
+                ProductionOperationDependencyStatus::Fulfilled->value,
+            ])
+            ->get()
+            ->filter(fn (ProductionOperationDependency $dependency): bool => app(ProductionOperationDependencyReadinessService::class)->findingForDependency($dependency)['classification'] === ProductionOperationDependencyReadiness::WaitingForQualityRelease->value)
+            ->map(fn (ProductionOperationDependency $dependency): array => $this->finding('quality_blocked_dependency_marked_ready', 'critical', $dependency, 'Dependency is ready or fulfilled while the upstream output is quality-blocked.'))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function dependencyStatusDrift(): array
+    {
+        return ProductionOperationDependency::query()
+            ->with('supplyLink')
+            ->get()
+            ->filter(function (ProductionOperationDependency $dependency): bool {
+                if (in_array($dependency->status, [
+                    ProductionOperationDependencyStatus::Cancelled,
+                    ProductionOperationDependencyStatus::Invalid,
+                ], true)) {
+                    return false;
+                }
+
+                $finding = app(ProductionOperationDependencyReadinessService::class)->findingForDependency($dependency);
+                $expectedStatus = match ($finding['classification']) {
+                    ProductionOperationDependencyReadiness::Ready->value => DecimalMath::compare(
+                        DecimalMath::quantity($finding['fulfilled_quantity_base']),
+                        $dependency->required_quantity_base,
+                    ) >= 0
+                        ? ProductionOperationDependencyStatus::Fulfilled
+                        : ProductionOperationDependencyStatus::Ready,
+                    ProductionOperationDependencyReadiness::PartiallyReady->value => ProductionOperationDependencyStatus::PartiallyReady,
+                    ProductionOperationDependencyReadiness::InvalidDependency->value,
+                    ProductionOperationDependencyReadiness::UpstreamCancelled->value => ProductionOperationDependencyStatus::Invalid,
+                    default => ProductionOperationDependencyStatus::Blocked,
+                };
+
+                return $dependency->status !== $expectedStatus;
+            })
+            ->map(fn (ProductionOperationDependency $dependency): array => $this->finding('dependency_status_drift', 'warning', $dependency, 'Dependency status no longer matches authoritative readiness.'))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function fulfilledWhileUpstreamIncomplete(): array
     {
         return ProductionOperationDependency::query()
@@ -227,6 +339,32 @@ class BiwmsManufacturingHierarchyReconcile extends Command
     /**
      * @return array<int, array<string, mixed>>
      */
+    private function downstreamCompletedBeforeReady(): array
+    {
+        return ProductionOperationExecution::query()
+            ->with('routingLine')
+            ->whereIn('status', [
+                ProductionOperationExecutionStatus::Completed->value,
+                ProductionOperationExecutionStatus::Submitted->value,
+                ProductionOperationExecutionStatus::Posted->value,
+            ])
+            ->get()
+            ->filter(fn (ProductionOperationExecution $execution): bool => $execution->routingLine && ! app(ProductionOperationDependencyReadinessService::class)->readinessForExecution($execution)->ready)
+            ->map(fn (ProductionOperationExecution $execution): array => [
+                'classification' => 'downstream_operation_completed_before_dependency_satisfied',
+                'severity' => 'critical',
+                'execution_id' => $execution->id,
+                'routing_line_id' => $execution->routing_line_id,
+                'production_order_id' => $execution->production_order_id,
+                'remediation' => 'Review execution history and dependency readiness before accepting completion.',
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function childOutputAvailableButNotUpdated(): array
     {
         return ProductionOperationDependency::query()
@@ -265,6 +403,34 @@ class BiwmsManufacturingHierarchyReconcile extends Command
             ->whereRaw('quantity_transferred_base > quantity_available_base')
             ->get()
             ->map(fn (ProductionIntermediateHandoff $handoff): array => $this->handoffFinding('handoff_consumed_exceeds_available', 'critical', $handoff, 'Handoff consumed quantity exceeds available quantity.'))
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function orphanHandoffs(): array
+    {
+        return ProductionIntermediateHandoff::query()
+            ->where(function ($query): void {
+                $query->whereDoesntHave('dependency')
+                    ->orWhereDoesntHave('supplyLink');
+            })
+            ->get()
+            ->map(fn (ProductionIntermediateHandoff $handoff): array => $this->handoffFinding('orphan_handoff', 'critical', $handoff, 'Handoff no longer has its source dependency or supply link.'))
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function orphanDependencies(): array
+    {
+        return ProductionOperationDependency::query()
+            ->where('source', 'phase_2b_supply_link')
+            ->whereDoesntHave('supplyLink')
+            ->get()
+            ->map(fn (ProductionOperationDependency $dependency): array => $this->finding('orphan_dependency', 'critical', $dependency, 'Phase 2B dependency no longer has its source supply link.'))
             ->all();
     }
 
