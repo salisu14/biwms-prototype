@@ -539,7 +539,7 @@ class ProductionOrder extends Model
                 $order->document_number = app(ProductionOrderService::class)->generateDocumentNumber();
             }
 
-            $order->created_by = auth()->id();
+            $order->created_by = $order->created_by ?: auth()->id();
         });
 
         static::updating(function ($order) {
