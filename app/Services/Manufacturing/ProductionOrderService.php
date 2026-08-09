@@ -605,7 +605,7 @@ class ProductionOrderService
             $this->validateBeforeFinish($order);
 
             // ✅ FIXED: Cast to float to prevent math errors
-            $totalActualCost = DecimalMath::amount($order->total_actual_cost ?? 0);
+            $totalActualCost = DecimalMath::amount($order->total_actual_cost);
             $totalOutput = DecimalMath::quantity($order->itemLedgerEntries()
                 ->where('entry_type', ItemLedgerEntryType::OUTPUT)
                 ->sum('quantity'));
