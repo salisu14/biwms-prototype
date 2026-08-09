@@ -8,6 +8,7 @@ use App\Enums\ProductionOperationExecutionStatus;
 use App\Filament\Resources\ProductionOperationExecutions\Pages\ListProductionOperationExecutions;
 use App\Filament\Resources\ProductionOperationExecutions\Pages\ViewProductionOperationExecution;
 use App\Models\Manufacturing\ProductionOperationExecution;
+use App\Services\Manufacturing\ProductionOperationDependencyReadinessService;
 use App\Services\Manufacturing\ProductionOperationExecutionService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -69,6 +70,30 @@ class ProductionOperationExecutionResource extends Resource
                     TextEntry::make('good_quantity')->numeric(),
                     TextEntry::make('scrap_quantity')->numeric(),
                     TextEntry::make('rework_quantity')->numeric(),
+                ]),
+            Section::make('Inter-Order Readiness')
+                ->columns([
+                    'default' => 1,
+                    'md' => 2,
+                ])
+                ->schema([
+                    TextEntry::make('dependency_readiness')
+                        ->label('Dependency Status')
+                        ->state(function (ProductionOperationExecution $record): string {
+                            $readiness = app(ProductionOperationDependencyReadinessService::class)->readinessForExecution($record);
+
+                            return $readiness->ready ? 'Ready' : str($readiness->classification->value)->replace('_', ' ')->title()->toString();
+                        })
+                        ->badge()
+                        ->color(function (ProductionOperationExecution $record): string {
+                            $readiness = app(ProductionOperationDependencyReadinessService::class)->readinessForExecution($record);
+
+                            return $readiness->ready ? 'success' : 'warning';
+                        }),
+                    TextEntry::make('dependency_blocking_reason')
+                        ->label('Reason')
+                        ->state(fn (ProductionOperationExecution $record): string => app(ProductionOperationDependencyReadinessService::class)->readinessForExecution($record)->reason())
+                        ->columnSpanFull(),
                 ]),
         ]);
     }

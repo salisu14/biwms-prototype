@@ -7,6 +7,7 @@ use App\Models\Manufacturing\ProductionOrder;
 use App\Services\Manufacturing\ExpectedManufacturingCostService;
 use App\Services\Manufacturing\MultiLevelProductionPlanningService;
 use App\Services\Manufacturing\ProductionHierarchyProgressService;
+use App\Services\Manufacturing\ProductionOperationDependencyGenerationService;
 use App\Services\Manufacturing\ProductionOrderCostSettlementService;
 use App\Services\Manufacturing\ProductionOrderService;
 use App\Support\DecimalFormatter;
@@ -93,6 +94,34 @@ class ProductionOrderActions
 
                     Notification::make()
                         ->title('Hierarchy status refreshed')
+                        ->success()
+                        ->send();
+                } catch (\Exception $e) {
+                    self::error($e);
+                }
+            });
+    }
+
+    public static function generateExecutionDependencies(): Action
+    {
+        return Action::make('generateExecutionDependencies')
+            ->label('Generate Execution Dependencies')
+            ->icon('heroicon-m-share')
+            ->color('info')
+            ->requiresConfirmation()
+            ->modalHeading('Generate Execution Dependencies')
+            ->modalDescription('Creates inter-order operation dependencies from the current production hierarchy and supply links. No inventory, value, capacity, or G/L posting is performed.')
+            ->visible(fn ($record): bool => $record instanceof ProductionOrder
+                && $record->productionHierarchy()->exists()
+                && (auth()->user()?->can('manufacturing.production_operation_dependency.generate') ?? false))
+            ->action(function (ProductionOrder $record): void {
+                try {
+                    $dependencies = app(ProductionOperationDependencyGenerationService::class)
+                        ->generateForHierarchy($record->productionHierarchy, auth()->id());
+
+                    Notification::make()
+                        ->title('Execution dependencies generated')
+                        ->body(count($dependencies).' dependency record(s) created or refreshed.')
                         ->success()
                         ->send();
                 } catch (\Exception $e) {

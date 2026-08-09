@@ -166,6 +166,33 @@ class ProductionOrderInfolist
                             ->suffix('%'),
                     ]),
 
+                Section::make('Execution Dependencies')
+                    ->icon('heroicon-m-share')
+                    ->columns([
+                        'default' => 1,
+                        'md' => 3,
+                    ])
+                    ->visible(fn ($record): bool => $record->downstreamOperationDependencies()->exists() || $record->upstreamOperationDependencies()->exists())
+                    ->schema([
+                        TextEntry::make('upstream_dependencies_count')
+                            ->label('Blocks Downstream')
+                            ->state(fn ($record): int => $record->upstreamOperationDependencies()->count())
+                            ->badge()
+                            ->color('info'),
+                        TextEntry::make('downstream_dependencies_count')
+                            ->label('Blocked By Upstream')
+                            ->state(fn ($record): int => $record->downstreamOperationDependencies()->count())
+                            ->badge()
+                            ->color(fn (int $state): string => $state > 0 ? 'warning' : 'success'),
+                        TextEntry::make('blocked_dependency_count')
+                            ->label('Open Blocks')
+                            ->state(fn ($record): int => $record->downstreamOperationDependencies()
+                                ->whereIn('status', ['blocked', 'partially_ready', 'invalid'])
+                                ->count())
+                            ->badge()
+                            ->color(fn (int $state): string => $state > 0 ? 'danger' : 'success'),
+                    ]),
+
                 Section::make('Warehouse & Costing')
                     ->icon('heroicon-m-banknotes')
                     ->columns(3)

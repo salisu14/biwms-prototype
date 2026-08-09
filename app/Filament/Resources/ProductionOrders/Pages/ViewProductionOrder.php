@@ -16,6 +16,7 @@ class ViewProductionOrder extends ViewRecord
         return [
             ProductionOrderActions::planMultiLevelProduction(),
             ProductionOrderActions::refreshHierarchyStatus(),
+            ProductionOrderActions::generateExecutionDependencies(),
             ProductionOrderActions::release(),
             ProductionOrderActions::postOutput(),
             ProductionOrderActions::finish(),
