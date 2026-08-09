@@ -42,6 +42,8 @@ class ProductionOperationExecutionService
     public function __construct(
         private readonly AuditTrailService $auditTrailService,
         private readonly ProductionJournalPostingRoutine $postingRoutine,
+        private readonly ProductionOperationDependencyReadinessService $dependencyReadinessService,
+        private readonly ProductionOperationDependencyProgressService $dependencyProgressService,
     ) {}
 
     /**
@@ -187,6 +189,7 @@ class ProductionOperationExecutionService
             ]);
 
             $this->recordEvent($locked, 'completed', $locked->status, ProductionOperationExecutionStatus::Completed, $userId, $locked->operator_employee_id, $quantities);
+            $this->dependencyProgressService->syncForProductionOrder($locked->productionOrder);
 
             return $locked->fresh();
         });
@@ -290,6 +293,7 @@ class ProductionOperationExecutionService
 
             $this->recordEvent($locked, 'posted', $locked->status, ProductionOperationExecutionStatus::Posted, $userId, $locked->operator_employee_id);
             $this->auditTrailService->recordPosting($locked, $userId, 'SHOP_FLOOR_EXECUTION', (string) $locked->id);
+            $this->dependencyProgressService->syncForProductionOrder($locked->productionOrder);
 
             return $locked->fresh();
         });
@@ -332,6 +336,7 @@ class ProductionOperationExecutionService
 
             $this->recordEvent($locked, 'reversed', $locked->status, ProductionOperationExecutionStatus::Reversed, $userId, $locked->operator_employee_id, ['reason' => $reason]);
             $this->auditTrailService->recordReversal($locked, $userId, 'SHOP_FLOOR_EXECUTION', (string) $locked->id, ['reason' => $reason]);
+            $this->dependencyProgressService->syncForProductionOrder($locked->productionOrder);
 
             return $locked->fresh();
         });
@@ -467,6 +472,7 @@ class ProductionOperationExecutionService
         return DB::transaction(function () use ($execution, $target, $timeType, $userId, $idempotencyKey): ProductionOperationExecution {
             $locked = $this->lockExecution($execution);
             $this->assertTransition($locked, $target);
+            $this->assertInterOrderDependenciesReady($locked);
             $this->assertNoOpenTimer($locked, $timeType);
             $this->assertNoOverlap($locked, $timeType);
 
@@ -728,6 +734,15 @@ class ProductionOperationExecutionService
     {
         if ($execution->activeQualityHolds()->exists()) {
             throw new RuntimeException('Active quality holds must be released before completing the operation.');
+        }
+    }
+
+    private function assertInterOrderDependenciesReady(ProductionOperationExecution $execution): void
+    {
+        $readiness = $this->dependencyReadinessService->readinessForExecution($execution);
+
+        if (! $readiness->ready) {
+            throw new RuntimeException('Operation cannot start: '.$readiness->reason());
         }
     }
 

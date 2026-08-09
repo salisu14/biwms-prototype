@@ -66,6 +66,8 @@ class ProductionSupplyFulfilmentService
             $this->syncReservationAvailability($reservation, $link, $latestOutputEntryId);
         }
 
+        app(ProductionOperationDependencyProgressService::class)->syncForSupplyLink($link->fresh());
+
         return $link->fresh();
     }
 

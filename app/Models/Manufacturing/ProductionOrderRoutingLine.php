@@ -113,6 +113,26 @@ class ProductionOrderRoutingLine extends Model
         return $this->hasMany(ProductionOperationExecution::class, 'routing_line_id');
     }
 
+    public function upstreamDependencies(): HasMany
+    {
+        return $this->hasMany(ProductionOperationDependency::class, 'upstream_routing_line_id');
+    }
+
+    public function downstreamDependencies(): HasMany
+    {
+        return $this->hasMany(ProductionOperationDependency::class, 'downstream_routing_line_id');
+    }
+
+    public function sourceIntermediateHandoffs(): HasMany
+    {
+        return $this->hasMany(ProductionIntermediateHandoff::class, 'source_routing_line_id');
+    }
+
+    public function destinationIntermediateHandoffs(): HasMany
+    {
+        return $this->hasMany(ProductionIntermediateHandoff::class, 'destination_routing_line_id');
+    }
+
     public function getTotalTimeMinutesAttribute(): float
     {
         $setup = $this->convertTimeToMinutes((float) $this->setup_time, (string) $this->setup_time_unit);

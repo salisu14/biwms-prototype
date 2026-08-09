@@ -321,6 +321,26 @@ class ProductionOrder extends Model
         return $this->hasMany(ProductionOrderSupplyLink::class, 'child_production_order_id');
     }
 
+    public function upstreamOperationDependencies(): HasMany
+    {
+        return $this->hasMany(ProductionOperationDependency::class, 'upstream_production_order_id');
+    }
+
+    public function downstreamOperationDependencies(): HasMany
+    {
+        return $this->hasMany(ProductionOperationDependency::class, 'downstream_production_order_id');
+    }
+
+    public function sourceIntermediateHandoffs(): HasMany
+    {
+        return $this->hasMany(ProductionIntermediateHandoff::class, 'source_production_order_id');
+    }
+
+    public function destinationIntermediateHandoffs(): HasMany
+    {
+        return $this->hasMany(ProductionIntermediateHandoff::class, 'destination_production_order_id');
+    }
+
     public function materialReservations(): HasMany
     {
         return $this->hasMany(ProductionMaterialReservation::class);

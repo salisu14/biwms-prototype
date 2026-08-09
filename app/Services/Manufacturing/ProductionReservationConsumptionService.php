@@ -89,6 +89,8 @@ class ProductionReservationConsumptionService
                         'status' => $this->supplyStatusAfterConsumption($link, $consumedQuantityBase),
                     ])->save();
                 });
+
+                app(ProductionOperationDependencyProgressService::class)->syncForSupplyLink($link->fresh());
             }
         });
     }

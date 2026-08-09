@@ -85,3 +85,12 @@ Still intentionally deferred to Phase 2B or later:
 - advanced WIP transfer orchestration.
 
 See `docs/manufacturing-phase-2a-completion.md` for the completion scenario, cost-flow assertions, reconciliation coverage, and known limitations.
+
+## Phase 2B
+
+Phase 2B adds inter-order routing dependencies, intermediate handoff visibility, shop-floor readiness blocking, and query-time genealogy tracing.
+
+See:
+
+- `docs/manufacturing-phase-2b.md`
+- `docs/manufacturing-phase-2b-architecture.md`

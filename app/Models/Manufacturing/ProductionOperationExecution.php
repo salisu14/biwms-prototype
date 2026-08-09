@@ -171,4 +171,9 @@ class ProductionOperationExecution extends Model
     {
         return $this->qualityHolds()->where('status', 'active');
     }
+
+    public function downstreamDependencies(): HasMany
+    {
+        return $this->hasMany(ProductionOperationDependency::class, 'downstream_routing_line_id', 'routing_line_id');
+    }
 }
