@@ -8,6 +8,7 @@ namespace App\Services;
 
 use App\Enums\FAStatus;
 use App\Enums\SourceType;
+use App\Exceptions\PostingSetupException;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
@@ -140,7 +141,7 @@ class PostingService
     ): array {
         $setup = $customer->getPostingSetupFor($item);
         if (! $setup) {
-            throw new \Exception("General Posting Setup missing for customer {$customer->customer_number} and item {$item->item_code}");
+            throw new PostingSetupException("General Posting Setup missing for customer {$customer->customer_number} and item {$item->item_code}");
         }
 
         return DB::transaction(function () use ($customer, $item, $quantity, $unitPrice, $unitCost, $postingDate, $documentNumber, $setup) {
@@ -224,7 +225,7 @@ class PostingService
     ): array {
         $setup = $vendor->getPostingSetupFor($item);
         if (! $setup) {
-            throw new \Exception("General Posting Setup missing for vendor {$vendor->vendor_number} and item {$item->item_code}");
+            throw new PostingSetupException("General Posting Setup missing for vendor {$vendor->vendor_number} and item {$item->item_code}");
         }
 
         return DB::transaction(function () use ($vendor, $item, $quantity, $unitCost, $postingDate, $documentNumber, $setup) {
@@ -321,7 +322,7 @@ class PostingService
         $bankGlAccount = $bankAccount->glAccount;
 
         if (! $arAccount || ! $bankGlAccount) {
-            throw new \Exception('Missing account setup for payment receipt.');
+            throw new PostingSetupException('Missing account setup for payment receipt.');
         }
 
         return DB::transaction(function () use ($customer, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $arAccount, $bankGlAccount, $currencyId, $exchangeRate) {
@@ -398,7 +399,7 @@ class PostingService
         $bankGlAccount = $bankAccount->glAccount;
 
         if (! $apAccount || ! $bankGlAccount) {
-            throw new \Exception('Missing account setup for payment disbursement.');
+            throw new PostingSetupException('Missing account setup for payment disbursement.');
         }
 
         return DB::transaction(function () use ($vendor, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $apAccount, $bankGlAccount, $currencyId, $exchangeRate) {
@@ -863,7 +864,7 @@ class PostingService
             $receivablesAccount = $customer->getReceivablesAccount();
 
             if (! $receivablesAccount) {
-                throw new \Exception("Customer '{$customer->name}' is missing a receivables account.");
+                throw new PostingSetupException("Customer '{$customer->name}' is missing a receivables account.");
             }
 
             foreach ($invoice->lines as $line) {
@@ -886,7 +887,7 @@ class PostingService
                 ])->first();
 
                 if (! $postingSetup) {
-                    throw new \Exception(
+                    throw new PostingSetupException(
                         "No posting setup found for customer '{$customer->name}' (Group: {$customerGroupId}) ".
                         "and item '{$itemDisplayName}' (General Product Group: {$productGroupId}). ".
                         "Please configure General Posting Setup for Business Group ID {$customerGroupId} ".
@@ -896,7 +897,7 @@ class PostingService
 
                 $salesAccount = $postingSetup->getSalesAccount();
                 if (! $salesAccount) {
-                    throw new \Exception("Missing sales account for item '{$itemDisplayName}'.");
+                    throw new PostingSetupException("Missing sales account for item '{$itemDisplayName}'.");
                 }
 
                 $vatBusGroup = $invoice->vat_business_posting_group_id;
