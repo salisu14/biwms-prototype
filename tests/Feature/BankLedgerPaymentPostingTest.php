@@ -2,6 +2,7 @@
 
 use App\Events\PaymentApplied;
 use App\Events\PaymentUnapplied;
+use App\Exceptions\PostingSetupException;
 use App\Models\AccountingPeriod;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
@@ -291,7 +292,7 @@ it('requires the bank ledger number series and rolls back payment posting when i
     NumberSeries::query()->where('code', 'BANK-LEDGER')->delete();
 
     expect(fn () => app(PaymentService::class)->post($payment, $user->id))
-        ->toThrow(RuntimeException::class, 'Missing or invalid BANK-LEDGER number series configuration.');
+        ->toThrow(PostingSetupException::class, 'Missing or invalid BANK-LEDGER number series configuration.');
 
     expect($payment->fresh()->status)->toBe('APPROVED')
         ->and((float) $bankAccount->fresh()->current_balance)->toBe(700.0)
