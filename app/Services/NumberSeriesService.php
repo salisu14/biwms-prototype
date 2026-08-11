@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Exceptions\MissingNumberSeriesException;
+use App\Exceptions\NumberSeriesException;
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
 use DateTimeInterface;
@@ -45,11 +46,11 @@ class NumberSeriesService
                 ->first();
 
             if (! $series) {
-                throw new MissingNumberSeriesException("Number Series {$seriesCode} does not exist", [$seriesCode]);
+                throw new MissingNumberSeriesException("Number Series {$seriesCode} does not exist", [$seriesCode], codeIdentifier: 'number_series_missing');
             }
 
             if (! $series->is_active) {
-                throw new MissingNumberSeriesException("Number Series {$seriesCode} is inactive", [$seriesCode]);
+                throw new MissingNumberSeriesException("Number Series {$seriesCode} is inactive", [$seriesCode], codeIdentifier: 'number_series_inactive');
             }
 
             // Check date validity (BC: CheckValidDate)
@@ -59,7 +60,7 @@ class NumberSeriesService
             $line = $this->getSeriesLine($series, $postingDate);
 
             if (! $line) {
-                throw new MissingNumberSeriesException("No open Number Series Line exists for date {$postingDate->format('Y-m-d')}", [$seriesCode]);
+                throw new MissingNumberSeriesException("No open Number Series Line exists for date {$postingDate->format('Y-m-d')}", [$seriesCode], codeIdentifier: 'number_series_line_missing');
             }
 
             $this->validateLineHasNextNumber($seriesCode, $line);
@@ -90,7 +91,7 @@ class NumberSeriesService
     ): ?string {
         try {
             return $this->getNextNo($seriesCode, $postingDate);
-        } catch (\Exception $e) {
+        } catch (\Throwable) {
             return null;
         }
     }
@@ -105,7 +106,7 @@ class NumberSeriesService
         foreach ($seriesCodes as $seriesCode) {
             try {
                 return $this->getNextNo($seriesCode, $postingDate);
-            } catch (MissingNumberSeriesException $exception) {
+            } catch (NumberSeriesException $exception) {
                 $errors[$seriesCode] = $exception->getMessage();
             }
         }
@@ -114,7 +115,8 @@ class NumberSeriesService
 
         throw new MissingNumberSeriesException(
             "Missing Number Series: {$label}".implode(', ', $seriesCodes).'. '.implode(' ', $errors),
-            $seriesCodes,
+            seriesCodes: $seriesCodes,
+            codeIdentifier: 'number_series_candidates_missing',
         );
     }
 
@@ -140,7 +142,7 @@ class NumberSeriesService
     public function validateManualNumber(string $seriesCode, string $manualNo): bool
     {
         if (! $this->manualNumberingAllowed) {
-            throw new \RuntimeException("Manual numbering not allowed for series {$seriesCode}");
+            throw new NumberSeriesException("Manual numbering is not allowed for series {$seriesCode}", [$seriesCode], codeIdentifier: 'manual_numbering_not_allowed');
         }
 
         $series = NumberSeries::where('code', $seriesCode)->first();
@@ -150,12 +152,12 @@ class NumberSeriesService
 
         // Check if number matches pattern
         if (! $this->matchesSeriesPattern($manualNo, $series)) {
-            throw new \RuntimeException("Number {$manualNo} does not match series pattern");
+            throw new NumberSeriesException("Number {$manualNo} does not match series pattern", [$series->code], codeIdentifier: 'manual_number_pattern_mismatch');
         }
 
         // Check uniqueness
         if ($this->numberExistsInSeries($series, $manualNo)) {
-            throw new \RuntimeException("Number {$manualNo} already exists");
+            throw new NumberSeriesException("Number {$manualNo} already exists", [$series->code], codeIdentifier: 'manual_number_duplicate');
         }
 
         return true;
@@ -264,10 +266,18 @@ class NumberSeriesService
     private function validateDateInRange(NumberSeries $series, DateTimeInterface $date): void
     {
         if ($series->starting_date && $date < $series->starting_date) {
-            throw new \RuntimeException('Posting date before series starting date');
+            throw new NumberSeriesException(
+                "Posting date {$date->format('Y-m-d')} is before Number Series {$series->code} starting date {$series->starting_date->format('Y-m-d')}",
+                [$series->code],
+                codeIdentifier: 'number_series_date_before_range',
+            );
         }
         if ($series->ending_date && $date > $series->ending_date) {
-            throw new \RuntimeException('Posting date after series ending date');
+            throw new NumberSeriesException(
+                "Posting date {$date->format('Y-m-d')} is after Number Series {$series->code} ending date {$series->ending_date->format('Y-m-d')}",
+                [$series->code],
+                codeIdentifier: 'number_series_date_after_range',
+            );
         }
     }
 
@@ -277,7 +287,7 @@ class NumberSeriesService
         $next = $current + ($line->increment_by ?? 1);
 
         if ($line->ending_no !== null && (int) $line->ending_no > 0 && $next > (int) $line->ending_no) {
-            throw new \RuntimeException("Number Series {$seriesCode} is exhausted");
+            throw new NumberSeriesException("Number Series {$seriesCode} is exhausted", [$seriesCode], codeIdentifier: 'number_series_exhausted');
         }
     }
 

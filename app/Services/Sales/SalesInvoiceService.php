@@ -7,6 +7,8 @@ namespace App\Services\Sales;
 use App\Data\Sales\SalesInvoiceData;
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemLedgerEntryType;
+use App\Exceptions\BusinessException;
+use App\Exceptions\DocumentStateException;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
@@ -22,6 +24,7 @@ use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use App\Services\Sales\ReferralCommissions\CommissionCalculationService;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -41,8 +44,11 @@ class SalesInvoiceService
             $user = Auth::user();
 
             if (! $user) {
-                throw new \Exception('Unauthenticated user');
+                throw new AuthenticationException('Authenticated user is required to create a sales invoice.');
             }
+
+            $lines = $this->invoiceLinesFromData($data);
+            $this->assertInvoiceLinesAreValid($lines, $data->sales_order_id);
 
             $invoice = SalesInvoice::create([
                 'customer_id' => $data->customer_id,
@@ -54,52 +60,9 @@ class SalesInvoiceService
                 'currency_code' => $data->currency_code ?? 'NGN',
             ]);
 
-            $lines = $data->lines;
-
-            if ($data->sales_order_id && empty($lines)) {
-                $salesOrder = SalesOrder::query()
-                    ->with('lines')
-                    ->find($data->sales_order_id);
-
-                if ($salesOrder) {
-                    $lines = $salesOrder->lines
-                        ->map(function ($line): array {
-                            $quantityToInvoice = max(
-                                0,
-                                ((float) $line->quantity_shipped > 0
-                                    ? (float) $line->quantity_shipped
-                                    : (float) $line->quantity) - (float) $line->quantity_invoiced
-                            );
-
-                            return [
-                                'item_id' => $line->item_id,
-                                'description' => $line->description,
-                                'quantity' => $quantityToInvoice,
-                                'unit_of_measure' => $line->unit_of_measure_code,
-                                'unit_price' => (float) $line->unit_price,
-                                'discount_percent' => (float) $line->line_discount_percent,
-                                'discount_amount' => (float) $line->line_discount_amount,
-                                'vat_percent' => (float) $line->vat_percentage,
-                            ];
-                        })
-                        ->filter(fn (array $line): bool => (float) $line['quantity'] > 0)
-                        ->values()
-                        ->all();
-                }
-            }
-
-            if (empty($lines)) {
-                throw new \Exception('Invoice must have at least one line');
-            }
-
             $total = 0;
 
             foreach ($lines as $line) {
-
-                if ($line['quantity'] <= 0) {
-                    throw new \Exception('Quantity must be greater than zero');
-                }
-
                 $lineSubTotal = (float) $line['quantity'] * (float) $line['unit_price'];
                 $discountAmount = (float) ($line['discount_amount'] ?? 0);
                 if ($discountAmount <= 0 && (float) ($line['discount_percent'] ?? 0) > 0) {
@@ -145,15 +108,15 @@ class SalesInvoiceService
                 ->findOrFail($invoice->id);
 
             if ($invoice->isPosted()) {
-                throw new \Exception('Invoice already posted');
+                throw new DocumentStateException('Invoice already posted');
             }
 
             if ($invoice->status !== ApprovalStatus::APPROVED) {
-                throw new \Exception('Only approved invoices can be posted');
+                throw new DocumentStateException('Only approved invoices can be posted');
             }
 
             if ($invoice->lines->isEmpty()) {
-                throw new \Exception('No lines to post');
+                throw new BusinessException('No lines to post', field: 'lines');
             }
 
             $itemLedgerEntryIds = [];
@@ -337,18 +300,18 @@ class SalesInvoiceService
         $quantityBase = $this->quantityBase($line, $item);
 
         if ($quantityBase <= 0) {
-            throw new \Exception("Quantity must be greater than zero for item {$item->item_code}");
+            throw new BusinessException("Quantity must be greater than zero for item {$item->item_code}", field: 'lines');
         }
 
         if ((float) $item->ledger_on_hand < $quantityBase) {
-            throw new \Exception("Insufficient stock for item: {$item->description}");
+            throw new BusinessException("Insufficient stock for item: {$item->description}", field: 'lines');
         }
 
         $costAmount = $quantityBase * (float) ($item->unit_cost ?? 0);
         $locationId = $line->location_id ?? $item->location_id ?? $invoice->customer?->location_id;
 
         if (! $locationId) {
-            throw new \Exception("Location is missing for item {$item->item_code} on sales invoice {$invoice->invoice_number}.");
+            throw new BusinessException("Location is missing for item {$item->item_code} on sales invoice {$invoice->invoice_number}.", field: 'location_id');
         }
 
         $entry = ItemLedgerEntry::query()->create([
@@ -377,6 +340,71 @@ class SalesInvoiceService
         $item->decrement('inventory', $quantityBase);
 
         return $entry;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function invoiceLinesFromData(SalesInvoiceData $data): array
+    {
+        if (! $data->sales_order_id || ! empty($data->lines)) {
+            return $data->lines;
+        }
+
+        $salesOrder = SalesOrder::query()
+            ->with('lines')
+            ->find($data->sales_order_id);
+
+        if (! $salesOrder) {
+            throw new DocumentStateException('The selected Sales Order could not be found.', 'sales_order_id');
+        }
+
+        return $salesOrder->lines
+            ->map(function ($line): array {
+                $quantityToInvoice = max(
+                    0,
+                    ((float) $line->quantity_shipped > 0
+                        ? (float) $line->quantity_shipped
+                        : (float) $line->quantity) - (float) $line->quantity_invoiced
+                );
+
+                return [
+                    'item_id' => $line->item_id,
+                    'description' => $line->description,
+                    'quantity' => $quantityToInvoice,
+                    'unit_of_measure' => $line->unit_of_measure_code,
+                    'unit_price' => (float) $line->unit_price,
+                    'discount_percent' => (float) $line->line_discount_percent,
+                    'discount_amount' => (float) $line->line_discount_amount,
+                    'vat_percent' => (float) $line->vat_percentage,
+                ];
+            })
+            ->filter(fn (array $line): bool => (float) $line['quantity'] > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lines
+     */
+    private function assertInvoiceLinesAreValid(array $lines, ?int $salesOrderId): void
+    {
+        if (empty($lines)) {
+            if ($salesOrderId) {
+                throw new DocumentStateException(
+                    'This Sales Order has already been fully invoiced. No remaining quantity is available to invoice.',
+                    'sales_order_id',
+                );
+            }
+
+            throw new BusinessException('Invoice must have at least one line', field: 'lines');
+        }
+
+        foreach ($lines as $line) {
+            if ((float) ($line['quantity'] ?? 0) <= 0) {
+                throw new BusinessException('Quantity must be greater than zero', field: 'lines');
+            }
+        }
     }
 
     private function quantityBase(SalesInvoiceLine $line, Item $item): float

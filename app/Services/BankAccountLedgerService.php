@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\BankAccountLedgerEntryStatus;
 use App\Enums\BankAccountLedgerEntryType;
 use App\Enums\CheckType;
+use App\Exceptions\PostingSetupException;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\VendorLedgerEntry;
@@ -323,9 +324,10 @@ class BankAccountLedgerService
                 $postingDate instanceof \DateTimeInterface ? $postingDate : null
             );
         } catch (\Throwable $exception) {
-            throw new \RuntimeException(
+            throw new PostingSetupException(
                 'Missing or invalid BANK-LEDGER number series configuration.',
-                previous: $exception
+                metadata: ['number_series' => 'BANK-LEDGER'],
+                previous: $exception,
             );
         }
     }

@@ -1,14 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\SalesInvoices\Pages;
 
 use App\Data\Sales\SalesInvoiceData;
+use App\Exceptions\BusinessException;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Filament\Resources\SalesInvoices\Schemas\SalesInvoiceForm;
 use App\Models\SalesOrder;
 use App\Services\Sales\SalesInvoiceService;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 class CreateSalesInvoice extends CreateRecord
 {
@@ -51,6 +56,18 @@ class CreateSalesInvoice extends CreateRecord
         // Map form data to your DTO
         $invoiceData = SalesInvoiceData::from($data);
 
-        return app(SalesInvoiceService::class)->create($invoiceData);
+        try {
+            return app(SalesInvoiceService::class)->create($invoiceData);
+        } catch (BusinessException $exception) {
+            Notification::make()
+                ->title($exception->title())
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
+
+            throw ValidationException::withMessages([
+                $exception->field() => $exception->getMessage(),
+            ]);
+        }
     }
 }

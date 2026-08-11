@@ -1,6 +1,7 @@
 <?php
 
 use App\Data\Sales\SalesInvoiceData;
+use App\Exceptions\NumberSeriesException;
 use App\Models\AuditTrail;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
@@ -93,17 +94,17 @@ it('generates bank ledger entry numbers from BANK-LEDGER series', function () {
 
 it('fails clearly when number series configuration is missing, inactive, or exhausted', function () {
     expect(fn () => app(NumberSeriesService::class)->getNextNo('MISSING-SERIES'))
-        ->toThrow(RuntimeException::class, 'Number Series MISSING-SERIES does not exist');
+        ->toThrow(NumberSeriesException::class, 'Number Series MISSING-SERIES does not exist');
 
     createNumberSeriesForTest('INACTIVE-SERIES', 'INA-', active: false);
 
     expect(fn () => app(NumberSeriesService::class)->getNextNo('INACTIVE-SERIES'))
-        ->toThrow(RuntimeException::class, 'Number Series INACTIVE-SERIES is inactive');
+        ->toThrow(NumberSeriesException::class, 'Number Series INACTIVE-SERIES is inactive');
 
     createNumberSeriesForTest('EXHAUSTED-SERIES', 'END-', endingNo: 1, lastNoUsed: 1);
 
     expect(fn () => app(NumberSeriesService::class)->getNextNo('EXHAUSTED-SERIES'))
-        ->toThrow(RuntimeException::class, 'Number Series EXHAUSTED-SERIES is exhausted');
+        ->toThrow(NumberSeriesException::class, 'Number Series EXHAUSTED-SERIES is exhausted');
 });
 
 it('rapid generation remains unique and sequential', function () {

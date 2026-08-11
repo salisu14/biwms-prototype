@@ -1,5 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
+use App\Exceptions\BusinessException;
 use App\Http\Middleware\EnsureFactoryRole;
 use App\Http\Middleware\EnsureFinanceRole;
 use App\Http\Middleware\EnsureHrRole;
@@ -42,6 +45,30 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (BusinessException $exception, Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                    'title' => $exception->title(),
+                    'errors' => [
+                        $exception->field() => [$exception->getMessage()],
+                    ],
+                ], $exception->httpStatus());
+            }
+
+            if ($request->hasSession()) {
+                $request->session()->flash('business_exception', [
+                    'title' => $exception->title(),
+                    'message' => $exception->getMessage(),
+                    'severity' => $exception->severity(),
+                ]);
+            }
+
+            return redirect()->back()->withInput()->withErrors([
+                $exception->field() => $exception->getMessage(),
+            ]);
+        });
+
         $exceptions->render(function (AuthenticationException $exception, Request $request) {
             if ($request->is('admin/two-factor/*')) {
                 return redirect()->guest('/admin/login');
