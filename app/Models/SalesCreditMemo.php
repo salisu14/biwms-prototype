@@ -107,8 +107,31 @@ class SalesCreditMemo extends Model implements Approvable
     public function refreshTotal(): void
     {
         $this->update([
-            'total_amount' => $this->items()->sum('amount_including_vat'),
+            'total_amount' => $this->items()
+                ->get()
+                ->sum(fn (SalesCreditMemoLine $line): float => $this->lineAmountIncludingVat($line)),
         ]);
+    }
+
+    private function lineAmountIncludingVat(SalesCreditMemoLine $line): float
+    {
+        $storedAmount = (float) ($line->amount_including_vat ?? 0);
+
+        if ($storedAmount > 0) {
+            return $storedAmount;
+        }
+
+        $lineTotal = (float) $line->quantity * (float) $line->unit_price;
+        $discountAmount = (float) $line->line_discount_amount;
+
+        if ($discountAmount <= 0 && (float) $line->line_discount_percent > 0) {
+            $discountAmount = $lineTotal * ((float) $line->line_discount_percent / 100);
+        }
+
+        $amount = max(0, $lineTotal - $discountAmount);
+        $vatAmount = $amount * ((float) $line->vat_percent / 100);
+
+        return $amount + $vatAmount;
     }
 
     /*
