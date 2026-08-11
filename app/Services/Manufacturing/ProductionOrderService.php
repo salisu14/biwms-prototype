@@ -7,6 +7,7 @@ namespace App\Services\Manufacturing;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderStatus;
 use App\Events\ProductionOrderStatusChanged;
+use App\Exceptions\BusinessException;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
@@ -335,7 +336,7 @@ class ProductionOrderService
             foreach ($orderLines as $orderLine) {
                 try {
                     $this->putAwayService->createPutAwayFromProductionOutput($orderLine, (float) $quantityBase);
-                } catch (\RuntimeException $exception) {
+                } catch (BusinessException|\RuntimeException $exception) {
                     Log::warning('Put-away generation skipped during production output posting', [
                         'production_order_id' => $order->id,
                         'production_order_no' => $order->document_number,
