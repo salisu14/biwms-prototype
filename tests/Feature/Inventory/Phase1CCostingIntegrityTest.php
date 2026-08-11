@@ -36,6 +36,7 @@ use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ReturnCostApplicationService;
 use App\Services\Inventory\StockMovementService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use App\Support\DecimalMath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 
@@ -203,10 +204,11 @@ it('creates cost adjustment value entries from inbound cost changes and protects
     $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound, 150, 'Invoice cost increase', dryRun: false);
     $retry = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 150, 'Invoice cost increase', dryRun: false);
 
-    expect($dryRun['adjustments'][0]['adjustment_amount'])->toBe(20.0)
+    expect((float) $dryRun['adjustments'][0]['adjustment_amount'])->toBe(20.0)
+        ->and((float) $dryRun['summary']['remaining_inventory_delta'])->toBe(30.0)
         ->and($posted['adjustments'][0])->toBeInstanceOf(ValueEntry::class)
         ->and($retry['adjustments'])->toHaveCount(0)
-        ->and(ValueEntry::query()->where('value_entry_state', 'adjustment')->count())->toBe(1);
+        ->and(ValueEntry::query()->where('value_entry_state', 'adjustment')->count())->toBe(2);
 
     CostingPeriod::query()->create([
         'start_date' => '2026-02-01',
@@ -220,6 +222,112 @@ it('creates cost adjustment value entries from inbound cost changes and protects
 
     expect(fn () => app(CostAdjustmentService::class)->adjustInboundCost($closedInbound, 12, 'Closed period test', dryRun: false))
         ->toThrow(RuntimeException::class, 'Cost adjustment is not allowed');
+});
+
+it('allocates fifo layer revaluation between consumed applications and remaining inventory', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 25000, 220000, 'OPEN-20260807170407', '2026-08-07');
+    $originalValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $inbound->entry_number)
+        ->where('value_entry_state', 'actual')
+        ->firstOrFail();
+
+    for ($index = 1; $index <= 3; $index++) {
+        $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -6.563808, 0, "PROD-CONS-{$index}", '2026-08-08');
+        app(ItemApplicationService::class)->applyOutbound($outbound, 'production_consumption');
+    }
+
+    $adjustmentCountBefore = ValueEntry::query()->where('value_entry_state', 'adjustment')->count();
+    $dryRun = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct opening FIFO layer cost', dryRun: true);
+
+    expect(ValueEntry::query()->where('value_entry_state', 'adjustment')->count())->toBe($adjustmentCountBefore)
+        ->and((float) $dryRun['summary']['total_delta'])->toBe(30000.0)
+        ->and((float) $dryRun['summary']['consumed_quantity'])->toBe(19.691424)
+        ->and((float) $dryRun['summary']['remaining_quantity'])->toBe(24980.308576)
+        ->and((float) $dryRun['summary']['consumed_delta'])->toBe(23.6298)
+        ->and((float) $dryRun['summary']['remaining_inventory_delta'])->toBe(29976.3702)
+        ->and((float) $dryRun['adjustments'][0]['adjustment_amount'])->toBe(7.8766)
+        ->and((float) $dryRun['adjustments'][1]['adjustment_amount'])->toBe(7.8766)
+        ->and((float) $dryRun['adjustments'][2]['adjustment_amount'])->toBe(7.8766);
+
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct opening FIFO layer cost', dryRun: false);
+    $retry = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct opening FIFO layer cost', dryRun: false);
+
+    $applicationAdjustments = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'COST_ADJUSTMENT')
+        ->where('value_entry_state', 'adjustment')
+        ->get();
+    $remainingRevaluation = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'INVENTORY_REVALUATION')
+        ->where('value_entry_state', 'adjustment')
+        ->firstOrFail();
+
+    expect($posted['adjustments'])->toHaveCount(4)
+        ->and($retry['adjustments'])->toHaveCount(0)
+        ->and((float) $inbound->fresh()->cost_amount_actual)->toBe(250000.0)
+        ->and((float) $originalValueEntry->fresh()->cost_amount_actual)->toBe(220000.0)
+        ->and($applicationAdjustments)->toHaveCount(3)
+        ->and((float) $applicationAdjustments->sum('cost_amount_actual'))->toBe(23.6298)
+        ->and((float) $remainingRevaluation->cost_amount_actual)->toBe(29976.3702)
+        ->and((float) DecimalMath::add($applicationAdjustments->sum('cost_amount_actual'), $remainingRevaluation->cost_amount_actual, 4))->toBe(30000.0)
+        ->and($applicationAdjustments->every(fn (ValueEntry $entry): bool => $entry->gl_posted === true))->toBeTrue()
+        ->and($remainingRevaluation->gl_posted)->toBeTrue()
+        ->and((float) GlEntry::query()->where('document_number', $posted['batch']->batch_number)->sum('debit_amount'))
+        ->toBe((float) GlEntry::query()->where('document_number', $posted['batch']->batch_number)->sum('credit_amount'))
+        ->and(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('value_entry_state', 'adjustment')->count())->toBe(4);
+
+    Artisan::call('biwms:costing-reconcile', ['--json' => true]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['revaluation_batch_missing_inventory_adjustment'])->toBeEmpty()
+        ->and($report['cost_adjustment_allocation_mismatches'])->toBeEmpty()
+        ->and($report['duplicate_adjustment_value_entries'])->toBeEmpty();
+});
+
+it('supports negative and fully unconsumed inventory layer revaluation without consumed adjustments', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 100, 1000, 'NEG-REVAL-001', '2026-01-03');
+
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound, 900, 'Decrease layer cost', dryRun: false);
+
+    $revaluation = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'INVENTORY_REVALUATION')
+        ->firstOrFail();
+
+    expect($posted['adjustments'])->toHaveCount(1)
+        ->and((float) $posted['summary']['consumed_delta'])->toBe(0.0)
+        ->and((float) $posted['summary']['remaining_inventory_delta'])->toBe(-100.0)
+        ->and((float) $revaluation->cost_amount_actual)->toBe(-100.0)
+        ->and($revaluation->gl_posted)->toBeTrue()
+        ->and((float) $inbound->fresh()->cost_amount_actual)->toBe(900.0);
+});
+
+it('refreshes existing unposted value entry from current item application state before gl posting', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 100, 'STALE-IN-001', '2026-01-01');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -4, 0, 'STALE-OUT-001', '2026-01-02');
+
+    $preExistingValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outbound->entry_number)
+        ->firstOrFail();
+
+    expect((float) $preExistingValueEntry->cost_amount_actual)->toBe(0.0)
+        ->and($preExistingValueEntry->gl_posted)->toBeFalse();
+
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'stale_refresh_test');
+    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($outbound);
+
+    $refreshedValueEntry = $preExistingValueEntry->fresh();
+
+    expect((float) $outbound->fresh()->cost_amount_actual)->toBe(40.0)
+        ->and((float) $refreshedValueEntry->cost_amount_actual)->toBe(40.0)
+        ->and((float) $refreshedValueEntry->unit_cost)->toBe(10.0)
+        ->and($refreshedValueEntry->gl_posted)->toBeTrue()
+        ->and((float) GlEntry::query()->where('document_number', 'STALE-OUT-001')->sum('debit_amount'))->toBe(40.0)
+        ->and((float) GlEntry::query()->where('document_number', 'STALE-OUT-001')->sum('credit_amount'))->toBe(40.0);
 });
 
 it('costing reconcile reports findings and exports json', function (): void {

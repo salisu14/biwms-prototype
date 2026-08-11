@@ -32,6 +32,9 @@ class BiwmsCostingReconcile extends Command
             'transfer_shipment_value_not_received' => $this->transferShipmentValueNotReceived(),
             'in_transit_quantity_value_mismatches' => $this->inTransitQuantityValueMismatches(),
             'unapplied_cost_adjustments' => $this->unappliedCostAdjustments(),
+            'revaluation_batch_missing_inventory_adjustment' => $this->revaluationBatchMissingInventoryAdjustment(),
+            'cost_adjustment_allocation_mismatches' => $this->costAdjustmentAllocationMismatches(),
+            'duplicate_adjustment_value_entries' => $this->duplicateAdjustmentValueEntries(),
             'unposted_adjustment_value_entries' => $this->unpostedAdjustmentValueEntries(),
             'value_entry_gl_posting_mismatches' => $this->valueEntryGlPostingMismatches(),
             'entries_modified_in_closed_costing_periods' => $this->entriesModifiedInClosedCostingPeriods(),
@@ -158,7 +161,7 @@ class BiwmsCostingReconcile extends Command
                 $outbound = $applications->first()->outboundItemLedgerEntry;
                 $valueCost = abs((float) ValueEntry::query()
                     ->where('item_ledger_entry_no', $outbound?->entry_number)
-                    ->whereIn('value_entry_state', ['actual', 'adjustment'])
+                    ->where('value_entry_state', 'actual')
                     ->sum('cost_amount_actual'));
                 $applicationCost = abs((float) $applications->sum('cost_amount'));
 
@@ -302,6 +305,96 @@ class BiwmsCostingReconcile extends Command
                 'suggested_remediation' => 'Re-run the cost adjustment posting after confirming the batch was not intentionally zero-impact.',
             ]))
             ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function revaluationBatchMissingInventoryAdjustment(): array
+    {
+        return CostAdjustmentBatch::query()
+            ->where('dry_run', false)
+            ->get()
+            ->filter(function (CostAdjustmentBatch $batch): bool {
+                $remainingDelta = (float) data_get($batch->metadata, 'remaining_inventory_delta', 0);
+                if (abs($remainingDelta) <= 0.0001) {
+                    return false;
+                }
+
+                return ! ValueEntry::query()
+                    ->where('source_type', CostAdjustmentBatch::class)
+                    ->where('source_id', $batch->id)
+                    ->where('document_type', 'INVENTORY_REVALUATION')
+                    ->where('value_entry_state', 'adjustment')
+                    ->exists();
+            })
+            ->map(fn (CostAdjustmentBatch $batch): array => $this->finding('revaluation_batch_missing_inventory_adjustment', 'critical', [
+                'batch_number' => $batch->batch_number,
+                'remaining_inventory_delta' => (float) data_get($batch->metadata, 'remaining_inventory_delta', 0),
+                'suggested_remediation' => 'Re-run the approved cost adjustment posting after confirming the remaining layer revaluation Value Entry was not intentionally voided.',
+            ]))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function costAdjustmentAllocationMismatches(): array
+    {
+        return CostAdjustmentBatch::query()
+            ->where('dry_run', false)
+            ->get()
+            ->filter(function (CostAdjustmentBatch $batch): bool {
+                $delta = (float) data_get($batch->metadata, 'delta', 0);
+                if (abs($delta) <= 0.0001) {
+                    return false;
+                }
+
+                $valueEntryTotal = (float) ValueEntry::query()
+                    ->where('source_type', CostAdjustmentBatch::class)
+                    ->where('source_id', $batch->id)
+                    ->where('value_entry_state', 'adjustment')
+                    ->sum('cost_amount_actual');
+
+                return abs($delta - $valueEntryTotal) > 0.0001;
+            })
+            ->map(fn (CostAdjustmentBatch $batch): array => $this->finding('cost_adjustment_allocation_mismatch', 'critical', [
+                'batch_number' => $batch->batch_number,
+                'expected_delta' => (float) data_get($batch->metadata, 'delta', 0),
+                'posted_adjustment_total' => (float) ValueEntry::query()
+                    ->where('source_type', CostAdjustmentBatch::class)
+                    ->where('source_id', $batch->id)
+                    ->where('value_entry_state', 'adjustment')
+                    ->sum('cost_amount_actual'),
+                'suggested_remediation' => 'Review consumed and remaining inventory adjustment Value Entries for this batch before any further layer revaluation.',
+            ]))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function duplicateAdjustmentValueEntries(): array
+    {
+        return ValueEntry::query()
+            ->selectRaw('source_type, source_id, document_type, original_entry_no, source_line_no, cost_amount_actual, count(*) as entry_count')
+            ->where('source_type', CostAdjustmentBatch::class)
+            ->where('value_entry_state', 'adjustment')
+            ->groupByRaw('source_type, source_id, document_type, original_entry_no, source_line_no, cost_amount_actual')
+            ->havingRaw('count(*) > 1')
+            ->get()
+            ->map(fn ($row): array => $this->finding('duplicate_adjustment_value_entry', 'critical', [
+                'source_id' => (int) $row->source_id,
+                'document_type' => $row->document_type,
+                'original_entry_no' => $row->original_entry_no,
+                'source_line_no' => $row->source_line_no,
+                'cost_amount_actual' => (float) $row->cost_amount_actual,
+                'entry_count' => (int) $row->entry_count,
+                'suggested_remediation' => 'Inspect cost adjustment idempotency keys and reverse duplicates only through an approved remediation plan.',
+            ]))
             ->all();
     }
 

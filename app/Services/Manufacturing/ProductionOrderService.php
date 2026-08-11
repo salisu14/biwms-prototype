@@ -238,6 +238,7 @@ class ProductionOrderService
                 }
 
                 app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry, 'production_consumption', strict: false);
+                $itemLedgerEntry->refresh();
                 app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
             }
         });

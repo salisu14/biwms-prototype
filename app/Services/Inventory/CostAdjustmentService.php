@@ -14,6 +14,7 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ValueEntry;
 use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -38,8 +39,9 @@ class CostAdjustmentService
 
             $this->costingPeriodService->assertAdjustmentAllowed($inbound->posting_date);
             $adjustmentPostingDate = $this->costingPeriodService->adjustmentPostingDate($inbound->posting_date);
-            $currentCost = (float) ($inbound->cost_amount_actual ?: $inbound->cost_amount_expected);
-            $delta = round($newTotalCost - $currentCost, 4);
+            $currentCost = DecimalMath::amount($inbound->cost_amount_actual ?: $inbound->cost_amount_expected);
+            $newTotalCostAmount = DecimalMath::amount($newTotalCost);
+            $delta = DecimalMath::sub($newTotalCostAmount, $currentCost, DecimalPrecision::AMOUNT_SCALE);
 
             $batch = CostAdjustmentBatch::query()->firstOrCreate(
                 [
@@ -54,14 +56,14 @@ class CostAdjustmentService
                     'run_by' => $userId,
                     'metadata' => [
                         'old_total_cost' => $currentCost,
-                        'new_total_cost' => $newTotalCost,
+                        'new_total_cost' => $newTotalCostAmount,
                         'delta' => $delta,
                         'posting_date' => $adjustmentPostingDate->toDateString(),
                     ],
                 ],
             );
 
-            if (abs($delta) <= 0.0001) {
+            if (abs((float) $delta) <= 0.0001) {
                 return ['batch' => $batch, 'adjustments' => []];
             }
 
@@ -73,13 +75,16 @@ class CostAdjustmentService
                 ->get();
 
             $adjustments = [];
-            $inboundQuantity = abs((float) $inbound->quantity);
+            $inboundQuantity = DecimalMath::abs($inbound->quantity, DecimalPrecision::QUANTITY_SCALE);
+            $consumedQuantity = DecimalMath::quantity($applications->sum(fn (ItemApplicationEntry $application): float => abs((float) $application->applied_quantity)));
+            $remainingQuantity = DecimalMath::quantity($inbound->remaining_quantity);
+            $consumedDelta = DecimalMath::amount('0');
 
             foreach ($applications as $application) {
-                $ratio = $inboundQuantity > 0.0 ? (float) $application->applied_quantity / $inboundQuantity : 0.0;
-                $adjustmentAmount = round($delta * $ratio, 4);
+                $adjustmentAmount = $this->allocatedDelta($delta, $application->applied_quantity, $inboundQuantity);
+                $consumedDelta = DecimalMath::add($consumedDelta, $adjustmentAmount, DecimalPrecision::AMOUNT_SCALE);
 
-                if (abs($adjustmentAmount) <= 0.0001) {
+                if (abs((float) $adjustmentAmount) <= 0.0001) {
                     continue;
                 }
 
@@ -87,7 +92,7 @@ class CostAdjustmentService
                     $adjustments[] = [
                         'outbound_item_ledger_entry_id' => $application->outbound_item_ledger_entry_id,
                         'adjustment_amount' => $adjustmentAmount,
-                        'applied_quantity' => (float) $application->applied_quantity,
+                        'applied_quantity' => DecimalMath::quantity($application->applied_quantity),
                     ];
 
                     continue;
@@ -105,17 +110,70 @@ class CostAdjustmentService
                 $this->markProductionOrderForLateCostAdjustment($application, $batch, $adjustmentAmount);
             }
 
+            $remainingDelta = DecimalMath::sub($delta, $consumedDelta, DecimalPrecision::AMOUNT_SCALE);
+
+            $batch->forceFill([
+                'metadata' => [
+                    ...(array) $batch->metadata,
+                    'old_total_cost' => $currentCost,
+                    'new_total_cost' => $newTotalCostAmount,
+                    'delta' => $delta,
+                    'consumed_quantity' => $consumedQuantity,
+                    'remaining_quantity' => $remainingQuantity,
+                    'consumed_delta' => $consumedDelta,
+                    'remaining_inventory_delta' => $remainingDelta,
+                    'posting_date' => $adjustmentPostingDate->toDateString(),
+                ],
+            ])->save();
+
+            if ($dryRun) {
+                return [
+                    'batch' => $batch->fresh(),
+                    'adjustments' => $adjustments,
+                    'summary' => [
+                        'total_delta' => $delta,
+                        'consumed_quantity' => $consumedQuantity,
+                        'remaining_quantity' => $remainingQuantity,
+                        'consumed_delta' => $consumedDelta,
+                        'remaining_inventory_delta' => $remainingDelta,
+                        'posting_date' => $adjustmentPostingDate->toDateString(),
+                    ],
+                ];
+            }
+
+            if (abs((float) $remainingDelta) > 0.0001) {
+                $adjustments[] = $this->createRemainingInventoryRevaluationValueEntry(
+                    batch: $batch,
+                    inbound: $inbound,
+                    adjustmentAmount: $remainingDelta,
+                    adjustmentPostingDate: $adjustmentPostingDate,
+                    reason: $reason,
+                    userId: $userId,
+                );
+            }
+
             if (! $dryRun) {
                 $inbound->forceFill([
-                    'cost_amount_actual' => DecimalMath::amount($newTotalCost),
+                    'cost_amount_actual' => $newTotalCostAmount,
                 ])->save();
             }
 
-            return ['batch' => $batch, 'adjustments' => $adjustments];
+            return [
+                'batch' => $batch->fresh(),
+                'adjustments' => $adjustments,
+                'summary' => [
+                    'total_delta' => $delta,
+                    'consumed_quantity' => $consumedQuantity,
+                    'remaining_quantity' => $remainingQuantity,
+                    'consumed_delta' => $consumedDelta,
+                    'remaining_inventory_delta' => $remainingDelta,
+                    'posting_date' => $adjustmentPostingDate->toDateString(),
+                ],
+            ];
         });
     }
 
-    private function markProductionOrderForLateCostAdjustment(ItemApplicationEntry $application, CostAdjustmentBatch $batch, float $adjustmentAmount): void
+    private function markProductionOrderForLateCostAdjustment(ItemApplicationEntry $application, CostAdjustmentBatch $batch, string $adjustmentAmount): void
     {
         $outbound = $application->outboundItemLedgerEntry;
         if (! $outbound || strtolower((string) ($outbound->entry_type?->value ?? $outbound->entry_type)) !== ItemLedgerEntryType::CONSUMPTION->value) {
@@ -144,7 +202,7 @@ class CostAdjustmentService
         }
     }
 
-    private function createProductionCostAdjustmentValueEntry(ProductionOrder $order, ItemLedgerEntry $consumptionEntry, CostAdjustmentBatch $batch, float $adjustmentAmount): ?ValueEntry
+    private function createProductionCostAdjustmentValueEntry(ProductionOrder $order, ItemLedgerEntry $consumptionEntry, CostAdjustmentBatch $batch, string $adjustmentAmount): ?ValueEntry
     {
         $idempotencyKey = hash('sha256', implode('|', [
             'production-late-material-cost-adjustment',
@@ -211,7 +269,7 @@ class CostAdjustmentService
     private function createAdjustmentValueEntry(
         CostAdjustmentBatch $batch,
         ItemApplicationEntry $application,
-        float $adjustmentAmount,
+        string $adjustmentAmount,
         Carbon $adjustmentPostingDate,
         string $reason,
         ?int $userId
@@ -275,6 +333,90 @@ class CostAdjustmentService
         $this->accountingOrchestrator->post($valueEntry);
 
         return $valueEntry->fresh();
+    }
+
+    private function createRemainingInventoryRevaluationValueEntry(
+        CostAdjustmentBatch $batch,
+        ItemLedgerEntry $inbound,
+        string $adjustmentAmount,
+        Carbon $adjustmentPostingDate,
+        string $reason,
+        ?int $userId
+    ): ValueEntry {
+        $inbound->loadMissing(['item', 'location']);
+        $idempotencyKey = hash('sha256', implode('|', [
+            'inventory-layer-revaluation',
+            $batch->id,
+            $inbound->id,
+            DecimalMath::amount($adjustmentAmount),
+        ]));
+
+        $existing = ValueEntry::query()->where('idempotency_key', $idempotencyKey)->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        /** @var ValueEntry $valueEntry */
+        $valueEntry = ValueEntry::query()->create([
+            'entry_no' => (ValueEntry::max('entry_no') ?? 0) + 1,
+            'item_ledger_entry_no' => $inbound->entry_number,
+            'item_ledger_entry_type' => 3,
+            'item_no' => (string) ($inbound->item?->item_code ?? $inbound->item_id),
+            'location_code' => (string) ($inbound->location?->code ?? $inbound->location_id ?? 'MAIN'),
+            'posting_date' => $adjustmentPostingDate->toDateString(),
+            'valuation_date' => $adjustmentPostingDate->toDateString(),
+            'document_type' => 'INVENTORY_REVALUATION',
+            'document_no' => $batch->batch_number,
+            'document_line_no' => $inbound->document_line_number,
+            'description' => $reason,
+            'quantity' => 0,
+            'invoiced_quantity' => 0,
+            'valued_quantity' => 0,
+            'remaining_quantity' => 0,
+            'cost_component' => ManufacturingCostComponent::CostAdjustment->value,
+            'value_entry_state' => 'adjustment',
+            'cost_amount_actual' => DecimalMath::amount($adjustmentAmount),
+            'cost_amount_actual_acy' => DecimalMath::amount($adjustmentAmount),
+            'cost_amount_expected' => 0,
+            'cost_amount_expected_acy' => 0,
+            'unit_cost' => 0,
+            'unit_cost_acy' => 0,
+            'source_type' => CostAdjustmentBatch::class,
+            'source_module' => 'inventory',
+            'source_id' => $batch->id,
+            'source_number' => $batch->batch_number,
+            'source_no' => (string) $inbound->id,
+            'source_line_no' => $inbound->document_line_number,
+            'expected_cost' => false,
+            'cost_adjusted' => true,
+            'cost_adjustment_date' => now()->toDateString(),
+            'original_entry_no' => $inbound->id,
+            'idempotency_key' => $idempotencyKey,
+            'accounting_metadata' => [
+                'inventory_layer_revaluation' => true,
+                'cost_adjustment_batch_id' => $batch->id,
+                'inbound_item_ledger_entry_id' => $inbound->id,
+                'remaining_quantity_base' => DecimalMath::quantity($inbound->remaining_quantity),
+            ],
+            'user_id' => $userId ? (string) $userId : null,
+        ]);
+
+        $this->accountingOrchestrator->post($valueEntry);
+
+        return $valueEntry->fresh();
+    }
+
+    private function allocatedDelta(string $delta, mixed $quantity, string $inboundQuantity): string
+    {
+        if (DecimalMath::isZero($inboundQuantity)) {
+            return DecimalMath::amount('0');
+        }
+
+        return DecimalMath::amount(DecimalMath::div(
+            DecimalMath::mul($delta, DecimalMath::abs($quantity, DecimalPrecision::QUANTITY_SCALE), DecimalPrecision::AMOUNT_SCALE + DecimalPrecision::QUANTITY_SCALE),
+            $inboundQuantity,
+            DecimalPrecision::AMOUNT_SCALE,
+        ));
     }
 
     private function batchNumber(ItemLedgerEntry $inbound, float $newTotalCost, string $reason, bool $dryRun): string
