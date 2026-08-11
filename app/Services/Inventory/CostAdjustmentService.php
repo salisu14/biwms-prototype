@@ -23,6 +23,7 @@ class CostAdjustmentService
     public function __construct(
         private readonly CostingPeriodService $costingPeriodService,
         private readonly ValueEntryAccountingOrchestrator $accountingOrchestrator,
+        private readonly ValueEntryEconomicValueService $economicValueService,
     ) {}
 
     /**
@@ -76,15 +77,31 @@ class CostAdjustmentService
 
             $adjustments = [];
             $inboundQuantity = DecimalMath::abs($inbound->quantity, DecimalPrecision::QUANTITY_SCALE);
+            $correctedInboundUnitCost = DecimalMath::isZero($inboundQuantity)
+                ? DecimalMath::unitCost('0')
+                : DecimalMath::div($newTotalCostAmount, $inboundQuantity, DecimalPrecision::UNIT_COST_SCALE);
             $consumedQuantity = DecimalMath::quantity($applications->sum(fn (ItemApplicationEntry $application): float => abs((float) $application->applied_quantity)));
             $remainingQuantity = DecimalMath::quantity($inbound->remaining_quantity);
             $consumedDelta = DecimalMath::amount('0');
 
             foreach ($applications as $application) {
-                $adjustmentAmount = $this->allocatedDelta($delta, $application->applied_quantity, $inboundQuantity);
+                $targetEconomicCost = $this->economicValueService->targetCostForApplication($application, $correctedInboundUnitCost);
+                $currentEconomicCost = $this->economicValueService->currentEconomicCostForApplication($application);
+                $adjustmentAmount = DecimalMath::sub($targetEconomicCost, $currentEconomicCost, DecimalPrecision::AMOUNT_SCALE);
                 $consumedDelta = DecimalMath::add($consumedDelta, $adjustmentAmount, DecimalPrecision::AMOUNT_SCALE);
 
                 if (abs((float) $adjustmentAmount) <= 0.0001) {
+                    if ($dryRun) {
+                        $adjustments[] = [
+                            'outbound_item_ledger_entry_id' => $application->outbound_item_ledger_entry_id,
+                            'adjustment_amount' => DecimalMath::amount('0'),
+                            'applied_quantity' => DecimalMath::quantity($application->applied_quantity),
+                            'current_economic_cost' => $currentEconomicCost,
+                            'target_economic_cost' => $targetEconomicCost,
+                            'outstanding_adjustment_required' => DecimalMath::amount('0'),
+                        ];
+                    }
+
                     continue;
                 }
 
@@ -93,6 +110,9 @@ class CostAdjustmentService
                         'outbound_item_ledger_entry_id' => $application->outbound_item_ledger_entry_id,
                         'adjustment_amount' => $adjustmentAmount,
                         'applied_quantity' => DecimalMath::quantity($application->applied_quantity),
+                        'current_economic_cost' => $currentEconomicCost,
+                        'target_economic_cost' => $targetEconomicCost,
+                        'outstanding_adjustment_required' => $adjustmentAmount,
                     ];
 
                     continue;
@@ -122,6 +142,7 @@ class CostAdjustmentService
                     'remaining_quantity' => $remainingQuantity,
                     'consumed_delta' => $consumedDelta,
                     'remaining_inventory_delta' => $remainingDelta,
+                    'corrected_inbound_unit_cost' => $correctedInboundUnitCost,
                     'posting_date' => $adjustmentPostingDate->toDateString(),
                 ],
             ])->save();
@@ -136,6 +157,7 @@ class CostAdjustmentService
                         'remaining_quantity' => $remainingQuantity,
                         'consumed_delta' => $consumedDelta,
                         'remaining_inventory_delta' => $remainingDelta,
+                        'corrected_inbound_unit_cost' => $correctedInboundUnitCost,
                         'posting_date' => $adjustmentPostingDate->toDateString(),
                     ],
                 ];
@@ -167,6 +189,7 @@ class CostAdjustmentService
                     'remaining_quantity' => $remainingQuantity,
                     'consumed_delta' => $consumedDelta,
                     'remaining_inventory_delta' => $remainingDelta,
+                    'corrected_inbound_unit_cost' => $correctedInboundUnitCost,
                     'posting_date' => $adjustmentPostingDate->toDateString(),
                 ],
             ];
@@ -404,19 +427,6 @@ class CostAdjustmentService
         $this->accountingOrchestrator->post($valueEntry);
 
         return $valueEntry->fresh();
-    }
-
-    private function allocatedDelta(string $delta, mixed $quantity, string $inboundQuantity): string
-    {
-        if (DecimalMath::isZero($inboundQuantity)) {
-            return DecimalMath::amount('0');
-        }
-
-        return DecimalMath::amount(DecimalMath::div(
-            DecimalMath::mul($delta, DecimalMath::abs($quantity, DecimalPrecision::QUANTITY_SCALE), DecimalPrecision::AMOUNT_SCALE + DecimalPrecision::QUANTITY_SCALE),
-            $inboundQuantity,
-            DecimalPrecision::AMOUNT_SCALE,
-        ));
     }
 
     private function batchNumber(ItemLedgerEntry $inbound, float $newTotalCost, string $reason, bool $dryRun): string

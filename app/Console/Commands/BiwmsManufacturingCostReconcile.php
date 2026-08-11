@@ -501,7 +501,16 @@ class BiwmsManufacturingCostReconcile extends Command
     {
         return $this->manufacturingValueEntryQuery($productionOrderFilter)
             ->where('gl_posted', false)
-            ->whereRaw('ABS(COALESCE(cost_amount_actual, 0)) + ABS(COALESCE(cost_amount_expected, 0)) > 0.0001')
+            ->where(function ($query): void {
+                $query->whereRaw('ABS(COALESCE(cost_amount_actual, 0)) > 0.0001');
+
+                if (config('accounts.post_expected_inventory_cost_to_gl', false)) {
+                    $query->orWhere(function ($expectedQuery): void {
+                        $expectedQuery->where('expected_cost', true)
+                            ->whereRaw('ABS(COALESCE(cost_amount_expected, 0)) > 0.0001');
+                    });
+                }
+            })
             ->limit(250)
             ->get()
             ->map(fn (ValueEntry $entry): array => [

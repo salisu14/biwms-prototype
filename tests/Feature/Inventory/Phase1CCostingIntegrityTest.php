@@ -10,6 +10,7 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
+use App\Models\CostAdjustmentBatch;
 use App\Models\CostingPeriod;
 use App\Models\Customer;
 use App\Models\GeneralBusinessPostingGroup;
@@ -235,6 +236,15 @@ it('allocates fifo layer revaluation between consumed applications and remaining
     for ($index = 1; $index <= 3; $index++) {
         $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -6.563808, 0, "PROD-CONS-{$index}", '2026-08-08');
         app(ItemApplicationService::class)->applyOutbound($outbound, 'production_consumption');
+        $outbound->refresh();
+        ValueEntry::query()
+            ->where('item_ledger_entry_no', $outbound->entry_number)
+            ->where('value_entry_state', 'actual')
+            ->update([
+                'cost_amount_actual' => $outbound->cost_amount_actual,
+                'cost_amount_actual_acy' => $outbound->cost_amount_actual,
+                'unit_cost' => '8.80000000',
+            ]);
     }
 
     $adjustmentCountBefore = ValueEntry::query()->where('value_entry_state', 'adjustment')->count();
@@ -284,6 +294,11 @@ it('allocates fifo layer revaluation between consumed applications and remaining
     expect($report['revaluation_batch_missing_inventory_adjustment'])->toBeEmpty()
         ->and($report['cost_adjustment_allocation_mismatches'])->toBeEmpty()
         ->and($report['duplicate_adjustment_value_entries'])->toBeEmpty();
+
+    Artisan::call('biwms:inventory-reconcile', ['--json' => true]);
+    $inventoryReport = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($inventoryReport['value_entry_mismatches'])->toBeEmpty();
 });
 
 it('supports negative and fully unconsumed inventory layer revaluation without consumed adjustments', function (): void {
@@ -303,6 +318,105 @@ it('supports negative and fully unconsumed inventory layer revaluation without c
         ->and((float) $revaluation->cost_amount_actual)->toBe(-100.0)
         ->and($revaluation->gl_posted)->toBeTrue()
         ->and((float) $inbound->fresh()->cost_amount_actual)->toBe(900.0);
+});
+
+it('does not duplicate adjustment when outbound economic value is already corrected', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 25000, 220000, 'PROD-B-IN', '2026-08-07');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -6.563808, 0, 'PROD-00005', '2026-08-08');
+    $applications = app(ItemApplicationService::class)->applyOutbound($outbound, 'production_consumption');
+    ValueEntry::query()
+        ->where('item_ledger_entry_no', $outbound->entry_number)
+        ->where('value_entry_state', 'actual')
+        ->update(['cost_amount_actual' => '65.6381', 'cost_amount_actual_acy' => '65.6381']);
+
+    $dryRun = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct layer cost', dryRun: true);
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct layer cost', dryRun: false);
+
+    expect((float) $applications[0]->cost_amount)->toBe(57.7615)
+        ->and((float) $dryRun['adjustments'][0]['current_economic_cost'])->toBe(65.6381)
+        ->and((float) $dryRun['adjustments'][0]['target_economic_cost'])->toBe(65.6381)
+        ->and((float) $dryRun['adjustments'][0]['outstanding_adjustment_required'])->toBe(0.0)
+        ->and((float) $posted['summary']['consumed_delta'])->toBe(0.0)
+        ->and(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('document_type', 'COST_ADJUSTMENT')->count())->toBe(0)
+        ->and(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('document_type', 'INVENTORY_REVALUATION')->count())->toBe(1);
+});
+
+it('nets adjustment and reversal chains before deciding whether another adjustment is required', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 25000, 220000, 'PROD-C-IN', '2026-08-07');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -6.563808, 0, 'PROD-00005-R', '2026-08-08');
+    $application = app(ItemApplicationService::class)->applyOutbound($outbound, 'production_consumption')[0];
+    ValueEntry::query()
+        ->where('item_ledger_entry_no', $outbound->entry_number)
+        ->where('value_entry_state', 'actual')
+        ->update(['cost_amount_actual' => '65.6381', 'cost_amount_actual_acy' => '65.6381']);
+
+    $correctionBatch = CostAdjustmentBatch::query()->create([
+        'batch_number' => 'COSTADJ-CORRECTION-TEST',
+        'source_type' => ItemLedgerEntry::class,
+        'source_id' => $inbound->id,
+        'reason' => 'Test correction chain',
+        'dry_run' => false,
+        'run_at' => now(),
+        'metadata' => ['delta' => 0],
+    ]);
+    $adjustment = ValueEntry::query()->create([
+        'entry_no' => (ValueEntry::max('entry_no') ?? 0) + 1,
+        'item_ledger_entry_no' => $outbound->entry_number,
+        'item_ledger_entry_type' => 6,
+        'item_no' => $fixture['item']->item_code,
+        'location_code' => $fixture['location']->code,
+        'posting_date' => '2026-08-08',
+        'document_type' => 'COST_ADJUSTMENT',
+        'document_no' => $correctionBatch->batch_number,
+        'document_line_no' => $application->id,
+        'quantity' => 0,
+        'valued_quantity' => 0,
+        'value_entry_state' => 'adjustment',
+        'cost_amount_actual' => '7.8766',
+        'cost_amount_actual_acy' => '7.8766',
+        'source_type' => CostAdjustmentBatch::class,
+        'source_id' => $correctionBatch->id,
+        'source_line_no' => $application->id,
+        'source_module' => 'inventory',
+        'cost_component' => 'cost_adjustment',
+        'expected_cost' => false,
+    ]);
+    ValueEntry::query()->create([
+        ...$adjustment->replicate()->toArray(),
+        'entry_no' => (ValueEntry::max('entry_no') ?? 0) + 1,
+        'value_entry_state' => 'reversal',
+        'entry_type' => 'REVERSAL',
+        'cost_amount_actual' => '-7.8766',
+        'cost_amount_actual_acy' => '-7.8766',
+        'reversal_of_value_entry_id' => $adjustment->id,
+        'original_entry_no' => $adjustment->id,
+    ]);
+
+    $dryRun = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct layer cost', dryRun: true);
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct layer cost', dryRun: false);
+
+    expect((float) $dryRun['adjustments'][0]['current_economic_cost'])->toBe(65.6381)
+        ->and((float) $dryRun['adjustments'][0]['outstanding_adjustment_required'])->toBe(0.0)
+        ->and(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('document_type', 'COST_ADJUSTMENT')->count())->toBe(0);
+});
+
+it('posts only incremental positive and negative revaluation deltas after an earlier correction', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 25000, 220000, 'INCR-IN', '2026-08-07');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -6.563808, 0, 'INCR-OUT', '2026-08-08');
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'production_consumption');
+
+    $first = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct to 10', dryRun: false);
+    $second = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 262500, 'Increase to 10.50', dryRun: false);
+    $third = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 237500, 'Decrease to 9.50', dryRun: false);
+
+    expect((float) $first['summary']['consumed_delta'])->toBe(7.8766)
+        ->and((float) $second['summary']['consumed_delta'])->toBe(3.2819)
+        ->and((float) $third['summary']['consumed_delta'])->toBe(-6.5638)
+        ->and((float) $second['summary']['remaining_inventory_delta'])->toBe(12496.7181)
+        ->and((float) $third['summary']['remaining_inventory_delta'])->toBe(-24993.4362);
 });
 
 it('refreshes existing unposted value entry from current item application state before gl posting', function (): void {

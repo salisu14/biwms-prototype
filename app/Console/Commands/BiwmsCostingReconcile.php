@@ -9,6 +9,7 @@ use App\Models\CostingPeriod;
 use App\Models\ItemApplicationEntry;
 use App\Models\ItemLedgerEntry;
 use App\Models\ValueEntry;
+use App\Services\Inventory\ValueEntryEconomicValueService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -152,20 +153,32 @@ class BiwmsCostingReconcile extends Command
      */
     private function valueEntryCostMismatches(): array
     {
+        $economicValueService = app(ValueEntryEconomicValueService::class);
+
         return ItemApplicationEntry::query()
             ->where('is_reversed', false)
-            ->with('outboundItemLedgerEntry')
+            ->with(['inboundItemLedgerEntry', 'outboundItemLedgerEntry'])
             ->get()
             ->groupBy('outbound_item_ledger_entry_id')
-            ->map(function ($applications): ?array {
+            ->map(function ($applications) use ($economicValueService): ?array {
                 $outbound = $applications->first()->outboundItemLedgerEntry;
-                $valueCost = abs((float) ValueEntry::query()
-                    ->where('item_ledger_entry_no', $outbound?->entry_number)
-                    ->where('value_entry_state', 'actual')
-                    ->sum('cost_amount_actual'));
+                if (! $outbound) {
+                    return null;
+                }
+
+                $valueCost = abs((float) $economicValueService->originalActualValueForItemLedgerEntry($outbound));
                 $applicationCost = abs((float) $applications->sum('cost_amount'));
 
                 if (abs($valueCost - $applicationCost) <= 0.0001) {
+                    return null;
+                }
+
+                $hasRevaluation = $applications->contains(
+                    fn (ItemApplicationEntry $application): bool => $application->inboundItemLedgerEntry
+                        && $economicValueService->hasPostedCostAdjustmentBatch($application->inboundItemLedgerEntry)
+                );
+
+                if ($hasRevaluation) {
                     return null;
                 }
 
@@ -355,7 +368,8 @@ class BiwmsCostingReconcile extends Command
                 $valueEntryTotal = (float) ValueEntry::query()
                     ->where('source_type', CostAdjustmentBatch::class)
                     ->where('source_id', $batch->id)
-                    ->where('value_entry_state', 'adjustment')
+                    ->whereIn('value_entry_state', ['adjustment', 'reversal'])
+                    ->where('document_type', '!=', 'PRODUCTION_COST_ADJUSTMENT')
                     ->sum('cost_amount_actual');
 
                 return abs($delta - $valueEntryTotal) > 0.0001;
@@ -366,7 +380,8 @@ class BiwmsCostingReconcile extends Command
                 'posted_adjustment_total' => (float) ValueEntry::query()
                     ->where('source_type', CostAdjustmentBatch::class)
                     ->where('source_id', $batch->id)
-                    ->where('value_entry_state', 'adjustment')
+                    ->whereIn('value_entry_state', ['adjustment', 'reversal'])
+                    ->where('document_type', '!=', 'PRODUCTION_COST_ADJUSTMENT')
                     ->sum('cost_amount_actual'),
                 'suggested_remediation' => 'Review consumed and remaining inventory adjustment Value Entries for this batch before any further layer revaluation.',
             ]))
