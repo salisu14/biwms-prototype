@@ -11,6 +11,8 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\OpeningInventory;
 use App\Models\PurchaseInvoice;
+use App\Models\ValueEntry;
+use App\Services\Inventory\ValueEntryEconomicValueService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -666,42 +668,51 @@ class BiwmsInventoryReconcile extends Command
      */
     private function valueEntryMismatches(): array
     {
-        return DB::table('item_ledger_entries as ile')
-            ->join('items', 'items.id', '=', 'ile.item_id')
-            ->join('value_entries as ve', 've.item_ledger_entry_no', '=', 'ile.entry_number')
-            ->selectRaw('
-                ile.entry_number,
-                ile.document_number,
-                ve.entry_no as value_entry_no,
-                items.item_code,
-                ile.quantity as item_ledger_quantity,
-                ve.quantity as value_entry_quantity,
-                ile.cost_amount_actual as item_ledger_cost,
-                ve.cost_amount_actual as value_entry_cost
-            ')
-            ->where(function ($query): void {
-                $query
-                    ->whereRaw('ABS(COALESCE(ile.quantity, 0) - COALESCE(ve.quantity, 0)) > 0.0001')
-                    ->orWhereRaw('ABS(COALESCE(ile.cost_amount_actual, 0) - COALESCE(ve.cost_amount_actual, 0)) > 0.0001');
-            })
-            ->orderBy('ile.entry_number')
-            ->limit(500)
+        $economicValueService = app(ValueEntryEconomicValueService::class);
+
+        return ItemLedgerEntry::query()
+            ->with('item')
+            ->whereIn('entry_number', ValueEntry::query()->select('item_ledger_entry_no'))
+            ->orderBy('entry_number')
+            ->limit(1000)
             ->get()
-            ->map(fn ($entry): array => [
-                'entry_number' => $entry->entry_number,
-                'value_entry_no' => $entry->value_entry_no,
-                'item_code' => $entry->item_code,
-                'document_number' => $entry->document_number,
-                'item_ledger_quantity' => round((float) $entry->item_ledger_quantity, 4),
-                'value_entry_quantity' => round((float) $entry->value_entry_quantity, 4),
-                'item_ledger_cost' => round((float) $entry->item_ledger_cost, 4),
-                'value_entry_cost' => round((float) $entry->value_entry_cost, 4),
-                ...$this->findingMetadata(
-                    classification: 'value_entry_mismatch',
-                    severity: 'critical',
-                    suggestedRemediation: 'Compare the Item Ledger Entry and Value Entry source document, quantity, and cost. Correct only through a reviewed value adjustment or controlled data repair plan.'
-                ),
-            ])
+            ->map(function (ItemLedgerEntry $entry) use ($economicValueService): ?array {
+                $actualValueEntryQuantity = (float) ValueEntry::query()
+                    ->where('item_ledger_entry_no', $entry->entry_number)
+                    ->where('value_entry_state', 'actual')
+                    ->where(function ($query): void {
+                        $query->where('expected_cost', false)
+                            ->orWhereNull('expected_cost');
+                    })
+                    ->sum('quantity');
+                $valueEntryCost = (float) ((float) $entry->quantity > 0 && $economicValueService->hasPostedCostAdjustmentBatch($entry)
+                    ? $economicValueService->economicValueForInboundLayer($entry)
+                    : $economicValueService->originalActualValueForItemLedgerEntry($entry));
+
+                if (
+                    abs((float) $entry->quantity - $actualValueEntryQuantity) <= 0.0001
+                    && abs((float) $entry->cost_amount_actual - $valueEntryCost) <= 0.0001
+                ) {
+                    return null;
+                }
+
+                return [
+                    'entry_number' => $entry->entry_number,
+                    'value_entry_no' => 'aggregate',
+                    'item_code' => $entry->item?->item_code,
+                    'document_number' => $entry->document_number,
+                    'item_ledger_quantity' => round((float) $entry->quantity, 4),
+                    'value_entry_quantity' => round($actualValueEntryQuantity, 4),
+                    'item_ledger_cost' => round((float) $entry->cost_amount_actual, 4),
+                    'value_entry_cost' => round($valueEntryCost, 4),
+                    ...$this->findingMetadata(
+                        classification: 'value_entry_economic_aggregate_mismatch',
+                        severity: 'critical',
+                        suggestedRemediation: 'Compare the Item Ledger Entry with aggregate actual Value Entries and append-only cost adjustment/reversal entries. Correct only through a reviewed value adjustment or controlled data repair plan.'
+                    ),
+                ];
+            })
+            ->filter()
             ->values()
             ->all();
     }

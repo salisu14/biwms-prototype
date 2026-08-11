@@ -1683,6 +1683,11 @@ it('creates idempotent expected manufacturing cost snapshots and expected value 
         ->and((float) $result['snapshot']->expected_total_cost)->toBe(178.0)
         ->and(ValueEntry::query()->where('source_type', 'PRODUCTION_EXPECTED_COST')->where('production_order_no', $order->document_number)->count())->toBe(4)
         ->and(ValueEntry::query()->where('cost_component', ManufacturingCostComponent::ExpectedDirectMaterial->value)->first()?->expected_cost)->toBeTrue();
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', ['--json' => true, '--production-order' => $order->document_number]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['findings']['manufacturing_value_entries_not_gl_posted'])->toBeEmpty();
 });
 
 it('clears manufacturing expected cost append only and idempotently', function (): void {
