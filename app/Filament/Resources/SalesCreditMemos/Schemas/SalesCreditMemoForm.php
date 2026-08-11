@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\SalesCreditMemos\Schemas;
 
 use App\Filament\Traits\HasSystemGeneratedField;
@@ -8,9 +10,7 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\SalesInvoice;
 use App\Services\Sales\SalesPricingResolver;
-use Closure;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -98,7 +98,7 @@ class SalesCreditMemoForm
             ->disabled(fn ($record) => $record?->isPosted())
             ->live()
             ->afterStateUpdated(function ($state, Set $set) {
-                if (!$state) {
+                if (! $state) {
                     return;
                 }
 
@@ -122,13 +122,14 @@ class SalesCreditMemoForm
     {
         return Repeater::make('items')
             ->relationship()
+            ->dehydrated()
+            ->saveRelationshipsUsing(null)
             ->live()
             ->schema(self::getRepeaterItemSchema())
             ->columns(12)
             ->reorderable(false)
             ->deleteAction(fn ($action) => $action->requiresConfirmation())
-            ->itemLabel(fn (array $state): ?string =>
-                $state['description'] ?? null
+            ->itemLabel(fn (array $state): ?string => $state['description'] ?? null
             );
     }
 
@@ -149,8 +150,7 @@ class SalesCreditMemoForm
     private static function makeItemSelect(): Select
     {
         return Select::make('item_id')
-            ->relationship('item', 'item_code', fn ($query) =>
-            $query->finishedGoods()->where('blocked', false)
+            ->relationship('item', 'item_code', fn ($query) => $query->finishedGoods()->where('blocked', false)
             )
             ->searchable()
             ->preload()
@@ -158,7 +158,7 @@ class SalesCreditMemoForm
             ->live()
             ->columnSpan(4)
             ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                if (!$state) {
+                if (! $state) {
                     return;
                 }
 
@@ -169,7 +169,7 @@ class SalesCreditMemoForm
     private static function populateItemFields(string|int $itemId, Set $set, Get $get): void
     {
         $item = Item::find($itemId);
-        if (!$item) {
+        if (! $item) {
             return;
         }
 
@@ -309,7 +309,7 @@ class SalesCreditMemoForm
             ->live()
             ->columnSpan(2)
             ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                if (!$state || !$get('item_id')) {
+                if (! $state || ! $get('item_id')) {
                     return;
                 }
 
@@ -320,12 +320,12 @@ class SalesCreditMemoForm
     private static function getUomOptions(Get $get): array
     {
         $itemId = $get('item_id');
-        if (!$itemId) {
+        if (! $itemId) {
             return [];
         }
 
         $item = Item::find($itemId);
-        if (!$item) {
+        if (! $item) {
             return [];
         }
 
@@ -335,7 +335,7 @@ class SalesCreditMemoForm
             ->toArray();
 
         // Ensure base UOM is always available
-        if (!array_key_exists($item->base_unit_of_measure, $uoms)) {
+        if (! array_key_exists($item->base_unit_of_measure, $uoms)) {
             $uoms[$item->base_unit_of_measure] = $item->base_unit_of_measure;
         }
 
@@ -345,7 +345,7 @@ class SalesCreditMemoForm
     private static function handleUomChange(string $newUom, Set $set, Get $get): void
     {
         $item = Item::find($get('item_id'));
-        if (!$item) {
+        if (! $item) {
             return;
         }
 
@@ -364,7 +364,7 @@ class SalesCreditMemoForm
     private static function updatePricingForCurrentUom(Set $set, Get $get): void
     {
         $currentUom = $get('unit_of_measure_code');
-        if (!$currentUom) {
+        if (! $currentUom) {
             return;
         }
 
@@ -386,8 +386,7 @@ class SalesCreditMemoForm
         return Section::make('Status & Dates')
             ->schema([
                 TextEntry::make('status')
-                    ->state(fn ($record) =>
-                        $record?->status?->getLabel() ?? 'Draft'
+                    ->state(fn ($record) => $record?->status?->getLabel() ?? 'Draft'
                     ),
 
                 DatePicker::make('effective_date')

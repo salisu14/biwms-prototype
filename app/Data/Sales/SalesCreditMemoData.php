@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Data\Sales;
 
 use Spatie\LaravelData\Data;
@@ -13,6 +15,9 @@ class SalesCreditMemoLineData extends Data
         public float $unit_price,
         public float $vat_percent = 0,
         public ?string $description = null,
+        public ?string $unit_of_measure_code = null,
+        public float $line_discount_percent = 0,
+        public float $line_discount_amount = 0,
     ) {}
 }
 
@@ -22,7 +27,7 @@ class SalesCreditMemoData extends Data
         public int $customer_id,
         public ?int $sales_invoice_id,
         public ?string $memo_number,
-        public ?\DateTime $effective_date,
+        public ?string $effective_date,
         public ?string $currency_code,
         public ?string $reason,
         /** @var DataCollection<SalesCreditMemoLineData> */

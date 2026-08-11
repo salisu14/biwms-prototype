@@ -5,8 +5,13 @@ declare(strict_types=1);
 namespace App\Services\Sales;
 
 use App\Data\Sales\SalesCreditMemoData;
+use App\Data\Sales\SalesCreditMemoLineData;
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemLedgerEntryType;
+use App\Exceptions\BusinessException;
+use App\Exceptions\DocumentStateException;
+use App\Exceptions\NumberSeriesException;
+use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
@@ -21,6 +26,7 @@ use App\Models\ValueEntry;
 use App\Services\Inventory\ReturnCostApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -37,27 +43,24 @@ class SalesCreditMemoService
      */
     public function create(SalesCreditMemoData $data): SalesCreditMemo
     {
+        $this->validateCreditMemoData($data);
+
         return DB::transaction(function () use ($data) {
             $creditMemo = SalesCreditMemo::create([
                 'customer_id' => $data->customer_id,
                 'sales_invoice_id' => $data->sales_invoice_id,
-                'memo_number' => $data->memo_number,
+                'memo_number' => $data->memo_number ?? $this->generateMemoNumber(),
                 'status' => ApprovalStatus::DRAFT,
                 'reason' => $data->reason,
                 'effective_date' => $data->effective_date ?? now(),
                 'currency_code' => $data->currency_code,
+                'total_amount' => 0,
             ]);
 
             foreach ($data->items as $line) {
-                $item = Item::findOrFail($line->item_id);
+                $item = Item::query()->findOrFail($line->item_id);
 
-                $creditMemo->items()->create([
-                    'item_id' => $item->id,
-                    'quantity' => $line->quantity,
-                    'unit_price' => $line->unit_price,
-                    'vat_percent' => $line->vat_percent,
-                    'description' => $line->description ?? $item->description,
-                ]);
+                $creditMemo->items()->create($this->linePayload($line, $item));
             }
 
             $creditMemo->refreshTotal();
@@ -67,15 +70,42 @@ class SalesCreditMemoService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function linePayload(SalesCreditMemoLineData $line, Item $item): array
+    {
+        $lineTotal = $line->quantity * $line->unit_price;
+        $discountAmount = $line->line_discount_amount > 0
+            ? $line->line_discount_amount
+            : ($lineTotal * ($line->line_discount_percent / 100));
+        $amount = max(0, $lineTotal - $discountAmount);
+        $vatAmount = round($amount * ($line->vat_percent / 100), 2);
+
+        return [
+            'item_id' => $item->id,
+            'quantity' => $line->quantity,
+            'unit_price' => $line->unit_price,
+            'vat_percent' => $line->vat_percent,
+            'description' => $line->description ?? $item->description,
+            'unit_of_measure_code' => $line->unit_of_measure_code ?: $item->base_unit_of_measure,
+            'line_discount_percent' => $line->line_discount_percent,
+            'line_discount_amount' => $line->line_discount_amount,
+            'amount' => $amount,
+            'vat_amount' => $vatAmount,
+            'amount_including_vat' => $amount + $vatAmount,
+        ];
+    }
+
+    /**
      * @throws \Throwable
      */
     public function update(SalesCreditMemo $creditMemo, SalesCreditMemoData $data): SalesCreditMemo
     {
         if ($creditMemo->status !== ApprovalStatus::DRAFT) {
-            throw ValidationException::withMessages([
-                'status' => 'Only draft credit memos can be modified.',
-            ]);
+            throw new DocumentStateException('Only draft credit memos can be modified.');
         }
+
+        $this->validateCreditMemoData($data);
 
         return DB::transaction(function () use ($creditMemo, $data) {
             $creditMemo->update([
@@ -89,15 +119,9 @@ class SalesCreditMemoService
             $creditMemo->items()->delete();
 
             foreach ($data->items as $line) {
-                $item = Item::findOrFail($line->item_id);
+                $item = Item::query()->findOrFail($line->item_id);
 
-                $creditMemo->items()->create([
-                    'item_id' => $item->id,
-                    'quantity' => $line->quantity,
-                    'unit_price' => $line->unit_price,
-                    'vat_percent' => $line->vat_percent,
-                    'description' => $line->description ?? $item->description,
-                ]);
+                $creditMemo->items()->create($this->linePayload($line, $item));
             }
 
             $creditMemo->refreshTotal();
@@ -129,26 +153,24 @@ class SalesCreditMemoService
         $userId = Auth::id();
 
         if (! $userId) {
-            throw new \Exception('Unauthenticated user');
+            throw new AuthenticationException('Authenticated user is required to post a sales credit memo.');
         }
 
         Gate::forUser(User::query()->findOrFail($userId))->authorize('post', $creditMemo);
 
         if ($creditMemo->isPosted()) {
-            throw new \Exception('Sales credit memo is already posted.');
+            throw new DocumentStateException('Sales credit memo is already posted.');
         }
 
         if ($creditMemo->status !== ApprovalStatus::APPROVED) {
-            throw ValidationException::withMessages([
-                'status' => 'Only approved credit memos can be posted.',
-            ]);
+            throw new DocumentStateException('Only approved credit memos can be posted.');
         }
 
         DB::transaction(function () use ($creditMemo) {
             $creditMemo->loadMissing(['items.item', 'customer', 'invoice']);
 
             if ($creditMemo->items->isEmpty()) {
-                throw new \Exception('No lines to post for this sales credit memo.');
+                throw new BusinessException('No lines to post for this sales credit memo.', field: 'items');
             }
 
             $correctedPostedInvoice = $this->resolveCorrectedPostedInvoice($creditMemo);
@@ -338,13 +360,13 @@ class SalesCreditMemoService
         $quantityBase = $this->quantityBase($line, $item);
 
         if ($quantityBase <= 0) {
-            throw new \Exception("Quantity must be greater than zero for item {$item->item_code}");
+            throw new BusinessException("Quantity must be greater than zero for item {$item->item_code}", field: 'items');
         }
 
         $locationId = $postedMemo->location_id ?? $item->location_id ?? $postedMemo->customer?->location_id;
 
         if (! $locationId) {
-            throw new \Exception("Location is missing for item {$item->item_code} on sales credit memo {$postedMemo->document_number}.");
+            throw new BusinessException("Location is missing for item {$item->item_code} on sales credit memo {$postedMemo->document_number}.", field: 'location_id');
         }
 
         $costAmount = $quantityBase * (float) ($item->unit_cost ?? 0);
@@ -433,5 +455,50 @@ class SalesCreditMemoService
             'original_document_no' => $originalDocumentNumber,
             'original_posting_date' => $originalPostingDate,
         ])->save();
+    }
+
+    private function validateCreditMemoData(SalesCreditMemoData $data): void
+    {
+        if (! Customer::query()->whereKey($data->customer_id)->exists()) {
+            throw ValidationException::withMessages([
+                'customer_id' => 'A valid customer is required.',
+            ]);
+        }
+
+        if ($data->items->count() === 0) {
+            throw ValidationException::withMessages([
+                'items' => 'Sales credit memo must have at least one credit line.',
+            ]);
+        }
+
+        /** @var SalesCreditMemoLineData $line */
+        foreach ($data->items as $line) {
+            if ($line->quantity <= 0) {
+                throw ValidationException::withMessages([
+                    'items' => 'Credit memo line quantity must be greater than zero.',
+                ]);
+            }
+
+            if (! Item::query()->whereKey($line->item_id)->exists()) {
+                throw ValidationException::withMessages([
+                    'items' => 'Each credit memo line must reference a valid item.',
+                ]);
+            }
+        }
+    }
+
+    private function generateMemoNumber(): string
+    {
+        try {
+            return SalesCreditMemo::generateMemoNumber();
+        } catch (NumberSeriesException $exception) {
+            throw new NumberSeriesException(
+                'Sales Credit Memo number series is not configured. Configure one of: S-CM, SALES_CREDIT_MEMO, SCM.',
+                ['S-CM', 'SALES_CREDIT_MEMO', 'SCM'],
+                title: 'Sales Credit Memo Number Series is not configured',
+                codeIdentifier: 'sales_credit_memo_number_series_missing',
+                previous: $exception,
+            );
+        }
     }
 }
