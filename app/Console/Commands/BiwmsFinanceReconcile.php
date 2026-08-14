@@ -11,6 +11,7 @@ use App\Models\CustomerLedgerEntry;
 use App\Models\CustomerPostingGroup;
 use App\Models\GlEntry;
 use App\Models\InventoryPostingSetup;
+use App\Models\Payment;
 use App\Models\ValueEntry;
 use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
@@ -32,6 +33,7 @@ class BiwmsFinanceReconcile extends Command
     {
         $report = [
             'gl_debit_credit_imbalances' => $this->glDebitCreditImbalances(),
+            'customer_ledger_missing_posting_groups' => $this->customerLedgerMissingPostingGroups(),
             'customer_ledger_receivables_mismatches' => $this->customerLedgerReceivablesMismatches(),
             'vendor_ledger_payables_mismatches' => $this->vendorLedgerPayablesMismatches(),
             'bank_ledger_gl_mismatches' => $this->bankLedgerGlMismatches(),
@@ -81,6 +83,19 @@ class BiwmsFinanceReconcile extends Command
             number_format($entry['subledger_balance'], 2, '.', ''),
             number_format($entry['gl_balance'], 2, '.', ''),
             number_format($entry['difference'], 2, '.', ''),
+        ));
+
+        $this->section('Customer ledger entries missing posting-group metadata', $report['customer_ledger_missing_posting_groups'], $details, fn (array $entry): string => sprintf(
+            '[%s] entry=%s customer=%s document=%s %s expected_customer_group=%s expected_business_group=%s ledger_customer_group=%s ledger_business_group=%s',
+            $entry['severity'],
+            $entry['entry_id'],
+            $entry['customer_id'],
+            $entry['document_type'],
+            $entry['document_number'],
+            $entry['expected_customer_posting_group_id'],
+            $entry['expected_general_business_posting_group_id'],
+            $entry['ledger_customer_posting_group_id'] ?? 'null',
+            $entry['ledger_general_business_posting_group_id'] ?? 'null',
         ));
 
         $this->section('Vendor ledger vs payables control mismatches', $report['vendor_ledger_payables_mismatches'], $details, fn (array $entry): string => sprintf(
@@ -190,6 +205,54 @@ class BiwmsFinanceReconcile extends Command
                 ),
             ])
             ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function customerLedgerMissingPostingGroups(): array
+    {
+        return CustomerLedgerEntry::query()
+            ->join('customers', 'customer_ledger_entries.customer_id', '=', 'customers.id')
+            ->where('customer_ledger_entries.reversed', false)
+            ->where('customer_ledger_entries.source_type', Payment::class)
+            ->whereNotNull('customers.customer_posting_group_id')
+            ->whereNotNull('customers.general_business_posting_group_id')
+            ->where(function ($query): void {
+                $query
+                    ->whereNull('customer_ledger_entries.customer_posting_group_id')
+                    ->orWhereNull('customer_ledger_entries.general_business_posting_group_id')
+                    ->orWhereColumn('customer_ledger_entries.customer_posting_group_id', '!=', 'customers.customer_posting_group_id')
+                    ->orWhereColumn('customer_ledger_entries.general_business_posting_group_id', '!=', 'customers.general_business_posting_group_id');
+            })
+            ->orderBy('customer_ledger_entries.id')
+            ->limit(250)
+            ->get([
+                'customer_ledger_entries.id',
+                'customer_ledger_entries.customer_id',
+                'customer_ledger_entries.document_type',
+                'customer_ledger_entries.document_number',
+                'customer_ledger_entries.customer_posting_group_id',
+                'customer_ledger_entries.general_business_posting_group_id',
+                'customers.customer_posting_group_id as expected_customer_posting_group_id',
+                'customers.general_business_posting_group_id as expected_general_business_posting_group_id',
+            ])
+            ->map(fn ($entry): array => [
+                'entry_id' => $entry->id,
+                'customer_id' => $entry->customer_id,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'ledger_customer_posting_group_id' => $entry->customer_posting_group_id,
+                'ledger_general_business_posting_group_id' => $entry->general_business_posting_group_id,
+                'expected_customer_posting_group_id' => $entry->expected_customer_posting_group_id,
+                'expected_general_business_posting_group_id' => $entry->expected_general_business_posting_group_id,
+                ...$this->findingMetadata(
+                    classification: 'customer_ledger_missing_posting_group',
+                    severity: 'warning',
+                    suggestedRemediation: 'Review the payment-created customer ledger entry, then run php artisan biwms:customer-ledger-posting-groups-repair --dry-run and apply only after approval.'
+                ),
+            ])
             ->all();
     }
 
