@@ -330,16 +330,119 @@ it('does not duplicate adjustment when outbound economic value is already correc
         ->where('value_entry_state', 'actual')
         ->update(['cost_amount_actual' => '65.6381', 'cost_amount_actual_acy' => '65.6381']);
 
+    $batchCountBeforeDryRun = CostAdjustmentBatch::query()->count();
+    $valueEntryCountBeforeDryRun = ValueEntry::query()->count();
     $dryRun = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct layer cost', dryRun: true);
+    $dryRunBatch = $dryRun['batch'];
+    expect($dryRunBatch->exists)->toBeFalse()
+        ->and(CostAdjustmentBatch::query()->count())->toBe($batchCountBeforeDryRun)
+        ->and(ValueEntry::query()->count())->toBe($valueEntryCountBeforeDryRun);
+
     $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct layer cost', dryRun: false);
+    $remainingRevaluation = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'INVENTORY_REVALUATION')
+        ->firstOrFail();
 
     expect((float) $applications[0]->cost_amount)->toBe(57.7615)
         ->and((float) $dryRun['adjustments'][0]['current_economic_cost'])->toBe(65.6381)
         ->and((float) $dryRun['adjustments'][0]['target_economic_cost'])->toBe(65.6381)
         ->and((float) $dryRun['adjustments'][0]['outstanding_adjustment_required'])->toBe(0.0)
+        ->and((float) $dryRun['summary']['consumed_layer_delta'])->toBe(7.8766)
+        ->and((float) $dryRun['summary']['pre_existing_economic_delta'])->toBe(7.8766)
+        ->and((float) $dryRun['summary']['required_new_adjustment_delta'])->toBe(29992.1234)
+        ->and((float) $dryRun['summary']['posted_new_adjustment_delta'])->toBe(29992.1234)
         ->and((float) $posted['summary']['consumed_delta'])->toBe(0.0)
+        ->and((float) $posted['summary']['remaining_inventory_delta'])->toBe(29992.1234)
+        ->and((float) $remainingRevaluation->cost_amount_actual)->toBe(29992.1234)
         ->and(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('document_type', 'COST_ADJUSTMENT')->count())->toBe(0)
         ->and(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('document_type', 'INVENTORY_REVALUATION')->count())->toBe(1);
+});
+
+it('allocates sodium saccharine revaluation around pre-existing outbound economic uplift', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 25000, 220000, 'PROD-SODIUM-IN', '2026-08-07');
+
+    foreach (['PROD-00001', 'PROD-00003', 'PROD-00005'] as $documentNumber) {
+        $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -6.563808, 0, $documentNumber, '2026-08-08');
+        app(ItemApplicationService::class)->applyOutbound($outbound, 'production_consumption');
+        $outbound->refresh();
+        ValueEntry::query()
+            ->where('item_ledger_entry_no', $outbound->entry_number)
+            ->where('value_entry_state', 'actual')
+            ->update(['cost_amount_actual' => $outbound->cost_amount_actual, 'cost_amount_actual_acy' => $outbound->cost_amount_actual]);
+
+        if ($documentNumber === 'PROD-00005') {
+            ValueEntry::query()
+                ->where('item_ledger_entry_no', $outbound->entry_number)
+                ->where('value_entry_state', 'actual')
+                ->update(['cost_amount_actual' => '65.6381', 'cost_amount_actual_acy' => '65.6381']);
+        }
+    }
+
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 250000, 'Correct opening FIFO layer cost', dryRun: false);
+    $applicationAdjustments = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'COST_ADJUSTMENT')
+        ->where('value_entry_state', 'adjustment')
+        ->get();
+    $remainingRevaluation = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'INVENTORY_REVALUATION')
+        ->firstOrFail();
+
+    Artisan::call('biwms:costing-reconcile', ['--json' => true]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+    Artisan::call('biwms:inventory-reconcile', ['--json' => true]);
+    $inventoryReport = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect((float) $posted['summary']['raw_layer_delta'])->toBe(30000.0)
+        ->and((float) $posted['summary']['consumed_layer_delta'])->toBe(23.6298)
+        ->and((float) $posted['summary']['pre_existing_economic_delta'])->toBe(7.8766)
+        ->and((float) $posted['summary']['consumed_delta'])->toBe(15.7532)
+        ->and((float) $posted['summary']['remaining_inventory_delta'])->toBe(29976.3702)
+        ->and((float) $posted['summary']['required_new_adjustment_delta'])->toBe(29992.1234)
+        ->and((float) $posted['summary']['posted_new_adjustment_delta'])->toBe(29992.1234)
+        ->and($applicationAdjustments)->toHaveCount(2)
+        ->and((float) $applicationAdjustments->sum('cost_amount_actual'))->toBe(15.7532)
+        ->and((float) $remainingRevaluation->cost_amount_actual)->toBe(29976.3702)
+        ->and($report['cost_adjustment_allocation_mismatches'])->toBeEmpty()
+        ->and($inventoryReport['value_entry_mismatches'])->toBeEmpty();
+});
+
+it('still reports genuinely missing cost adjustment allocation', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 100, 'MISSING-ADJ-IN', '2026-01-01');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -4, 0, 'MISSING-ADJ-OUT', '2026-01-02');
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'missing_adjustment_test');
+
+    $batch = CostAdjustmentBatch::query()->create([
+        'batch_number' => 'COSTADJ-MISSING-ALLOCATION',
+        'source_type' => ItemLedgerEntry::class,
+        'source_id' => $inbound->id,
+        'reason' => 'Incomplete test batch',
+        'dry_run' => false,
+        'run_at' => now(),
+        'metadata' => [
+            'old_total_cost' => '100.0000',
+            'new_total_cost' => '150.0000',
+            'delta' => '50.0000',
+            'raw_layer_delta' => '50.0000',
+            'posting_date' => '2026-01-02',
+        ],
+    ]);
+
+    Artisan::call('biwms:costing-reconcile', ['--json' => true]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+    $finding = collect($report['cost_adjustment_allocation_mismatches'])
+        ->firstWhere('batch_number', $batch->batch_number);
+
+    expect($finding)->not->toBeNull()
+        ->and((float) $finding['target_delta'])->toBe(50.0)
+        ->and((float) $finding['pre_existing_economic_delta'])->toBe(0.0)
+        ->and((float) $finding['required_new_adjustment_delta'])->toBe(50.0)
+        ->and((float) $finding['posted_new_adjustment_delta'])->toBe(0.0)
+        ->and((float) $finding['difference'])->toBe(50.0);
 });
 
 it('nets adjustment and reversal chains before deciding whether another adjustment is required', function (): void {

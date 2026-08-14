@@ -44,25 +44,26 @@ class CostAdjustmentService
             $newTotalCostAmount = DecimalMath::amount($newTotalCost);
             $delta = DecimalMath::sub($newTotalCostAmount, $currentCost, DecimalPrecision::AMOUNT_SCALE);
 
-            $batch = CostAdjustmentBatch::query()->firstOrCreate(
-                [
-                    'batch_number' => $this->batchNumber($inbound, $newTotalCost, $reason, $dryRun),
+            $batchNumber = $this->batchNumber($inbound, $newTotalCost, $reason, $dryRun);
+            $batchAttributes = [
+                'source_type' => ItemLedgerEntry::class,
+                'source_id' => $inbound->id,
+                'reason' => $reason,
+                'dry_run' => $dryRun,
+                'run_at' => now(),
+                'run_by' => $userId,
+                'metadata' => [
+                    'old_total_cost' => $currentCost,
+                    'new_total_cost' => $newTotalCostAmount,
+                    'delta' => $delta,
+                    'raw_layer_delta' => $delta,
+                    'posting_date' => $adjustmentPostingDate->toDateString(),
                 ],
-                [
-                    'source_type' => ItemLedgerEntry::class,
-                    'source_id' => $inbound->id,
-                    'reason' => $reason,
-                    'dry_run' => $dryRun,
-                    'run_at' => now(),
-                    'run_by' => $userId,
-                    'metadata' => [
-                        'old_total_cost' => $currentCost,
-                        'new_total_cost' => $newTotalCostAmount,
-                        'delta' => $delta,
-                        'posting_date' => $adjustmentPostingDate->toDateString(),
-                    ],
-                ],
-            );
+            ];
+
+            $batch = $dryRun
+                ? new CostAdjustmentBatch(['batch_number' => $batchNumber, ...$batchAttributes])
+                : CostAdjustmentBatch::query()->firstOrCreate(['batch_number' => $batchNumber], $batchAttributes);
 
             if (abs((float) $delta) <= 0.0001) {
                 return ['batch' => $batch, 'adjustments' => []];
@@ -77,17 +78,27 @@ class CostAdjustmentService
 
             $adjustments = [];
             $inboundQuantity = DecimalMath::abs($inbound->quantity, DecimalPrecision::QUANTITY_SCALE);
+            $currentInboundUnitCost = DecimalMath::isZero($inboundQuantity)
+                ? DecimalMath::unitCost('0')
+                : DecimalMath::div($currentCost, $inboundQuantity, DecimalPrecision::UNIT_COST_SCALE);
             $correctedInboundUnitCost = DecimalMath::isZero($inboundQuantity)
                 ? DecimalMath::unitCost('0')
                 : DecimalMath::div($newTotalCostAmount, $inboundQuantity, DecimalPrecision::UNIT_COST_SCALE);
             $consumedQuantity = DecimalMath::quantity($applications->sum(fn (ItemApplicationEntry $application): float => abs((float) $application->applied_quantity)));
             $remainingQuantity = DecimalMath::quantity($inbound->remaining_quantity);
             $consumedDelta = DecimalMath::amount('0');
+            $consumedLayerDelta = DecimalMath::amount('0');
+            $preExistingEconomicDelta = DecimalMath::amount('0');
 
             foreach ($applications as $application) {
+                $currentLayerCost = $this->economicValueService->targetCostForApplication($application, $currentInboundUnitCost);
                 $targetEconomicCost = $this->economicValueService->targetCostForApplication($application, $correctedInboundUnitCost);
                 $currentEconomicCost = $this->economicValueService->currentEconomicCostForApplication($application);
+                $applicationLayerDelta = DecimalMath::sub($targetEconomicCost, $currentLayerCost, DecimalPrecision::AMOUNT_SCALE);
+                $applicationPreExistingDelta = DecimalMath::sub($currentEconomicCost, $currentLayerCost, DecimalPrecision::AMOUNT_SCALE);
                 $adjustmentAmount = DecimalMath::sub($targetEconomicCost, $currentEconomicCost, DecimalPrecision::AMOUNT_SCALE);
+                $consumedLayerDelta = DecimalMath::add($consumedLayerDelta, $applicationLayerDelta, DecimalPrecision::AMOUNT_SCALE);
+                $preExistingEconomicDelta = DecimalMath::add($preExistingEconomicDelta, $applicationPreExistingDelta, DecimalPrecision::AMOUNT_SCALE);
                 $consumedDelta = DecimalMath::add($consumedDelta, $adjustmentAmount, DecimalPrecision::AMOUNT_SCALE);
 
                 if (abs((float) $adjustmentAmount) <= 0.0001) {
@@ -96,8 +107,11 @@ class CostAdjustmentService
                             'outbound_item_ledger_entry_id' => $application->outbound_item_ledger_entry_id,
                             'adjustment_amount' => DecimalMath::amount('0'),
                             'applied_quantity' => DecimalMath::quantity($application->applied_quantity),
+                            'current_layer_cost' => $currentLayerCost,
                             'current_economic_cost' => $currentEconomicCost,
                             'target_economic_cost' => $targetEconomicCost,
+                            'application_layer_delta' => $applicationLayerDelta,
+                            'pre_existing_economic_delta' => $applicationPreExistingDelta,
                             'outstanding_adjustment_required' => DecimalMath::amount('0'),
                         ];
                     }
@@ -110,8 +124,11 @@ class CostAdjustmentService
                         'outbound_item_ledger_entry_id' => $application->outbound_item_ledger_entry_id,
                         'adjustment_amount' => $adjustmentAmount,
                         'applied_quantity' => DecimalMath::quantity($application->applied_quantity),
+                        'current_layer_cost' => $currentLayerCost,
                         'current_economic_cost' => $currentEconomicCost,
                         'target_economic_cost' => $targetEconomicCost,
+                        'application_layer_delta' => $applicationLayerDelta,
+                        'pre_existing_economic_delta' => $applicationPreExistingDelta,
                         'outstanding_adjustment_required' => $adjustmentAmount,
                     ];
 
@@ -130,7 +147,9 @@ class CostAdjustmentService
                 $this->markProductionOrderForLateCostAdjustment($application, $batch, $adjustmentAmount);
             }
 
-            $remainingDelta = DecimalMath::sub($delta, $consumedDelta, DecimalPrecision::AMOUNT_SCALE);
+            $remainingDelta = DecimalMath::sub($delta, $consumedLayerDelta, DecimalPrecision::AMOUNT_SCALE);
+            $requiredNewAdjustmentDelta = DecimalMath::sub($delta, $preExistingEconomicDelta, DecimalPrecision::AMOUNT_SCALE);
+            $postedNewAdjustmentDelta = DecimalMath::add($consumedDelta, $remainingDelta, DecimalPrecision::AMOUNT_SCALE);
 
             $batch->forceFill([
                 'metadata' => [
@@ -138,25 +157,41 @@ class CostAdjustmentService
                     'old_total_cost' => $currentCost,
                     'new_total_cost' => $newTotalCostAmount,
                     'delta' => $delta,
+                    'raw_layer_delta' => $delta,
                     'consumed_quantity' => $consumedQuantity,
                     'remaining_quantity' => $remainingQuantity,
+                    'consumed_layer_delta' => $consumedLayerDelta,
                     'consumed_delta' => $consumedDelta,
+                    'pre_existing_economic_delta' => $preExistingEconomicDelta,
+                    'required_new_adjustment_delta' => $requiredNewAdjustmentDelta,
+                    'posted_new_adjustment_delta' => $postedNewAdjustmentDelta,
                     'remaining_inventory_delta' => $remainingDelta,
+                    'current_inbound_unit_cost' => $currentInboundUnitCost,
                     'corrected_inbound_unit_cost' => $correctedInboundUnitCost,
                     'posting_date' => $adjustmentPostingDate->toDateString(),
                 ],
-            ])->save();
+            ]);
+
+            if (! $dryRun) {
+                $batch->save();
+            }
 
             if ($dryRun) {
                 return [
-                    'batch' => $batch->fresh(),
+                    'batch' => $batch,
                     'adjustments' => $adjustments,
                     'summary' => [
                         'total_delta' => $delta,
+                        'raw_layer_delta' => $delta,
                         'consumed_quantity' => $consumedQuantity,
                         'remaining_quantity' => $remainingQuantity,
+                        'consumed_layer_delta' => $consumedLayerDelta,
                         'consumed_delta' => $consumedDelta,
+                        'pre_existing_economic_delta' => $preExistingEconomicDelta,
+                        'required_new_adjustment_delta' => $requiredNewAdjustmentDelta,
+                        'posted_new_adjustment_delta' => $postedNewAdjustmentDelta,
                         'remaining_inventory_delta' => $remainingDelta,
+                        'current_inbound_unit_cost' => $currentInboundUnitCost,
                         'corrected_inbound_unit_cost' => $correctedInboundUnitCost,
                         'posting_date' => $adjustmentPostingDate->toDateString(),
                     ],
@@ -185,10 +220,16 @@ class CostAdjustmentService
                 'adjustments' => $adjustments,
                 'summary' => [
                     'total_delta' => $delta,
+                    'raw_layer_delta' => $delta,
                     'consumed_quantity' => $consumedQuantity,
                     'remaining_quantity' => $remainingQuantity,
+                    'consumed_layer_delta' => $consumedLayerDelta,
                     'consumed_delta' => $consumedDelta,
+                    'pre_existing_economic_delta' => $preExistingEconomicDelta,
+                    'required_new_adjustment_delta' => $requiredNewAdjustmentDelta,
+                    'posted_new_adjustment_delta' => $postedNewAdjustmentDelta,
                     'remaining_inventory_delta' => $remainingDelta,
+                    'current_inbound_unit_cost' => $currentInboundUnitCost,
                     'corrected_inbound_unit_cost' => $correctedInboundUnitCost,
                     'posting_date' => $adjustmentPostingDate->toDateString(),
                 ],
