@@ -319,10 +319,20 @@ class BankAccountLedgerService
     private function getNextLedgerEntryNumber(\DateTimeInterface|string|null $postingDate = null): int
     {
         try {
-            return (int) $this->numberSeriesService->getNextNo(
+            $nextNumber = $this->numberSeriesService->getNextNo(
                 'BANK-LEDGER',
                 $postingDate instanceof \DateTimeInterface ? $postingDate : null
             );
+
+            if (is_numeric($nextNumber)) {
+                return (int) $nextNumber;
+            }
+
+            if (preg_match('/(\d+)(?!.*\d)/', $nextNumber, $matches) === 1) {
+                return (int) $matches[1];
+            }
+
+            throw new \UnexpectedValueException("BANK-LEDGER number [{$nextNumber}] does not contain a numeric sequence.");
         } catch (\Throwable $exception) {
             throw new PostingSetupException(
                 'Missing or invalid BANK-LEDGER number series configuration.',

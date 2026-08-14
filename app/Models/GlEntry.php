@@ -170,22 +170,5 @@ class GlEntry extends Model
             }
         });
 
-        static::created(function (GlEntry $entry) {
-            // Find the associated Chart of Account
-            // Adjust 'chart_of_account_id' if your foreign key is named differently
-            $account = ChartOfAccount::find($entry->chart_of_account_id);
-
-            if ($account) {
-                // Recalculate the balance directly from the source of truth (GlEntries)
-                // This prevents drift if transactions ever fail halfway
-                $newBalance = GlEntry::where('chart_of_account_id', $account->id)
-                    ->selectRaw('SUM(debit_amount) - SUM(credit_amount) as balance')
-                    ->value('balance');
-
-                $account->update([
-                    'balance' => $newBalance ?? 0,
-                ]);
-            }
-        });
     }
 }
