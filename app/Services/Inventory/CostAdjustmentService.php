@@ -16,6 +16,7 @@ use App\Models\ValueEntry;
 use App\Support\DecimalMath;
 use App\Support\DecimalPrecision;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class CostAdjustmentService
@@ -135,7 +136,7 @@ class CostAdjustmentService
                     continue;
                 }
 
-                $adjustments[] = $this->createAdjustmentValueEntry(
+                $genericAdjustment = $this->createAdjustmentValueEntry(
                     batch: $batch,
                     application: $application,
                     adjustmentAmount: $adjustmentAmount,
@@ -144,7 +145,14 @@ class CostAdjustmentService
                     userId: $userId,
                 );
 
-                $this->markProductionOrderForLateCostAdjustment($application, $batch, $adjustmentAmount);
+                $adjustments[] = $genericAdjustment;
+
+                $this->propagateManufacturingCostAdjustment(
+                    application: $application,
+                    batch: $batch,
+                    adjustmentAmount: $adjustmentAmount,
+                    genericAdjustment: $genericAdjustment,
+                );
             }
 
             $remainingDelta = DecimalMath::sub($delta, $consumedLayerDelta, DecimalPrecision::AMOUNT_SCALE);
@@ -237,23 +245,184 @@ class CostAdjustmentService
         });
     }
 
-    private function markProductionOrderForLateCostAdjustment(ItemApplicationEntry $application, CostAdjustmentBatch $batch, string $adjustmentAmount): void
+    /**
+     * @return Collection<int, array{
+     *     generic_value_entry: ValueEntry,
+     *     batch: CostAdjustmentBatch,
+     *     application: ItemApplicationEntry,
+     *     consumption_entry: ItemLedgerEntry,
+     *     production_order: ProductionOrder,
+     *     adjustment_amount: string,
+     *     companion_idempotency_key: string
+     * }>
+     */
+    public function missingManufacturingCostAdjustmentPropagations(mixed $productionOrderFilter = null): Collection
     {
-        $outbound = $application->outboundItemLedgerEntry;
-        if (! $outbound || strtolower((string) ($outbound->entry_type?->value ?? $outbound->entry_type)) !== ItemLedgerEntryType::CONSUMPTION->value) {
-            return;
+        return ValueEntry::query()
+            ->where('document_type', 'COST_ADJUSTMENT')
+            ->where('source_type', CostAdjustmentBatch::class)
+            ->where('source_module', 'inventory')
+            ->where('value_entry_state', 'adjustment')
+            ->whereRaw('ABS(COALESCE(cost_amount_actual, 0)) > 0.0001')
+            ->with('itemLedgerEntry')
+            ->get()
+            ->map(function (ValueEntry $genericAdjustment): ?array {
+                $batchId = $this->costAdjustmentBatchId($genericAdjustment);
+                $applicationId = $this->itemApplicationEntryId($genericAdjustment);
+
+                if (! $batchId || ! $applicationId) {
+                    return null;
+                }
+
+                /** @var CostAdjustmentBatch|null $batch */
+                $batch = CostAdjustmentBatch::query()->find($batchId);
+                /** @var ItemApplicationEntry|null $application */
+                $application = ItemApplicationEntry::query()
+                    ->with('outboundItemLedgerEntry')
+                    ->find($applicationId);
+
+                $consumptionEntry = $application?->outboundItemLedgerEntry ?? $genericAdjustment->itemLedgerEntry;
+
+                if (! $batch || ! $application || ! $consumptionEntry || ! $this->isConsumptionEntry($consumptionEntry)) {
+                    return null;
+                }
+
+                $productionOrder = $this->productionOrderForConsumptionEntry($consumptionEntry);
+                if (! $productionOrder) {
+                    return null;
+                }
+
+                $adjustmentAmount = DecimalMath::amount($genericAdjustment->cost_amount_actual);
+                $idempotencyKey = $this->productionCostAdjustmentIdempotencyKey(
+                    order: $productionOrder,
+                    consumptionEntry: $consumptionEntry,
+                    batch: $batch,
+                    adjustmentAmount: $adjustmentAmount,
+                );
+
+                if (ValueEntry::query()->where('idempotency_key', $idempotencyKey)->exists()) {
+                    return null;
+                }
+
+                return [
+                    'generic_value_entry' => $genericAdjustment,
+                    'batch' => $batch,
+                    'application' => $application,
+                    'consumption_entry' => $consumptionEntry,
+                    'production_order' => $productionOrder,
+                    'adjustment_amount' => $adjustmentAmount,
+                    'companion_idempotency_key' => $idempotencyKey,
+                ];
+            })
+            ->filter()
+            ->when($productionOrderFilter, function (Collection $rows, mixed $filter): Collection {
+                return $rows->filter(function (array $row) use ($filter): bool {
+                    /** @var ProductionOrder $order */
+                    $order = $row['production_order'];
+
+                    return (string) $order->document_number === (string) $filter
+                        || (string) $order->id === (string) $filter;
+                });
+            })
+            ->values();
+    }
+
+    /**
+     * @return array{scanned: int, repaired: int, rows: list<array<string, mixed>>}
+     */
+    public function repairMissingManufacturingCostAdjustmentPropagations(bool $apply = false, mixed $productionOrderFilter = null): array
+    {
+        $missing = $this->missingManufacturingCostAdjustmentPropagations($productionOrderFilter);
+        $rows = [];
+        $repaired = 0;
+
+        foreach ($missing as $row) {
+            /** @var ProductionOrder $order */
+            $order = $row['production_order'];
+            /** @var ItemLedgerEntry $consumptionEntry */
+            $consumptionEntry = $row['consumption_entry'];
+            /** @var CostAdjustmentBatch $batch */
+            $batch = $row['batch'];
+            /** @var ItemApplicationEntry $application */
+            $application = $row['application'];
+            /** @var ValueEntry $genericAdjustment */
+            $genericAdjustment = $row['generic_value_entry'];
+
+            $created = null;
+            if ($apply) {
+                $created = $this->propagateManufacturingCostAdjustment(
+                    application: $application,
+                    batch: $batch,
+                    adjustmentAmount: $row['adjustment_amount'],
+                    genericAdjustment: $genericAdjustment,
+                );
+                $repaired += $created ? 1 : 0;
+            }
+
+            $rows[] = [
+                'batch_id' => $batch->id,
+                'batch_number' => $batch->batch_number,
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                'consumption_item_ledger_entry_id' => $consumptionEntry->id,
+                'consumption_item_ledger_entry_no' => $consumptionEntry->entry_number,
+                'generic_value_entry_id' => $genericAdjustment->id,
+                'generic_value_entry_no' => $genericAdjustment->entry_no,
+                'adjustment_amount' => (float) $row['adjustment_amount'],
+                'companion_value_entry_id' => $created?->id,
+                'status' => $apply ? ($created ? 'repaired' : 'skipped') : 'dry_run',
+            ];
         }
 
-        $productionOrder = $outbound->source instanceof ProductionOrder
-            ? $outbound->source
-            : ProductionOrder::query()->find($outbound->source_id);
+        return [
+            'scanned' => $missing->count(),
+            'repaired' => $repaired,
+            'rows' => $rows,
+        ];
+    }
 
-        if (! $productionOrder) {
-            return;
+    public function propagateManufacturingCostAdjustment(
+        ItemApplicationEntry $application,
+        CostAdjustmentBatch $batch,
+        string $adjustmentAmount,
+        ?ValueEntry $genericAdjustment = null
+    ): ?ValueEntry {
+        if (abs((float) $adjustmentAmount) <= 0.0001) {
+            return null;
         }
 
-        $this->createProductionCostAdjustmentValueEntry($productionOrder, $outbound, $batch, $adjustmentAmount);
+        return DB::transaction(function () use ($application, $batch, $adjustmentAmount, $genericAdjustment): ?ValueEntry {
+            $application->loadMissing('outboundItemLedgerEntry');
+            $outbound = $application->outboundItemLedgerEntry;
 
+            if (! $outbound || ! $this->isConsumptionEntry($outbound)) {
+                return null;
+            }
+
+            $productionOrder = $this->productionOrderForConsumptionEntry($outbound);
+
+            if (! $productionOrder) {
+                return null;
+            }
+
+            $genericAdjustment ??= $this->genericCostAdjustmentForApplication($application, $batch, $adjustmentAmount);
+
+            $companion = $this->createProductionCostAdjustmentValueEntry(
+                order: $productionOrder,
+                consumptionEntry: $outbound,
+                batch: $batch,
+                adjustmentAmount: $adjustmentAmount,
+                genericAdjustment: $genericAdjustment,
+            );
+
+            $this->markProductionOrderForLateCostAdjustment($productionOrder);
+
+            return $companion;
+        });
+    }
+
+    private function markProductionOrderForLateCostAdjustment(ProductionOrder $productionOrder): void
+    {
         $currentStatus = $productionOrder->cost_settlement_status instanceof ProductionCostSettlementStatus
             ? $productionOrder->cost_settlement_status
             : ProductionCostSettlementStatus::tryFrom((string) $productionOrder->cost_settlement_status);
@@ -266,15 +435,14 @@ class CostAdjustmentService
         }
     }
 
-    private function createProductionCostAdjustmentValueEntry(ProductionOrder $order, ItemLedgerEntry $consumptionEntry, CostAdjustmentBatch $batch, string $adjustmentAmount): ?ValueEntry
-    {
-        $idempotencyKey = hash('sha256', implode('|', [
-            'production-late-material-cost-adjustment',
-            $batch->id,
-            $order->id,
-            $consumptionEntry->id,
-            DecimalMath::amount($adjustmentAmount),
-        ]));
+    private function createProductionCostAdjustmentValueEntry(
+        ProductionOrder $order,
+        ItemLedgerEntry $consumptionEntry,
+        CostAdjustmentBatch $batch,
+        string $adjustmentAmount,
+        ?ValueEntry $genericAdjustment = null
+    ): ?ValueEntry {
+        $idempotencyKey = $this->productionCostAdjustmentIdempotencyKey($order, $consumptionEntry, $batch, $adjustmentAmount);
 
         $existing = ValueEntry::query()->where('idempotency_key', $idempotencyKey)->first();
         if ($existing) {
@@ -322,12 +490,96 @@ class CostAdjustmentService
                 'phase_1d_late_material_cost_propagation' => true,
                 'cost_adjustment_batch_id' => $batch->id,
                 'consumption_item_ledger_entry_id' => $consumptionEntry->id,
+                'generic_cost_adjustment_value_entry_id' => $genericAdjustment?->id,
+                'gl_covered_by_generic_cost_adjustment' => (bool) ($genericAdjustment?->gl_posted && $genericAdjustment->posting_transaction_id),
             ],
         ]);
 
-        $this->accountingOrchestrator->post($valueEntry);
+        if ($genericAdjustment?->gl_posted && $genericAdjustment->posting_transaction_id) {
+            $valueEntry->forceFill([
+                'gl_posted' => true,
+                'posting_transaction_id' => $genericAdjustment->posting_transaction_id,
+                'gl_posting_date' => $genericAdjustment->gl_posting_date,
+                'gl_posted_at' => $genericAdjustment->gl_posted_at,
+                'gl_entry_no' => $genericAdjustment->gl_entry_no,
+                'gl_account_no' => $genericAdjustment->gl_account_no,
+                'balancing_account_no' => $genericAdjustment->balancing_account_no,
+                'accounting_metadata' => [
+                    ...(array) $valueEntry->accounting_metadata,
+                    'generic_cost_adjustment_value_entry_id' => $genericAdjustment->id,
+                    'generic_cost_adjustment_value_entry_no' => $genericAdjustment->entry_no,
+                    'gl_covered_by_generic_cost_adjustment' => true,
+                    'gl_posting_boundary' => 'generic_inventory_cost_adjustment',
+                ],
+            ])->save();
+        } else {
+            $this->accountingOrchestrator->post($valueEntry);
+        }
 
         return $valueEntry->fresh();
+    }
+
+    private function productionCostAdjustmentIdempotencyKey(
+        ProductionOrder $order,
+        ItemLedgerEntry $consumptionEntry,
+        CostAdjustmentBatch $batch,
+        string $adjustmentAmount
+    ): string {
+        return hash('sha256', implode('|', [
+            'production-late-material-cost-adjustment',
+            $batch->id,
+            $order->id,
+            $consumptionEntry->id,
+            DecimalMath::amount($adjustmentAmount),
+        ]));
+    }
+
+    private function isConsumptionEntry(ItemLedgerEntry $entry): bool
+    {
+        $entryType = $entry->entry_type;
+
+        if ($entryType instanceof ItemLedgerEntryType) {
+            return $entryType === ItemLedgerEntryType::CONSUMPTION;
+        }
+
+        return strtolower((string) $entryType) === strtolower(ItemLedgerEntryType::CONSUMPTION->value);
+    }
+
+    private function productionOrderForConsumptionEntry(ItemLedgerEntry $consumptionEntry): ?ProductionOrder
+    {
+        return $consumptionEntry->source instanceof ProductionOrder
+            ? $consumptionEntry->source
+            : ProductionOrder::query()->find($consumptionEntry->source_id);
+    }
+
+    private function genericCostAdjustmentForApplication(ItemApplicationEntry $application, CostAdjustmentBatch $batch, string $adjustmentAmount): ?ValueEntry
+    {
+        return ValueEntry::query()
+            ->where('document_type', 'COST_ADJUSTMENT')
+            ->where('source_type', CostAdjustmentBatch::class)
+            ->where('source_module', 'inventory')
+            ->where('source_id', $batch->id)
+            ->where('source_line_no', $application->id)
+            ->where('value_entry_state', 'adjustment')
+            ->where('cost_amount_actual', DecimalMath::amount($adjustmentAmount))
+            ->first();
+    }
+
+    private function costAdjustmentBatchId(ValueEntry $valueEntry): ?int
+    {
+        $batchId = data_get($valueEntry->accounting_metadata, 'adjustment_batch_id')
+            ?? data_get($valueEntry->accounting_metadata, 'cost_adjustment_batch_id')
+            ?? $valueEntry->source_id;
+
+        return is_numeric($batchId) ? (int) $batchId : null;
+    }
+
+    private function itemApplicationEntryId(ValueEntry $valueEntry): ?int
+    {
+        $applicationId = data_get($valueEntry->accounting_metadata, 'item_application_entry_id')
+            ?? $valueEntry->source_line_no;
+
+        return is_numeric($applicationId) ? (int) $applicationId : null;
     }
 
     private function createAdjustmentValueEntry(
