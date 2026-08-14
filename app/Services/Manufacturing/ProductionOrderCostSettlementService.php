@@ -32,6 +32,7 @@ class ProductionOrderCostSettlementService
         private readonly ExpectedCostClearingService $expectedCostClearingService,
         private readonly ProductionVarianceCalculationService $varianceCalculationService,
         private readonly CostingPeriodService $costingPeriodService,
+        private readonly ProductionValueEntryOwnership $ownership,
     ) {}
 
     /**
@@ -350,14 +351,7 @@ class ProductionOrderCostSettlementService
 
     private function manufacturingValueEntries(ProductionOrder $order): Builder
     {
-        return ValueEntry::query()
-            ->where(function (Builder $query) use ($order): void {
-                $query->where('production_order_no', $order->document_number)
-                    ->orWhere(function (Builder $query) use ($order): void {
-                        $query->where('source_module', 'manufacturing')
-                            ->where('source_id', $order->id);
-                    });
-            });
+        return $this->ownership->belongsToOrderQuery($order);
     }
 
     private function requiresResettlement(ProductionOrder $order): bool

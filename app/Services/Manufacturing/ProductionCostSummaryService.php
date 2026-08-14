@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\Schema;
 
 class ProductionCostSummaryService
 {
+    public function __construct(
+        private readonly ProductionValueEntryOwnership $ownership,
+    ) {}
+
     /**
      * @return array<string, float|bool|null>
      */
@@ -19,14 +23,8 @@ class ProductionCostSummaryService
     {
         $order->refresh();
 
-        $valueEntries = ValueEntry::query()
-            ->where(function ($query) use ($order): void {
-                $query->where('production_order_no', $order->document_number)
-                    ->orWhere(function ($nested) use ($order): void {
-                        $nested->where('source_module', 'manufacturing')
-                            ->where('source_id', $order->id);
-                    });
-            })
+        $valueEntries = $this->ownership
+            ->belongsToOrderQuery($order)
             ->get()
             ->reject(fn (ValueEntry $entry): bool => in_array((string) $entry->value_entry_state, ['reversed', 'cleared'], true));
 
@@ -52,6 +50,7 @@ class ProductionCostSummaryService
         $allocatedOutputCost = Schema::hasTable('production_output_cost_allocations')
             ? (float) ProductionOutputCostAllocation::query()
                 ->where('production_order_id', $order->id)
+                ->whereNull('reversed_at')
                 ->sum('allocated_total_cost')
             : 0.0;
         $totalAccumulatedCost = $actualMaterial + $actualCapacity + $actualOverhead;
