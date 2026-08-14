@@ -118,14 +118,6 @@ class ExpectedCostClearingService
         float $amountToClear,
         ?int $userId = null
     ): ?ValueEntry {
-        if (! config('accounts.post_expected_inventory_cost_to_gl', false)) {
-            return null;
-        }
-
-        if (! $expectedEntry->gl_posted) {
-            return null;
-        }
-
         if ($quantityBase <= 0.0) {
             throw new RuntimeException('Expected manufacturing cost clearing quantity must be greater than zero.');
         }
@@ -203,7 +195,9 @@ class ExpectedCostClearingService
                 'user_id' => $userId ? (string) $userId : (auth()->id() ? (string) auth()->id() : null),
             ]);
 
-            $this->accountingOrchestrator->post($clearingEntry);
+            if (config('accounts.post_expected_inventory_cost_to_gl', false) && $lockedExpected->gl_posted) {
+                $this->accountingOrchestrator->post($clearingEntry);
+            }
 
             return $clearingEntry->fresh();
         });
