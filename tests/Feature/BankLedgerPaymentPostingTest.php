@@ -111,6 +111,8 @@ it('creates a bank ledger entry and increases bank balance for a customer receip
         ->and((float) $ledgerEntry->amount)->toBe(-1800.0)
         ->and((float) $ledgerEntry->remaining_amount)->toBe(1800.0)
         ->and($ledgerEntry->open)->toBeTrue()
+        ->and($ledgerEntry->customer_posting_group_id)->toBe($customerPostingGroup->id)
+        ->and($ledgerEntry->general_business_posting_group_id)->toBe($customer->general_business_posting_group_id)
         ->and((float) $customer->fresh()->balance)->toBe(-1800.0)
         ->and((float) $bankGlAccount->fresh()->balance)->toBe(1800.0)
         ->and((float) $receivablesAccount->fresh()->balance)->toBe(-1800.0)
@@ -172,6 +174,8 @@ it('creates a bank ledger entry and reduces bank balance for a vendor payment', 
         ->and((float) $ledgerEntry->amount)->toBe(-600.0)
         ->and((float) $ledgerEntry->remaining_amount)->toBe(600.0)
         ->and($ledgerEntry->open)->toBeTrue()
+        ->and($ledgerEntry->vendor_posting_group_id)->toBe($vendorPostingGroup->id)
+        ->and($ledgerEntry->general_business_posting_group_id)->toBe($vendor->general_business_posting_group_id)
         ->and((float) $vendor->fresh()->balance)->toBe(-600.0);
 });
 
@@ -179,7 +183,7 @@ it('blocks double posting and does not duplicate bank ledger entries', function 
     $user = User::factory()->create();
     grantPaymentPostingPermission($user);
 
-    $customer = Customer::factory()->create();
+    $customer = customerWithReceivablesPostingSetup();
     $bankAccount = BankAccount::factory()->receiptOnly()->create();
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
@@ -208,7 +212,7 @@ it('rejects posting without a bank account', function () {
     $user = User::factory()->create();
     grantPaymentPostingPermission($user);
 
-    $customer = Customer::factory()->create();
+    $customer = customerWithReceivablesPostingSetup();
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
         'party_name' => $customer->name,
@@ -228,11 +232,41 @@ it('rejects posting without a bank account', function () {
         ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse();
 });
 
+it('rejects customer receipt when the customer cannot be resolved without partial posting', function () {
+    $user = User::factory()->create();
+    grantPaymentPostingPermission($user);
+
+    $bankAccount = BankAccount::factory()->receiptOnly()->create([
+        'current_balance' => 700,
+        'available_balance' => 700,
+    ]);
+    $payment = Payment::factory()->customerReceipt()->create([
+        'party_id' => 999999,
+        'party_name' => 'Missing Customer',
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 300,
+        'payment_amount_lcy' => 300,
+        'applied_amount' => 0,
+        'unapplied_amount' => 300,
+        'status' => 'APPROVED',
+        'created_by' => $user->id,
+    ]);
+
+    expect(fn () => app(PaymentService::class)->post($payment, $user->id))
+        ->toThrow(PostingSetupException::class, 'Customer could not be resolved for this receipt.');
+
+    expect($payment->fresh()->status)->toBe('APPROVED')
+        ->and((float) $bankAccount->fresh()->current_balance)->toBe(700.0)
+        ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse()
+        ->and(CustomerLedgerEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeFalse();
+});
+
 it('rejects zero and negative payment amounts', function (float $amount) {
     $user = User::factory()->create();
     grantPaymentPostingPermission($user);
 
-    $customer = Customer::factory()->create();
+    $customer = customerWithReceivablesPostingSetup();
     $bankAccount = BankAccount::factory()->receiptOnly()->create();
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
@@ -258,7 +292,7 @@ it('rejects zero and negative payment amounts', function (float $amount) {
 
 it('blocks users without payment posting permission', function () {
     $user = User::factory()->create();
-    $customer = Customer::factory()->create();
+    $customer = customerWithReceivablesPostingSetup();
     $bankAccount = BankAccount::factory()->receiptOnly()->create();
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
@@ -283,7 +317,7 @@ it('requires the bank ledger number series and rolls back payment posting when i
     $user = User::factory()->create();
     grantPaymentPostingPermission($user);
 
-    $customer = Customer::factory()->create();
+    $customer = customerWithReceivablesPostingSetup();
     $bankAccount = BankAccount::factory()->receiptOnly()->create([
         'current_balance' => 700,
         'available_balance' => 700,
@@ -690,6 +724,18 @@ function ensureBankLedgerNumberSeries(): void
             'blocked' => false,
         ]
     );
+}
+
+function customerWithReceivablesPostingSetup(): Customer
+{
+    $receivablesAccount = ChartOfAccount::factory()->create();
+    $customerPostingGroup = CustomerPostingGroup::factory()->create([
+        'receivables_account_id' => $receivablesAccount->id,
+    ]);
+
+    return Customer::factory()->create([
+        'customer_posting_group_id' => $customerPostingGroup->id,
+    ]);
 }
 
 function postedCustomerPayment(Customer $customer, User $user, float $amount): Payment

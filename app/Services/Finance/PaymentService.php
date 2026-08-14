@@ -6,7 +6,9 @@ namespace App\Services\Finance;
 
 use App\Events\PaymentApplied;
 use App\Events\PaymentUnapplied;
+use App\Exceptions\PostingSetupException;
 use App\Models\Currency;
+use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Payment;
 use App\Models\PaymentApplication;
@@ -17,6 +19,7 @@ use App\Models\PostedSalesInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\SalesOrder;
 use App\Models\User;
+use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Services\AuditTrailService;
 use App\Services\BankAccountLedgerService;
@@ -556,8 +559,10 @@ class PaymentService
 
     protected function postCustomerReceipt(Payment $payment, int $userId): void
     {
+        $customer = $this->resolveCustomerForReceipt($payment);
+
         $lastEntry = CustomerLedgerEntry::query()
-            ->where('customer_id', $payment->party_id)
+            ->where('customer_id', $customer->id)
             ->orderByDesc('entry_number')
             ->first();
 
@@ -566,7 +571,7 @@ class PaymentService
 
         CustomerLedgerEntry::create([
             'entry_number' => $nextEntryNumber,
-            'customer_id' => $payment->party_id,
+            'customer_id' => $customer->id,
             'document_type' => 'PAYMENT',
             'document_number' => $payment->payment_number,
             'external_document_number' => $payment->external_reference,
@@ -584,6 +589,8 @@ class PaymentService
             'currency_code' => $payment->currency_code, // Keeping for compat
             'currency_factor' => $payment->currency_factor,
             'original_credit_amount' => $payment->payment_amount, // FCY
+            'general_business_posting_group_id' => $customer->general_business_posting_group_id,
+            'customer_posting_group_id' => $customer->customer_posting_group_id,
             'source_id' => $payment->id,
             'source_type' => Payment::class,
             'created_by' => $userId,
@@ -592,8 +599,10 @@ class PaymentService
 
     protected function postVendorPayment(Payment $payment, int $userId): void
     {
+        $vendor = $this->resolveVendorForPayment($payment);
+
         $lastEntry = VendorLedgerEntry::query()
-            ->where('vendor_id', $payment->party_id)
+            ->where('vendor_id', $vendor->id)
             ->orderByDesc('entry_number')
             ->first();
 
@@ -602,7 +611,7 @@ class PaymentService
 
         VendorLedgerEntry::create([
             'entry_number' => $nextEntryNumber,
-            'vendor_id' => $payment->party_id,
+            'vendor_id' => $vendor->id,
             'document_type' => 'PAYMENT',
             'document_number' => $payment->payment_number,
             'external_document_number' => $payment->external_reference,
@@ -621,12 +630,88 @@ class PaymentService
             'currency_factor' => $payment->currency_factor,
             'original_debit_amount' => 0,
             'original_credit_amount' => $payment->payment_amount,
-            'general_business_posting_group_id' => $payment->general_business_posting_group_id,
-            'vendor_posting_group_id' => $payment->posting_group_id,
+            'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+            'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
             'source_id' => $payment->id,
             'source_type' => Payment::class,
             'created_by' => $userId,
         ]);
+    }
+
+    protected function resolveCustomerForReceipt(Payment $payment): Customer
+    {
+        $customer = Customer::query()
+            ->with('customerPostingGroup')
+            ->find($payment->party_id);
+
+        if (! $customer) {
+            throw new PostingSetupException('Customer could not be resolved for this receipt.', [
+                'payment_id' => $payment->id,
+                'party_id' => $payment->party_id,
+            ]);
+        }
+
+        if (! $customer->customer_posting_group_id) {
+            throw new PostingSetupException('Customer posting group is not configured for this customer.', [
+                'payment_id' => $payment->id,
+                'customer_id' => $customer->id,
+            ]);
+        }
+
+        if (! $customer->general_business_posting_group_id) {
+            throw new PostingSetupException('General business posting group is not configured for this customer.', [
+                'payment_id' => $payment->id,
+                'customer_id' => $customer->id,
+            ]);
+        }
+
+        if (! $customer->customerPostingGroup?->receivables_account_id) {
+            throw new PostingSetupException('Customer posting group receivables account is not configured.', [
+                'payment_id' => $payment->id,
+                'customer_id' => $customer->id,
+                'customer_posting_group_id' => $customer->customer_posting_group_id,
+            ]);
+        }
+
+        return $customer;
+    }
+
+    protected function resolveVendorForPayment(Payment $payment): Vendor
+    {
+        $vendor = Vendor::query()
+            ->with('vendorPostingGroup')
+            ->find($payment->party_id);
+
+        if (! $vendor) {
+            throw new PostingSetupException('Vendor could not be resolved for this payment.', [
+                'payment_id' => $payment->id,
+                'party_id' => $payment->party_id,
+            ]);
+        }
+
+        if (! $vendor->vendor_posting_group_id) {
+            throw new PostingSetupException('Vendor posting group is not configured for this vendor.', [
+                'payment_id' => $payment->id,
+                'vendor_id' => $vendor->id,
+            ]);
+        }
+
+        if (! $vendor->general_business_posting_group_id) {
+            throw new PostingSetupException('General business posting group is not configured for this vendor.', [
+                'payment_id' => $payment->id,
+                'vendor_id' => $vendor->id,
+            ]);
+        }
+
+        if (! $vendor->vendorPostingGroup?->payables_account_id) {
+            throw new PostingSetupException('Vendor posting group payables account is not configured.', [
+                'payment_id' => $payment->id,
+                'vendor_id' => $vendor->id,
+                'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+            ]);
+        }
+
+        return $vendor;
     }
 
     protected function postGlEntries(Payment $payment): void

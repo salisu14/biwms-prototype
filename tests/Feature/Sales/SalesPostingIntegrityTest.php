@@ -36,6 +36,7 @@ use App\Services\Sales\SalesCreditMemoService;
 use App\Services\Sales\SalesInvoiceService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Validation\ValidationException;
 
 uses(RefreshDatabase::class);
@@ -124,6 +125,12 @@ test('sales invoice posting creates traceable item, value, customer, and balance
 
     expect((float) $receivablesAccount->fresh()->balance)->toBe(0.0)
         ->and((float) GlEntry::query()->where('chart_of_account_id', $receivablesAccount->id)->sum('amount'))->toBe(0.0);
+
+    expect(Artisan::call('biwms:finance-reconcile', ['--json' => true]))->toBe(0);
+    $financeReconcile = json_decode(trim(Artisan::output()), true);
+
+    expect($financeReconcile['customer_ledger_receivables_mismatches'])->toBeEmpty()
+        ->and($financeReconcile['customer_ledger_missing_posting_groups'])->toBeEmpty();
 
     $this->expectExceptionMessage('Invoice already posted');
     app(SalesInvoiceService::class)->post($invoice->fresh());
