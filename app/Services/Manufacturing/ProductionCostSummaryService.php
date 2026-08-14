@@ -92,8 +92,8 @@ class ProductionCostSummaryService
             'uncleared_expected_cost' => round($unclearedExpectedCost, 4),
             'pending_adjustments' => round($pendingAdjustments, 4),
             'posted_adjustments' => round($postedAdjustments, 4),
-            'cost_posted_to_gl' => round((float) $valueEntries->where('gl_posted', true)->sum(fn (ValueEntry $entry): float => abs((float) $entry->cost_amount_actual) + abs((float) $entry->cost_amount_expected)), 4),
-            'cost_not_posted_to_gl' => round((float) $valueEntries->where('gl_posted', false)->sum(fn (ValueEntry $entry): float => abs((float) $entry->cost_amount_actual) + abs((float) $entry->cost_amount_expected)), 4),
+            'cost_posted_to_gl' => round((float) $valueEntries->where('gl_posted', true)->sum(fn (ValueEntry $entry): float => $this->glRelevantAmount($entry)), 4),
+            'cost_not_posted_to_gl' => round((float) $valueEntries->where('gl_posted', false)->sum(fn (ValueEntry $entry): float => $this->glRelevantAmount($entry)), 4),
             'settlement_status' => $order->cost_settlement_status?->value ?? $order->cost_settlement_status,
             'settlement_classification' => $order->cost_settlement_classification?->value ?? $order->cost_settlement_classification,
             'last_expected_cost_calculation_date' => optional($order->expectedCostSnapshots()->latest('calculated_at')->first())->calculated_at,
@@ -132,5 +132,14 @@ class ProductionCostSummaryService
 
                 return (float) $expectedEntry->cost_amount_expected + $clearedAmount;
             });
+    }
+
+    private function glRelevantAmount(ValueEntry $entry): float
+    {
+        if ($entry->expected_cost && ! config('accounts.post_expected_inventory_cost_to_gl', false)) {
+            return 0.0;
+        }
+
+        return abs((float) $entry->cost_amount_actual) + abs((float) $entry->cost_amount_expected);
     }
 }

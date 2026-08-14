@@ -179,14 +179,7 @@ class ProductionOrderCostSettlementService
             $reasons[] = ProductionCostSettlementClassification::RequiredConsumptionNotPosted->value;
         }
 
-        $incompleteRoutingLines = $order->routingLines()
-            ->where(function (Builder $query): void {
-                $query->whereRaw('(COALESCE(setup_time, 0) - COALESCE(actual_setup_time, 0)) > ?', [DecimalTolerance::QUANTITY])
-                    ->orWhereRaw('(COALESCE(run_time, 0) - COALESCE(actual_run_time, 0)) > ?', [DecimalTolerance::QUANTITY]);
-            })
-            ->exists();
-
-        if ($incompleteRoutingLines) {
+        if ($this->hasIncompleteRoutingCapacity($order)) {
             $reasons[] = ProductionCostSettlementClassification::RequiredCapacityNotPosted->value;
         }
 
@@ -218,10 +211,6 @@ class ProductionOrderCostSettlementService
 
     private function clearExpectedCosts(ProductionOrder $order, int $userId): void
     {
-        if (! config('accounts.post_expected_inventory_cost_to_gl', false)) {
-            return;
-        }
-
         $actualEntries = $this->manufacturingValueEntries($order)
             ->where('expected_cost', false)
             ->whereIn('cost_component', [
@@ -257,7 +246,7 @@ class ProductionOrderCostSettlementService
             $this->expectedCostClearingService->clearForActualManufacturingCost(
                 expectedEntry: $expectedEntry,
                 actualEntry: $actualEntry,
-                quantityBase: abs((float) ($actualEntry->valued_quantity ?: $actualEntry->quantity ?: $expectedEntry->quantity)),
+                quantityBase: $this->quantityBaseForExpectedClearing($expectedEntry, $actualEntry),
                 amountToClear: min($outstandingExpectedAmount, abs((float) $actualEntry->cost_amount_actual)),
                 userId: $userId,
             );
@@ -266,6 +255,10 @@ class ProductionOrderCostSettlementService
 
     private function actualClearsExpected(ValueEntry $expectedEntry, ValueEntry $actualEntry): bool
     {
+        if (! $this->expectedAndActualReferToSameManufacturingLine($expectedEntry, $actualEntry)) {
+            return false;
+        }
+
         return match ((string) $expectedEntry->cost_component) {
             ManufacturingCostComponent::ExpectedDirectMaterial->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::DirectMaterial->value, ManufacturingCostComponent::CostAdjustment->value, 'material'], true),
             ManufacturingCostComponent::ExpectedDirectCapacity->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::DirectCapacity->value, 'capacity'], true),
@@ -273,6 +266,62 @@ class ProductionOrderCostSettlementService
             ManufacturingCostComponent::ExpectedOutput->value => (string) $actualEntry->cost_component === ManufacturingCostComponent::Output->value,
             default => false,
         };
+    }
+
+    private function hasIncompleteRoutingCapacity(ProductionOrder $order): bool
+    {
+        return $order->routingLines()
+            ->withCount('capacityLedgerEntries')
+            ->get()
+            ->contains(function ($routingLine): bool {
+                if ((string) $routingLine->status !== 'COMPLETED') {
+                    return true;
+                }
+
+                $requiresCapacityEvidence = abs((float) $routingLine->setup_time) > DecimalTolerance::QUANTITY
+                    || abs((float) $routingLine->run_time) > DecimalTolerance::QUANTITY
+                    || abs((float) $routingLine->actual_setup_time) > DecimalTolerance::QUANTITY
+                    || abs((float) $routingLine->actual_run_time) > DecimalTolerance::QUANTITY;
+
+                return $requiresCapacityEvidence && (int) $routingLine->capacity_ledger_entries_count === 0;
+            });
+    }
+
+    private function expectedAndActualReferToSameManufacturingLine(ValueEntry $expectedEntry, ValueEntry $actualEntry): bool
+    {
+        if ((string) $expectedEntry->production_order_no !== (string) $actualEntry->production_order_no) {
+            return false;
+        }
+
+        if ((string) $expectedEntry->cost_component === ManufacturingCostComponent::ExpectedOutput->value) {
+            return true;
+        }
+
+        foreach (['production_order_component_line_no', 'source_line_no', 'document_line_no'] as $attribute) {
+            $expectedValue = $expectedEntry->{$attribute};
+            $actualValue = $actualEntry->{$attribute};
+
+            if (filled($expectedValue) && filled($actualValue)) {
+                return (string) $expectedValue === (string) $actualValue;
+            }
+        }
+
+        return filled($expectedEntry->item_no)
+            && filled($actualEntry->item_no)
+            && (string) $expectedEntry->item_no === (string) $actualEntry->item_no;
+    }
+
+    private function quantityBaseForExpectedClearing(ValueEntry $expectedEntry, ValueEntry $actualEntry): float
+    {
+        foreach ([$actualEntry->valued_quantity, $actualEntry->quantity, $expectedEntry->valued_quantity, $expectedEntry->quantity] as $quantity) {
+            $absoluteQuantity = abs((float) $quantity);
+
+            if ($absoluteQuantity > DecimalTolerance::QUANTITY) {
+                return $absoluteQuantity;
+            }
+        }
+
+        return 1.0;
     }
 
     /**
