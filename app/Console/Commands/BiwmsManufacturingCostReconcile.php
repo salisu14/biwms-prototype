@@ -151,20 +151,28 @@ class BiwmsManufacturingCostReconcile extends Command
             ->where('expected_cost', true)
             ->where('value_entry_state', 'expected')
             ->where('cost_component', $component)
-            ->whereRaw('ABS(COALESCE(cost_amount_expected, 0)) > 0.0001')
             ->limit(250)
             ->get()
-            ->map(fn (ValueEntry $entry): array => [
-                'production_order_no' => $entry->production_order_no,
-                'value_entry_id' => $entry->id,
-                'cost_component' => $entry->cost_component,
-                'uncleared_amount' => round((float) $entry->cost_amount_expected, 4),
-                ...$this->findingMetadata(
-                    classification: $classification,
-                    severity: 'warning',
-                    suggestedRemediation: 'Run expected-cost clearing against matching actual manufacturing Value Entries; preserve the original expected entry.',
-                ),
-            ])
+            ->map(function (ValueEntry $entry) use ($classification): ?array {
+                $unclearedAmount = $this->unclearedExpectedAmount($entry);
+
+                if (abs($unclearedAmount) <= 0.0001) {
+                    return null;
+                }
+
+                return [
+                    'production_order_no' => $entry->production_order_no,
+                    'value_entry_id' => $entry->id,
+                    'cost_component' => $entry->cost_component,
+                    'uncleared_amount' => round($unclearedAmount, 4),
+                    ...$this->findingMetadata(
+                        classification: $classification,
+                        severity: 'warning',
+                        suggestedRemediation: 'Run expected-cost clearing against matching actual manufacturing Value Entries; preserve the original expected entry.',
+                    ),
+                ];
+            })
+            ->filter()
             ->values()
             ->all();
     }
@@ -893,5 +901,16 @@ class BiwmsManufacturingCostReconcile extends Command
             'overhead' => ManufacturingCostComponent::CapacityOverhead->value,
             default => strtolower((string) $valueEntry->cost_component),
         };
+    }
+
+    private function unclearedExpectedAmount(ValueEntry $expectedEntry): float
+    {
+        $clearedAmount = (float) ValueEntry::query()
+            ->where('expected_cost', true)
+            ->where('value_entry_state', 'clearing')
+            ->where('reversal_of_value_entry_id', $expectedEntry->id)
+            ->sum('cost_amount_expected');
+
+        return round((float) $expectedEntry->cost_amount_expected + $clearedAmount, 4);
     }
 }
