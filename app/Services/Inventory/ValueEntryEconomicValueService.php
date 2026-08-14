@@ -103,7 +103,7 @@ class ValueEntryEconomicValueService
             ->where('dry_run', false)
             ->get()
             ->sum(function (CostAdjustmentBatch $batch): float {
-                return (float) ValueEntry::query()
+                $postedAdjustmentCost = (float) ValueEntry::query()
                     ->where('source_type', CostAdjustmentBatch::class)
                     ->where('source_id', $batch->id)
                     ->whereIn('value_entry_state', ['adjustment', 'reversal'])
@@ -112,6 +112,12 @@ class ValueEntryEconomicValueService
                             ->orWhereNull('document_type');
                     })
                     ->sum('cost_amount_actual');
+
+                return (float) DecimalMath::add(
+                    $postedAdjustmentCost,
+                    $this->preExistingEconomicDeltaForBatch($batch),
+                    DecimalPrecision::AMOUNT_SCALE,
+                );
             });
 
         return DecimalMath::amount(DecimalMath::add(
@@ -128,5 +134,75 @@ class ValueEntryEconomicValueService
             ->where('source_id', $entry->id)
             ->where('dry_run', false)
             ->exists();
+    }
+
+    public function preExistingEconomicDeltaForBatch(CostAdjustmentBatch $batch): string
+    {
+        if ($batch->source_type !== ItemLedgerEntry::class || ! $batch->source_id) {
+            return DecimalMath::amount('0');
+        }
+
+        $inbound = ItemLedgerEntry::query()->find($batch->source_id);
+        if (! $inbound) {
+            return DecimalMath::amount('0');
+        }
+
+        $inboundQuantity = DecimalMath::abs($inbound->quantity, DecimalPrecision::QUANTITY_SCALE);
+        if (DecimalMath::isZero($inboundQuantity)) {
+            return DecimalMath::amount('0');
+        }
+
+        $oldTotalCost = DecimalMath::amount(data_get($batch->metadata, 'old_total_cost', 0));
+        $oldUnitCost = DecimalMath::div($oldTotalCost, $inboundQuantity, DecimalPrecision::UNIT_COST_SCALE);
+
+        return DecimalMath::amount(ItemApplicationEntry::query()
+            ->where('inbound_item_ledger_entry_id', $inbound->id)
+            ->where('is_reversed', false)
+            ->with('outboundItemLedgerEntry')
+            ->get()
+            ->sum(function (ItemApplicationEntry $application) use ($oldUnitCost, $batch): float {
+                $baseline = $this->targetCostForApplication($application, $oldUnitCost);
+                $currentBeforeBatch = $this->economicCostForApplicationBeforeBatch($application, $batch);
+
+                return (float) DecimalMath::sub($currentBeforeBatch, $baseline, DecimalPrecision::AMOUNT_SCALE);
+            }));
+    }
+
+    public function economicCostForApplicationBeforeBatch(ItemApplicationEntry $application, CostAdjustmentBatch $batch): string
+    {
+        $outbound = $application->outboundItemLedgerEntry;
+        if (! $outbound) {
+            return DecimalMath::amount('0');
+        }
+
+        $baseActualCost = (float) ValueEntry::query()
+            ->where('item_ledger_entry_no', $outbound->entry_number)
+            ->where('value_entry_state', 'actual')
+            ->where(function ($query): void {
+                $query->where('expected_cost', false)
+                    ->orWhereNull('expected_cost');
+            })
+            ->sum('cost_amount_actual');
+
+        if (abs($baseActualCost) <= 0.0001) {
+            $baseActualCost = (float) $application->cost_amount;
+        }
+
+        $priorAdjustmentCost = (float) ValueEntry::query()
+            ->where('item_ledger_entry_no', $outbound->entry_number)
+            ->where('source_type', CostAdjustmentBatch::class)
+            ->where('source_line_no', $application->id)
+            ->whereIn('value_entry_state', ['adjustment', 'reversal'])
+            ->where(function ($query): void {
+                $query->where('document_type', 'COST_ADJUSTMENT')
+                    ->orWhere('value_entry_state', 'reversal');
+            })
+            ->where(function ($query) use ($batch): void {
+                $query->where('source_id', '<', $batch->id)
+                    ->orWhereNull('source_id');
+            })
+            ->sum('cost_amount_actual');
+
+        return DecimalMath::amount(DecimalMath::add($baseActualCost, $priorAdjustmentCost, DecimalPrecision::AMOUNT_SCALE));
     }
 }

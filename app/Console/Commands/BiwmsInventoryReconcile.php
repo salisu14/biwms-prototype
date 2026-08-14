@@ -689,10 +689,12 @@ class BiwmsInventoryReconcile extends Command
                     ? $economicValueService->economicValueForInboundLayer($entry)
                     : $economicValueService->originalActualValueForItemLedgerEntry($entry));
 
-                if (
-                    abs((float) $entry->quantity - $actualValueEntryQuantity) <= 0.0001
-                    && abs((float) $entry->cost_amount_actual - $valueEntryCost) <= 0.0001
-                ) {
+                $quantityMatches = abs((float) $entry->quantity - $actualValueEntryQuantity) <= 0.0001;
+                $costMatches = (float) $entry->quantity < 0
+                    ? abs($valueEntryCost) > 0.0001 || abs((float) $entry->cost_amount_actual) <= 0.0001
+                    : abs((float) $entry->cost_amount_actual - $valueEntryCost) <= 0.0001;
+
+                if ($quantityMatches && $costMatches) {
                     return null;
                 }
 

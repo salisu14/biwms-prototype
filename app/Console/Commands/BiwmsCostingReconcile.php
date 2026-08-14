@@ -10,6 +10,8 @@ use App\Models\ItemApplicationEntry;
 use App\Models\ItemLedgerEntry;
 use App\Models\ValueEntry;
 use App\Services\Inventory\ValueEntryEconomicValueService;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -360,33 +362,72 @@ class BiwmsCostingReconcile extends Command
             ->where('dry_run', false)
             ->get()
             ->filter(function (CostAdjustmentBatch $batch): bool {
-                $delta = (float) data_get($batch->metadata, 'delta', 0);
-                if (abs($delta) <= 0.0001) {
+                $allocation = $this->costAdjustmentAllocation($batch);
+
+                if (abs((float) $allocation['target_delta']) <= 0.0001) {
                     return false;
                 }
 
-                $valueEntryTotal = (float) ValueEntry::query()
-                    ->where('source_type', CostAdjustmentBatch::class)
-                    ->where('source_id', $batch->id)
-                    ->whereIn('value_entry_state', ['adjustment', 'reversal'])
-                    ->where('document_type', '!=', 'PRODUCTION_COST_ADJUSTMENT')
-                    ->sum('cost_amount_actual');
-
-                return abs($delta - $valueEntryTotal) > 0.0001;
+                return abs((float) $allocation['difference']) > 0.0001;
             })
-            ->map(fn (CostAdjustmentBatch $batch): array => $this->finding('cost_adjustment_allocation_mismatch', 'critical', [
-                'batch_number' => $batch->batch_number,
-                'expected_delta' => (float) data_get($batch->metadata, 'delta', 0),
-                'posted_adjustment_total' => (float) ValueEntry::query()
-                    ->where('source_type', CostAdjustmentBatch::class)
-                    ->where('source_id', $batch->id)
-                    ->whereIn('value_entry_state', ['adjustment', 'reversal'])
-                    ->where('document_type', '!=', 'PRODUCTION_COST_ADJUSTMENT')
-                    ->sum('cost_amount_actual'),
-                'suggested_remediation' => 'Review consumed and remaining inventory adjustment Value Entries for this batch before any further layer revaluation.',
-            ]))
+            ->map(function (CostAdjustmentBatch $batch): array {
+                $allocation = $this->costAdjustmentAllocation($batch);
+
+                return $this->finding('cost_adjustment_allocation_mismatch', 'critical', [
+                    'batch_number' => $batch->batch_number,
+                    'target_delta' => (float) $allocation['target_delta'],
+                    'expected_delta' => (float) $allocation['target_delta'],
+                    'pre_existing_economic_delta' => (float) $allocation['pre_existing_economic_delta'],
+                    'required_new_adjustment_delta' => (float) $allocation['required_new_adjustment_delta'],
+                    'posted_new_adjustment_delta' => (float) $allocation['posted_new_adjustment_delta'],
+                    'posted_adjustment_total' => (float) $allocation['posted_new_adjustment_delta'],
+                    'difference' => (float) $allocation['difference'],
+                    'suggested_remediation' => 'Review pre-existing outbound economic value, consumed adjustments, and remaining inventory revaluation before posting any further layer correction.',
+                ]);
+            })
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array{
+     *     target_delta: string,
+     *     pre_existing_economic_delta: string,
+     *     required_new_adjustment_delta: string,
+     *     posted_new_adjustment_delta: string,
+     *     difference: string
+     * }
+     */
+    private function costAdjustmentAllocation(CostAdjustmentBatch $batch): array
+    {
+        $targetDelta = DecimalMath::amount(data_get($batch->metadata, 'raw_layer_delta', data_get($batch->metadata, 'delta', 0)));
+        $preExistingEconomicDelta = data_get($batch->metadata, 'pre_existing_economic_delta');
+
+        if ($preExistingEconomicDelta === null) {
+            $preExistingEconomicDelta = app(ValueEntryEconomicValueService::class)->preExistingEconomicDeltaForBatch($batch);
+        } else {
+            $preExistingEconomicDelta = DecimalMath::amount($preExistingEconomicDelta);
+        }
+
+        $requiredNewAdjustmentDelta = DecimalMath::amount(data_get(
+            $batch->metadata,
+            'required_new_adjustment_delta',
+            DecimalMath::sub($targetDelta, $preExistingEconomicDelta, DecimalPrecision::AMOUNT_SCALE),
+        ));
+        $postedNewAdjustmentDelta = DecimalMath::amount(ValueEntry::query()
+            ->where('source_type', CostAdjustmentBatch::class)
+            ->where('source_id', $batch->id)
+            ->whereIn('value_entry_state', ['adjustment', 'reversal'])
+            ->where('document_type', '!=', 'PRODUCTION_COST_ADJUSTMENT')
+            ->sum('cost_amount_actual'));
+
+        return [
+            'target_delta' => $targetDelta,
+            'pre_existing_economic_delta' => $preExistingEconomicDelta,
+            'required_new_adjustment_delta' => $requiredNewAdjustmentDelta,
+            'posted_new_adjustment_delta' => $postedNewAdjustmentDelta,
+            'difference' => DecimalMath::sub($requiredNewAdjustmentDelta, $postedNewAdjustmentDelta, DecimalPrecision::AMOUNT_SCALE),
+        ];
     }
 
     /**
