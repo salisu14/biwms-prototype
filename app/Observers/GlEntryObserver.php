@@ -1,18 +1,24 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Observers;
 
-use App\Models\ChartOfAccount;
 use App\Models\GlEntry;
+use App\Services\Accounting\GlAccountBalanceService;
 
 class GlEntryObserver
 {
+    public function __construct(
+        private readonly GlAccountBalanceService $balanceService,
+    ) {}
+
     /**
      * Handle the GlEntry "created" event.
      */
     public function created(GlEntry $entry): void
     {
-        $this->updateAccountBalance($entry->chart_of_account_id, $entry->amount);
+        $this->balanceService->syncAccount($entry->chart_of_account_id);
     }
 
     /**
@@ -20,20 +26,11 @@ class GlEntryObserver
      */
     public function updated(GlEntry $entry): void
     {
-        $delta = $entry->amount - $entry->getOriginal('amount');
-        if ($delta != 0) {
-            $this->updateAccountBalance($entry->chart_of_account_id, $delta);
-        }
-
-        // Handle account change
         if ($entry->wasChanged('chart_of_account_id')) {
-            // Subtract from old account
-            $oldAccountId = $entry->getOriginal('chart_of_account_id');
-            $this->updateAccountBalance($oldAccountId, -$entry->getOriginal('amount'));
-
-            // Add back to new account (already handled by delta loop? No, handled manually)
-            $this->updateAccountBalance($entry->chart_of_account_id, $entry->amount);
+            $this->balanceService->syncAccount($entry->getOriginal('chart_of_account_id'));
         }
+
+        $this->balanceService->syncAccount($entry->chart_of_account_id);
     }
 
     /**
@@ -41,21 +38,22 @@ class GlEntryObserver
      */
     public function deleted(GlEntry $entry): void
     {
-        $this->updateAccountBalance($entry->chart_of_account_id, -$entry->amount);
+        $this->balanceService->syncAccount($entry->chart_of_account_id);
     }
 
     /**
-     * Update the balance of a ChartOfAccount.
+     * Handle the GlEntry "restored" event.
      */
-    protected function updateAccountBalance($accountId, float $amount): void
+    public function restored(GlEntry $entry): void
     {
-        if (! $accountId) {
-            return;
-        }
+        $this->balanceService->syncAccount($entry->chart_of_account_id);
+    }
 
-        $account = ChartOfAccount::find($accountId);
-        if ($account) {
-            $account->increment('balance', $amount);
-        }
+    /**
+     * Handle the GlEntry "force deleted" event.
+     */
+    public function forceDeleted(GlEntry $entry): void
+    {
+        $this->balanceService->syncAccount($entry->chart_of_account_id);
     }
 }

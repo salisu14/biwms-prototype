@@ -5,6 +5,7 @@ use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Models\AccountingPeriod;
+use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
@@ -19,6 +20,9 @@ use App\Models\InventoryPostingSetup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\ItemUomAssignment;
+use App\Models\NumberSeries;
+use App\Models\NumberSeriesLine;
+use App\Models\Payment;
 use App\Models\Permission;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
@@ -27,6 +31,7 @@ use App\Models\SalesInvoice;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Services\Finance\PaymentService;
 use App\Services\Sales\SalesCreditMemoService;
 use App\Services\Sales\SalesInvoiceService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -89,8 +94,36 @@ test('sales invoice posting creates traceable item, value, customer, and balance
         ->and($postedLine->item_ledger_entry_id)->toBe($itemLedgerEntry->id);
 
     $glEntries = GlEntry::query()->where('document_number', 'SI-TRACE-001')->get();
+    $receivablesAccount = ChartOfAccount::query()->where('account_number', '1100')->firstOrFail();
     expect(round((float) $glEntries->sum('debit_amount'), 2))
-        ->toBe(round((float) $glEntries->sum('credit_amount'), 2));
+        ->toBe(round((float) $glEntries->sum('credit_amount'), 2))
+        ->and((float) $receivablesAccount->fresh()->balance)->toBe(1000.0)
+        ->and((float) GlEntry::query()->where('chart_of_account_id', $receivablesAccount->id)->sum('amount'))->toBe(1000.0);
+
+    Permission::query()->firstOrCreate(['name' => 'finance.payment.post', 'guard_name' => 'web']);
+    $fixture['user']->givePermissionTo('finance.payment.post');
+    salesPostingEnsureBankLedgerNumberSeries();
+
+    $bankAccount = BankAccount::factory()->receiptOnly()->create([
+        'current_balance' => 0,
+        'available_balance' => 0,
+    ]);
+    $payment = Payment::factory()->customerReceipt()->create([
+        'party_id' => $fixture['customer']->id,
+        'party_name' => $fixture['customer']->name,
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 1000,
+        'payment_amount_lcy' => 1000,
+        'applied_amount' => 0,
+        'unapplied_amount' => 1000,
+        'status' => 'APPROVED',
+        'created_by' => $fixture['user']->id,
+    ]);
+
+    app(PaymentService::class)->post($payment, $fixture['user']->id);
+
+    expect((float) $receivablesAccount->fresh()->balance)->toBe(0.0)
+        ->and((float) GlEntry::query()->where('chart_of_account_id', $receivablesAccount->id)->sum('amount'))->toBe(0.0);
 
     $this->expectExceptionMessage('Invoice already posted');
     app(SalesInvoiceService::class)->post($invoice->fresh());
@@ -431,4 +464,36 @@ function grantSalesCreditMemoPostPermission(User $user): void
     ]);
 
     $user->givePermissionTo('sales.credit_memo.post');
+}
+
+function salesPostingEnsureBankLedgerNumberSeries(): void
+{
+    $series = NumberSeries::query()->firstOrCreate(
+        ['code' => 'BANK-LEDGER'],
+        [
+            'description' => 'Bank Ledger Entries',
+            'prefix' => '',
+            'starting_number' => 1,
+            'ending_number' => null,
+            'current_number' => 0,
+            'year' => 2026,
+            'is_active' => true,
+            'allow_manual' => false,
+            'module' => 'finance',
+        ]
+    );
+
+    NumberSeriesLine::query()->firstOrCreate(
+        ['number_series_id' => $series->id, 'starting_date' => now()->startOfYear()->toDateString()],
+        [
+            'prefix' => '',
+            'suffix' => '',
+            'starting_no' => 0,
+            'ending_no' => null,
+            'increment_by' => 1,
+            'last_no_used' => 0,
+            'no_of_digits' => 6,
+            'blocked' => false,
+        ]
+    );
 }

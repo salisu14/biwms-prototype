@@ -92,6 +92,28 @@ it('generates bank ledger entry numbers from BANK-LEDGER series', function () {
         ->and((float) $bankAccount->fresh()->current_balance)->toBe(150.0);
 });
 
+it('extracts numeric bank ledger entry numbers from formatted BANK-LEDGER series', function () {
+    createNumberSeriesForTest('BANK-LEDGER', 'BKL-');
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $bankAccount = BankAccount::factory()->receiptOnly()->create([
+        'current_balance' => 100,
+        'available_balance' => 100,
+    ]);
+
+    $entry = app(BankAccountLedgerService::class)->postDeposit($bankAccount, [
+        'amount' => 50,
+        'posting_date' => now(),
+        'document_no' => 'DEP-FMT-001',
+        'description' => 'Formatted number series deposit',
+        'user_id' => $user->id,
+    ]);
+
+    expect($entry->entry_number)->toBe(1)
+        ->and($entry->entry_number)->not->toBe(0);
+});
+
 it('fails clearly when number series configuration is missing, inactive, or exhausted', function () {
     expect(fn () => app(NumberSeriesService::class)->getNextNo('MISSING-SERIES'))
         ->toThrow(NumberSeriesException::class, 'Number Series MISSING-SERIES does not exist');

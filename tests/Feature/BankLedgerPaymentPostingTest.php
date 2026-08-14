@@ -10,6 +10,7 @@ use App\Models\CashReceiptLine;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
+use App\Models\CustomerPostingGroup;
 use App\Models\GeneralLedgerSetup;
 use App\Models\GlEntry;
 use App\Models\JournalBatch;
@@ -56,20 +57,27 @@ it('creates a bank ledger entry and increases bank balance for a customer receip
     $user = User::factory()->create();
     grantPaymentPostingPermission($user);
 
-    $customer = Customer::factory()->create();
+    $receivablesAccount = ChartOfAccount::factory()->create(['balance' => 0]);
+    $customerPostingGroup = CustomerPostingGroup::factory()->create([
+        'receivables_account_id' => $receivablesAccount->id,
+    ]);
+    $customer = Customer::factory()->create([
+        'customer_posting_group_id' => $customerPostingGroup->id,
+    ]);
     $bankAccount = BankAccount::factory()->receiptOnly()->create([
         'current_balance' => 1250,
         'available_balance' => 1250,
     ]);
+    $bankGlAccount = $bankAccount->glAccount;
 
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
         'party_name' => $customer->name,
         'bank_account_id' => $bankAccount->id,
-        'payment_amount' => 450,
-        'payment_amount_lcy' => 450,
+        'payment_amount' => 1800,
+        'payment_amount_lcy' => 1800,
         'applied_amount' => 0,
-        'unapplied_amount' => 450,
+        'unapplied_amount' => 1800,
         'status' => 'APPROVED',
         'created_by' => $user->id,
     ]);
@@ -82,13 +90,13 @@ it('creates a bank ledger entry and increases bank balance for a customer receip
         ->first();
 
     expect($bankEntry)->not->toBeNull()
-        ->and((float) $bankEntry->amount)->toBe(450.0)
-        ->and((float) $bankEntry->debit_amount)->toBe(450.0)
+        ->and((float) $bankEntry->amount)->toBe(1800.0)
+        ->and((float) $bankEntry->debit_amount)->toBe(1800.0)
         ->and((float) $bankEntry->credit_amount)->toBe(0.0)
         ->and($bankEntry->source_type)->toBe(Payment::class)
         ->and($bankEntry->source_id)->toBe($payment->id)
         ->and($bankEntry->user_id)->toBe($user->id)
-        ->and((float) $bankAccount->fresh()->current_balance)->toBe(1700.0)
+        ->and((float) $bankAccount->fresh()->current_balance)->toBe(3050.0)
         ->and($payment->fresh()->status)->toBe('POSTED');
 
     $ledgerEntry = CustomerLedgerEntry::query()
@@ -99,11 +107,15 @@ it('creates a bank ledger entry and increases bank balance for a customer receip
 
     expect($ledgerEntry)->not->toBeNull()
         ->and((float) $ledgerEntry->debit_amount)->toBe(0.0)
-        ->and((float) $ledgerEntry->credit_amount)->toBe(450.0)
-        ->and((float) $ledgerEntry->amount)->toBe(-450.0)
-        ->and((float) $ledgerEntry->remaining_amount)->toBe(450.0)
+        ->and((float) $ledgerEntry->credit_amount)->toBe(1800.0)
+        ->and((float) $ledgerEntry->amount)->toBe(-1800.0)
+        ->and((float) $ledgerEntry->remaining_amount)->toBe(1800.0)
         ->and($ledgerEntry->open)->toBeTrue()
-        ->and((float) $customer->fresh()->balance)->toBe(-450.0);
+        ->and((float) $customer->fresh()->balance)->toBe(-1800.0)
+        ->and((float) $bankGlAccount->fresh()->balance)->toBe(1800.0)
+        ->and((float) $receivablesAccount->fresh()->balance)->toBe(-1800.0)
+        ->and((float) GlEntry::query()->where('chart_of_account_id', $bankGlAccount->id)->sum('amount'))->toBe(1800.0)
+        ->and((float) GlEntry::query()->where('chart_of_account_id', $receivablesAccount->id)->sum('amount'))->toBe(-1800.0);
 });
 
 it('creates a bank ledger entry and reduces bank balance for a vendor payment', function () {
