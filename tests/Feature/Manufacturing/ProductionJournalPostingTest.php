@@ -32,6 +32,7 @@ use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\WorkCenter;
 use App\Models\NumberSeries;
 use App\Models\Permission;
+use App\Models\ProductionExpectedCostSnapshot;
 use App\Models\ProductionJournalBatch;
 use App\Models\ProductionJournalLine;
 use App\Models\ProductionJournalTemplate;
@@ -49,6 +50,7 @@ use App\Services\Manufacturing\ProductionOrderService;
 use App\Services\Manufacturing\ProductionVarianceCalculationService;
 use App\Services\Manufacturing\ProductionVarianceValueEntryService;
 use App\Services\Posting\ProductionJournalPostingRoutine;
+use App\Support\DecimalMath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -1751,6 +1753,200 @@ it('clears manufacturing expected cost append only and idempotently', function (
         ->and((float) $clearing?->cost_amount_expected)->toBe(-10.0)
         ->and(ValueEntry::query()->where('value_entry_state', 'clearing')->count())->toBe(1)
         ->and((float) $expected->fresh()->cost_amount_expected)->toBe(10.0);
+});
+
+it('resettles late production cost into output adjustment and expected clearing idempotently', function (): void {
+    config(['accounts.post_expected_inventory_cost_to_gl' => true]);
+
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order,,, $location] = createMinimalSettlementOrders($user, 'LATECOST');
+    createPostingAccountsForOrder($order, $location);
+    $order->forceFill([
+        'quantity' => 288,
+        'quantity_base' => 288,
+    ])->save();
+
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-LATECOST',
+        'unit_cost' => 1,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+
+    ProductionExpectedCostSnapshot::query()->create([
+        'production_order_id' => $order->id,
+        'finished_item_id' => $order->item_id,
+        'production_quantity_base' => 288,
+        'costing_date' => now()->toDateString(),
+        'expected_material_cost' => 2092.896,
+        'expected_capacity_cost' => 0,
+        'expected_overhead_cost' => 0,
+        'expected_output_cost' => 0,
+        'expected_total_cost' => 2092.896,
+        'calculation_identity' => 'late-cost-test',
+        'status' => 'calculated',
+        'calculated_by' => $user->id,
+        'calculated_at' => now(),
+    ]);
+
+    $outputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 288,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 34525.4933,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    $outputValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outputEntry->entry_number)
+        ->firstOrFail();
+    $outputValueEntry->forceFill([
+        'cost_component' => ManufacturingCostComponent::Output->value,
+        'source_module' => 'manufacturing',
+        'source_id' => $order->id,
+        'source_no' => (string) $order->id,
+        'production_order_no' => $order->document_number,
+        'cost_amount_actual' => 34525.4933,
+        'cost_amount_actual_acy' => 34525.4933,
+        'unit_cost' => 119.88018507,
+        'unit_cost_acy' => 119.88018507,
+    ])->save();
+    app(ValueEntryAccountingOrchestrator::class)->post($outputValueEntry->fresh());
+
+    $baseMaterial = manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::DirectMaterial,
+        quantity: -288,
+        amount: 34525.4933,
+        lineNumber: 10000,
+    );
+    app(ValueEntryAccountingOrchestrator::class)->post($baseMaterial);
+
+    ProductionOutputCostAllocation::query()->create([
+        'production_order_id' => $order->id,
+        'output_item_ledger_entry_id' => $outputEntry->id,
+        'output_value_entry_id' => $outputValueEntry->id,
+        'output_quantity' => 288,
+        'eligible_cost_before_allocation' => 34525.4933,
+        'allocated_material_cost' => 34525.4933,
+        'allocated_capacity_cost' => 0,
+        'allocated_overhead_cost' => 0,
+        'allocated_total_cost' => 34525.4933,
+        'allocation_status' => ProductionOutputAllocationStatus::Final->value,
+        'is_final_allocation' => true,
+        'finalized_at' => now(),
+        'idempotency_key' => hash('sha256', implode('|', [
+            'production-output-allocation',
+            $order->id,
+            $outputEntry->id,
+            DecimalMath::quantity($outputEntry->quantity),
+        ])),
+        'source_identity_key' => hash('sha256', implode('|', [
+            'production-output-source',
+            $order->id,
+            $outputEntry->id,
+        ])),
+    ]);
+
+    $expectedLateMaterial = ValueEntry::query()->create([
+        'entry_no' => (ValueEntry::max('entry_no') ?? 0) + 1,
+        'item_ledger_entry_type' => 6,
+        'item_no' => $componentItem->item_code,
+        'location_code' => $location->code,
+        'posting_date' => now()->toDateString(),
+        'document_type' => 'PRODUCTION_EXPECTED_COST',
+        'document_no' => $order->document_number,
+        'document_line_no' => 20000,
+        'quantity' => -17.065728,
+        'valued_quantity' => -17.065728,
+        'cost_component' => ManufacturingCostComponent::ExpectedDirectMaterial->value,
+        'value_entry_state' => 'expected',
+        'cost_amount_expected' => 2092.896,
+        'cost_amount_expected_acy' => 2092.896,
+        'source_type' => 'PRODUCTION_EXPECTED_COST',
+        'source_module' => 'manufacturing',
+        'source_id' => $order->id,
+        'source_no' => (string) $order->id,
+        'source_line_no' => 20000,
+        'production_order_no' => $order->document_number,
+        'production_order_component_line_no' => 20000,
+        'expected_cost' => true,
+        'gl_posted' => true,
+    ]);
+
+    $lateMaterial = manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::CostAdjustment,
+        quantity: 0,
+        amount: 2092.896,
+        lineNumber: 20000,
+    );
+    app(ValueEntryAccountingOrchestrator::class)->post($lateMaterial);
+
+    $order->forceFill([
+        'status' => ProductionOrderStatus::FINISHED,
+        'cost_settled_at' => now()->subDay(),
+        'cost_settled_by' => $user->id,
+        'cost_settlement_status' => ProductionCostSettlementStatus::AdjustmentRequired->value,
+        'cost_settlement_classification' => ProductionCostSettlementClassification::LateCostAdjustmentRequired->value,
+    ])->save();
+
+    $result = app(ProductionOrderCostSettlementService::class)->settle($order->fresh(), $user->id);
+    $retry = app(ProductionOrderCostSettlementService::class)->settle($order->fresh(), $user->id);
+
+    $allocation = ProductionOutputCostAllocation::query()
+        ->where('production_order_id', $order->id)
+        ->firstOrFail();
+    $outputAdjustment = ValueEntry::query()
+        ->where('production_order_no', $order->document_number)
+        ->where('document_type', 'PROD_OUTPUT_COST_ADJ')
+        ->firstOrFail();
+    $clearing = ValueEntry::query()
+        ->where('reversal_of_value_entry_id', $expectedLateMaterial->id)
+        ->where('value_entry_state', 'clearing')
+        ->firstOrFail();
+    $summary = app(ProductionCostSummaryService::class)->summarize($order->fresh());
+
+    expect($result['settled'])->toBeTrue()
+        ->and($retry['idempotent'])->toBeTrue()
+        ->and((float) $allocation->allocated_total_cost)->toBe(36618.3893)
+        ->and((float) $outputEntry->fresh()->cost_amount_actual)->toBe(36618.3893)
+        ->and((float) $outputAdjustment->cost_amount_actual)->toBe(2092.896)
+        ->and($outputAdjustment->gl_posted)->toBeTrue()
+        ->and((float) $clearing->cost_amount_expected)->toBe(-2092.896)
+        ->and($clearing->gl_posted)->toBeTrue()
+        ->and($summary['unallocated_cost'])->toBe(0.0)
+        ->and($summary['uncleared_expected_cost'])->toBe(0.0)
+        ->and(ValueEntry::query()->where('document_type', 'PROD_OUTPUT_COST_ADJ')->count())->toBe(1)
+        ->and(ValueEntry::query()->where('reversal_of_value_entry_id', $expectedLateMaterial->id)->count())->toBe(1);
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', [
+        '--json' => true,
+        '--production-order' => $order->document_number,
+    ]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['findings']['expected_material_cost_uncleared'])->toBeEmpty()
+        ->and($report['findings']['finished_orders_with_unallocated_cost'])->toBeEmpty()
+        ->and($report['findings']['settled_orders_with_open_wip'])->toBeEmpty();
 });
 
 it('calculates detailed production variances and posts eligible variance through value entries', function (): void {

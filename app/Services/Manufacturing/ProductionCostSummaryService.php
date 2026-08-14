@@ -31,7 +31,7 @@ class ProductionCostSummaryService
             ->reject(fn (ValueEntry $entry): bool => in_array((string) $entry->value_entry_state, ['reversed', 'cleared'], true));
 
         $expectedMaterial = $this->sumExpected($valueEntries, ['expected_direct_material', 'direct_material', 'material']);
-        $actualMaterial = $this->sumActual($valueEntries, ['direct_material', 'material']);
+        $actualMaterial = $this->sumActual($valueEntries, ['direct_material', 'material', 'cost_adjustment']);
         $expectedCapacity = $this->sumExpected($valueEntries, ['expected_direct_capacity', 'direct_capacity', 'capacity']);
         $actualCapacity = $this->sumActual($valueEntries, ['direct_capacity', 'capacity']);
         $expectedOverhead = $this->sumExpected($valueEntries, ['expected_capacity_overhead', 'capacity_overhead', 'overhead', 'material_overhead']);
@@ -58,10 +58,7 @@ class ProductionCostSummaryService
         $varianceCalculations = ProductionVarianceCalculation::query()
             ->where('production_order_id', $order->id)
             ->get();
-        $unclearedExpectedCost = (float) $valueEntries
-            ->where('expected_cost', true)
-            ->where('value_entry_state', 'expected')
-            ->sum('cost_amount_expected');
+        $unclearedExpectedCost = $this->unclearedExpectedCost($valueEntries);
         $postedAdjustments = (float) $valueEntries
             ->where('value_entry_state', 'adjustment')
             ->where('gl_posted', true)
@@ -119,5 +116,21 @@ class ProductionCostSummaryService
         return (float) $entries
             ->whereIn('cost_component', $components)
             ->sum('cost_amount_expected');
+    }
+
+    private function unclearedExpectedCost($entries): float
+    {
+        return (float) $entries
+            ->where('expected_cost', true)
+            ->where('value_entry_state', 'expected')
+            ->sum(function (ValueEntry $expectedEntry) use ($entries): float {
+                $clearedAmount = (float) $entries
+                    ->where('expected_cost', true)
+                    ->where('value_entry_state', 'clearing')
+                    ->where('reversal_of_value_entry_id', $expectedEntry->id)
+                    ->sum('cost_amount_expected');
+
+                return (float) $expectedEntry->cost_amount_expected + $clearedAmount;
+            });
     }
 }

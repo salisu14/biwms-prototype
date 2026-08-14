@@ -46,7 +46,7 @@ class ProductionOrderCostSettlementService
                 ->lockForUpdate()
                 ->findOrFail($order->id);
 
-            if ($lockedOrder->cost_settled_at) {
+            if ($lockedOrder->cost_settled_at && ! $this->requiresResettlement($lockedOrder)) {
                 return [
                     'settled' => false,
                     'idempotent' => true,
@@ -229,6 +229,7 @@ class ProductionOrderCostSettlementService
                 ManufacturingCostComponent::DirectCapacity->value,
                 ManufacturingCostComponent::CapacityOverhead->value,
                 ManufacturingCostComponent::Output->value,
+                ManufacturingCostComponent::CostAdjustment->value,
                 'material',
                 'capacity',
                 'overhead',
@@ -248,11 +249,16 @@ class ProductionOrderCostSettlementService
                 continue;
             }
 
+            $outstandingExpectedAmount = $this->unclearedExpectedAmount($expectedEntry);
+            if ($outstandingExpectedAmount <= DecimalTolerance::AMOUNT) {
+                continue;
+            }
+
             $this->expectedCostClearingService->clearForActualManufacturingCost(
                 expectedEntry: $expectedEntry,
                 actualEntry: $actualEntry,
                 quantityBase: abs((float) ($actualEntry->valued_quantity ?: $actualEntry->quantity ?: $expectedEntry->quantity)),
-                amountToClear: min(abs((float) $expectedEntry->cost_amount_expected), abs((float) $actualEntry->cost_amount_actual)),
+                amountToClear: min($outstandingExpectedAmount, abs((float) $actualEntry->cost_amount_actual)),
                 userId: $userId,
             );
         }
@@ -261,7 +267,7 @@ class ProductionOrderCostSettlementService
     private function actualClearsExpected(ValueEntry $expectedEntry, ValueEntry $actualEntry): bool
     {
         return match ((string) $expectedEntry->cost_component) {
-            ManufacturingCostComponent::ExpectedDirectMaterial->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::DirectMaterial->value, 'material'], true),
+            ManufacturingCostComponent::ExpectedDirectMaterial->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::DirectMaterial->value, ManufacturingCostComponent::CostAdjustment->value, 'material'], true),
             ManufacturingCostComponent::ExpectedDirectCapacity->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::DirectCapacity->value, 'capacity'], true),
             ManufacturingCostComponent::ExpectedCapacityOverhead->value => in_array((string) $actualEntry->cost_component, [ManufacturingCostComponent::CapacityOverhead->value, 'overhead'], true),
             ManufacturingCostComponent::ExpectedOutput->value => (string) $actualEntry->cost_component === ManufacturingCostComponent::Output->value,
@@ -282,11 +288,7 @@ class ProductionOrderCostSettlementService
             return ProductionCostSettlementClassification::PendingActualMaterialCost;
         }
 
-        if ($this->manufacturingValueEntries($order)
-            ->where('expected_cost', true)
-            ->where('value_entry_state', 'expected')
-            ->whereRaw('ABS(COALESCE(cost_amount_expected, 0)) > 0.0001')
-            ->exists()) {
+        if ($this->unclearedExpectedCost($order) > DecimalTolerance::AMOUNT) {
             return ProductionCostSettlementClassification::PendingExpectedCost;
         }
 
@@ -307,6 +309,37 @@ class ProductionOrderCostSettlementService
                             ->where('source_id', $order->id);
                     });
             });
+    }
+
+    private function requiresResettlement(ProductionOrder $order): bool
+    {
+        $status = $this->settlementStatusEnum($order->cost_settlement_status);
+        $summary = $this->summaryService->summarize($order);
+
+        return $status === ProductionCostSettlementStatus::AdjustmentRequired
+            || abs((float) $summary['unallocated_cost']) > DecimalTolerance::AMOUNT
+            || abs((float) $summary['uncleared_expected_cost']) > DecimalTolerance::AMOUNT
+            || abs((float) $summary['cost_not_posted_to_gl']) > DecimalTolerance::AMOUNT;
+    }
+
+    private function unclearedExpectedCost(ProductionOrder $order): float
+    {
+        return (float) $this->manufacturingValueEntries($order)
+            ->where('expected_cost', true)
+            ->where('value_entry_state', 'expected')
+            ->get()
+            ->sum(fn (ValueEntry $expectedEntry): float => $this->unclearedExpectedAmount($expectedEntry));
+    }
+
+    private function unclearedExpectedAmount(ValueEntry $expectedEntry): float
+    {
+        $clearedAmount = (float) ValueEntry::query()
+            ->where('expected_cost', true)
+            ->where('value_entry_state', 'clearing')
+            ->where('reversal_of_value_entry_id', $expectedEntry->id)
+            ->sum('cost_amount_expected');
+
+        return abs(round((float) $expectedEntry->cost_amount_expected + $clearedAmount, 4));
     }
 
     private function isStandardCosting(ProductionOrder $order): bool
