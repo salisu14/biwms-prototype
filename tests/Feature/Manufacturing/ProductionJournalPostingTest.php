@@ -18,6 +18,7 @@ use App\Filament\Resources\ProductionOrders\Actions\ProductionOrderActions;
 use App\Models\AccountingPeriod;
 use App\Models\CapacityLedgerEntry;
 use App\Models\ChartOfAccount;
+use App\Models\CostAdjustmentBatch;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
@@ -682,6 +683,7 @@ it('updates output value entry costs and marks the order posted when finishing',
 
     $allocation = ProductionOutputCostAllocation::query()
         ->where('production_order_id', $order->id)
+        ->whereNull('reversed_at')
         ->firstOrFail();
 
     expect((float) $allocation->allocated_total_cost)->toBe(1296.0)
@@ -1947,6 +1949,248 @@ it('resettles late production cost into output adjustment and expected clearing 
     expect($report['findings']['expected_material_cost_uncleared'])->toBeEmpty()
         ->and($report['findings']['finished_orders_with_unallocated_cost'])->toBeEmpty()
         ->and($report['findings']['settled_orders_with_open_wip'])->toBeEmpty();
+});
+
+it('isolates production value entries from colliding manufacturing source ids', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$orderA, $orderB,, $location] = createMinimalSettlementOrders($user, 'OWNERSHIP');
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-OWNERSHIP',
+        'general_product_posting_group_id' => $orderA->general_product_posting_group_id,
+        'inventory_posting_group_id' => $orderA->inventory_posting_group_id,
+    ]);
+
+    $collidingBatch = null;
+    while (! $collidingBatch || $collidingBatch->id < $orderB->id) {
+        $collidingBatch = CostAdjustmentBatch::query()->create([
+            'batch_number' => 'COSTADJ-COLLISION-'.$orderB->id.'-'.CostAdjustmentBatch::query()->count(),
+            'source_type' => ItemLedgerEntry::class,
+            'source_id' => 1000,
+            'reason' => 'Collision',
+            'dry_run' => false,
+            'run_at' => now(),
+        ]);
+    }
+
+    expect($collidingBatch->id)->toBe($orderB->id);
+
+    ValueEntry::query()->create([
+        'entry_no' => (ValueEntry::max('entry_no') ?? 0) + 1,
+        'item_ledger_entry_type' => 6,
+        'item_no' => $componentItem->item_code,
+        'location_code' => $location->code,
+        'posting_date' => now()->toDateString(),
+        'document_type' => 'PRODUCTION_COST_ADJUSTMENT',
+        'document_no' => $collidingBatch->batch_number,
+        'document_line_no' => 10000,
+        'quantity' => 0,
+        'valued_quantity' => 0,
+        'cost_component' => ManufacturingCostComponent::CostAdjustment->value,
+        'value_entry_state' => 'adjustment',
+        'cost_amount_actual' => -5791389.6419,
+        'source_type' => CostAdjustmentBatch::class,
+        'source_module' => 'manufacturing',
+        'source_id' => $collidingBatch->id,
+        'source_no' => (string) $orderA->id,
+        'source_line_no' => 10000,
+        'production_order_no' => $orderA->document_number,
+        'expected_cost' => false,
+        'gl_posted' => true,
+    ]);
+    ValueEntry::query()->create([
+        'entry_no' => (ValueEntry::max('entry_no') ?? 0) + 1,
+        'item_ledger_entry_type' => 6,
+        'item_no' => $componentItem->item_code,
+        'location_code' => $location->code,
+        'posting_date' => now()->toDateString(),
+        'document_type' => 'LEGACY_PRODUCTION',
+        'document_no' => $orderB->document_number,
+        'document_line_no' => 20000,
+        'quantity' => -1,
+        'valued_quantity' => -1,
+        'cost_component' => ManufacturingCostComponent::DirectMaterial->value,
+        'value_entry_state' => 'actual',
+        'cost_amount_actual' => 123.4567,
+        'source_type' => ProductionOrder::class,
+        'source_module' => 'manufacturing',
+        'source_id' => $orderB->id,
+        'source_line_no' => 20000,
+        'expected_cost' => false,
+        'gl_posted' => true,
+    ]);
+
+    $summaryA = app(ProductionCostSummaryService::class)->summarize($orderA->fresh());
+    $summaryB = app(ProductionCostSummaryService::class)->summarize($orderB->fresh());
+
+    expect($summaryA['actual_material_cost'])->toBe(-5791389.6419)
+        ->and($summaryB['actual_material_cost'])->toBe(123.4567)
+        ->and($summaryB['posted_adjustments'])->toBe(0.0);
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', ['--json' => true]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['findings']['ambiguous_production_value_entry_ownership'])->toHaveCount(1)
+        ->and($report['findings']['ambiguous_production_value_entry_ownership'][0]['production_order_no'])->toBe($orderA->document_number)
+        ->and($report['findings']['ambiguous_production_value_entry_ownership'][0]['colliding_production_order_no'])->toBe($orderB->document_number);
+});
+
+it('repairs stale output allocation after upstream material adjustment append only and idempotently', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order,,, $location] = createMinimalSettlementOrders($user, 'OUTPUTPROP');
+    createPostingAccountsForOrder($order, $location);
+    $order->forceFill([
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'status' => ProductionOrderStatus::RELEASED,
+    ])->save();
+
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-OUTPUTPROP',
+        'unit_cost' => 1,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+    $outputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 1000,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $outputValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outputEntry->entry_number)
+        ->firstOrFail();
+    $outputValueEntry->forceFill([
+        'cost_component' => ManufacturingCostComponent::Output->value,
+        'source_module' => 'manufacturing',
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+        'source_no' => (string) $order->id,
+        'production_order_no' => $order->document_number,
+        'cost_amount_actual' => 1000,
+        'cost_amount_actual_acy' => 1000,
+        'unit_cost' => 1000,
+        'unit_cost_acy' => 1000,
+    ])->save();
+    app(ValueEntryAccountingOrchestrator::class)->post($outputValueEntry->fresh());
+
+    $material = manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::DirectMaterial,
+        quantity: -1,
+        amount: 1000,
+        lineNumber: 10000,
+    );
+    app(ValueEntryAccountingOrchestrator::class)->post($material);
+
+    $originalAllocation = ProductionOutputCostAllocation::query()->create([
+        'production_order_id' => $order->id,
+        'output_item_ledger_entry_id' => $outputEntry->id,
+        'output_value_entry_id' => $outputValueEntry->id,
+        'output_quantity' => 1,
+        'eligible_cost_before_allocation' => 1000,
+        'allocated_material_cost' => 1000,
+        'allocated_capacity_cost' => 0,
+        'allocated_overhead_cost' => 0,
+        'allocated_total_cost' => 1000,
+        'allocation_status' => ProductionOutputAllocationStatus::Final->value,
+        'is_final_allocation' => true,
+        'finalized_at' => now(),
+        'idempotency_key' => hash('sha256', implode('|', [
+            'production-output-allocation',
+            $order->id,
+            $outputEntry->id,
+            DecimalMath::quantity($outputEntry->quantity),
+        ])),
+        'source_identity_key' => hash('sha256', implode('|', [
+            'production-output-source',
+            $order->id,
+            $outputEntry->id,
+        ])),
+    ]);
+    $lateAdjustment = manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::CostAdjustment,
+        quantity: 0,
+        amount: -900,
+        lineNumber: 10000,
+    );
+    $lateAdjustment->forceFill([
+        'document_type' => 'PRODUCTION_COST_ADJUSTMENT',
+        'value_entry_state' => 'adjustment',
+        'accounting_metadata' => ['gl_covered_by_generic_cost_adjustment' => true],
+        'gl_posted' => true,
+    ])->save();
+    $beforeCounts = [
+        'allocations' => ProductionOutputCostAllocation::query()->count(),
+        'value_entries' => ValueEntry::query()->count(),
+        'gl_entries' => GlEntry::query()->count(),
+    ];
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', ['--json' => true, '--production-order' => $order->document_number]);
+    $beforeReport = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($beforeReport['findings']['stale_output_cost_propagation_pending'])->toHaveCount(1)
+        ->and($beforeReport['findings']['output_cost_overallocated'])->toHaveCount(1);
+
+    Artisan::call('biwms:manufacturing-output-cost-propagation-repair', ['--dry-run' => true, '--production-order' => $order->document_number]);
+    expect(ProductionOutputCostAllocation::query()->count())->toBe($beforeCounts['allocations'])
+        ->and(ValueEntry::query()->count())->toBe($beforeCounts['value_entries'])
+        ->and(GlEntry::query()->count())->toBe($beforeCounts['gl_entries']);
+
+    Artisan::call('biwms:manufacturing-output-cost-propagation-repair', ['--apply' => true, '--production-order' => $order->document_number]);
+    $firstApplyOutput = Artisan::output();
+    Artisan::call('biwms:manufacturing-output-cost-propagation-repair', ['--apply' => true, '--production-order' => $order->document_number]);
+    $secondApplyOutput = Artisan::output();
+
+    $activeAllocation = ProductionOutputCostAllocation::query()
+        ->where('production_order_id', $order->id)
+        ->whereNull('reversed_at')
+        ->firstOrFail();
+    $outputAdjustment = ValueEntry::query()
+        ->where('production_order_no', $order->document_number)
+        ->where('document_type', 'PROD_OUTPUT_COST_ADJ')
+        ->firstOrFail();
+    $summary = app(ProductionCostSummaryService::class)->summarize($order->fresh());
+
+    expect($firstApplyOutput)->toContain('Repaired: 1')
+        ->and($secondApplyOutput)->toContain('Repaired: 0')
+        ->and($originalAllocation->fresh()->allocation_status)->toBe(ProductionOutputAllocationStatus::Reversed)
+        ->and($originalAllocation->fresh()->reversed_at)->not->toBeNull()
+        ->and((float) $activeAllocation->allocated_total_cost)->toBe(100.0)
+        ->and($activeAllocation->reversed_allocation_id)->toBe($originalAllocation->id)
+        ->and((float) $outputAdjustment->cost_amount_actual)->toBe(-900.0)
+        ->and($outputAdjustment->gl_posted)->toBeTrue()
+        ->and(ProductionOutputCostAllocation::query()->where('production_order_id', $order->id)->count())->toBe(2)
+        ->and(ValueEntry::query()->where('production_order_no', $order->document_number)->where('document_type', 'PROD_OUTPUT_COST_ADJ')->count())->toBe(1)
+        ->and($summary['allocated_output_cost'])->toBe(100.0)
+        ->and($summary['unallocated_cost'])->toBe(0.0);
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', ['--json' => true, '--production-order' => $order->document_number]);
+    $afterReport = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($afterReport['findings']['stale_output_cost_propagation_pending'])->toBeEmpty()
+        ->and($afterReport['findings']['output_cost_overallocated'])->toBeEmpty();
 });
 
 it('allows completed routing with valid zero cost capacity even when planned setup exceeds actual setup', function (): void {

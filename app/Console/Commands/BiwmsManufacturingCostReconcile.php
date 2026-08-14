@@ -15,6 +15,7 @@ use App\Models\ProductionVarianceCalculation;
 use App\Models\ValueEntry;
 use App\Services\Inventory\CostAdjustmentService;
 use App\Services\Manufacturing\ProductionCostSummaryService;
+use App\Services\Manufacturing\ProductionOutputCostService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -29,6 +30,7 @@ class BiwmsManufacturingCostReconcile extends Command
     public function __construct(
         private readonly ProductionCostSummaryService $summaryService,
         private readonly CostAdjustmentService $costAdjustmentService,
+        private readonly ProductionOutputCostService $outputCostService,
     ) {
         parent::__construct();
     }
@@ -49,6 +51,7 @@ class BiwmsManufacturingCostReconcile extends Command
                 'capacity_without_value_entries' => $this->capacityEntriesWithoutValueEntries($productionOrderFilter),
                 'expected_manufacturing_cost_missing' => $this->expectedManufacturingCostMissing($productionOrderFilter),
                 'expected_material_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_direct_material', 'expected_material_cost_uncleared'),
+                'ambiguous_production_value_entry_ownership' => $this->ambiguousProductionValueEntryOwnership($productionOrderFilter),
                 'expected_capacity_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_direct_capacity', 'expected_capacity_cost_uncleared'),
                 'expected_overhead_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_capacity_overhead', 'expected_overhead_cost_uncleared'),
                 'expected_output_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_output', 'expected_output_cost_uncleared'),
@@ -66,6 +69,7 @@ class BiwmsManufacturingCostReconcile extends Command
                 'missing_manufacturing_cost_adjustment_propagation' => $this->missingManufacturingCostAdjustmentPropagation($productionOrderFilter),
                 'late_capacity_cost_adjustment_pending' => [],
                 'output_cost_adjustment_pending' => $this->outputCostAdjustmentPending($productionOrderFilter),
+                'stale_output_cost_propagation_pending' => $this->staleOutputCostPropagationPending($productionOrderFilter),
                 'downstream_cost_adjustment_pending' => [],
                 'settled_order_adjustment_required' => $this->adjustmentRequiredOrders($productionOrderFilter, 'settled_order_adjustment_required'),
                 'completed_adjustment_not_resettled' => $this->completedAdjustmentNotResettled($productionOrderFilter),
@@ -144,6 +148,63 @@ class BiwmsManufacturingCostReconcile extends Command
                     suggestedRemediation: 'Calculate expected manufacturing cost before final settlement so variance analysis has a historical baseline.',
                 ),
             ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function ambiguousProductionValueEntryOwnership(mixed $productionOrderFilter): array
+    {
+        return ValueEntry::query()
+            ->where('source_module', 'manufacturing')
+            ->whereNotNull('source_id')
+            ->whereNotNull('production_order_no')
+            ->where(function (Builder $query): void {
+                $query->whereNull('source_type')
+                    ->orWhere('source_type', '!=', ProductionOrder::class);
+            })
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->where(function (Builder $query) use ($filter): void {
+                    $query->where('production_order_no', (string) $filter);
+
+                    if (is_numeric($filter)) {
+                        $documentNumber = ProductionOrder::query()->whereKey((int) $filter)->value('document_number');
+
+                        if ($documentNumber) {
+                            $query->orWhere('production_order_no', $documentNumber);
+                        }
+                    }
+                });
+            })
+            ->limit(500)
+            ->get()
+            ->map(function (ValueEntry $entry): ?array {
+                $collidingOrder = ProductionOrder::query()->find($entry->source_id);
+
+                if (! $collidingOrder || (string) $collidingOrder->document_number === (string) $entry->production_order_no) {
+                    return null;
+                }
+
+                return [
+                    'value_entry_id' => $entry->id,
+                    'value_entry_no' => $entry->entry_no,
+                    'document_type' => $entry->document_type,
+                    'document_no' => $entry->document_no,
+                    'source_type' => $entry->source_type,
+                    'source_id' => $entry->source_id,
+                    'production_order_no' => $entry->production_order_no,
+                    'colliding_production_order_id' => $collidingOrder->id,
+                    'colliding_production_order_no' => $collidingOrder->document_number,
+                    ...$this->findingMetadata(
+                        classification: 'ambiguous_production_value_entry_ownership',
+                        severity: 'critical',
+                        suggestedRemediation: 'Use production_order_no or a source_type=ProductionOrder fallback only. Do not infer ownership from source_module=manufacturing and source_id.'
+                    ),
+                ];
+            })
+            ->filter()
             ->values()
             ->all();
     }
@@ -571,6 +632,30 @@ class BiwmsManufacturingCostReconcile extends Command
                     ),
                 ];
             })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function staleOutputCostPropagationPending(mixed $productionOrderFilter): array
+    {
+        return $this->outputCostService
+            ->staleOutputCostPropagations($productionOrderFilter)
+            ->map(fn (array $row): array => [
+                'production_order_id' => $row['production_order']->id,
+                'production_order_no' => $row['production_order']->document_number,
+                'total_accumulated_cost' => $row['total_accumulated_cost'],
+                'allocated_output_cost' => $row['allocated_output_cost'],
+                'difference' => $row['difference'],
+                'output_entry_count' => $row['output_entries']->count(),
+                ...$this->findingMetadata(
+                    classification: 'stale_output_cost_propagation_pending',
+                    severity: 'critical',
+                    suggestedRemediation: 'Run biwms:manufacturing-output-cost-propagation-repair --dry-run, review the deterministic rows, then use --apply only in an approved maintenance window or run controlled production cost resettlement.'
+                ),
+            ])
             ->values()
             ->all();
     }

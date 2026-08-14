@@ -9,7 +9,6 @@ use App\Enums\ProductionVarianceType;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ProductionExpectedCostSnapshot;
 use App\Models\ProductionVarianceCalculation;
-use App\Models\ValueEntry;
 use App\Support\DecimalMath;
 use App\Support\DecimalTolerance;
 use Carbon\Carbon;
@@ -18,6 +17,10 @@ use Illuminate\Support\Facades\DB;
 
 class ProductionVarianceCalculationService
 {
+    public function __construct(
+        private readonly ProductionValueEntryOwnership $ownership,
+    ) {}
+
     /**
      * @return Collection<int, ProductionVarianceCalculation>
      */
@@ -302,14 +305,8 @@ class ProductionVarianceCalculationService
 
     private function manufacturingValueEntries(ProductionOrder $order): Collection
     {
-        return ValueEntry::query()
-            ->where(function ($query) use ($order): void {
-                $query->where('production_order_no', $order->document_number)
-                    ->orWhere(function ($nested) use ($order): void {
-                        $nested->where('source_module', 'manufacturing')
-                            ->where('source_no', (string) $order->id);
-                    });
-            })
+        return $this->ownership
+            ->belongsToOrderQuery($order)
             ->get();
     }
 }

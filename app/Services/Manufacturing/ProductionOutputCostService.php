@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Manufacturing;
 
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\ManufacturingCostComponent;
 use App\Enums\ProductionOutputAllocationStatus;
 use App\Models\ItemLedgerEntry;
@@ -14,6 +15,7 @@ use App\Services\Inventory\CostingPeriodService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 use App\Support\DecimalMath;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ProductionOutputCostService
@@ -49,9 +51,13 @@ class ProductionOutputCostService
             $eligibleCost = max(0.0, (float) $summary['total_accumulated_cost']);
             $alreadyAllocated = max(0.0, (float) $summary['allocated_output_cost']);
             $existing = ProductionOutputCostAllocation::query()
+                ->where('production_order_id', $lockedOrder->id)
+                ->where('output_item_ledger_entry_id', $lockedOutput->id)
+                ->whereNull('reversed_at')
                 ->where(function ($query) use ($idempotencyKey, $sourceIdentityKey): void {
                     $query->where('idempotency_key', $idempotencyKey)
-                        ->orWhere('source_identity_key', $sourceIdentityKey);
+                        ->orWhere('source_identity_key', $sourceIdentityKey)
+                        ->orWhereNotNull('reversed_allocation_id');
                 })
                 ->first();
 
@@ -129,6 +135,45 @@ class ProductionOutputCostService
             ];
 
             if ($existing) {
+                if ($this->allocationMatches($existing, $allocationValues)) {
+                    return $existing->fresh();
+                }
+
+                if ($this->allocationStatusEnum($existing->allocation_status) === ProductionOutputAllocationStatus::Final) {
+                    $existing->forceFill([
+                        'allocation_status' => ProductionOutputAllocationStatus::Reversed->value,
+                        'reversed_at' => now(),
+                        'metadata' => [
+                            ...(array) $existing->metadata,
+                            'reversed_by' => 'production_output_cost_reallocation',
+                            'replacement_allocated_total_cost' => DecimalMath::amount($allocatedTotal),
+                        ],
+                    ])->save();
+
+                    return ProductionOutputCostAllocation::query()->firstOrCreate([
+                        'idempotency_key' => hash('sha256', implode('|', [
+                            'production-output-allocation-reallocation',
+                            $lockedOrder->id,
+                            $lockedOutput->id,
+                            DecimalMath::amount($allocatedTotal),
+                        ])),
+                    ], [
+                        ...$allocationValues,
+                        'reversed_allocation_id' => $existing->id,
+                        'source_identity_key' => hash('sha256', implode('|', [
+                            'production-output-source-reallocation',
+                            $lockedOrder->id,
+                            $lockedOutput->id,
+                            DecimalMath::amount($allocatedTotal),
+                        ])),
+                        'metadata' => [
+                            ...(array) $allocationValues['metadata'],
+                            'allocation_method' => 'append_only_reallocation_after_upstream_cost_adjustment',
+                            'reversed_allocation_id' => $existing->id,
+                        ],
+                    ])->fresh();
+                }
+
                 $existing->forceFill($allocationValues)->save();
 
                 return $existing->fresh();
@@ -140,6 +185,115 @@ class ProductionOutputCostService
                 'source_identity_key' => $sourceIdentityKey,
             ]);
         });
+    }
+
+    /**
+     * @return Collection<int, array{
+     *     production_order: ProductionOrder,
+     *     output_entries: Collection<int, ItemLedgerEntry>,
+     *     total_accumulated_cost: float,
+     *     allocated_output_cost: float,
+     *     difference: float
+     * }>
+     */
+    public function staleOutputCostPropagations(mixed $productionOrderFilter = null): Collection
+    {
+        return ProductionOrder::query()
+            ->when($productionOrderFilter, function ($query, mixed $filter): void {
+                $query->where(function ($query) use ($filter): void {
+                    $query->where('document_number', (string) $filter);
+
+                    if (is_numeric($filter)) {
+                        $query->orWhere('id', (int) $filter);
+                    }
+                });
+            })
+            ->whereHas('itemLedgerEntries', function ($query): void {
+                $query->where('entry_type', ItemLedgerEntryType::OUTPUT);
+            })
+            ->with(['itemLedgerEntries' => function ($query): void {
+                $query->where('entry_type', ItemLedgerEntryType::OUTPUT)
+                    ->orderBy('id');
+            }])
+            ->get()
+            ->map(function (ProductionOrder $order): ?array {
+                $summary = $this->summaryService->summarize($order);
+                $difference = round((float) $summary['total_accumulated_cost'] - (float) $summary['allocated_output_cost'], 4);
+
+                if (abs($difference) <= 0.0001) {
+                    return null;
+                }
+
+                return [
+                    'production_order' => $order,
+                    'output_entries' => $order->itemLedgerEntries,
+                    'total_accumulated_cost' => round((float) $summary['total_accumulated_cost'], 4),
+                    'allocated_output_cost' => round((float) $summary['allocated_output_cost'], 4),
+                    'difference' => $difference,
+                ];
+            })
+            ->filter()
+            ->values();
+    }
+
+    /**
+     * @return array{scanned: int, repaired: int, rows: list<array<string, mixed>>}
+     */
+    public function repairStaleOutputCostPropagations(bool $apply = false, mixed $productionOrderFilter = null): array
+    {
+        $staleRows = $this->staleOutputCostPropagations($productionOrderFilter);
+        $rows = [];
+        $repaired = 0;
+
+        foreach ($staleRows as $row) {
+            /** @var ProductionOrder $order */
+            $order = $row['production_order'];
+            /** @var Collection<int, ItemLedgerEntry> $outputEntries */
+            $outputEntries = $row['output_entries'];
+            $createdAllocationIds = [];
+
+            if ($apply) {
+                foreach ($outputEntries as $index => $outputEntry) {
+                    $allocation = $this->allocateToOutput(
+                        order: $order,
+                        outputEntry: $outputEntry,
+                        finalOutput: $index === $outputEntries->count() - 1,
+                    );
+                    $createdAllocationIds[] = $allocation->id;
+                }
+
+                $repaired++;
+            }
+
+            $rows[] = [
+                'production_order_id' => $order->id,
+                'production_order_no' => $order->document_number,
+                'total_accumulated_cost' => $row['total_accumulated_cost'],
+                'allocated_output_cost' => $row['allocated_output_cost'],
+                'difference' => $row['difference'],
+                'output_entry_count' => $outputEntries->count(),
+                'allocation_ids' => $createdAllocationIds,
+                'status' => $apply ? 'repaired' : 'dry_run',
+            ];
+        }
+
+        return [
+            'scanned' => $staleRows->count(),
+            'repaired' => $repaired,
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $allocationValues
+     */
+    private function allocationMatches(ProductionOutputCostAllocation $existing, array $allocationValues): bool
+    {
+        return abs((float) $existing->allocated_total_cost - (float) $allocationValues['allocated_total_cost']) <= 0.0001
+            && abs((float) $existing->allocated_material_cost - (float) $allocationValues['allocated_material_cost']) <= 0.0001
+            && abs((float) $existing->allocated_capacity_cost - (float) $allocationValues['allocated_capacity_cost']) <= 0.0001
+            && abs((float) $existing->allocated_overhead_cost - (float) $allocationValues['allocated_overhead_cost']) <= 0.0001
+            && $this->allocationStatusEnum($existing->allocation_status) === $this->allocationStatusEnum($allocationValues['allocation_status']);
     }
 
     private function share(float $allocatedTotal, float $componentAmount, float $eligibleCost): float
