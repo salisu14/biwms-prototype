@@ -18,6 +18,7 @@ use App\Models\VendorPostingGroup;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
@@ -387,24 +388,35 @@ class BiwmsFinanceReconcile extends Command
      */
     private function inventoryValueGlMismatches(): array
     {
-        $inventoryAccountIds = InventoryPostingSetup::query()
-            ->whereNotNull('inventory_account_id')
-            ->pluck('inventory_account_id')
+        $inventoryAccountIds = $this->valueEntryControlAccountIds();
+
+        if ($inventoryAccountIds->isEmpty()) {
+            return [];
+        }
+
+        $legacyDocumentNumbers = ValueEntry::query()
+            ->whereNull('posting_transaction_id')
+            ->whereNotNull('document_no')
+            ->pluck('document_no')
             ->unique()
             ->values();
 
-        if ($inventoryAccountIds->isEmpty()) {
-            $inventoryAccountIds = DB::table('chart_of_accounts')
-                ->where('account_category', AccountCategory::INVENTORY->value)
-                ->pluck('id');
+        if ($legacyDocumentNumbers->isEmpty()) {
+            return [];
         }
 
         $subledgerBalance = (float) ValueEntry::query()
+            ->whereNull('posting_transaction_id')
+            ->where(function ($query): void {
+                $query->where('expected_cost', false)
+                    ->orWhereNull('expected_cost');
+            })
             ->selectRaw($this->inventoryValueEffectSql(alias: 'inventory_value_effect'))
             ->value('inventory_value_effect');
 
         $glBalance = (float) GlEntry::query()
             ->whereIn('chart_of_account_id', $inventoryAccountIds->all())
+            ->whereIn('document_number', $legacyDocumentNumbers->all())
             ->sum(DB::raw('debit_amount - credit_amount'));
 
         $difference = round($subledgerBalance - $glBalance, 2);
@@ -419,6 +431,7 @@ class BiwmsFinanceReconcile extends Command
             'subledger_balance' => round($subledgerBalance, 2),
             'gl_balance' => round($glBalance, 2),
             'difference' => $difference,
+            'diagnostic_hint' => 'Compared legacy Value Entries without PostingTransaction metadata against InventoryPostingSetup inventory, WIP, in-transit, and interim control accounts. Modern Value Entries are reconciled by posting_transaction_id diagnostics.',
             ...$this->findingMetadata(
                 classification: 'inventory_value_gl_mismatch',
                 severity: 'critical',
@@ -574,45 +587,99 @@ class BiwmsFinanceReconcile extends Command
      */
     private function valueEntriesMissingInventoryGl(): array
     {
-        $inventoryAccountIds = InventoryPostingSetup::query()
-            ->whereNotNull('inventory_account_id')
-            ->pluck('inventory_account_id')
-            ->unique()
-            ->values();
+        $controlAccountIds = $this->valueEntryControlAccountIds();
 
-        if ($inventoryAccountIds->isEmpty()) {
+        if ($controlAccountIds->isEmpty()) {
             return [];
         }
 
-        return DB::table('value_entries as ve')
-            ->whereNotNull('ve.document_no')
-            ->whereNotExists(function ($query) use ($inventoryAccountIds): void {
+        $modernRows = DB::table('value_entries as ve')
+            ->where('ve.gl_posted', true)
+            ->whereNotNull('ve.posting_transaction_id')
+            ->whereNotExists(function ($query) use ($controlAccountIds): void {
                 $query->selectRaw('1')
                     ->from('gl_entries as gl')
-                    ->whereIn('gl.chart_of_account_id', $inventoryAccountIds->all())
-                    ->whereColumn('gl.document_number', 've.document_no');
+                    ->whereColumn('gl.posting_transaction_id', 've.posting_transaction_id')
+                    ->whereIn('gl.chart_of_account_id', $controlAccountIds->all());
             })
-            ->groupBy('ve.document_type', 've.document_no')
+            ->orderBy('ve.entry_no')
+            ->limit(250)
+            ->get([
+                've.entry_no',
+                've.posting_transaction_id',
+                've.document_type',
+                've.document_no as document_number',
+                've.item_no',
+                've.item_ledger_entry_no',
+                DB::raw('COALESCE(ve.cost_amount_actual, 0) as amount'),
+            ])
+            ->map(fn ($entry): array => [
+                'control_type' => 'INVENTORY',
+                'account_number' => 'VALUE_ENTRY_CONTROL_TRANSACTION',
+                'value_entry_no' => $entry->entry_no,
+                'posting_transaction_id' => $entry->posting_transaction_id,
+                'item_no' => $entry->item_no,
+                'item_ledger_entry_no' => $entry->item_ledger_entry_no,
+                'document_type' => $entry->document_type,
+                'document_number' => $entry->document_number,
+                'amount' => round((float) $entry->amount, 2),
+                'source_hint' => 'Value Entry PostingTransaction',
+                ...$this->findingMetadata(
+                    classification: 'missing_control_account_entry',
+                    severity: 'critical',
+                    suggestedRemediation: 'This modern Value Entry is marked G/L posted but its PostingTransaction has no inventory/WIP control account line. Review the Value Entry PostingTransaction before planning a controlled correction.'
+                ),
+            ]);
+
+        $legacyRows = DB::table('value_entries as ve')
+            ->whereNotNull('ve.document_no')
+            ->whereNull('ve.posting_transaction_id')
+            ->whereNotExists(function ($query) use ($controlAccountIds): void {
+                $query->selectRaw('1')
+                    ->from('gl_entries as gl')
+                    ->whereIn('gl.chart_of_account_id', $controlAccountIds->all())
+                    ->where(function ($fallback): void {
+                        $fallback
+                            ->whereColumn('gl.document_number', 've.document_no')
+                            ->orWhereExists(function ($itemLedger): void {
+                                $itemLedger->selectRaw('1')
+                                    ->from('item_ledger_entries as ile')
+                                    ->whereColumn('ile.entry_number', 've.item_ledger_entry_no')
+                                    ->whereColumn('gl.item_ledger_entry_id', 'ile.id');
+                            });
+                    });
+            })
+            ->groupBy('ve.entry_no', 've.document_type', 've.document_no', 've.item_no', 've.item_ledger_entry_no')
             ->orderBy('ve.document_no')
             ->limit(250)
             ->get([
+                've.entry_no',
                 've.document_type',
                 've.document_no as document_number',
+                've.item_no',
+                've.item_ledger_entry_no',
                 DB::raw($this->inventoryValueEffectSql('ve', 'amount')),
             ])
             ->map(fn ($entry): array => [
                 'control_type' => 'INVENTORY',
-                'account_number' => 'INVENTORY_CONTROL_TOTAL',
+                'account_number' => 'LEGACY_INVENTORY_CONTROL_TOTAL',
+                'value_entry_no' => $entry->entry_no,
+                'posting_transaction_id' => null,
+                'item_no' => $entry->item_no,
+                'item_ledger_entry_no' => $entry->item_ledger_entry_no,
                 'document_type' => $entry->document_type,
                 'document_number' => $entry->document_number,
                 'amount' => round((float) $entry->amount, 2),
-                'source_hint' => 'Value Entry',
+                'source_hint' => 'Legacy Value Entry document fallback',
                 ...$this->findingMetadata(
                     classification: 'missing_control_account_entry',
                     severity: 'critical',
-                    suggestedRemediation: 'This Value Entry document has no matching inventory G/L control entry. Review item/value posting for the document before planning a controlled correction.'
+                    suggestedRemediation: 'This legacy Value Entry has no matching inventory/WIP G/L control entry by document or item ledger metadata. Review source posting before planning a controlled correction.'
                 ),
-            ])
+            ]);
+
+        return $modernRows
+            ->merge($legacyRows)
             ->values()
             ->all();
     }
@@ -730,31 +797,44 @@ class BiwmsFinanceReconcile extends Command
         }
 
         return DB::table('value_entries as ve')
-            ->join('item_ledger_entries as ile', 'ile.entry_number', '=', 've.item_ledger_entry_no')
-            ->join('gl_entries as gl', 'gl.item_ledger_entry_id', '=', 'ile.id')
+            ->join('posting_transactions as owner_pt', 'owner_pt.id', '=', 've.posting_transaction_id')
+            ->join('posting_transactions as duplicate_pt', function ($join): void {
+                $join
+                    ->whereColumn('duplicate_pt.id', '<>', 've.posting_transaction_id')
+                    ->where(function ($keys): void {
+                        $keys
+                            ->whereColumn('duplicate_pt.transaction_key', 'owner_pt.transaction_key')
+                            ->orWhereColumn('duplicate_pt.idempotency_key', 'owner_pt.idempotency_key')
+                            ->orWhereRaw("duplicate_pt.transaction_key = 'value-entry:' || ve.entry_no");
+                    });
+            })
             ->where('ve.gl_posted', true)
             ->whereNotNull('ve.posting_transaction_id')
-            ->whereColumn('gl.posting_transaction_id', '<>', 've.posting_transaction_id')
-            ->groupBy('ve.entry_no', 've.document_type', 've.document_no', 'ile.id')
+            ->where(function ($query): void {
+                $query
+                    ->where('owner_pt.transaction_key', 'like', 'value-entry:%')
+                    ->orWhereRaw("owner_pt.transaction_key = 'value-entry:' || ve.entry_no");
+            })
+            ->groupBy('ve.entry_no', 've.posting_transaction_id', 've.document_type', 've.document_no')
             ->orderBy('ve.entry_no')
             ->limit(250)
             ->get([
                 've.entry_no',
+                've.posting_transaction_id',
                 've.document_type',
                 've.document_no',
-                'ile.id as item_ledger_entry_id',
-                DB::raw('COUNT(gl.id) as duplicate_gl_line_count'),
+                DB::raw('COUNT(DISTINCT duplicate_pt.id) as duplicate_transaction_count'),
             ])
             ->map(fn ($entry): array => [
                 'value_entry_no' => $entry->entry_no,
+                'posting_transaction_id' => $entry->posting_transaction_id,
                 'document_type' => $entry->document_type,
                 'document_number' => $entry->document_no,
-                'item_ledger_entry_id' => $entry->item_ledger_entry_id,
-                'duplicate_gl_line_count' => (int) $entry->duplicate_gl_line_count,
+                'duplicate_transaction_count' => (int) $entry->duplicate_transaction_count,
                 ...$this->findingMetadata(
                     classification: 'source_and_value_entry_duplicate_inventory_value',
                     severity: 'critical',
-                    suggestedRemediation: 'The source service and Value Entry both appear to have posted inventory value for the same Item Ledger Entry. Keep the Value Entry posting and reverse/remediate the duplicate source-owned inventory value entry.'
+                    suggestedRemediation: 'More than one PostingTransaction appears to claim the same Value Entry economic event. Review transaction_key/idempotency_key ownership before planning a controlled remediation.'
                 ),
             ])
             ->values()
@@ -778,7 +858,33 @@ class BiwmsFinanceReconcile extends Command
 
     private function inventoryValueEffectSql(string $table = 'value_entries', string $alias = 'inventory_value_effect'): string
     {
-        return "COALESCE(SUM(CASE WHEN {$table}.item_ledger_entry_type IN (2, 4, 6, 9) THEN -ABS({$table}.cost_amount_actual) ELSE {$table}.cost_amount_actual END), 0) as {$alias}";
+        return "COALESCE(SUM({$table}.cost_amount_actual), 0) as {$alias}";
+    }
+
+    /**
+     * @return Collection<int, int>
+     */
+    private function valueEntryControlAccountIds(): Collection
+    {
+        $accountIds = collect([
+            ...InventoryPostingSetup::query()->whereNotNull('inventory_account_id')->pluck('inventory_account_id')->all(),
+            ...InventoryPostingSetup::query()->whereNotNull('inventory_account_interim_id')->pluck('inventory_account_interim_id')->all(),
+            ...InventoryPostingSetup::query()->whereNotNull('inventory_in_transit_account_id')->pluck('inventory_in_transit_account_id')->all(),
+            ...InventoryPostingSetup::query()->whereNotNull('wip_account_id')->pluck('wip_account_id')->all(),
+        ])
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($accountIds->isNotEmpty()) {
+            return $accountIds;
+        }
+
+        return DB::table('chart_of_accounts')
+            ->where('account_category', AccountCategory::INVENTORY->value)
+            ->pluck('id')
+            ->unique()
+            ->values();
     }
 
     private function glCreditMinusDebit(int $chartOfAccountId): float
