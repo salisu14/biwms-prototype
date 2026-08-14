@@ -8,6 +8,8 @@ use App\Enums\CostingMethod;
 use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
+use App\Enums\ManufacturingCostComponent;
+use App\Enums\ProductionOrderStatus;
 use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\CostAdjustmentBatch;
@@ -24,6 +26,7 @@ use App\Models\Item;
 use App\Models\ItemApplicationEntry;
 use App\Models\ItemLedgerEntry;
 use App\Models\Location;
+use App\Models\Manufacturing\ProductionOrder;
 use App\Models\PostedSalesInvoice;
 use App\Models\PostedSalesInvoiceLine;
 use App\Models\PurchaseInvoice;
@@ -37,6 +40,7 @@ use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ReturnCostApplicationService;
 use App\Services\Inventory\StockMovementService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use App\Services\Manufacturing\ProductionCostSummaryService;
 use App\Support\DecimalMath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -408,6 +412,190 @@ it('allocates sodium saccharine revaluation around pre-existing outbound economi
         ->and((float) $remainingRevaluation->cost_amount_actual)->toBe(29976.3702)
         ->and($report['cost_adjustment_allocation_mismatches'])->toBeEmpty()
         ->and($inventoryReport['value_entry_mismatches'])->toBeEmpty();
+});
+
+it('propagates production consumption cost adjustments without duplicating generic inventory gl', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $user = User::factory()->create();
+    $finishedGood = Item::factory()->create([
+        'item_code' => 'FG-FICUS',
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+    ]);
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PROD-00001',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $finishedGood->id,
+        'description' => 'Ficus Carica costing correction',
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_business_posting_group_id' => $fixture['businessGroup']->id,
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $fixture['location']->code,
+        'created_by' => $user->id,
+    ]);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 17.065728, 5791505.4720, 'OPEN-FICUS', '2026-08-01');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -17.065728, 0, 'PROD-00001', '2026-08-02');
+    $outbound->forceFill([
+        'source_type' => ProductionOrder::class,
+        'source_id' => $order->id,
+    ])->save();
+
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'production_consumption');
+    ValueEntry::query()
+        ->where('item_ledger_entry_no', $outbound->entry_number)
+        ->where('value_entry_state', 'actual')
+        ->update([
+            'document_type' => 'PRODUCTION_ORDER',
+            'document_no' => $order->document_number,
+            'source_module' => 'manufacturing',
+            'source_id' => $order->id,
+            'source_no' => (string) $order->id,
+            'production_order_no' => $order->document_number,
+            'production_order_component_line_no' => 10000,
+            'cost_component' => ManufacturingCostComponent::DirectMaterial->value,
+            'cost_amount_actual' => '5791505.4720',
+            'cost_amount_actual_acy' => '5791505.4720',
+        ]);
+
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 115.8301, 'Correct Ficus Carica opening cost', dryRun: false, userId: $user->id);
+    $retry = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 115.8301, 'Correct Ficus Carica opening cost', dryRun: false, userId: $user->id);
+
+    $genericAdjustment = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'COST_ADJUSTMENT')
+        ->firstOrFail();
+    $manufacturingCompanion = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'PRODUCTION_COST_ADJUSTMENT')
+        ->firstOrFail();
+    $summary = app(ProductionCostSummaryService::class)->summarize($order->fresh());
+    $glEntries = GlEntry::query()
+        ->where('posting_transaction_id', $genericAdjustment->posting_transaction_id)
+        ->get();
+
+    expect($retry['adjustments'])->toHaveCount(0)
+        ->and((float) $genericAdjustment->cost_amount_actual)->toBe(-5791389.6419)
+        ->and($genericAdjustment->source_module)->toBe('inventory')
+        ->and($genericAdjustment->gl_posted)->toBeTrue()
+        ->and((float) $manufacturingCompanion->cost_amount_actual)->toBe(-5791389.6419)
+        ->and($manufacturingCompanion->source_module)->toBe('manufacturing')
+        ->and($manufacturingCompanion->production_order_no)->toBe('PROD-00001')
+        ->and($manufacturingCompanion->cost_component)->toBe(ManufacturingCostComponent::CostAdjustment->value)
+        ->and($manufacturingCompanion->value_entry_state)->toBe('adjustment')
+        ->and($manufacturingCompanion->gl_posted)->toBeTrue()
+        ->and($manufacturingCompanion->posting_transaction_id)->toBe($genericAdjustment->posting_transaction_id)
+        ->and($manufacturingCompanion->accounting_metadata['gl_covered_by_generic_cost_adjustment'])->toBeTrue()
+        ->and($manufacturingCompanion->accounting_metadata['generic_cost_adjustment_value_entry_id'])->toBe($genericAdjustment->id)
+        ->and($summary['actual_material_cost'])->toBe(115.8301)
+        ->and((float) $glEntries->sum('debit_amount'))->toBe(5791389.64)
+        ->and((float) $glEntries->sum('credit_amount'))->toBe(5791389.64)
+        ->and($glEntries)->toHaveCount(2);
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', ['--json' => true, '--production-order' => $order->document_number]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['findings']['missing_manufacturing_cost_adjustment_propagation'])->toBeEmpty();
+});
+
+it('does not create manufacturing companions for non-production outbound cost adjustments', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 100, 'SALE-ADJ-IN', '2026-01-01');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -4, 0, 'SALE-ADJ-OUT', '2026-01-02');
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'sales_cost_adjustment');
+
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 150, 'Sales cost correction', dryRun: false);
+
+    expect(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('document_type', 'COST_ADJUSTMENT')->count())->toBe(1)
+        ->and(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('document_type', 'PRODUCTION_COST_ADJUSTMENT')->count())->toBe(0);
+});
+
+it('repairs deterministic missing manufacturing cost adjustment propagation idempotently', function (): void {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $user = User::factory()->create();
+    $finishedGood = Item::factory()->create([
+        'item_code' => 'FG-REPAIR',
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+    ]);
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PROD-REPAIR-001',
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $finishedGood->id,
+        'description' => 'Repair production companion',
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_business_posting_group_id' => $fixture['businessGroup']->id,
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $fixture['location']->code,
+        'created_by' => $user->id,
+    ]);
+    $inbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 10, 1000, 'REPAIR-IN', '2026-01-01');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -4, 0, 'PROD-REPAIR-001', '2026-01-02');
+    $outbound->forceFill([
+        'source_type' => ProductionOrder::class,
+        'source_id' => $order->id,
+    ])->save();
+    app(ItemApplicationService::class)->applyOutbound($outbound, 'production_consumption_repair');
+    ValueEntry::query()
+        ->where('item_ledger_entry_no', $outbound->entry_number)
+        ->where('value_entry_state', 'actual')
+        ->update([
+            'source_module' => 'manufacturing',
+            'source_id' => $order->id,
+            'source_no' => (string) $order->id,
+            'production_order_no' => $order->document_number,
+            'cost_component' => ManufacturingCostComponent::DirectMaterial->value,
+            'cost_amount_actual' => '400.0000',
+            'cost_amount_actual_acy' => '400.0000',
+        ]);
+
+    $posted = app(CostAdjustmentService::class)->adjustInboundCost($inbound->fresh(), 500, 'Repair candidate', dryRun: false);
+    $companion = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'PRODUCTION_COST_ADJUSTMENT')
+        ->firstOrFail();
+    $companion->delete();
+    $beforeCount = ValueEntry::query()->count();
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', ['--json' => true, '--production-order' => $order->document_number]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['findings']['missing_manufacturing_cost_adjustment_propagation'])->toHaveCount(1);
+
+    Artisan::call('biwms:manufacturing-cost-adjustment-propagation-repair', ['--dry-run' => true, '--production-order' => $order->document_number]);
+    expect(ValueEntry::query()->count())->toBe($beforeCount);
+
+    Artisan::call('biwms:manufacturing-cost-adjustment-propagation-repair', ['--apply' => true, '--production-order' => $order->document_number]);
+    $firstApplyOutput = Artisan::output();
+    Artisan::call('biwms:manufacturing-cost-adjustment-propagation-repair', ['--apply' => true, '--production-order' => $order->document_number]);
+    $secondApplyOutput = Artisan::output();
+
+    $repairedCompanion = ValueEntry::query()
+        ->where('document_no', $posted['batch']->batch_number)
+        ->where('document_type', 'PRODUCTION_COST_ADJUSTMENT')
+        ->firstOrFail();
+
+    expect($firstApplyOutput)->toContain('Repaired: 1')
+        ->and($secondApplyOutput)->toContain('Repaired: 0')
+        ->and($repairedCompanion->posting_transaction_id)->toBe(ValueEntry::query()->where('document_no', $posted['batch']->batch_number)->where('document_type', 'COST_ADJUSTMENT')->value('posting_transaction_id'));
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', ['--json' => true, '--production-order' => $order->document_number]);
+    $cleanReport = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($cleanReport['findings']['missing_manufacturing_cost_adjustment_propagation'])->toBeEmpty();
 });
 
 it('still reports genuinely missing cost adjustment allocation', function (): void {

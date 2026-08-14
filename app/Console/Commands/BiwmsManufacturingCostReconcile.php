@@ -13,6 +13,7 @@ use App\Models\Manufacturing\ProductionOrder;
 use App\Models\ProductionOutputCostAllocation;
 use App\Models\ProductionVarianceCalculation;
 use App\Models\ValueEntry;
+use App\Services\Inventory\CostAdjustmentService;
 use App\Services\Manufacturing\ProductionCostSummaryService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -27,6 +28,7 @@ class BiwmsManufacturingCostReconcile extends Command
 {
     public function __construct(
         private readonly ProductionCostSummaryService $summaryService,
+        private readonly CostAdjustmentService $costAdjustmentService,
     ) {
         parent::__construct();
     }
@@ -61,6 +63,7 @@ class BiwmsManufacturingCostReconcile extends Command
                 'standard_cost_variance_mismatch' => $this->varianceMismatch($productionOrderFilter, 'standard_cost', 'standard_cost_variance_mismatch'),
                 'rounding_variance_outside_tolerance' => $this->varianceMismatch($productionOrderFilter, 'rounding', 'rounding_variance_outside_tolerance'),
                 'late_material_cost_adjustment_pending' => $this->adjustmentRequiredOrders($productionOrderFilter, 'late_material_cost_adjustment_pending'),
+                'missing_manufacturing_cost_adjustment_propagation' => $this->missingManufacturingCostAdjustmentPropagation($productionOrderFilter),
                 'late_capacity_cost_adjustment_pending' => [],
                 'output_cost_adjustment_pending' => $this->outputCostAdjustmentPending($productionOrderFilter),
                 'downstream_cost_adjustment_pending' => [],
@@ -534,6 +537,40 @@ class BiwmsManufacturingCostReconcile extends Command
                     suggestedRemediation: 'Post manufacturing inventory value to G/L through ValueEntryAccountingOrchestrator; do not create source-module duplicate G/L rows.',
                 ),
             ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function missingManufacturingCostAdjustmentPropagation(mixed $productionOrderFilter): array
+    {
+        return $this->costAdjustmentService
+            ->missingManufacturingCostAdjustmentPropagations($productionOrderFilter)
+            ->map(function (array $row): array {
+                /** @var ProductionOrder $order */
+                $order = $row['production_order'];
+                /** @var ValueEntry $genericAdjustment */
+                $genericAdjustment = $row['generic_value_entry'];
+
+                return [
+                    'production_order_id' => $order->id,
+                    'production_order_no' => $order->document_number,
+                    'batch_id' => $row['batch']->id,
+                    'batch_number' => $row['batch']->batch_number,
+                    'generic_value_entry_id' => $genericAdjustment->id,
+                    'generic_value_entry_no' => $genericAdjustment->entry_no,
+                    'consumption_item_ledger_entry_id' => $row['consumption_entry']->id,
+                    'consumption_item_ledger_entry_no' => $row['consumption_entry']->entry_number,
+                    'adjustment_amount' => round((float) $row['adjustment_amount'], 4),
+                    ...$this->findingMetadata(
+                        classification: 'missing_manufacturing_cost_adjustment_propagation',
+                        severity: 'critical',
+                        suggestedRemediation: 'Run biwms:manufacturing-cost-adjustment-propagation-repair --dry-run, review the deterministic rows, then run --apply only during an approved maintenance window.'
+                    ),
+                ];
+            })
             ->values()
             ->all();
     }
