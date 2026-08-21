@@ -2742,6 +2742,431 @@ it('does not repair finished adjustment required orders through the generic outp
         ->and(ValueEntry::query()->where('production_order_no', $order->document_number)->where('document_type', 'PROD_OUTPUT_COST_ADJ')->doesntExist())->toBeTrue();
 });
 
+it('resettles finished adjustment required production order append only without double posting material companion gl', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order,,, $location] = createMinimalSettlementOrders($user, 'PROD00005');
+    createPostingAccountsForOrder($order, $location);
+    $order->forceFill([
+        'document_number' => 'PROD-00005',
+        'quantity' => 288,
+        'quantity_base' => 288,
+        'status' => ProductionOrderStatus::FINISHED,
+    ])->save();
+
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-PROD00005',
+        'unit_cost' => 778.5,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+    ProductionExpectedCostSnapshot::query()->create([
+        'production_order_id' => $order->id,
+        'finished_item_id' => $order->item_id,
+        'production_quantity_base' => 288,
+        'costing_date' => now()->toDateString(),
+        'expected_material_cost' => 0,
+        'expected_capacity_cost' => 0,
+        'expected_overhead_cost' => 0,
+        'expected_output_cost' => 0,
+        'expected_total_cost' => 0,
+        'calculation_identity' => 'prod-00005-resettle',
+        'status' => 'calculated',
+        'calculated_by' => $user->id,
+        'calculated_at' => now(),
+    ]);
+
+    $outputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 288,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 36618.3893,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $outputValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outputEntry->entry_number)
+        ->firstOrFail();
+    $outputValueEntry->forceFill([
+        'cost_component' => ManufacturingCostComponent::Output->value,
+        'source_module' => 'manufacturing',
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+        'source_no' => (string) $order->id,
+        'production_order_no' => $order->document_number,
+        'cost_amount_actual' => 36618.3893,
+        'cost_amount_actual_acy' => 36618.3893,
+        'unit_cost' => 127.14718507,
+        'unit_cost_acy' => 127.14718507,
+    ])->save();
+    app(ValueEntryAccountingOrchestrator::class)->post($outputValueEntry->fresh());
+
+    $baseMaterial = manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::DirectMaterial,
+        quantity: -47.03646744,
+        amount: 36618.3893,
+        lineNumber: 10000,
+    );
+    app(ValueEntryAccountingOrchestrator::class)->post($baseMaterial);
+    $materialPostingTransactionId = $baseMaterial->fresh()->posting_transaction_id;
+
+    $lateMaterialCompanion = manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::CostAdjustment,
+        quantity: 0,
+        amount: 7.8766,
+        lineNumber: 10000,
+    );
+    $lateMaterialCompanion->forceFill([
+        'document_type' => 'PRODUCTION_COST_ADJUSTMENT',
+        'value_entry_state' => 'adjustment',
+        'accounting_metadata' => ['gl_covered_by_generic_cost_adjustment' => true],
+        'gl_posted' => true,
+    ])->save();
+
+    $originalAllocation = ProductionOutputCostAllocation::query()->create([
+        'production_order_id' => $order->id,
+        'output_item_ledger_entry_id' => $outputEntry->id,
+        'output_value_entry_id' => $outputValueEntry->id,
+        'output_quantity' => 288,
+        'eligible_cost_before_allocation' => 36618.3893,
+        'allocated_material_cost' => 36618.3893,
+        'allocated_capacity_cost' => 0,
+        'allocated_overhead_cost' => 0,
+        'allocated_total_cost' => 36618.3893,
+        'allocation_status' => ProductionOutputAllocationStatus::Final->value,
+        'is_final_allocation' => true,
+        'finalized_at' => now(),
+        'idempotency_key' => hash('sha256', implode('|', [
+            'production-output-allocation',
+            $order->id,
+            $outputEntry->id,
+            DecimalMath::quantity($outputEntry->quantity),
+        ])),
+        'source_identity_key' => hash('sha256', implode('|', [
+            'production-output-source',
+            $order->id,
+            $outputEntry->id,
+        ])),
+    ]);
+    $order->forceFill([
+        'cost_settled_at' => now()->subDay(),
+        'cost_settled_by' => $user->id,
+        'cost_settlement_status' => ProductionCostSettlementStatus::AdjustmentRequired->value,
+        'cost_settlement_classification' => ProductionCostSettlementClassification::LateCostAdjustmentRequired->value,
+    ])->save();
+
+    $beforeSummary = app(ProductionCostSummaryService::class)->summarize($order->fresh());
+    $beforeCounts = [
+        'allocations' => ProductionOutputCostAllocation::query()->where('production_order_id', $order->id)->count(),
+        'output_adjustments' => ValueEntry::query()->where('production_order_no', $order->document_number)->where('document_type', 'PROD_OUTPUT_COST_ADJ')->count(),
+        'posting_transactions' => PostingTransaction::query()->count(),
+        'gl_entries' => GlEntry::query()->count(),
+    ];
+
+    expect((float) $beforeSummary['total_accumulated_cost'])->toBe(36626.2659)
+        ->and((float) $beforeSummary['allocated_output_cost'])->toBe(36618.3893)
+        ->and(round((float) $beforeSummary['unallocated_cost'], 4))->toBe(7.8766);
+
+    $result = app(ProductionOrderCostSettlementService::class)->settle($order->fresh(), $user->id);
+    $retry = app(ProductionOrderCostSettlementService::class)->settle($order->fresh(), $user->id);
+
+    $replacement = ProductionOutputCostAllocation::query()
+        ->where('production_order_id', $order->id)
+        ->whereNull('reversed_at')
+        ->firstOrFail();
+    $outputAdjustment = ValueEntry::query()
+        ->where('production_order_no', $order->document_number)
+        ->where('document_type', 'PROD_OUTPUT_COST_ADJ')
+        ->firstOrFail();
+    $afterSummary = app(ProductionCostSummaryService::class)->summarize($order->fresh());
+
+    expect($result['settled'])->toBeTrue()
+        ->and($retry['idempotent'])->toBeTrue()
+        ->and($order->fresh()->cost_settlement_status)->toBe(ProductionCostSettlementStatus::Settled)
+        ->and((float) $afterSummary['total_accumulated_cost'])->toBe(36626.2659)
+        ->and((float) $afterSummary['allocated_output_cost'])->toBe(36626.2659)
+        ->and((float) $afterSummary['unallocated_cost'])->toBe(0.0)
+        ->and($originalAllocation->fresh()->allocation_status)->toBe(ProductionOutputAllocationStatus::Reversed)
+        ->and($originalAllocation->fresh()->reversed_at)->not->toBeNull()
+        ->and((float) $originalAllocation->fresh()->allocated_total_cost)->toBe(36618.3893)
+        ->and($replacement->reversed_allocation_id)->toBe($originalAllocation->id)
+        ->and((float) $replacement->allocated_total_cost)->toBe(36626.2659)
+        ->and((float) $outputAdjustment->cost_amount_actual)->toBe(7.8766)
+        ->and($outputAdjustment->gl_posted)->toBeTrue()
+        ->and($outputAdjustment->posting_transaction_id)->not->toBeNull()
+        ->and($lateMaterialCompanion->fresh()->posting_transaction_id)->toBeNull()
+        ->and($baseMaterial->fresh()->posting_transaction_id)->toBe($materialPostingTransactionId)
+        ->and(ProductionOutputCostAllocation::query()->where('production_order_id', $order->id)->count())->toBe($beforeCounts['allocations'] + 1)
+        ->and(ValueEntry::query()->where('production_order_no', $order->document_number)->where('document_type', 'PROD_OUTPUT_COST_ADJ')->count())->toBe($beforeCounts['output_adjustments'] + 1)
+        ->and(PostingTransaction::query()->count())->toBe($beforeCounts['posting_transactions'] + 1)
+        ->and(GlEntry::query()->count())->toBe($beforeCounts['gl_entries'] + 2)
+        ->and((float) $outputAdjustment->fresh()->postingTransaction->glEntries()->sum('debit_amount'))->toBe(7.88)
+        ->and((float) $outputAdjustment->fresh()->postingTransaction->glEntries()->sum('credit_amount'))->toBe(7.88);
+});
+
+it('reports controlled manufacturing resettlement dry run without mutating data', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order,,, $location] = createMinimalSettlementOrders($user, 'DRYRESETTLE');
+    createPostingAccountsForOrder($order, $location);
+    $order->forceFill([
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'status' => ProductionOrderStatus::FINISHED,
+    ])->save();
+    ProductionExpectedCostSnapshot::query()->create([
+        'production_order_id' => $order->id,
+        'finished_item_id' => $order->item_id,
+        'production_quantity_base' => 1,
+        'costing_date' => now()->toDateString(),
+        'expected_material_cost' => 0,
+        'expected_capacity_cost' => 0,
+        'expected_overhead_cost' => 0,
+        'expected_output_cost' => 0,
+        'expected_total_cost' => 0,
+        'calculation_identity' => 'dry-resettle',
+        'status' => 'calculated',
+        'calculated_by' => $user->id,
+        'calculated_at' => now(),
+    ]);
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-DRYRESETTLE',
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+    $outputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 90,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $outputValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outputEntry->entry_number)
+        ->firstOrFail();
+    $outputValueEntry->forceFill([
+        'cost_component' => ManufacturingCostComponent::Output->value,
+        'source_module' => 'manufacturing',
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+        'source_no' => (string) $order->id,
+        'production_order_no' => $order->document_number,
+        'cost_amount_actual' => 90,
+        'cost_amount_actual_acy' => 90,
+    ])->save();
+    app(ValueEntryAccountingOrchestrator::class)->post($outputValueEntry->fresh());
+    manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::DirectMaterial,
+        quantity: -1,
+        amount: 100,
+        lineNumber: 10000,
+    )->forceFill(['gl_posted' => true])->save();
+    ProductionOutputCostAllocation::query()->create([
+        'production_order_id' => $order->id,
+        'output_item_ledger_entry_id' => $outputEntry->id,
+        'output_value_entry_id' => $outputValueEntry->id,
+        'output_quantity' => 1,
+        'eligible_cost_before_allocation' => 90,
+        'allocated_material_cost' => 90,
+        'allocated_capacity_cost' => 0,
+        'allocated_overhead_cost' => 0,
+        'allocated_total_cost' => 90,
+        'allocation_status' => ProductionOutputAllocationStatus::Final->value,
+        'is_final_allocation' => true,
+        'finalized_at' => now(),
+        'idempotency_key' => hash('sha256', implode('|', [
+            'production-output-allocation',
+            $order->id,
+            $outputEntry->id,
+            DecimalMath::quantity($outputEntry->quantity),
+        ])),
+        'source_identity_key' => hash('sha256', implode('|', [
+            'production-output-source',
+            $order->id,
+            $outputEntry->id,
+        ])),
+    ]);
+    $order->forceFill([
+        'cost_settled_at' => now()->subDay(),
+        'cost_settled_by' => $user->id,
+        'cost_settlement_status' => ProductionCostSettlementStatus::AdjustmentRequired->value,
+        'cost_settlement_classification' => ProductionCostSettlementClassification::LateCostAdjustmentRequired->value,
+    ])->save();
+
+    $beforeCounts = [
+        'allocations' => ProductionOutputCostAllocation::query()->count(),
+        'output_adjustments' => ValueEntry::query()->where('document_type', 'PROD_OUTPUT_COST_ADJ')->count(),
+        'posting_transactions' => PostingTransaction::query()->count(),
+    ];
+
+    expect(Artisan::call('biwms:manufacturing-cost-resettle', [
+        'productionOrder' => $order->document_number,
+        '--dry-run' => true,
+    ]))->toBe(0);
+    $output = Artisan::output();
+
+    expect($output)->toContain('Mode: dry-run. No data was changed.')
+        ->and($output)->toContain('Expected Resettlement Delta: 10.0000')
+        ->and($output)->toContain('Dry Run Mutates Data: no')
+        ->and(ProductionOutputCostAllocation::query()->count())->toBe($beforeCounts['allocations'])
+        ->and(ValueEntry::query()->where('document_type', 'PROD_OUTPUT_COST_ADJ')->count())->toBe($beforeCounts['output_adjustments'])
+        ->and(PostingTransaction::query()->count())->toBe($beforeCounts['posting_transactions'])
+        ->and($order->fresh()->cost_settlement_status)->toBe(ProductionCostSettlementStatus::AdjustmentRequired);
+});
+
+it('rolls back controlled resettlement when output adjustment gl posting fails', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order,,, $location] = createMinimalSettlementOrders($user, 'RESETFAIL');
+    createPostingAccountsForOrder($order, $location);
+    $order->forceFill([
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'status' => ProductionOrderStatus::FINISHED,
+    ])->save();
+    ProductionExpectedCostSnapshot::query()->create([
+        'production_order_id' => $order->id,
+        'finished_item_id' => $order->item_id,
+        'production_quantity_base' => 1,
+        'costing_date' => now()->toDateString(),
+        'expected_material_cost' => 0,
+        'expected_capacity_cost' => 0,
+        'expected_overhead_cost' => 0,
+        'expected_output_cost' => 0,
+        'expected_total_cost' => 0,
+        'calculation_identity' => 'rollback-resettle',
+        'status' => 'calculated',
+        'calculated_by' => $user->id,
+        'calculated_at' => now(),
+    ]);
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-RESETFAIL',
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+    $outputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 90,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $outputValueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outputEntry->entry_number)
+        ->firstOrFail();
+    $outputValueEntry->forceFill([
+        'cost_component' => ManufacturingCostComponent::Output->value,
+        'source_module' => 'manufacturing',
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+        'source_no' => (string) $order->id,
+        'production_order_no' => $order->document_number,
+        'cost_amount_actual' => 90,
+        'cost_amount_actual_acy' => 90,
+        'gl_posted' => true,
+    ])->save();
+    manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::DirectMaterial,
+        quantity: -1,
+        amount: 100,
+        lineNumber: 10000,
+    )->forceFill(['gl_posted' => true])->save();
+    $originalAllocation = ProductionOutputCostAllocation::query()->create([
+        'production_order_id' => $order->id,
+        'output_item_ledger_entry_id' => $outputEntry->id,
+        'output_value_entry_id' => $outputValueEntry->id,
+        'output_quantity' => 1,
+        'eligible_cost_before_allocation' => 90,
+        'allocated_material_cost' => 90,
+        'allocated_capacity_cost' => 0,
+        'allocated_overhead_cost' => 0,
+        'allocated_total_cost' => 90,
+        'allocation_status' => ProductionOutputAllocationStatus::Final->value,
+        'is_final_allocation' => true,
+        'finalized_at' => now(),
+        'idempotency_key' => hash('sha256', implode('|', [
+            'production-output-allocation',
+            $order->id,
+            $outputEntry->id,
+            DecimalMath::quantity($outputEntry->quantity),
+        ])),
+        'source_identity_key' => hash('sha256', implode('|', [
+            'production-output-source',
+            $order->id,
+            $outputEntry->id,
+        ])),
+    ]);
+    $order->forceFill([
+        'cost_settled_at' => now()->subDay(),
+        'cost_settled_by' => $user->id,
+        'cost_settlement_status' => ProductionCostSettlementStatus::AdjustmentRequired->value,
+        'cost_settlement_classification' => ProductionCostSettlementClassification::LateCostAdjustmentRequired->value,
+    ])->save();
+
+    $this->mock(ValueEntryAccountingOrchestrator::class, function ($mock): void {
+        $mock->shouldReceive('post')->once()->andThrow(new RuntimeException('Simulated downstream posting failure.'));
+    });
+
+    expect(fn () => app(ProductionOrderCostSettlementService::class)->settle($order->fresh(), $user->id))
+        ->toThrow(RuntimeException::class, 'Simulated downstream posting failure');
+
+    expect(ValueEntry::query()->where('production_order_no', $order->document_number)->where('document_type', 'PROD_OUTPUT_COST_ADJ')->exists())->toBeFalse()
+        ->and(ProductionOutputCostAllocation::query()->where('production_order_id', $order->id)->count())->toBe(1)
+        ->and($originalAllocation->fresh()->allocation_status)->toBe(ProductionOutputAllocationStatus::Final)
+        ->and($originalAllocation->fresh()->reversed_at)->toBeNull()
+        ->and($order->fresh()->cost_settlement_status)->toBe(ProductionCostSettlementStatus::AdjustmentRequired);
+});
+
 it('allows completed routing with valid zero cost capacity even when planned setup exceeds actual setup', function (): void {
     $user = User::factory()->create();
     $this->actingAs($user);
