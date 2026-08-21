@@ -685,9 +685,7 @@ class BiwmsInventoryReconcile extends Command
                             ->orWhereNull('expected_cost');
                     })
                     ->sum('quantity');
-                $valueEntryCost = (float) ((float) $entry->quantity > 0 && $economicValueService->hasPostedCostAdjustmentBatch($entry)
-                    ? $economicValueService->economicValueForInboundLayer($entry)
-                    : $economicValueService->originalActualValueForItemLedgerEntry($entry));
+                $valueEntryCost = (float) $economicValueService->economicActualValueForItemLedgerEntry($entry);
 
                 $quantityMatches = abs((float) $entry->quantity - $actualValueEntryQuantity) <= 0.0001;
                 $costMatches = (float) $entry->quantity < 0

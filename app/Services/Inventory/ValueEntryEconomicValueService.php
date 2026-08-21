@@ -127,6 +127,15 @@ class ValueEntryEconomicValueService
         ));
     }
 
+    public function economicActualValueForItemLedgerEntry(ItemLedgerEntry $entry): string
+    {
+        if ((float) $entry->quantity > 0 && $this->hasPostedCostAdjustmentBatch($entry)) {
+            return $this->economicValueForInboundLayer($entry);
+        }
+
+        return $this->economicValueForItemLedgerEntry($entry);
+    }
+
     public function hasPostedCostAdjustmentBatch(ItemLedgerEntry $entry): bool
     {
         return CostAdjustmentBatch::query()
