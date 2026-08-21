@@ -89,6 +89,8 @@ class BiwmsManufacturingCostReconcile extends Command
                 'production_cost_summary_mismatch' => $this->productionCostSummaryMismatch($productionOrderFilter),
                 'duplicate_capacity_postings' => $this->duplicateCapacityPostings($productionOrderFilter),
                 'duplicate_output_allocations' => $this->duplicateOutputAllocations($productionOrderFilter),
+                'invalid_output_allocation_ile_type' => $this->invalidOutputAllocationIleType($productionOrderFilter),
+                'output_allocation_order_mismatch' => $this->outputAllocationOrderMismatch($productionOrderFilter),
                 'output_cost_overallocated' => $this->outputCostOverallocated($productionOrderFilter),
                 'finished_orders_with_unallocated_cost' => $this->finishedOrdersWithUnallocatedCost($productionOrderFilter),
                 'finished_orders_without_cost_settlement' => $this->finishedOrdersWithoutCostSettlement($productionOrderFilter),
@@ -834,6 +836,87 @@ class BiwmsManufacturingCostReconcile extends Command
                     classification: 'duplicate_output_allocation',
                     severity: 'critical',
                     suggestedRemediation: 'Review duplicate output allocations and correct through explicit reversal/allocation adjustment records.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function invalidOutputAllocationIleType(mixed $productionOrderFilter): array
+    {
+        return ProductionOutputCostAllocation::query()
+            ->with(['productionOrder', 'outputItemLedgerEntry'])
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->whereHas('productionOrder', function (Builder $query) use ($filter): void {
+                    $query->where('document_number', (string) $filter);
+
+                    if (is_numeric($filter)) {
+                        $query->orWhere('id', (int) $filter);
+                    }
+                });
+            })
+            ->whereHas('outputItemLedgerEntry', function (Builder $query): void {
+                $query->where('entry_type', '!=', ItemLedgerEntryType::OUTPUT->value);
+            })
+            ->limit(250)
+            ->get()
+            ->map(fn (ProductionOutputCostAllocation $allocation): array => [
+                'production_order_id' => $allocation->production_order_id,
+                'production_order_no' => $allocation->productionOrder?->document_number,
+                'allocation_id' => $allocation->id,
+                'output_item_ledger_entry_id' => $allocation->output_item_ledger_entry_id,
+                'output_item_ledger_entry_no' => $allocation->outputItemLedgerEntry?->entry_number,
+                'entry_type' => $allocation->outputItemLedgerEntry?->entry_type?->value ?? $allocation->outputItemLedgerEntry?->entry_type,
+                ...$this->findingMetadata(
+                    classification: 'invalid_output_allocation_ile_type',
+                    severity: 'critical',
+                    suggestedRemediation: 'Production output allocations must point only to Output Item Ledger Entries. Review the allocation history and correct through an approved append-only remediation plan.',
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function outputAllocationOrderMismatch(mixed $productionOrderFilter): array
+    {
+        return ProductionOutputCostAllocation::query()
+            ->with(['productionOrder', 'outputItemLedgerEntry'])
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                $query->whereHas('productionOrder', function (Builder $query) use ($filter): void {
+                    $query->where('document_number', (string) $filter);
+
+                    if (is_numeric($filter)) {
+                        $query->orWhere('id', (int) $filter);
+                    }
+                });
+            })
+            ->limit(250)
+            ->get()
+            ->filter(function (ProductionOutputCostAllocation $allocation): bool {
+                $outputEntry = $allocation->outputItemLedgerEntry;
+
+                return ! $outputEntry
+                    || (string) $outputEntry->source_type !== ProductionOrder::class
+                    || (int) $outputEntry->source_id !== (int) $allocation->production_order_id;
+            })
+            ->map(fn (ProductionOutputCostAllocation $allocation): array => [
+                'production_order_id' => $allocation->production_order_id,
+                'production_order_no' => $allocation->productionOrder?->document_number,
+                'allocation_id' => $allocation->id,
+                'output_item_ledger_entry_id' => $allocation->output_item_ledger_entry_id,
+                'output_item_ledger_entry_no' => $allocation->outputItemLedgerEntry?->entry_number,
+                'output_source_type' => $allocation->outputItemLedgerEntry?->source_type,
+                'output_source_id' => $allocation->outputItemLedgerEntry?->source_id,
+                ...$this->findingMetadata(
+                    classification: 'output_allocation_order_mismatch',
+                    severity: 'critical',
+                    suggestedRemediation: 'Production output allocation ownership must match the output Item Ledger Entry source production order. Review and correct only through approved append-only remediation.',
                 ),
             ])
             ->values()

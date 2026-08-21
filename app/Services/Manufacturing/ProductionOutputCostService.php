@@ -35,6 +35,7 @@ class ProductionOutputCostService
             /** @var ItemLedgerEntry $lockedOutput */
             $lockedOutput = ItemLedgerEntry::query()->lockForUpdate()->findOrFail($outputEntry->id);
 
+            $this->assertValidOutputEntry($lockedOrder, $lockedOutput);
             $this->costingPeriodService->assertAdjustmentAllowed($lockedOutput->posting_date);
 
             $idempotencyKey = hash('sha256', implode('|', [
@@ -180,15 +181,17 @@ class ProductionOutputCostService
                 });
             })
             ->whereHas('itemLedgerEntries', function ($query): void {
-                $query->where('entry_type', ItemLedgerEntryType::OUTPUT);
+                $query->where('entry_type', ItemLedgerEntryType::OUTPUT->value)
+                    ->where('quantity', '>', 0);
             })
-            ->with(['itemLedgerEntries' => function ($query): void {
-                $query->where('entry_type', ItemLedgerEntryType::OUTPUT)
-                    ->orderBy('id');
-            }])
             ->get()
             ->map(function (ProductionOrder $order): ?array {
                 $summary = $this->summaryService->summarize($order);
+                $outputEntries = $order->itemLedgerEntries()
+                    ->where('entry_type', ItemLedgerEntryType::OUTPUT->value)
+                    ->where('quantity', '>', 0)
+                    ->orderBy('id')
+                    ->get();
                 $difference = round((float) $summary['total_accumulated_cost'] - (float) $summary['allocated_output_cost'], 4);
 
                 if (abs($difference) <= 0.0001) {
@@ -197,7 +200,7 @@ class ProductionOutputCostService
 
                 return [
                     'production_order' => $order,
-                    'output_entries' => $order->itemLedgerEntries,
+                    'output_entries' => $outputEntries,
                     'total_accumulated_cost' => round((float) $summary['total_accumulated_cost'], 4),
                     'allocated_output_cost' => round((float) $summary['allocated_output_cost'], 4),
                     'difference' => $difference,
@@ -270,6 +273,37 @@ class ProductionOutputCostService
             && abs((float) $existing->allocated_capacity_cost - (float) $allocationValues['allocated_capacity_cost']) <= 0.0001
             && abs((float) $existing->allocated_overhead_cost - (float) $allocationValues['allocated_overhead_cost']) <= 0.0001
             && $this->allocationStatusEnum($existing->allocation_status) === $this->allocationStatusEnum($allocationValues['allocation_status']);
+    }
+
+    private function assertValidOutputEntry(ProductionOrder $order, ItemLedgerEntry $outputEntry): void
+    {
+        $entryType = $outputEntry->entry_type instanceof ItemLedgerEntryType
+            ? $outputEntry->entry_type
+            : ItemLedgerEntryType::tryFrom((string) $outputEntry->entry_type);
+
+        if ($entryType !== ItemLedgerEntryType::OUTPUT) {
+            throw new \RuntimeException(sprintf(
+                'Production output cost allocation requires an Output Item Ledger Entry; entry %s is %s.',
+                $outputEntry->entry_number ?? $outputEntry->id,
+                $entryType?->value ?? (string) $outputEntry->entry_type,
+            ));
+        }
+
+        if ((float) $outputEntry->quantity <= 0.0) {
+            throw new \RuntimeException(sprintf(
+                'Production output cost allocation requires positive output quantity; entry %s quantity is %s.',
+                $outputEntry->entry_number ?? $outputEntry->id,
+                (string) $outputEntry->quantity,
+            ));
+        }
+
+        if ((string) $outputEntry->source_type !== ProductionOrder::class || (int) $outputEntry->source_id !== (int) $order->id) {
+            throw new \RuntimeException(sprintf(
+                'Production output Item Ledger Entry %s does not belong to production order %s.',
+                $outputEntry->entry_number ?? $outputEntry->id,
+                $order->document_number,
+            ));
+        }
     }
 
     /**
@@ -474,6 +508,8 @@ class ProductionOutputCostService
                     'already_allocated_before_allocation' => $alreadyAllocated,
                 ]),
             ])->save();
+
+            app(ValueEntryAccountingOrchestrator::class)->post($valueEntry->fresh());
 
             return $valueEntry->fresh();
         }

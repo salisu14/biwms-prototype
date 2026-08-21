@@ -33,6 +33,7 @@ use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\WorkCenter;
 use App\Models\NumberSeries;
 use App\Models\Permission;
+use App\Models\PostingTransaction;
 use App\Models\ProductionExpectedCostSnapshot;
 use App\Models\ProductionJournalBatch;
 use App\Models\ProductionJournalLine;
@@ -48,6 +49,7 @@ use App\Services\Manufacturing\ExpectedManufacturingCostService;
 use App\Services\Manufacturing\ProductionCostSummaryService;
 use App\Services\Manufacturing\ProductionOrderCostSettlementService;
 use App\Services\Manufacturing\ProductionOrderService;
+use App\Services\Manufacturing\ProductionOutputCostService;
 use App\Services\Manufacturing\ProductionVarianceCalculationService;
 use App\Services\Manufacturing\ProductionVarianceValueEntryService;
 use App\Services\Posting\ProductionJournalPostingRoutine;
@@ -2252,6 +2254,26 @@ it('initializes a pending zero output allocation in place without creating an ou
         lineNumber: 10000,
     );
     $material->forceFill(['gl_posted' => true])->save();
+    $consumptionEntryIds = collect(range(1, 10))
+        ->map(fn (int $line): int => ItemLedgerEntry::query()->create([
+            'entry_type' => ItemLedgerEntryType::CONSUMPTION,
+            'document_type' => 'PRODUCTION_ORDER',
+            'document_number' => $order->document_number,
+            'document_line_number' => 20000 + $line,
+            'item_id' => $componentItem->id,
+            'location_id' => $location->id,
+            'quantity' => -1,
+            'remaining_quantity' => 0,
+            'cost_amount_actual' => 0,
+            'cost_amount_expected' => 0,
+            'general_product_posting_group_id' => $order->general_product_posting_group_id,
+            'inventory_posting_group_id' => $order->inventory_posting_group_id,
+            'posting_date' => now(),
+            'entry_date' => now(),
+            'open' => false,
+            'source_id' => $order->id,
+            'source_type' => ProductionOrder::class,
+        ])->id);
 
     $pendingAllocation = ProductionOutputCostAllocation::query()->create([
         'production_order_id' => $order->id,
@@ -2282,20 +2304,222 @@ it('initializes a pending zero output allocation in place without creating an ou
         'allocations' => ProductionOutputCostAllocation::query()->count(),
         'adjustments' => ValueEntry::query()->where('document_type', 'PROD_OUTPUT_COST_ADJ')->count(),
         'gl_entries' => GlEntry::query()->count(),
+        'posting_transactions' => PostingTransaction::query()->count(),
     ];
 
     Artisan::call('biwms:manufacturing-output-cost-propagation-repair', ['--apply' => true, '--production-order' => $order->document_number]);
     $output = Artisan::output();
+    Artisan::call('biwms:manufacturing-output-cost-propagation-repair', ['--apply' => true, '--production-order' => $order->document_number]);
 
     expect($output)->toContain('status=initialized_pending_output')
         ->and($output)->toContain('output_entry_count=1')
         ->and(ProductionOutputCostAllocation::query()->count())->toBe($beforeCounts['allocations'])
+        ->and(ProductionOutputCostAllocation::query()->whereIn('output_item_ledger_entry_id', $consumptionEntryIds)->doesntExist())->toBeTrue()
         ->and($pendingAllocation->fresh()->allocation_status)->toBe(ProductionOutputAllocationStatus::Final)
         ->and((float) $pendingAllocation->fresh()->allocated_total_cost)->toBe(100.0)
         ->and((float) $outputValueEntry->fresh()->cost_amount_actual)->toBe(100.0)
-        ->and($outputValueEntry->fresh()->gl_posted)->toBeFalse()
+        ->and($outputValueEntry->fresh()->gl_posted)->toBeTrue()
+        ->and($outputValueEntry->fresh()->posting_transaction_id)->not->toBeNull()
         ->and(ValueEntry::query()->where('document_type', 'PROD_OUTPUT_COST_ADJ')->count())->toBe($beforeCounts['adjustments'])
-        ->and(GlEntry::query()->count())->toBe($beforeCounts['gl_entries']);
+        ->and(PostingTransaction::query()->count())->toBe($beforeCounts['posting_transactions'] + 1)
+        ->and(GlEntry::query()->count())->toBe($beforeCounts['gl_entries'] + 2)
+        ->and($outputValueEntry->fresh()->postingTransaction->glEntries()->count())->toBe(2)
+        ->and((float) $outputValueEntry->fresh()->postingTransaction->glEntries()->sum('debit_amount'))->toBe(100.0)
+        ->and((float) $outputValueEntry->fresh()->postingTransaction->glEntries()->sum('credit_amount'))->toBe(100.0);
+});
+
+it('rejects output cost allocation for non-output cross-order and nonpositive output entries', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order, $otherOrder,, $location] = createMinimalSettlementOrders($user, 'OUTGUARD');
+    createPostingAccountsForOrder($order, $location);
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-OUTGUARD',
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+    $consumptionEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::CONSUMPTION,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $componentItem->id,
+        'location_id' => $location->id,
+        'quantity' => -1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 10,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $otherOutputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $otherOrder->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $otherOrder->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 10,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $otherOrder->general_product_posting_group_id,
+        'inventory_posting_group_id' => $otherOrder->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $otherOrder->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $zeroOutputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 20000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 0,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $validOutputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 30000,
+        'item_id' => $order->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    manufacturingValueEntryForVariance(
+        order: $order,
+        item: $componentItem,
+        location: $location,
+        component: ManufacturingCostComponent::DirectMaterial,
+        quantity: -1,
+        amount: 10,
+        lineNumber: 40000,
+    )->forceFill(['gl_posted' => true])->save();
+
+    $service = app(ProductionOutputCostService::class);
+
+    expect(fn () => $service->allocateToOutput($order, $consumptionEntry, true))
+        ->toThrow(RuntimeException::class, 'requires an Output Item Ledger Entry')
+        ->and(fn () => $service->allocateToOutput($order, $otherOutputEntry, true))
+        ->toThrow(RuntimeException::class, 'does not belong to production order')
+        ->and(fn () => $service->allocateToOutput($order, $zeroOutputEntry, true))
+        ->toThrow(RuntimeException::class, 'requires positive output quantity')
+        ->and(fn () => $service->allocateToOutput($order, $validOutputEntry, true))
+        ->not->toThrow(RuntimeException::class)
+        ->and(ProductionOutputCostAllocation::query()->whereIn('output_item_ledger_entry_id', [
+            $consumptionEntry->id,
+            $otherOutputEntry->id,
+            $zeroOutputEntry->id,
+        ])->doesntExist())->toBeTrue()
+        ->and(ProductionOutputCostAllocation::query()->where('output_item_ledger_entry_id', $validOutputEntry->id)->exists())->toBeTrue();
+});
+
+it('reports invalid output allocation item ledger entry type and order ownership mismatches', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    [$order, $otherOrder,, $location] = createMinimalSettlementOrders($user, 'OUTRECON');
+    $componentItem = Item::factory()->create([
+        'item_code' => 'RM-OUTRECON',
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+    ]);
+    $consumptionEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::CONSUMPTION,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $componentItem->id,
+        'location_id' => $location->id,
+        'quantity' => -1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 10,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $order->general_product_posting_group_id,
+        'inventory_posting_group_id' => $order->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+    $otherOutputEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $otherOrder->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $otherOrder->item_id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 10,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $otherOrder->general_product_posting_group_id,
+        'inventory_posting_group_id' => $otherOrder->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $otherOrder->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    foreach ([[$consumptionEntry, 'bad-type'], [$otherOutputEntry, 'bad-order']] as [$entry, $suffix]) {
+        ProductionOutputCostAllocation::query()->create([
+            'production_order_id' => $order->id,
+            'output_item_ledger_entry_id' => $entry->id,
+            'output_value_entry_id' => ValueEntry::query()->where('item_ledger_entry_no', $entry->entry_number)->value('id'),
+            'output_quantity' => abs((float) $entry->quantity),
+            'eligible_cost_before_allocation' => 10,
+            'allocated_material_cost' => 10,
+            'allocated_capacity_cost' => 0,
+            'allocated_overhead_cost' => 0,
+            'allocated_total_cost' => 10,
+            'allocation_status' => ProductionOutputAllocationStatus::Final->value,
+            'is_final_allocation' => true,
+            'finalized_at' => now(),
+            'idempotency_key' => 'invalid-output-allocation-'.$suffix,
+            'source_identity_key' => 'invalid-output-source-'.$suffix,
+        ]);
+    }
+
+    Artisan::call('biwms:manufacturing-cost-reconcile', ['--json' => true, '--production-order' => $order->document_number]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['findings']['invalid_output_allocation_ile_type'])->toHaveCount(1)
+        ->and($report['findings']['invalid_output_allocation_ile_type'][0]['classification'])->toBe('invalid_output_allocation_ile_type')
+        ->and($report['findings']['invalid_output_allocation_ile_type'][0]['severity'])->toBe('critical')
+        ->and($report['findings']['output_allocation_order_mismatch'])->toHaveCount(1)
+        ->and($report['findings']['output_allocation_order_mismatch'][0]['classification'])->toBe('output_allocation_order_mismatch')
+        ->and($report['findings']['output_allocation_order_mismatch'][0]['severity'])->toBe('critical');
 });
 
 it('replaces a nonzero provisional stale output allocation append only', function (): void {
