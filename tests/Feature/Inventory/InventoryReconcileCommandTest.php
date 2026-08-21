@@ -18,6 +18,7 @@ use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesCreditMemoLine;
 use App\Models\PostedSalesInvoice;
 use App\Models\PostedSalesInvoiceLine;
+use App\Models\PostingTransaction;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseReceipt;
 use App\Models\PurchaseReceiptLine;
@@ -769,6 +770,56 @@ it('reports production output consumption value entry and open wip inconsistenci
         ->and($report['finished_production_orders_with_open_wip'][0]['severity'])->toBe('critical');
 });
 
+it('does not report finished production open wip when production-owned adjustment transaction clears wip with different document number', function (): void {
+    [$order, $wipAccount] = createFinishedProductionOrderForOpenWipReconcile('OWNED-CLEAR');
+
+    createProductionOwnedWipGl($order, $wipAccount, 'PRODUCTION_ORDER', $order->document_number, 36618.41, 36626.27);
+    createProductionOwnedWipGl($order, $wipAccount, 'COST_ADJUSTMENT', 'ADJOWNED01', 7.88, 0);
+    createUnrelatedWipGl($wipAccount, 'COST_ADJUSTMENT', 'ADJUNREL01', 500, 0);
+
+    expect(Artisan::call('biwms:inventory-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+
+    expect(collect($report['finished_production_orders_with_open_wip'])->pluck('document_number')->all())
+        ->not->toContain($order->document_number);
+});
+
+it('preserves genuine finished production open wip detection beyond currency rounding tolerance', function (): void {
+    [$roundingOrder, $wipAccount] = createFinishedProductionOrderForOpenWipReconcile('ROUNDING');
+    [$openOrder] = createFinishedProductionOrderForOpenWipReconcile('OPEN-WIP', $wipAccount);
+
+    createProductionOwnedWipGl($roundingOrder, $wipAccount, 'PRODUCTION_ORDER', $roundingOrder->document_number, 100.00, 100.02);
+    createProductionOwnedWipGl($openOrder, $wipAccount, 'PRODUCTION_ORDER', $openOrder->document_number, 100.00, 100.03);
+
+    expect(Artisan::call('biwms:inventory-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+    $openWipDocuments = collect($report['finished_production_orders_with_open_wip'])->pluck('document_number')->all();
+
+    expect($openWipDocuments)
+        ->not->toContain($roundingOrder->document_number)
+        ->toContain($openOrder->document_number);
+});
+
+it('does not cross contaminate finished production wip ownership across production orders', function (): void {
+    [$balancedOrder, $wipAccount] = createFinishedProductionOrderForOpenWipReconcile('BALANCED');
+    [$openOrder] = createFinishedProductionOrderForOpenWipReconcile('CROSS-OPEN', $wipAccount);
+
+    createProductionOwnedWipGl($balancedOrder, $wipAccount, 'PRODUCTION_ORDER', $balancedOrder->document_number, 200, 250);
+    createProductionOwnedWipGl($balancedOrder, $wipAccount, 'COST_ADJUSTMENT', 'ADJBAL01', 50, 0);
+    createProductionOwnedWipGl($openOrder, $wipAccount, 'PRODUCTION_ORDER', $openOrder->document_number, 75, 0);
+
+    expect(Artisan::call('biwms:inventory-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true);
+    $openWipDocuments = collect($report['finished_production_orders_with_open_wip'])->pluck('document_number')->all();
+
+    expect($openWipDocuments)
+        ->not->toContain($balancedOrder->document_number)
+        ->toContain($openOrder->document_number);
+});
+
 it('does not report value mismatch when base output value entry equals item ledger cost', function (): void {
     $entry = createOutputLedgerEntryForValueReconcile('BASE', 100, 100);
 
@@ -967,4 +1018,162 @@ function valueMismatchForEntry(ItemLedgerEntry $entry): ?array
 
     return collect($report['value_entry_mismatches'])
         ->firstWhere('entry_number', $entry->entry_number);
+}
+
+function createFinishedProductionOrderForOpenWipReconcile(string $suffix, ?ChartOfAccount $wipAccount = null): array
+{
+    $user = User::factory()->create();
+    $location = Location::factory()->create(['code' => 'WIP-'.$suffix]);
+    $item = Item::factory()->create([
+        'item_code' => 'FG-WIP-'.$suffix,
+        'inventory' => 0,
+        'location_id' => $location->id,
+    ]);
+    $wipAccount ??= ChartOfAccount::query()->create([
+        'account_number' => 'WIP-'.$suffix,
+        'name' => 'WIP '.$suffix,
+        'account_category' => 'asset',
+        'income_balance' => 0,
+    ]);
+
+    InventoryPostingSetup::query()->create([
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'location_id' => $location->id,
+        'inventory_account_id' => $wipAccount->id,
+        'wip_account_id' => $wipAccount->id,
+    ]);
+
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-WIP-'.$suffix,
+        'status' => ProductionOrderStatus::FINISHED,
+        'item_id' => $item->id,
+        'description' => 'Finished WIP '.$suffix,
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+        'posted' => true,
+        'posted_at' => now(),
+        'posted_by' => $user->id,
+        'finished_at' => now(),
+        'finished_by' => $user->id,
+        'created_by' => $user->id,
+    ]);
+
+    return [$order, $wipAccount, $item, $location];
+}
+
+function createProductionOwnedWipGl(
+    ProductionOrder $order,
+    ChartOfAccount $wipAccount,
+    string $documentType,
+    string $documentNumber,
+    float $debit,
+    float $credit
+): void {
+    $transaction = createPostingTransactionForOpenWipReconcile($documentType, $documentNumber);
+    $entryNo = (ValueEntry::query()->max('entry_no') ?? 0) + 1;
+
+    ValueEntry::query()->create([
+        'entry_no' => $entryNo,
+        'item_ledger_entry_type' => 6,
+        'item_no' => 'FG-WIP-OWNED',
+        'location_code' => $order->location_code,
+        'posting_date' => now()->toDateString(),
+        'document_type' => $documentType,
+        'document_no' => $documentNumber,
+        'document_line_no' => $entryNo,
+        'quantity' => 0,
+        'valued_quantity' => 0,
+        'cost_component' => $documentType === 'COST_ADJUSTMENT' ? 'cost_adjustment' : 'output',
+        'value_entry_state' => $documentType === 'COST_ADJUSTMENT' ? 'adjustment' : 'actual',
+        'cost_amount_actual' => abs($debit - $credit),
+        'source_module' => 'manufacturing',
+        'source_type' => ProductionOrder::class,
+        'source_id' => $order->id,
+        'source_no' => (string) $order->id,
+        'production_order_no' => $order->document_number,
+        'expected_cost' => false,
+        'gl_posted' => true,
+        'posting_transaction_id' => $transaction->id,
+    ]);
+
+    createWipGlEntryForOpenWipReconcile($transaction, $wipAccount, $documentType, $documentNumber, $debit, $credit);
+}
+
+function createUnrelatedWipGl(ChartOfAccount $wipAccount, string $documentType, string $documentNumber, float $debit, float $credit): void
+{
+    $transaction = createPostingTransactionForOpenWipReconcile($documentType, $documentNumber);
+
+    ValueEntry::query()->create([
+        'entry_no' => (ValueEntry::query()->max('entry_no') ?? 0) + 1,
+        'item_ledger_entry_type' => 6,
+        'item_no' => 'FG-WIP-UNRELATED',
+        'location_code' => 'UNRELATED',
+        'posting_date' => now()->toDateString(),
+        'document_type' => $documentType,
+        'document_no' => $documentNumber,
+        'document_line_no' => 10000,
+        'quantity' => 0,
+        'valued_quantity' => 0,
+        'cost_component' => 'cost_adjustment',
+        'value_entry_state' => 'adjustment',
+        'cost_amount_actual' => abs($debit - $credit),
+        'source_module' => 'manufacturing',
+        'source_type' => 'unrelated',
+        'source_id' => 999999,
+        'expected_cost' => false,
+        'gl_posted' => true,
+        'posting_transaction_id' => $transaction->id,
+    ]);
+
+    createWipGlEntryForOpenWipReconcile($transaction, $wipAccount, $documentType, $documentNumber, $debit, $credit);
+}
+
+function createPostingTransactionForOpenWipReconcile(string $documentType, string $documentNumber): PostingTransaction
+{
+    return PostingTransaction::query()->create([
+        'source_module' => 'manufacturing',
+        'source_type' => 'ITEM',
+        'source_number' => $documentNumber,
+        'document_type' => $documentType,
+        'document_number' => $documentNumber,
+        'transaction_key' => 'test-open-wip-'.$documentType.'-'.$documentNumber.'-'.PostingTransaction::query()->count(),
+        'idempotency_key' => 'test-open-wip-'.$documentType.'-'.$documentNumber.'-'.PostingTransaction::query()->count(),
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'status' => 'posted',
+    ]);
+}
+
+function createWipGlEntryForOpenWipReconcile(
+    PostingTransaction $transaction,
+    ChartOfAccount $wipAccount,
+    string $documentType,
+    string $documentNumber,
+    float $debit,
+    float $credit
+): void {
+    GlEntry::query()->create([
+        'entry_number' => (GlEntry::query()->max('entry_number') ?? 0) + 1,
+        'transaction_number' => (GlEntry::query()->max('transaction_number') ?? 0) + 1,
+        'posting_transaction_id' => $transaction->id,
+        'chart_of_account_id' => $wipAccount->id,
+        'debit_amount' => $debit,
+        'credit_amount' => $credit,
+        'amount' => $debit - $credit,
+        'source_type' => 'ITEM',
+        'source_module' => 'manufacturing',
+        'document_type' => $documentType,
+        'document_number' => $documentNumber,
+        'document_date' => now(),
+        'posting_date' => now(),
+        'description' => 'WIP ownership regression',
+    ]);
 }

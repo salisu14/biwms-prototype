@@ -32,6 +32,7 @@ it('allows direct gl entry persistence only inside the posting kernel and compat
 it('keeps direct gl_entries table access read-only outside reconcile and reporting code', function (): void {
     $allowedReaders = [
         'app/Console/Commands/BiwmsFinanceReconcile.php',
+        'app/Console/Commands/BiwmsInventoryReconcile.php',
         'app/Services/Sales/ProfitLossService.php',
     ];
 

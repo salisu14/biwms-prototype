@@ -13,9 +13,11 @@ use App\Models\OpeningInventory;
 use App\Models\PurchaseInvoice;
 use App\Models\ValueEntry;
 use App\Services\Inventory\ValueEntryEconomicValueService;
+use App\Services\Manufacturing\ProductionValueEntryOwnership;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
@@ -23,6 +25,8 @@ use Illuminate\Support\Facades\File;
 #[Description('Report BIWMS inventory ledger, value entry, and cached stock consistency issues.')]
 class BiwmsInventoryReconcile extends Command
 {
+    private const GL_CURRENCY_ROUNDING_TOLERANCE = 0.02;
+
     /**
      * Execute the console command.
      */
@@ -507,43 +511,93 @@ class BiwmsInventoryReconcile extends Command
             return [];
         }
 
-        return DB::table('production_orders as po')
-            ->leftJoin('locations', 'locations.code', '=', 'po.location_code')
-            ->join('inventory_posting_setups as ips', function ($join): void {
-                $join->on('ips.inventory_posting_group_id', '=', 'po.inventory_posting_group_id')
-                    ->where(function ($query): void {
-                        $query
-                            ->whereColumn('ips.location_id', 'locations.id')
-                            ->orWhereNull('ips.location_id');
-                    });
+        $ownership = app(ProductionValueEntryOwnership::class);
+
+        return ProductionOrder::query()
+            ->where('status', ProductionOrderStatus::FINISHED->value)
+            ->orderBy('document_number')
+            ->get()
+            ->map(function (ProductionOrder $order) use ($ownership): ?array {
+                $wipAccountId = $this->wipAccountIdForProductionOrder($order);
+
+                if (! $wipAccountId) {
+                    return null;
+                }
+
+                $postingTransactionIds = $ownership
+                    ->belongsToOrderQuery($order)
+                    ->whereNotNull('posting_transaction_id')
+                    ->pluck('posting_transaction_id')
+                    ->unique()
+                    ->values();
+
+                $wipNetAmount = $this->productionOrderWipNetAmount(
+                    order: $order,
+                    wipAccountId: $wipAccountId,
+                    postingTransactionIds: $postingTransactionIds,
+                );
+
+                if (abs($wipNetAmount) <= self::GL_CURRENCY_ROUNDING_TOLERANCE) {
+                    return null;
+                }
+
+                return [
+                    'production_order_id' => $order->id,
+                    'document_number' => $order->document_number,
+                    'wip_net_amount' => round($wipNetAmount, 4),
+                    'posting_transaction_count' => $postingTransactionIds->count(),
+                    'ownership_rule' => 'production_value_entries_posting_transactions_with_legacy_document_number_fallback',
+                    ...$this->findingMetadata(
+                        classification: 'finished_production_order_open_wip',
+                        severity: 'critical',
+                        suggestedRemediation: 'Review finish posting, WIP clearing, and variance entries. Post an approved variance or correction only after confirming finished goods value and WIP ledger balance.'
+                    ),
+                ];
             })
-            ->join('gl_entries as gl', function ($join): void {
-                $join->on('gl.document_number', '=', 'po.document_number')
-                    ->on('gl.chart_of_account_id', '=', 'ips.wip_account_id');
-            })
-            ->where('po.status', ProductionOrderStatus::FINISHED->value)
-            ->whereNotNull('ips.wip_account_id')
-            ->groupBy('po.id', 'po.document_number')
-            ->havingRaw('ABS(COALESCE(SUM(gl.debit_amount), 0) - COALESCE(SUM(gl.credit_amount), 0)) > 0.01')
-            ->orderBy('po.document_number')
-            ->limit(250)
-            ->get([
-                'po.id as production_order_id',
-                'po.document_number',
-                DB::raw('COALESCE(SUM(gl.debit_amount), 0) - COALESCE(SUM(gl.credit_amount), 0) as wip_net_amount'),
-            ])
-            ->map(fn ($order): array => [
-                'production_order_id' => $order->production_order_id,
-                'document_number' => $order->document_number,
-                'wip_net_amount' => round((float) $order->wip_net_amount, 4),
-                ...$this->findingMetadata(
-                    classification: 'finished_production_order_open_wip',
-                    severity: 'critical',
-                    suggestedRemediation: 'Review finish posting, WIP clearing, and variance entries. Post an approved variance or correction only after confirming finished goods value and WIP ledger balance.'
-                ),
-            ])
+            ->filter()
+            ->take(250)
             ->values()
             ->all();
+    }
+
+    private function wipAccountIdForProductionOrder(ProductionOrder $order): ?int
+    {
+        $locationId = DB::table('locations')
+            ->where('code', $order->location_code)
+            ->value('id');
+
+        $accountId = DB::table('inventory_posting_setups')
+            ->where('inventory_posting_group_id', $order->inventory_posting_group_id)
+            ->where(function ($query) use ($locationId): void {
+                if ($locationId) {
+                    $query->where('location_id', $locationId);
+                }
+
+                $query->orWhereNull('location_id');
+            })
+            ->whereNotNull('wip_account_id')
+            ->orderByRaw('CASE WHEN location_id IS NULL THEN 1 ELSE 0 END')
+            ->value('wip_account_id');
+
+        return $accountId ? (int) $accountId : null;
+    }
+
+    /**
+     * @param  Collection<int, int|string>  $postingTransactionIds
+     */
+    private function productionOrderWipNetAmount(ProductionOrder $order, int $wipAccountId, Collection $postingTransactionIds): float
+    {
+        return (float) DB::table('gl_entries as gl')
+            ->where('gl.chart_of_account_id', $wipAccountId)
+            ->where(function ($query) use ($order, $postingTransactionIds): void {
+                if ($postingTransactionIds->isNotEmpty()) {
+                    $query->whereIn('gl.posting_transaction_id', $postingTransactionIds->all());
+                }
+
+                $query->orWhere('gl.document_number', $order->document_number);
+            })
+            ->selectRaw('COALESCE(SUM(gl.debit_amount), 0) - COALESCE(SUM(gl.credit_amount), 0) as net_amount')
+            ->value('net_amount');
     }
 
     /**
