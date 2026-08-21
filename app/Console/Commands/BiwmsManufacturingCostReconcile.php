@@ -52,6 +52,7 @@ class BiwmsManufacturingCostReconcile extends Command
                 'expected_manufacturing_cost_missing' => $this->expectedManufacturingCostMissing($productionOrderFilter),
                 'expected_material_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_direct_material', 'expected_material_cost_uncleared'),
                 'ambiguous_production_value_entry_ownership' => $this->ambiguousProductionValueEntryOwnership($productionOrderFilter),
+                'production_source_id_collision_potential' => $this->productionSourceIdCollisionPotential($productionOrderFilter),
                 'expected_capacity_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_direct_capacity', 'expected_capacity_cost_uncleared'),
                 'expected_overhead_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_capacity_overhead', 'expected_overhead_cost_uncleared'),
                 'expected_output_cost_uncleared' => $this->unclearedExpectedCost($productionOrderFilter, 'expected_output', 'expected_output_cost_uncleared'),
@@ -160,6 +161,48 @@ class BiwmsManufacturingCostReconcile extends Command
         return ValueEntry::query()
             ->where('source_module', 'manufacturing')
             ->whereNotNull('source_id')
+            ->whereNull('production_order_no')
+            ->where(function (Builder $query): void {
+                $query->whereNull('source_type')
+                    ->orWhere('source_type', '!=', ProductionOrder::class);
+            })
+            ->when($productionOrderFilter, function (Builder $query, mixed $filter): void {
+                if (is_numeric($filter)) {
+                    $query->where('source_id', (int) $filter);
+
+                    return;
+                }
+
+                $query->whereRaw('1 = 0');
+            })
+            ->limit(500)
+            ->get()
+            ->map(fn (ValueEntry $entry): array => [
+                'value_entry_id' => $entry->id,
+                'value_entry_no' => $entry->entry_no,
+                'document_type' => $entry->document_type,
+                'document_no' => $entry->document_no,
+                'source_type' => $entry->source_type,
+                'source_id' => $entry->source_id,
+                'production_order_no' => $entry->production_order_no,
+                ...$this->findingMetadata(
+                    classification: 'ambiguous_production_value_entry_ownership',
+                    severity: 'critical',
+                    suggestedRemediation: 'Add canonical production_order_no or source_type=ProductionOrder ownership metadata before using this Value Entry in production cost summaries.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function productionSourceIdCollisionPotential(mixed $productionOrderFilter): array
+    {
+        return ValueEntry::query()
+            ->where('source_module', 'manufacturing')
+            ->whereNotNull('source_id')
             ->whereNotNull('production_order_no')
             ->where(function (Builder $query): void {
                 $query->whereNull('source_type')
@@ -198,9 +241,9 @@ class BiwmsManufacturingCostReconcile extends Command
                     'colliding_production_order_id' => $collidingOrder->id,
                     'colliding_production_order_no' => $collidingOrder->document_number,
                     ...$this->findingMetadata(
-                        classification: 'ambiguous_production_value_entry_ownership',
-                        severity: 'critical',
-                        suggestedRemediation: 'Use production_order_no or a source_type=ProductionOrder fallback only. Do not infer ownership from source_module=manufacturing and source_id.'
+                        classification: 'production_source_id_collision_potential',
+                        severity: 'info',
+                        suggestedRemediation: 'Canonical production_order_no establishes ownership. Treat the colliding source_id as legacy diagnostic context only; do not repair historical source relationships solely for this warning.'
                     ),
                 ];
             })

@@ -6,6 +6,8 @@ namespace App\Services\Manufacturing;
 
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ManufacturingCostComponent;
+use App\Enums\ProductionCostSettlementStatus;
+use App\Enums\ProductionOrderStatus;
 use App\Enums\ProductionOutputAllocationStatus;
 use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
@@ -139,39 +141,8 @@ class ProductionOutputCostService
                     return $existing->fresh();
                 }
 
-                if ($this->allocationStatusEnum($existing->allocation_status) === ProductionOutputAllocationStatus::Final) {
-                    $existing->forceFill([
-                        'allocation_status' => ProductionOutputAllocationStatus::Reversed->value,
-                        'reversed_at' => now(),
-                        'metadata' => [
-                            ...(array) $existing->metadata,
-                            'reversed_by' => 'production_output_cost_reallocation',
-                            'replacement_allocated_total_cost' => DecimalMath::amount($allocatedTotal),
-                        ],
-                    ])->save();
-
-                    return ProductionOutputCostAllocation::query()->firstOrCreate([
-                        'idempotency_key' => hash('sha256', implode('|', [
-                            'production-output-allocation-reallocation',
-                            $lockedOrder->id,
-                            $lockedOutput->id,
-                            DecimalMath::amount($allocatedTotal),
-                        ])),
-                    ], [
-                        ...$allocationValues,
-                        'reversed_allocation_id' => $existing->id,
-                        'source_identity_key' => hash('sha256', implode('|', [
-                            'production-output-source-reallocation',
-                            $lockedOrder->id,
-                            $lockedOutput->id,
-                            DecimalMath::amount($allocatedTotal),
-                        ])),
-                        'metadata' => [
-                            ...(array) $allocationValues['metadata'],
-                            'allocation_method' => 'append_only_reallocation_after_upstream_cost_adjustment',
-                            'reversed_allocation_id' => $existing->id,
-                        ],
-                    ])->fresh();
+                if ($this->requiresAppendOnlyReallocation($existing, $allocationValues)) {
+                    return $this->reverseAndReplaceAllocation($existing, $lockedOrder, $lockedOutput, $allocationValues, $allocatedTotal);
                 }
 
                 $existing->forceFill($allocationValues)->save();
@@ -250,9 +221,10 @@ class ProductionOutputCostService
             $order = $row['production_order'];
             /** @var Collection<int, ItemLedgerEntry> $outputEntries */
             $outputEntries = $row['output_entries'];
+            $eligibility = $this->repairEligibility($order, $outputEntries);
             $createdAllocationIds = [];
 
-            if ($apply) {
+            if ($apply && $eligibility['may_apply']) {
                 foreach ($outputEntries as $index => $outputEntry) {
                     $allocation = $this->allocateToOutput(
                         order: $order,
@@ -268,12 +240,16 @@ class ProductionOutputCostService
             $rows[] = [
                 'production_order_id' => $order->id,
                 'production_order_no' => $order->document_number,
+                'production_order_status' => $order->status?->value ?? $order->status,
+                'cost_settlement_status' => $order->cost_settlement_status?->value ?? $order->cost_settlement_status,
+                'cost_settlement_classification' => $order->cost_settlement_classification?->value ?? $order->cost_settlement_classification,
                 'total_accumulated_cost' => $row['total_accumulated_cost'],
                 'allocated_output_cost' => $row['allocated_output_cost'],
                 'difference' => $row['difference'],
                 'output_entry_count' => $outputEntries->count(),
                 'allocation_ids' => $createdAllocationIds,
-                'status' => $apply ? 'repaired' : 'dry_run',
+                'status' => $apply && $eligibility['may_apply'] ? $eligibility['applied_status'] : $eligibility['status'],
+                'requires_resettlement' => $eligibility['requires_resettlement'],
             ];
         }
 
@@ -294,6 +270,144 @@ class ProductionOutputCostService
             && abs((float) $existing->allocated_capacity_cost - (float) $allocationValues['allocated_capacity_cost']) <= 0.0001
             && abs((float) $existing->allocated_overhead_cost - (float) $allocationValues['allocated_overhead_cost']) <= 0.0001
             && $this->allocationStatusEnum($existing->allocation_status) === $this->allocationStatusEnum($allocationValues['allocation_status']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $allocationValues
+     */
+    private function requiresAppendOnlyReallocation(ProductionOutputCostAllocation $existing, array $allocationValues): bool
+    {
+        if ((float) $existing->allocated_total_cost <= 0.0001) {
+            return false;
+        }
+
+        return abs((float) $existing->allocated_total_cost - (float) $allocationValues['allocated_total_cost']) > 0.0001
+            || abs((float) $existing->allocated_material_cost - (float) $allocationValues['allocated_material_cost']) > 0.0001
+            || abs((float) $existing->allocated_capacity_cost - (float) $allocationValues['allocated_capacity_cost']) > 0.0001
+            || abs((float) $existing->allocated_overhead_cost - (float) $allocationValues['allocated_overhead_cost']) > 0.0001;
+    }
+
+    /**
+     * @param  array<string, mixed>  $allocationValues
+     */
+    private function reverseAndReplaceAllocation(
+        ProductionOutputCostAllocation $existing,
+        ProductionOrder $order,
+        ItemLedgerEntry $outputEntry,
+        array $allocationValues,
+        float $allocatedTotal
+    ): ProductionOutputCostAllocation {
+        $existing->forceFill([
+            'allocation_status' => ProductionOutputAllocationStatus::Reversed->value,
+            'reversed_at' => now(),
+            'metadata' => [
+                ...(array) $existing->metadata,
+                'reversed_by' => 'production_output_cost_reallocation',
+                'replacement_allocated_total_cost' => DecimalMath::amount($allocatedTotal),
+            ],
+        ])->save();
+
+        return ProductionOutputCostAllocation::query()->firstOrCreate([
+            'idempotency_key' => hash('sha256', implode('|', [
+                'production-output-allocation-reallocation',
+                $order->id,
+                $outputEntry->id,
+                DecimalMath::amount($allocatedTotal),
+            ])),
+        ], [
+            ...$allocationValues,
+            'reversed_allocation_id' => $existing->id,
+            'source_identity_key' => hash('sha256', implode('|', [
+                'production-output-source-reallocation',
+                $order->id,
+                $outputEntry->id,
+                DecimalMath::amount($allocatedTotal),
+            ])),
+            'metadata' => [
+                ...(array) $allocationValues['metadata'],
+                'allocation_method' => 'append_only_reallocation_after_upstream_cost_adjustment',
+                'reversed_allocation_id' => $existing->id,
+            ],
+        ])->fresh();
+    }
+
+    /**
+     * @param  Collection<int, ItemLedgerEntry>  $outputEntries
+     * @return array{status: string, applied_status: string, may_apply: bool, requires_resettlement: bool}
+     */
+    private function repairEligibility(ProductionOrder $order, Collection $outputEntries): array
+    {
+        $orderStatus = $order->status instanceof ProductionOrderStatus
+            ? $order->status
+            : ProductionOrderStatus::tryFrom((string) $order->status);
+        $settlementStatus = $order->cost_settlement_status instanceof ProductionCostSettlementStatus
+            ? $order->cost_settlement_status
+            : ProductionCostSettlementStatus::tryFrom((string) $order->cost_settlement_status);
+
+        if ($orderStatus === ProductionOrderStatus::FINISHED
+            || in_array($settlementStatus, [ProductionCostSettlementStatus::Settled, ProductionCostSettlementStatus::AdjustmentRequired], true)) {
+            return [
+                'status' => 'requires_resettlement',
+                'applied_status' => 'requires_resettlement',
+                'may_apply' => false,
+                'requires_resettlement' => true,
+            ];
+        }
+
+        if ($orderStatus === ProductionOrderStatus::RELEASED
+            && $settlementStatus !== ProductionCostSettlementStatus::Settled) {
+            return [
+                'status' => $this->hasPendingZeroUnpostedOutput($order, $outputEntries)
+                    ? 'initialized_pending_output'
+                    : 'eligible_for_output_propagation',
+                'applied_status' => $this->hasPendingZeroUnpostedOutput($order, $outputEntries)
+                    ? 'initialized_pending_output'
+                    : 'eligible_for_output_propagation',
+                'may_apply' => true,
+                'requires_resettlement' => false,
+            ];
+        }
+
+        return [
+            'status' => 'requires_resettlement',
+            'applied_status' => 'requires_resettlement',
+            'may_apply' => false,
+            'requires_resettlement' => true,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, ItemLedgerEntry>  $outputEntries
+     */
+    private function hasPendingZeroUnpostedOutput(ProductionOrder $order, Collection $outputEntries): bool
+    {
+        foreach ($outputEntries as $outputEntry) {
+            $allocation = ProductionOutputCostAllocation::query()
+                ->where('production_order_id', $order->id)
+                ->where('output_item_ledger_entry_id', $outputEntry->id)
+                ->whereNull('reversed_at')
+                ->first();
+
+            if (! $allocation
+                || $this->allocationStatusEnum($allocation->allocation_status) !== ProductionOutputAllocationStatus::Pending
+                || (float) $allocation->allocated_total_cost > 0.0001) {
+                continue;
+            }
+
+            $valueEntry = ValueEntry::query()
+                ->where('item_ledger_entry_no', $outputEntry->entry_number)
+                ->where('document_no', $outputEntry->document_number)
+                ->where('document_line_no', $outputEntry->document_line_number)
+                ->where('cost_component', ManufacturingCostComponent::Output->value)
+                ->where('expected_cost', false)
+                ->first();
+
+            if ($valueEntry && ! $valueEntry->gl_posted && abs((float) $valueEntry->cost_amount_actual) <= 0.0001) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function share(float $allocatedTotal, float $componentAmount, float $eligibleCost): float
