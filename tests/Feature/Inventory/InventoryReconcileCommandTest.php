@@ -768,3 +768,203 @@ it('reports production output consumption value entry and open wip inconsistenci
         ->and($report['finished_production_orders_with_open_wip'][0]['classification'])->toBe('finished_production_order_open_wip')
         ->and($report['finished_production_orders_with_open_wip'][0]['severity'])->toBe('critical');
 });
+
+it('does not report value mismatch when base output value entry equals item ledger cost', function (): void {
+    $entry = createOutputLedgerEntryForValueReconcile('BASE', 100, 100);
+
+    expect(valueMismatchForEntry($entry))->toBeNull();
+});
+
+it('includes positive append-only production output adjustments in value reconciliation economics', function (): void {
+    $entry = createOutputLedgerEntryForValueReconcile('POSADJ', 120, 100, [
+        ['amount' => 20, 'document_type' => 'PROD_OUTPUT_COST_ADJ', 'state' => 'adjustment'],
+    ]);
+
+    expect(valueMismatchForEntry($entry))->toBeNull();
+});
+
+it('includes negative append-only production output adjustments in value reconciliation economics', function (): void {
+    $entry = createOutputLedgerEntryForValueReconcile('NEGADJ', 100, 500, [
+        ['amount' => -400, 'document_type' => 'PROD_OUTPUT_COST_ADJ', 'state' => 'adjustment'],
+    ]);
+
+    expect(valueMismatchForEntry($entry))->toBeNull();
+});
+
+it('still reports genuine value mismatch when append-only adjustment is missing', function (): void {
+    $entry = createOutputLedgerEntryForValueReconcile('MISSINGADJ', 120, 100);
+    $mismatch = valueMismatchForEntry($entry);
+
+    expect($mismatch)->not->toBeNull()
+        ->and($mismatch['item_ledger_cost'])->toEqual(120.0)
+        ->and($mismatch['value_entry_cost'])->toEqual(100.0);
+});
+
+it('still reports genuine value mismatch when duplicate append-only adjustment overstates economics', function (): void {
+    $entry = createOutputLedgerEntryForValueReconcile('DUPADJ', 120, 100, [
+        ['amount' => 20, 'document_type' => 'PROD_OUTPUT_COST_ADJ', 'state' => 'adjustment'],
+        ['amount' => 20, 'document_type' => 'PROD_OUTPUT_COST_ADJ', 'state' => 'adjustment'],
+    ]);
+    $mismatch = valueMismatchForEntry($entry);
+
+    expect($mismatch)->not->toBeNull()
+        ->and($mismatch['item_ledger_cost'])->toEqual(120.0)
+        ->and($mismatch['value_entry_cost'])->toEqual(140.0);
+});
+
+it('excludes expected-cost value entries from actual value reconciliation economics', function (): void {
+    $entry = createOutputLedgerEntryForValueReconcile('EXPECTED', 100, 100, [
+        ['amount' => 20, 'document_type' => 'PRODUCTION_EXPECTED_COST', 'state' => 'expected', 'expected' => true],
+    ]);
+
+    expect(valueMismatchForEntry($entry))->toBeNull();
+});
+
+it('nets append-only reversal pairs in value reconciliation economics', function (): void {
+    $entry = createOutputLedgerEntryForValueReconcile('REVERSAL', 100, 100, [
+        ['amount' => 20, 'document_type' => 'PROD_OUTPUT_COST_ADJ', 'state' => 'adjustment'],
+        ['amount' => -20, 'document_type' => 'PROD_OUTPUT_COST_ADJ_REVERSAL', 'state' => 'reversal'],
+    ]);
+
+    expect(valueMismatchForEntry($entry))->toBeNull();
+});
+
+it('keeps existing non-production value reconciliation mismatch detection intact', function (): void {
+    $location = Location::factory()->create();
+    $item = Item::factory()->create(['inventory' => 0]);
+    $entry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_number' => 'PI-VALUE-MISMATCH',
+        'document_line_number' => 10000,
+        'item_id' => $item->id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => 125,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+    ]);
+    ValueEntry::query()
+        ->where('item_ledger_entry_no', $entry->entry_number)
+        ->update([
+            'quantity' => 1,
+            'value_entry_state' => 'actual',
+            'expected_cost' => false,
+            'cost_amount_actual' => 100,
+        ]);
+
+    $mismatch = valueMismatchForEntry($entry);
+
+    expect($mismatch)->not->toBeNull()
+        ->and($mismatch['item_ledger_cost'])->toEqual(125.0)
+        ->and($mismatch['value_entry_cost'])->toEqual(100.0);
+});
+
+function createOutputLedgerEntryForValueReconcile(string $suffix, float $itemLedgerCost, float $baseValueCost, array $adjustments = []): ItemLedgerEntry
+{
+    $user = User::factory()->create();
+    $location = Location::factory()->create(['code' => 'LOC-'.$suffix]);
+    $item = Item::factory()->create([
+        'item_code' => 'FG-'.$suffix,
+        'inventory' => 0,
+        'location_id' => $location->id,
+    ]);
+    $order = ProductionOrder::query()->create([
+        'document_number' => 'PO-VALREC-'.$suffix,
+        'status' => ProductionOrderStatus::RELEASED,
+        'item_id' => $item->id,
+        'description' => 'Value reconcile '.$suffix,
+        'quantity' => 1,
+        'quantity_base' => 1,
+        'starting_date_time' => now(),
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'costing_method' => 'FIFO',
+        'unit_cost' => 0,
+        'cost_rollup' => 0,
+        'flushing_method' => 'MANUAL',
+        'location_code' => $location->code,
+        'created_by' => $user->id,
+    ]);
+
+    $entry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::OUTPUT,
+        'document_type' => 'PRODUCTION_ORDER',
+        'document_number' => $order->document_number,
+        'document_line_number' => 10000,
+        'item_id' => $item->id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => $itemLedgerCost,
+        'cost_amount_expected' => 0,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => false,
+        'source_id' => $order->id,
+        'source_type' => ProductionOrder::class,
+    ]);
+
+    ValueEntry::query()
+        ->where('item_ledger_entry_no', $entry->entry_number)
+        ->update([
+            'item_ledger_entry_type' => 7,
+            'item_no' => $item->item_code,
+            'location_code' => $location->code,
+            'quantity' => 1,
+            'valued_quantity' => 1,
+            'document_type' => 'PRODUCTION_ORDER',
+            'document_no' => $order->document_number,
+            'document_line_no' => 10000,
+            'value_entry_state' => 'actual',
+            'expected_cost' => false,
+            'cost_amount_actual' => $baseValueCost,
+            'source_module' => 'manufacturing',
+            'source_type' => ProductionOrder::class,
+            'source_id' => $order->id,
+            'production_order_no' => $order->document_number,
+        ]);
+
+    foreach ($adjustments as $index => $adjustment) {
+        ValueEntry::query()->create([
+            'entry_no' => (ValueEntry::query()->max('entry_no') ?? 0) + 1,
+            'item_ledger_entry_no' => $entry->entry_number,
+            'item_ledger_entry_type' => 7,
+            'item_no' => $item->item_code,
+            'location_code' => $location->code,
+            'posting_date' => now()->toDateString(),
+            'document_type' => $adjustment['document_type'],
+            'document_no' => $order->document_number,
+            'document_line_no' => 10000 + $index,
+            'quantity' => 0,
+            'valued_quantity' => 0,
+            'value_entry_state' => $adjustment['state'],
+            'expected_cost' => (bool) ($adjustment['expected'] ?? false),
+            'cost_amount_actual' => (float) $adjustment['amount'],
+            'cost_amount_expected' => (bool) ($adjustment['expected'] ?? false) ? (float) $adjustment['amount'] : 0,
+            'source_module' => 'manufacturing',
+            'source_type' => ProductionOrder::class,
+            'source_id' => $order->id,
+            'production_order_no' => $order->document_number,
+        ]);
+    }
+
+    return $entry->fresh();
+}
+
+function valueMismatchForEntry(ItemLedgerEntry $entry): ?array
+{
+    expect(Artisan::call('biwms:inventory-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true, flags: JSON_THROW_ON_ERROR);
+
+    return collect($report['value_entry_mismatches'])
+        ->firstWhere('entry_number', $entry->entry_number);
+}
