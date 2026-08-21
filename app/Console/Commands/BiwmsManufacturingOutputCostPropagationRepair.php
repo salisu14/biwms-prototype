@@ -40,9 +40,11 @@ class BiwmsManufacturingOutputCostPropagationRepair extends Command
 
         foreach ($result['rows'] as $row) {
             $this->line(sprintf(
-                '- status=%s production_order=%s total_accumulated=%0.4f allocated_output=%0.4f difference=%0.4f output_entries=%s allocations=%s',
+                '- status=%s production_order=%s order_status=%s settlement_status=%s total_accumulated=%0.4f allocated_output=%0.4f difference=%0.4f output_entry_count=%s allocation_ids=%s',
                 $row['status'],
                 $row['production_order_no'],
+                $row['production_order_status'],
+                $row['cost_settlement_status'],
                 $row['total_accumulated_cost'],
                 $row['allocated_output_cost'],
                 $row['difference'],
