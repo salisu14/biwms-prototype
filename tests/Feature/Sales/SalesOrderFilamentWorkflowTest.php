@@ -10,8 +10,11 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
+use App\Exceptions\InsufficientInventoryApplicationException;
+use App\Filament\Resources\SalesOrders\Pages\CreateSalesOrder as AdminCreateSalesOrder;
 use App\Filament\Sales\Resources\SalesOrders\Pages\CreateSalesOrder;
 use App\Filament\Sales\Resources\SalesOrders\Pages\EditSalesOrder;
+use App\Filament\Sales\Resources\SalesOrders\Pages\ListSalesOrders;
 use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
@@ -36,7 +39,10 @@ use App\Models\SalesOrderLine;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Support\SalesOrderPostingActionHandler;
+use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -86,6 +92,51 @@ it('persists approved sales order lines from the Filament create flow and recalc
         ->and((float) $line->unit_price)->toBe(150.0)
         ->and((float) $line->line_total)->toBe(1500.0)
         ->and((float) $order->grand_total)->toBe(1500.0);
+});
+
+it('recalculates sales order header totals for admin create and persisted line mutations', function (): void {
+    $user = salesOrderFilamentUser();
+    $fixture = salesOrderFilamentFixture();
+    salesOrderFilamentNumberSeries();
+
+    Livewire::actingAs($user)
+        ->test(AdminCreateSalesOrder::class)
+        ->fillForm(salesOrderFilamentPayload($fixture, SalesOrderStatus::DRAFT))
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $order = SalesOrder::query()->with('lines')->firstOrFail();
+    $line = $order->lines->firstOrFail();
+
+    expect((float) $order->fresh()->grand_total)->toBe(1500.0);
+
+    $line->update([
+        'quantity' => 4,
+    ]);
+
+    expect((float) $order->fresh()->grand_total)->toBe(600.0);
+
+    SalesOrderLine::query()->create([
+        'sales_order_id' => $order->id,
+        'line_number' => 20,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 2,
+        'unit_of_measure_code' => 'PCS',
+        'qty_per_unit_of_measure' => 1,
+        'unit_price' => 150,
+        'line_discount_percent' => 0,
+        'location_id' => $fixture['location']->id,
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+    ]);
+
+    expect((float) $order->fresh()->grand_total)->toBe(900.0);
+
+    $order->fresh('lines')->lines->firstWhere('line_number', 20)?->delete();
+
+    expect((float) $order->fresh()->grand_total)->toBe(600.0);
 });
 
 it('rolls back the Filament create flow when no persisted positive quantity line exists', function (): void {
@@ -199,6 +250,137 @@ it('ships a Filament-created approved sales order because persisted lines remain
         ->and(ValueEntry::query()->where('document_no', "SS-{$order->order_number}")->count())->toBe(1)
         ->and(GlEntry::query()->where('item_ledger_entry_id', $outboundEntry->id)->count())->toBe(2)
         ->and((float) $fixture['item']->fresh()->inventory)->toBe(0.0);
+});
+
+it('rolls back a shipment when ledger quantity exists but open inbound costing layers are insufficient', function (): void {
+    $user = salesOrderFilamentUser();
+    $fixture = salesOrderFilamentFixture();
+    salesOrderFilamentNumberSeries();
+    salesOrderFilamentClosedInboundLayer($fixture, 10, 500);
+
+    Livewire::actingAs($user)
+        ->test(CreateSalesOrder::class)
+        ->fillForm(salesOrderFilamentPayload($fixture, SalesOrderStatus::APPROVED))
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $order = SalesOrder::query()->with('lines')->firstOrFail();
+
+    foreach ([1, 2] as $attempt) {
+        expect(fn () => $order->fresh()->postShipment())
+            ->toThrow(
+                InsufficientInventoryApplicationException::class,
+                'insufficient open inbound quantity',
+            );
+
+        $order->refresh()->load('lines');
+
+        expect(ItemLedgerEntry::query()
+            ->where('document_number', "SS-{$order->order_number}")
+            ->where('entry_type', ItemLedgerEntryType::SALE)
+            ->count())->toBe(0)
+            ->and(ItemApplicationEntry::query()->count())->toBe(0)
+            ->and(ValueEntry::query()->where('document_no', "SS-{$order->order_number}")->count())->toBe(0)
+            ->and(GlEntry::query()->where('document_number', "SS-{$order->order_number}")->count())->toBe(0)
+            ->and((float) $order->lines->first()->quantity_shipped)->toBe(0.0)
+            ->and((float) $order->quantity_shipped)->toBe(0.0)
+            ->and($order->fully_shipped)->toBeFalse()
+            ->and($order->status)->toBe(SalesOrderStatus::APPROVED);
+    }
+});
+
+it('shows Filament danger notifications for expected shipment and post plus invoice failures', function (): void {
+    $user = salesOrderFilamentUser();
+    $fixture = salesOrderFilamentFixture();
+    salesOrderFilamentNumberSeries();
+    salesOrderFilamentInvoiceNumberSeries();
+    salesOrderFilamentClosedInboundLayer($fixture, 10, 500);
+
+    Livewire::actingAs($user)
+        ->test(CreateSalesOrder::class)
+        ->fillForm(salesOrderFilamentPayload($fixture, SalesOrderStatus::APPROVED))
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $order = SalesOrder::query()->firstOrFail();
+
+    Livewire::actingAs($user)
+        ->test(ListSalesOrders::class)
+        ->assertTableActionVisible('post_shipment', $order)
+        ->assertTableActionVisible('post_and_invoice', $order);
+
+    app(SalesOrderPostingActionHandler::class)->postShipment($order);
+    Notification::assertNotified('Insufficient inventory costing layers');
+
+    app(SalesOrderPostingActionHandler::class)->postAndInvoice($order->fresh());
+    Notification::assertNotified('Insufficient inventory costing layers');
+
+    expect(ItemLedgerEntry::query()
+        ->where('document_number', "SS-{$order->order_number}")
+        ->where('entry_type', ItemLedgerEntryType::SALE)
+        ->count())->toBe(0)
+        ->and(ValueEntry::query()->where('document_no', "SS-{$order->order_number}")->count())->toBe(0)
+        ->and($order->fresh()->status)->toBe(SalesOrderStatus::APPROVED);
+});
+
+it('renders an unshipped uninvoiced sales order as not invoiced in the table', function (): void {
+    $user = salesOrderFilamentUser();
+    $fixture = salesOrderFilamentFixture();
+    salesOrderFilamentNumberSeries();
+
+    Livewire::actingAs($user)
+        ->test(CreateSalesOrder::class)
+        ->fillForm(salesOrderFilamentPayload($fixture, SalesOrderStatus::APPROVED))
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $order = SalesOrder::query()->firstOrFail();
+
+    expect($order->fully_invoiced)->toBeFalse()
+        ->and((float) $order->quantity_invoiced)->toBe(0.0)
+        ->and((float) $order->quantity_shipped)->toBe(0.0);
+
+    Livewire::actingAs($user)
+        ->test(ListSalesOrders::class)
+        ->assertTableColumnStateSet('fully_invoiced', false, $order);
+});
+
+it('post plus invoice is successful and keeps shipment and invoice accounting idempotent with sufficient stock', function (): void {
+    $user = salesOrderFilamentUser();
+    $fixture = salesOrderFilamentFixture();
+    salesOrderFilamentNumberSeries();
+    salesOrderFilamentInvoiceNumberSeries();
+    salesOrderFilamentInboundLayer($fixture, 10, 500);
+
+    Livewire::actingAs($user)
+        ->test(CreateSalesOrder::class)
+        ->fillForm(salesOrderFilamentPayload($fixture, SalesOrderStatus::APPROVED))
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $order = SalesOrder::query()->with('lines')->firstOrFail();
+
+    Livewire::actingAs($user)
+        ->test(ListSalesOrders::class)
+        ->assertTableActionVisible('post_and_invoice', $order);
+
+    app(SalesOrderPostingActionHandler::class)->postAndInvoice($order);
+    Notification::assertNotified('Shipment and Invoice Posted');
+
+    $order->refresh()->load('lines');
+
+    expect($order->status)->toBe(SalesOrderStatus::INVOICED)
+        ->and($order->fully_shipped)->toBeTrue()
+        ->and($order->fully_invoiced)->toBeTrue()
+        ->and((float) $order->quantity_shipped)->toBe(10.0)
+        ->and((float) $order->quantity_invoiced)->toBe(10.0)
+        ->and(ItemLedgerEntry::query()->where('document_number', "SS-{$order->order_number}")->where('entry_type', ItemLedgerEntryType::SALE)->count())->toBe(1)
+        ->and(ItemApplicationEntry::query()->count())->toBe(1)
+        ->and(ValueEntry::query()->where('document_no', "SS-{$order->order_number}")->count())->toBe(1)
+        ->and(GlEntry::query()->where('item_ledger_entry_id', ItemLedgerEntry::query()->where('document_number', "SS-{$order->order_number}")->value('id'))->count())->toBe(2)
+        ->and($order->postedInvoices()->count())->toBe(1);
+
+    expect(fn () => $order->fresh()->postShipment())->toThrow(ValidationException::class);
 });
 
 function salesOrderFilamentUser(): User
@@ -366,6 +548,29 @@ function salesOrderFilamentInboundLayer(array $fixture, float $quantity, float $
     ]);
 }
 
+function salesOrderFilamentClosedInboundLayer(array $fixture, float $quantity, float $cost): void
+{
+    ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
+        'document_type' => 'PURCHASE_RECEIPT',
+        'document_number' => 'PR-SO-FIL-CLOSED-001',
+        'document_line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'location_id' => $fixture['location']->id,
+        'quantity' => $quantity,
+        'remaining_quantity' => 0,
+        'cost_amount_actual' => $cost,
+        'cost_amount_expected' => 0,
+        'purchase_amount_actual' => $cost,
+        'general_business_posting_group_id' => $fixture['businessGroup']->id,
+        'general_product_posting_group_id' => $fixture['productGroup']->id,
+        'inventory_posting_group_id' => $fixture['inventoryGroup']->id,
+        'posting_date' => '2026-08-23',
+        'entry_date' => now(),
+        'open' => false,
+    ]);
+}
+
 function salesOrderFilamentNumberSeries(): void
 {
     $series = NumberSeries::query()->create([
@@ -384,6 +589,34 @@ function salesOrderFilamentNumberSeries(): void
         'number_series_id' => $series->id,
         'starting_date' => '2026-01-01',
         'prefix' => 'SO-2026-',
+        'suffix' => '',
+        'starting_no' => 0,
+        'ending_no' => null,
+        'increment_by' => 1,
+        'last_no_used' => 0,
+        'no_of_digits' => 5,
+        'blocked' => false,
+    ]);
+}
+
+function salesOrderFilamentInvoiceNumberSeries(): void
+{
+    $series = NumberSeries::query()->create([
+        'code' => 'S-INV',
+        'description' => 'Sales Invoice test series',
+        'prefix' => 'SI-',
+        'starting_number' => 1,
+        'current_number' => 0,
+        'year' => 2026,
+        'is_active' => true,
+        'allow_manual' => false,
+        'module' => 'sales',
+    ]);
+
+    NumberSeriesLine::query()->create([
+        'number_series_id' => $series->id,
+        'starting_date' => '2026-01-01',
+        'prefix' => 'SI-2026-',
         'suffix' => '',
         'starting_no' => 0,
         'ending_no' => null,

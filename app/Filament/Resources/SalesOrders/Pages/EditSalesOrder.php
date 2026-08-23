@@ -1,25 +1,55 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\SalesOrders\Pages;
 
 use App\Enums\SalesOrderStatus;
-use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
 use App\Filament\Traits\PreventsEditingPostedRecords;
 use App\Models\SalesOrder;
+use App\Models\SalesOrderLine;
 use App\Services\Approval\ApprovalService;
+use App\Support\SalesOrderPostingActionHandler;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class EditSalesOrder extends EditRecord
 {
     protected static string $resource = SalesOrderResource::class;
 
     use PreventsEditingPostedRecords;
+
+    protected ?bool $hasDatabaseTransactions = true;
+
+    public function save(bool $shouldRedirect = true, bool $shouldSendSavedNotification = true): void
+    {
+        try {
+            parent::save($shouldRedirect, $shouldSendSavedNotification);
+        } catch (ValidationException $exception) {
+            $this->notifyFailure('Sales order was not saved.', $this->validationMessage($exception));
+
+            throw $exception;
+        } catch (Throwable $exception) {
+            Log::error('Sales order Filament edit failed.', [
+                'sales_order_id' => $this->record?->getKey(),
+                'order_number' => $this->record?->getAttribute('order_number'),
+                'exception' => $exception,
+            ]);
+
+            $this->notifyFailure('Sales order was not saved.', 'Sales order could not be saved. Please review the form and try again.');
+
+            throw ValidationException::withMessages([
+                'data' => 'Sales order could not be saved. Please review the form and try again.',
+            ]);
+        }
+    }
 
     public function getHeading(): string
     {
@@ -105,12 +135,7 @@ class EditSalesOrder extends EditRecord
                     in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
                 ->requiresConfirmation()
                 ->action(function (SalesOrder $record): void {
-                    try {
-                        $record->postShipment();
-                        Notification::make()->title('Shipment Posted')->success()->send();
-                    } catch (ValidationException $exception) {
-                        Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post shipment')->danger()->send();
-                    }
+                    app(SalesOrderPostingActionHandler::class)->postShipment($record);
                 }),
 
             Action::make('create_sales_invoice')
@@ -121,12 +146,7 @@ class EditSalesOrder extends EditRecord
                     in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
                 ->requiresConfirmation()
                 ->action(function (SalesOrder $record): void {
-                    try {
-                        $record->postInvoice();
-                        Notification::make()->title('Sales Invoice Created')->success()->send();
-                    } catch (ValidationException $exception) {
-                        Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to create sales invoice')->danger()->send();
-                    }
+                    app(SalesOrderPostingActionHandler::class)->postInvoice($record);
                 }),
 
             Action::make('post_and_invoice')
@@ -137,21 +157,7 @@ class EditSalesOrder extends EditRecord
                     in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED, SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
                 ->requiresConfirmation()
                 ->action(function (SalesOrder $record) {
-                    try {
-                        if (in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true)) {
-                            $record->postShipment();
-                            $record->refresh();
-                        }
-
-                        $postedInvoice = $record->postInvoice();
-                        Notification::make()->title('Shipment and Invoice Posted')->success()->send();
-
-                        return redirect(SalesInvoiceResource::getUrl('posted', [
-                            'tableSearch' => $postedInvoice->document_number,
-                        ]));
-                    } catch (ValidationException $exception) {
-                        Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post and invoice')->danger()->send();
-                    }
+                    return app(SalesOrderPostingActionHandler::class)->postAndInvoice($record);
                 }),
 
             Action::make('archive')
@@ -179,5 +185,41 @@ class EditSalesOrder extends EditRecord
 
             DeleteAction::make(),
         ];
+    }
+
+    protected function afterSave(): void
+    {
+        $this->finalizeSalesOrderPersistence();
+    }
+
+    protected function finalizeSalesOrderPersistence(): void
+    {
+        $this->record->refresh()->load('lines');
+
+        $hasValidLine = $this->record->lines
+            ->contains(fn (SalesOrderLine $line): bool => (float) $line->quantity > 0);
+
+        if (! $hasValidLine) {
+            throw ValidationException::withMessages([
+                'lines' => 'Sales order requires at least one item line with a quantity greater than zero.',
+            ]);
+        }
+
+        $this->record->saveRecalculatedTotalsFromPersistedLines();
+    }
+
+    private function notifyFailure(string $title, string $message): void
+    {
+        Notification::make()
+            ->title($title)
+            ->body($message)
+            ->danger()
+            ->send();
+    }
+
+    private function validationMessage(ValidationException $exception): string
+    {
+        return collect($exception->errors())->flatten()->first()
+            ?? 'Please review the highlighted fields and try again.';
     }
 }

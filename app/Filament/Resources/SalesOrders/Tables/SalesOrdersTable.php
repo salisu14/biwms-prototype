@@ -3,12 +3,12 @@
 namespace App\Filament\Resources\SalesOrders\Tables;
 
 use App\Enums\SalesOrderStatus;
-use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\PostedSalesInvoice;
 use App\Models\SalesOrder;
 use App\Services\Approval\ApprovalService;
 use App\Services\Print\PostedSalesInvoicePrintService;
 use App\Services\Print\ProformaInvoiceService;
+use App\Support\SalesOrderPostingActionHandler;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -152,16 +152,11 @@ class SalesOrdersTable
                 IconColumn::make('fully_invoiced')
                     ->label('Invoiced')
                     ->state(function (SalesOrder $record): bool {
-                        $record->loadMissing('lines');
-
                         if ($record->status === SalesOrderStatus::INVOICED) {
                             return true;
                         }
 
-                        return $record->lines->isNotEmpty()
-                            && $record->lines->every(
-                                fn ($line): bool => (float) $line->quantity_invoiced >= (float) $line->quantity_shipped
-                            );
+                        return (bool) $record->fully_invoiced;
                     })
                     ->boolean()
                     ->toggleable(),
@@ -213,12 +208,7 @@ class SalesOrdersTable
                             in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
                         ->requiresConfirmation()
                         ->action(function (SalesOrder $record): void {
-                            try {
-                                $record->postShipment();
-                                Notification::make()->title('Shipment Posted')->success()->send();
-                            } catch (ValidationException $exception) {
-                                Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post shipment')->danger()->send();
-                            }
+                            app(SalesOrderPostingActionHandler::class)->postShipment($record);
                         }),
                     Action::make('post_invoice')
                         ->label('Post Invoice')
@@ -229,12 +219,7 @@ class SalesOrdersTable
                             in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
                         ->requiresConfirmation()
                         ->action(function (SalesOrder $record): void {
-                            try {
-                                $record->postInvoice();
-                                Notification::make()->title('Invoice Posted')->success()->send();
-                            } catch (ValidationException $exception) {
-                                Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post invoice')->danger()->send();
-                            }
+                            app(SalesOrderPostingActionHandler::class)->postInvoice($record);
                         }),
                     Action::make('post_and_invoice')
                         ->label('Post + Invoice')
@@ -245,21 +230,7 @@ class SalesOrdersTable
                             in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED, SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
                         ->requiresConfirmation()
                         ->action(function (SalesOrder $record) {
-                            try {
-                                if (in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true)) {
-                                    $record->postShipment();
-                                    $record->refresh();
-                                }
-
-                                $postedInvoice = $record->postInvoice();
-                                Notification::make()->title('Shipment and Invoice Posted')->success()->send();
-
-                                return redirect(SalesInvoiceResource::getUrl('posted', [
-                                    'tableSearch' => $postedInvoice->document_number,
-                                ]));
-                            } catch (ValidationException $exception) {
-                                Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post and invoice')->danger()->send();
-                            }
+                            return app(SalesOrderPostingActionHandler::class)->postAndInvoice($record);
                         }),
                     Action::make('printProforma')
                         ->label('Proforma Invoice')

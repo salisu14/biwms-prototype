@@ -1,6 +1,6 @@
 <?php
 
-// app/Models/SalesOrderLine.php
+declare(strict_types=1);
 
 namespace App\Models;
 
@@ -144,6 +144,25 @@ class SalesOrderLine extends Model
 
             $line->syncDimensionsWithDefaults();
         });
+
+        static::saved(function (SalesOrderLine $line): void {
+            $line->refreshParentSalesOrderTotals();
+        });
+
+        static::deleted(function (SalesOrderLine $line): void {
+            $line->refreshParentSalesOrderTotals();
+        });
+    }
+
+    public function refreshParentSalesOrderTotals(): void
+    {
+        $order = $this->salesOrder()->first();
+
+        if (! $order instanceof SalesOrder) {
+            return;
+        }
+
+        $order->saveRecalculatedTotalsFromPersistedLines();
     }
 
     public function syncDimensionsWithDefaults(): void

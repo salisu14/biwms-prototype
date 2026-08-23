@@ -69,8 +69,7 @@ class EditSalesOrder extends EditRecord
             ]);
         }
 
-        $this->record->recalculateTotals();
-        $this->record->save();
+        $this->record->saveRecalculatedTotalsFromPersistedLines();
     }
 
     private function notifyFailure(string $title, string $message): void

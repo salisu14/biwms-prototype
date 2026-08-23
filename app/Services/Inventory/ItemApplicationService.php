@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Services\Inventory;
 
 use App\Enums\CostingMethod;
+use App\Exceptions\InsufficientInventoryApplicationException;
 use App\Models\ItemApplicationEntry;
 use App\Models\ItemLedgerEntry;
 use App\Support\DecimalMath;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 use UnitEnum;
 
 class ItemApplicationService
@@ -100,7 +100,7 @@ class ItemApplicationService
             }
 
             if ($remainingToApply > 0.00000001 && $strict) {
-                throw new RuntimeException("Unable to apply outbound item ledger entry {$outbound->entry_number}; insufficient open inbound quantity.");
+                throw InsufficientInventoryApplicationException::forOutboundEntry($outbound->entry_number);
             }
 
             $appliedCost = collect($applications)->sum(fn (ItemApplicationEntry $application): float => (float) $application->cost_amount);

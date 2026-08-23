@@ -3,18 +3,17 @@
 namespace App\Filament\Resources\SalesOrders\Pages;
 
 use App\Enums\SalesOrderStatus;
-use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
 use App\Filament\Resources\SalesShipmentHeaders\SalesShipmentHeaderResource;
 use App\Models\SalesOrder;
 use App\Models\SalesShipmentHeader;
 use App\Services\Approval\ApprovalService;
+use App\Support\SalesOrderPostingActionHandler;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
-use Illuminate\Validation\ValidationException;
 
 class ViewSalesOrder extends ViewRecord
 {
@@ -110,12 +109,7 @@ class ViewSalesOrder extends ViewRecord
                     in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true))
                 ->requiresConfirmation()
                 ->action(function (SalesOrder $record): void {
-                    try {
-                        $record->postShipment();
-                        Notification::make()->title('Shipment Posted')->success()->send();
-                    } catch (ValidationException $exception) {
-                        Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post shipment')->danger()->send();
-                    }
+                    app(SalesOrderPostingActionHandler::class)->postShipment($record);
                 }),
 
             Action::make('view_shipment')
@@ -143,12 +137,7 @@ class ViewSalesOrder extends ViewRecord
                     in_array($record->status, [SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
                 ->requiresConfirmation()
                 ->action(function (SalesOrder $record): void {
-                    try {
-                        $record->postInvoice();
-                        Notification::make()->title('Sales Invoice Created')->success()->send();
-                    } catch (ValidationException $exception) {
-                        Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to create sales invoice')->danger()->send();
-                    }
+                    app(SalesOrderPostingActionHandler::class)->postInvoice($record);
                 }),
 
             Action::make('post_and_invoice')
@@ -159,21 +148,7 @@ class ViewSalesOrder extends ViewRecord
                     in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED, SalesOrderStatus::SHIPPED, SalesOrderStatus::PARTIALLY_INVOICED], true))
                 ->requiresConfirmation()
                 ->action(function (SalesOrder $record) {
-                    try {
-                        if (in_array($record->status, [SalesOrderStatus::APPROVED, SalesOrderStatus::RELEASED], true)) {
-                            $record->postShipment();
-                            $record->refresh();
-                        }
-
-                        $postedInvoice = $record->postInvoice();
-                        Notification::make()->title('Shipment and Invoice Posted')->success()->send();
-
-                        return redirect(SalesInvoiceResource::getUrl('posted', [
-                            'tableSearch' => $postedInvoice->document_number,
-                        ]));
-                    } catch (ValidationException $exception) {
-                        Notification::make()->title(collect($exception->errors())->flatten()->first() ?? 'Unable to post and invoice')->danger()->send();
-                    }
+                    return app(SalesOrderPostingActionHandler::class)->postAndInvoice($record);
                 }),
 
             Action::make('changeStatus')

@@ -201,6 +201,18 @@ class SalesOrder extends Model implements Approvable
         $this->grand_total = ($this->total_amount - $this->invoice_discount_amount) + $this->total_vat;
     }
 
+    public function recalculateTotalsFromPersistedLines(): void
+    {
+        $this->load('lines');
+        $this->recalculateTotals();
+    }
+
+    public function saveRecalculatedTotalsFromPersistedLines(): void
+    {
+        $this->recalculateTotalsFromPersistedLines();
+        $this->saveQuietly();
+    }
+
     // ==================== RELATIONSHIPS ====================
     public function customer(): BelongsTo
     {

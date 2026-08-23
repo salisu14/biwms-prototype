@@ -75,16 +75,11 @@ class SalesOrderInfolist
                                             IconEntry::make('fully_shipped')->boolean(),
                                             IconEntry::make('fully_invoiced')
                                                 ->state(function (SalesOrder $record): bool {
-                                                    $record->loadMissing('lines');
-
                                                     if ($record->status === SalesOrderStatus::INVOICED) {
                                                         return true;
                                                     }
 
-                                                    return $record->lines->isNotEmpty()
-                                                        && $record->lines->every(
-                                                            fn ($line): bool => (float) $line->quantity_invoiced >= (float) $line->quantity_shipped
-                                                        );
+                                                    return (bool) $record->fully_invoiced;
                                                 })
                                                 ->boolean(),
                                         ]),
