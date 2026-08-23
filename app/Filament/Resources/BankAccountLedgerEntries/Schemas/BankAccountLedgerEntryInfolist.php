@@ -50,17 +50,17 @@ class BankAccountLedgerEntryInfolist
                                 TextEntry::make('entry_type')->badge(),
                                 TextEntry::make('amount')
                                     ->label('Amount')
-                                    ->formatStateUsing(fn ($state) => Number::currency(abs($state), 'NGN'))
-                                    ->color(fn ($state) => $state < 0 ? 'danger' : 'success')
+                                    ->formatStateUsing(fn (mixed $state): string => self::formatAbsoluteMoney($state))
+                                    ->color(fn (mixed $state): string => self::isNegativeAmount($state) ? 'danger' : 'success')
                                     ->weight('bold'),
                                 TextEntry::make('currency_code')->label('Currency'),
                             ]),
                         Grid::make(4)
                             ->schema([
-                                TextEntry::make('debit_amount')->formatStateUsing(fn ($state) => Number::currency($state, 'NGN')),
-                                TextEntry::make('credit_amount')->formatStateUsing(fn ($state) => Number::currency($state, 'NGN')),
-                                TextEntry::make('amount_lcy')->label('Amount (LCY)')->formatStateUsing(fn ($state) => Number::currency($state, 'NGN')),
-                                TextEntry::make('balance')->formatStateUsing(fn ($state) => Number::currency($state, 'NGN')),
+                                TextEntry::make('debit_amount')->formatStateUsing(fn (mixed $state): string => self::formatMoney($state)),
+                                TextEntry::make('credit_amount')->formatStateUsing(fn (mixed $state): string => self::formatMoney($state)),
+                                TextEntry::make('amount_lcy')->label('Amount (LCY)')->formatStateUsing(fn (mixed $state): string => self::formatMoney($state)),
+                                TextEntry::make('balance')->formatStateUsing(fn (mixed $state): string => self::formatMoney($state)),
                             ]),
                     ]),
 
@@ -133,5 +133,25 @@ class BankAccountLedgerEntryInfolist
                             ]),
                     ]),
             ]);
+    }
+
+    private static function formatAbsoluteMoney(mixed $state): string
+    {
+        return Number::currency(abs(self::numericAmount($state)), 'NGN');
+    }
+
+    private static function formatMoney(mixed $state): string
+    {
+        return Number::currency(self::numericAmount($state), 'NGN');
+    }
+
+    private static function isNegativeAmount(mixed $state): bool
+    {
+        return self::numericAmount($state) < 0;
+    }
+
+    private static function numericAmount(mixed $state): float
+    {
+        return (float) ($state ?? 0);
     }
 }

@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\BankAccountLedgerEntries\Schemas;
 
 use App\Enums\BankAccountLedgerEntryType;
 use App\Enums\CheckType;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -61,11 +64,11 @@ class BankAccountLedgerEntryForm
                                         // Auto-calculate debit/credit in form based on entry type
                                         $amount = $get('amount') ?? 0;
                                         if (BankAccountLedgerEntryType::tryFrom($state)?->isDebit()) {
-                                            $set('debit_amount', abs($amount));
+                                            $set('debit_amount', self::absoluteAmount($amount));
                                             $set('credit_amount', 0);
                                         } elseif (BankAccountLedgerEntryType::tryFrom($state)?->isCredit()) {
                                             $set('debit_amount', 0);
-                                            $set('credit_amount', abs($amount));
+                                            $set('credit_amount', self::absoluteAmount($amount));
                                         }
                                     }),
                                 TextInput::make('amount')
@@ -76,11 +79,11 @@ class BankAccountLedgerEntryForm
                                     ->afterStateUpdated(function ($state, callable $set, callable $get) {
                                         $type = $get('entry_type');
                                         if (BankAccountLedgerEntryType::tryFrom($type)?->isDebit()) {
-                                            $set('debit_amount', abs($state));
+                                            $set('debit_amount', self::absoluteAmount($state));
                                             $set('credit_amount', 0);
                                         } elseif (BankAccountLedgerEntryType::tryFrom($type)?->isCredit()) {
                                             $set('debit_amount', 0);
-                                            $set('credit_amount', abs($state));
+                                            $set('credit_amount', self::absoluteAmount($state));
                                         }
                                     }),
                                 TextInput::make('currency_code')->label('Currency')->default('NGN'),
@@ -102,7 +105,7 @@ class BankAccountLedgerEntryForm
                                 TextInput::make('check_no')->maxLength(50),
                                 DatePicker::make('check_date')->native(false),
                             ]),
-                    ])->visible(fn(callable $get) => $get('entry_type') === BankAccountLedgerEntryType::CHECK->value),
+                    ])->visible(fn (callable $get) => $get('entry_type') === BankAccountLedgerEntryType::CHECK->value),
 
                 Section::make('References & Dimensions')
                     ->schema([
@@ -126,5 +129,10 @@ class BankAccountLedgerEntryForm
                             ]),
                     ]),
             ]);
+    }
+
+    private static function absoluteAmount(mixed $state): float
+    {
+        return abs((float) ($state ?? 0));
     }
 }

@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\BankAccountLedgerEntries\Tables;
 
 use App\Enums\BankAccountLedgerEntryStatus;
 use App\Enums\BankAccountLedgerEntryType;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -13,6 +16,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Number;
 
 class BankAccountLedgerEntriesTable
 {
@@ -47,14 +51,14 @@ class BankAccountLedgerEntriesTable
                     ->searchable(),
                 TextColumn::make('amount')
                     ->label('Amount')
-                    ->formatStateUsing(fn ($state) => \Illuminate\Support\Number::currency(abs($state), 'NGN'))
-                    ->color(fn ($state) => $state < 0 ? 'danger' : 'success')
-                    ->icon(fn ($state) => $state < 0 ? 'heroicon-m-arrow-down-tray' : 'heroicon-m-arrow-up-tray')
+                    ->formatStateUsing(fn (mixed $state): string => self::formatAbsoluteMoney($state))
+                    ->color(fn (mixed $state): string => self::isNegativeAmount($state) ? 'danger' : 'success')
+                    ->icon(fn (mixed $state): string => self::isNegativeAmount($state) ? 'heroicon-m-arrow-down-tray' : 'heroicon-m-arrow-up-tray')
                     ->sortable()
                     ->alignEnd(),
                 TextColumn::make('balance')
                     ->label('Balance')
-                    ->formatStateUsing(fn ($state) => \Illuminate\Support\Number::currency($state, 'NGN'))
+                    ->formatStateUsing(fn (mixed $state): string => self::formatMoney($state))
                     ->sortable()
                     ->alignEnd(),
                 TextColumn::make('status')
@@ -83,8 +87,8 @@ class BankAccountLedgerEntriesTable
                     ->options(BankAccountLedgerEntryStatus::class),
                 Filter::make('posting_date')
                     ->schema([
-                        \Filament\Forms\Components\DatePicker::make('from')->native(false),
-                        \Filament\Forms\Components\DatePicker::make('until')->native(false),
+                        DatePicker::make('from')->native(false),
+                        DatePicker::make('until')->native(false),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
@@ -102,5 +106,25 @@ class BankAccountLedgerEntriesTable
                 ]),
             ])
             ->defaultSort('posting_date', 'desc');
+    }
+
+    private static function formatAbsoluteMoney(mixed $state): string
+    {
+        return Number::currency(abs(self::numericAmount($state)), 'NGN');
+    }
+
+    private static function formatMoney(mixed $state): string
+    {
+        return Number::currency(self::numericAmount($state), 'NGN');
+    }
+
+    private static function isNegativeAmount(mixed $state): bool
+    {
+        return self::numericAmount($state) < 0;
+    }
+
+    private static function numericAmount(mixed $state): float
+    {
+        return (float) ($state ?? 0);
     }
 }
