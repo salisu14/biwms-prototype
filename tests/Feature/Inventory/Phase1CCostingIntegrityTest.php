@@ -15,6 +15,7 @@ use App\Models\ChartOfAccount;
 use App\Models\CostAdjustmentBatch;
 use App\Models\CostingPeriod;
 use App\Models\Customer;
+use App\Models\CustomerLedgerEntry;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralLedgerSetup;
 use App\Models\GeneralPostingSetup;
@@ -36,6 +37,7 @@ use App\Models\ValueEntry;
 use App\Models\Vendor;
 use App\Services\Inventory\CostAdjustmentService;
 use App\Services\Inventory\ExpectedCostClearingService;
+use App\Services\Inventory\HistoricalSalesShipmentCostRepairService;
 use App\Services\Inventory\ItemApplicationRepairService;
 use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ReturnCostApplicationService;
@@ -190,6 +192,166 @@ it('rolls back historical item application repair when downstream value accounti
         ->toThrow(RuntimeException::class, 'Simulated item application repair accounting failure');
 
     expect(ItemApplicationEntry::query()->where('outbound_item_ledger_entry_id', $outbound->id)->exists())->toBeFalse();
+});
+
+it('repairs historical sales shipment application with append-only positive economic correction', function (): void {
+    [$outbound, $firstInbound, , $fixture] = historicalSalesShipmentCostRepairFixture(existingOutboundCost: 80, firstInboundQuantity: 20, firstInboundCost: 200, outboundQuantity: 10);
+    $customerLedgerCount = CustomerLedgerEntry::query()->count();
+    $dryRunValueEntryCount = ValueEntry::query()->count();
+
+    expect(Artisan::call('biwms:item-application-cost-repair', [
+        '--entry' => $outbound->entry_number,
+        '--dry-run' => true,
+    ]))->toBe(0);
+    $output = Artisan::output();
+
+    expect($output)->toContain('Mode: dry-run. No data was changed.')
+        ->and($output)->toContain('Corrected Outbound ILE Cost: 100.0000')
+        ->and($output)->toContain('Adjustment Delta: 20.0000')
+        ->and($output)->toContain('Expected G/L Debit: COGS')
+        ->and($output)->toContain('Expected G/L Credit: Inventory')
+        ->and(ValueEntry::query()->count())->toBe($dryRunValueEntryCount);
+
+    expect(Artisan::call('biwms:item-application-cost-repair', [
+        '--entry' => $outbound->entry_number,
+        '--apply' => true,
+    ]))->toBe(0);
+    expect(Artisan::call('biwms:item-application-cost-repair', [
+        '--entry' => $outbound->entry_number,
+        '--apply' => true,
+    ]))->toBe(0);
+
+    $application = ItemApplicationEntry::query()
+        ->where('outbound_item_ledger_entry_id', $outbound->id)
+        ->firstOrFail();
+    $adjustment = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outbound->entry_number)
+        ->where('document_type', 'COST_ADJUSTMENT')
+        ->where('value_entry_state', 'adjustment')
+        ->firstOrFail();
+
+    expect((float) $application->applied_quantity)->toBe(10.0)
+        ->and((float) $application->cost_amount)->toBe(100.0)
+        ->and((float) $outbound->fresh()->cost_amount_actual)->toBe(100.0)
+        ->and((float) $firstInbound->fresh()->remaining_quantity)->toBe(10.0)
+        ->and((float) $adjustment->cost_amount_actual)->toBe(20.0)
+        ->and($adjustment->gl_posted)->toBeTrue()
+        ->and(ValueEntry::query()->where('item_ledger_entry_no', $outbound->entry_number)->where('document_type', 'COST_ADJUSTMENT')->count())->toBe(1)
+        ->and((float) GlEntry::query()->where('posting_transaction_id', $adjustment->posting_transaction_id)->where('chart_of_account_id', $fixture['cogsAccount']->id)->sum('debit_amount'))->toBe(20.0)
+        ->and((float) GlEntry::query()->where('posting_transaction_id', $adjustment->posting_transaction_id)->where('chart_of_account_id', $fixture['inventoryAccount']->id)->sum('credit_amount'))->toBe(20.0)
+        ->and(CustomerLedgerEntry::query()->count())->toBe($customerLedgerCount);
+
+    expect(Artisan::call('biwms:costing-reconcile', ['--json' => true]))->toBe(0);
+    $report = json_decode(trim(Artisan::output()), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['outbound_without_applications'])->toBeEmpty()
+        ->and($report['application_quantity_mismatches'])->toBeEmpty()
+        ->and($report['value_entry_cost_mismatches'])->toBeEmpty()
+        ->and($report['value_entry_gl_posting_mismatches'])->toBeEmpty();
+});
+
+it('posts negative historical sales shipment cost correction as inventory debit and cogs credit', function (): void {
+    [$outbound, , , $fixture] = historicalSalesShipmentCostRepairFixture(existingOutboundCost: 120, firstInboundQuantity: 20, firstInboundCost: 200, outboundQuantity: 10);
+
+    expect(Artisan::call('biwms:item-application-cost-repair', [
+        '--entry' => $outbound->entry_number,
+        '--apply' => true,
+    ]))->toBe(0);
+
+    $adjustment = ValueEntry::query()
+        ->where('item_ledger_entry_no', $outbound->entry_number)
+        ->where('document_type', 'COST_ADJUSTMENT')
+        ->firstOrFail();
+
+    expect((float) $adjustment->cost_amount_actual)->toBe(-20.0)
+        ->and((float) GlEntry::query()->where('posting_transaction_id', $adjustment->posting_transaction_id)->where('chart_of_account_id', $fixture['inventoryAccount']->id)->sum('debit_amount'))->toBe(20.0)
+        ->and((float) GlEntry::query()->where('posting_transaction_id', $adjustment->posting_transaction_id)->where('chart_of_account_id', $fixture['cogsAccount']->id)->sum('credit_amount'))->toBe(20.0);
+});
+
+it('reconstructs historical fifo availability while preserving later and reversed applications', function (): void {
+    [$outbound, $firstInbound] = historicalSalesShipmentCostRepairFixture(existingOutboundCost: 80, firstInboundQuantity: 20, firstInboundCost: 200, outboundQuantity: 10);
+    $laterOutbound = historicalSalesShipmentCostRepairOutboundFrom($outbound, quantity: 5, documentNumber: 'SS-LATER-APP', postingDate: '2026-01-04', existingCost: 50);
+    app(ItemApplicationService::class)->applyOutbound($laterOutbound, 'later_sales_shipment');
+
+    $reversedApplication = ItemApplicationEntry::query()->create([
+        'inbound_item_ledger_entry_id' => $firstInbound->id,
+        'outbound_item_ledger_entry_id' => $outbound->id,
+        'applied_quantity' => 3,
+        'remaining_quantity_after_application' => 17,
+        'application_date' => '2026-01-03',
+        'application_source' => 'reversed_test',
+        'costing_method' => CostingMethod::FIFO->value,
+        'unit_cost' => 10,
+        'cost_amount' => 30,
+        'is_reversed' => true,
+        'idempotency_key' => 'reversed-test-'.$outbound->id,
+    ]);
+
+    $analysis = app(HistoricalSalesShipmentCostRepairService::class)->analyze($outbound->fresh());
+
+    expect($analysis['candidate_inbound_layers'][0]['historical_available_quantity'])->toBe(20.0)
+        ->and($analysis['later_application_impacts'][0]['later_non_reversed_applied_quantity'])->toBe(5.0)
+        ->and($reversedApplication->fresh()->is_reversed)->toBeTrue();
+
+    app(HistoricalSalesShipmentCostRepairService::class)->repair($outbound->fresh());
+
+    expect((float) $firstInbound->fresh()->remaining_quantity)->toBe(5.0)
+        ->and((float) ItemApplicationEntry::query()->where('inbound_item_ledger_entry_id', $firstInbound->id)->where('is_reversed', false)->sum('applied_quantity'))->toBe(15.0);
+});
+
+it('refuses unsafe historical sales shipment cost repairs', function (): void {
+    [$insufficientOutbound] = historicalSalesShipmentCostRepairFixture(existingOutboundCost: 80, firstInboundQuantity: 4, firstInboundCost: 40, secondInboundQuantity: 0, secondInboundCost: 0, outboundQuantity: 10);
+    [$ambiguousOutbound] = historicalSalesShipmentCostRepairFixture(suffix: 'COST-AMBIG', existingOutboundCost: 80, firstInboundQuantity: 20, firstInboundCost: 200, outboundQuantity: 10);
+    $earlierBroken = phase1cItemLedgerEntry(phase1cFixture(CostingMethod::FIFO), ItemLedgerEntryType::SALE, -1, 0, 'SS-COST-EARLIER', '2026-01-02');
+    $earlierBroken->forceFill([
+        'item_id' => $ambiguousOutbound->item_id,
+        'location_id' => $ambiguousOutbound->location_id,
+        'document_type' => 'SALES_ORDER_SHIPMENT',
+    ])->save();
+    [$crossLocationOutbound] = historicalSalesShipmentCostRepairFixture(suffix: 'COST-XLOC', existingOutboundCost: 80, firstInboundQuantity: 20, firstInboundCost: 200, outboundQuantity: 10);
+    ItemLedgerEntry::query()
+        ->where('id', '!=', $crossLocationOutbound->id)
+        ->where('item_id', $crossLocationOutbound->item_id)
+        ->update(['location_id' => Location::factory()->create()->id]);
+    [$nonSalesOutbound] = historicalSalesShipmentCostRepairFixture(suffix: 'COST-NON-SALE', existingOutboundCost: 80, firstInboundQuantity: 20, firstInboundCost: 200, outboundQuantity: 10);
+    $nonSalesOutbound->forceFill(['document_type' => 'PRODUCTION_CONSUMPTION'])->save();
+
+    $service = app(HistoricalSalesShipmentCostRepairService::class);
+
+    expect($service->analyze($insufficientOutbound)['eligibility_classification'])->toBe('insufficient_historical_inventory')
+        ->and($service->analyze($ambiguousOutbound)['eligibility_classification'])->toBe('ambiguous_layer_history')
+        ->and($service->analyze($crossLocationOutbound)['eligibility_classification'])->toBe('insufficient_historical_inventory')
+        ->and($service->analyze($nonSalesOutbound)['eligibility_classification'])->toBe('unsupported_document_type');
+});
+
+it('rolls back historical sales shipment cost repair when adjustment accounting fails', function (): void {
+    [$outbound, $firstInbound] = historicalSalesShipmentCostRepairFixture(existingOutboundCost: 80, firstInboundQuantity: 20, firstInboundCost: 200, outboundQuantity: 10);
+
+    $this->mock(ValueEntryAccountingOrchestrator::class, function ($mock): void {
+        $mock->shouldReceive('post')->once()->andThrow(new RuntimeException('Simulated sales shipment cost repair accounting failure.'));
+    });
+
+    expect(fn () => app(HistoricalSalesShipmentCostRepairService::class)->repair($outbound))
+        ->toThrow(RuntimeException::class, 'Simulated sales shipment cost repair accounting failure');
+
+    expect(ItemApplicationEntry::query()->where('outbound_item_ledger_entry_id', $outbound->id)->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', 'HIST-SALES-SHIP-'.$outbound->entry_number)->exists())->toBeFalse()
+        ->and((float) $outbound->fresh()->cost_amount_actual)->toBe(80.0)
+        ->and((float) $firstInbound->fresh()->remaining_quantity)->toBe(20.0);
+});
+
+it('cost repair leaves unrelated costing defects detectable', function (): void {
+    [$outbound] = historicalSalesShipmentCostRepairFixture(existingOutboundCost: 80, firstInboundQuantity: 20, firstInboundCost: 200, outboundQuantity: 10);
+    app(HistoricalSalesShipmentCostRepairService::class)->repair($outbound);
+
+    $broken = phase1cItemLedgerEntry(phase1cFixture(CostingMethod::FIFO), ItemLedgerEntryType::SALE, -3, 0, 'SS-STILL-BROKEN-COST', '2026-01-03');
+    $broken->forceFill(['document_type' => 'SALES_ORDER_SHIPMENT'])->save();
+
+    expect(Artisan::call('biwms:costing-reconcile', ['--json' => true]))->toBe(0);
+    $report = json_decode(trim(Artisan::output()), true, flags: JSON_THROW_ON_ERROR);
+
+    expect(collect($report['outbound_without_applications'])->pluck('entry_number')->all())->toContain($broken->entry_number)
+        ->and(collect($report['application_quantity_mismatches'])->pluck('entry_number')->all())->toContain($broken->entry_number);
 });
 
 it('applies average cost across open layers', function (): void {
@@ -1027,6 +1189,65 @@ function historicalSalesShipmentRepairFixture(
         ]);
 
     return [$outbound->fresh(), $firstInbound->fresh(), $secondInbound->fresh(), $fixture];
+}
+
+/**
+ * @return array{0: ItemLedgerEntry, 1: ItemLedgerEntry, 2: ItemLedgerEntry, 3: array<string, mixed>}
+ */
+function historicalSalesShipmentCostRepairFixture(
+    string $suffix = 'COST-HIST',
+    float $existingOutboundCost = 80,
+    float $firstInboundQuantity = 20,
+    float $firstInboundCost = 200,
+    float $secondInboundQuantity = 10,
+    float $secondInboundCost = 150,
+    float $outboundQuantity = 10,
+): array {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $firstInbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, $firstInboundQuantity, $firstInboundCost, "PR-{$suffix}-001", '2026-01-01');
+    $secondInbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, $secondInboundQuantity, $secondInboundCost, "PR-{$suffix}-002", '2026-01-02');
+
+    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($firstInbound);
+    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($secondInbound);
+
+    $outbound = historicalSalesShipmentCostRepairOutboundFrom(
+        source: $firstInbound,
+        quantity: $outboundQuantity,
+        documentNumber: "SS-{$suffix}",
+        postingDate: '2026-01-03',
+        existingCost: $existingOutboundCost,
+    );
+    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($outbound);
+
+    return [$outbound->fresh(), $firstInbound->fresh(), $secondInbound->fresh(), $fixture];
+}
+
+function historicalSalesShipmentCostRepairOutboundFrom(
+    ItemLedgerEntry $source,
+    float $quantity,
+    string $documentNumber,
+    string $postingDate,
+    float $existingCost,
+): ItemLedgerEntry {
+    return ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::SALE,
+        'document_type' => 'SALES_ORDER_SHIPMENT',
+        'document_number' => $documentNumber,
+        'document_line_number' => 10000,
+        'item_id' => $source->item_id,
+        'location_id' => $source->location_id,
+        'quantity' => -$quantity,
+        'remaining_quantity' => -$quantity,
+        'cost_amount_actual' => $existingCost,
+        'cost_amount_expected' => 0,
+        'purchase_amount_actual' => $existingCost,
+        'general_business_posting_group_id' => $source->general_business_posting_group_id,
+        'general_product_posting_group_id' => $source->general_product_posting_group_id,
+        'inventory_posting_group_id' => $source->inventory_posting_group_id,
+        'posting_date' => $postingDate,
+        'entry_date' => now(),
+        'open' => false,
+    ]);
 }
 
 /**

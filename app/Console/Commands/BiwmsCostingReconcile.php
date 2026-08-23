@@ -168,7 +168,7 @@ class BiwmsCostingReconcile extends Command
                     return null;
                 }
 
-                $valueCost = abs((float) $economicValueService->originalActualValueForItemLedgerEntry($outbound));
+                $valueCost = abs((float) $economicValueService->economicActualValueForItemLedgerEntry($outbound));
                 $applicationCost = abs((float) $applications->sum('cost_amount'));
 
                 if (abs($valueCost - $applicationCost) <= 0.0001) {
