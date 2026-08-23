@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Enums\AccountCategory;
 use App\Enums\BankAccountLedgerEntryStatus;
 use App\Enums\BankAccountLedgerEntryType;
 use App\Enums\IncomeBalanceType;
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SourceType;
@@ -40,6 +43,7 @@ use App\Services\Finance\BalanceSheetService;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PaymentService;
 use App\Services\IncomeStatementService;
+use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
@@ -425,6 +429,7 @@ it('keeps sales order ship and invoice inventory value movement in agreement wit
     $inventoryAccount = financeAccount('12300', 'Sales Order Inventory', AccountCategory::INVENTORY);
     $revenueAccount = financeAccount('41300', 'Sales Order Revenue', AccountCategory::REVENUE);
     $cogsAccount = financeAccount('51300', 'Sales Order COGS', AccountCategory::COGS);
+    $purchaseOffsetAccount = financeAccount('21300', 'Sales Order Purchase Clearing', AccountCategory::LIABILITY);
 
     $businessGroup = GeneralBusinessPostingGroup::query()->create([
         'code' => 'SO-DOM',
@@ -460,6 +465,7 @@ it('keeps sales order ship and invoice inventory value movement in agreement wit
         'general_product_posting_group_id' => $productGroup->id,
         'sales_account_id' => $revenueAccount->id,
         'cogs_account_id' => $cogsAccount->id,
+        'purchase_account_id' => $purchaseOffsetAccount->id,
         'blocked' => false,
     ]);
 
@@ -481,6 +487,27 @@ it('keeps sales order ship and invoice inventory value movement in agreement wit
         'inventory_posting_group_id' => $inventoryGroup->id,
         'location_id' => $location->id,
     ]);
+
+    $receiptEntry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
+        'document_type' => 'PURCHASE_RECEIPT',
+        'document_number' => 'PR-SO-FIN-001',
+        'document_line_number' => 10000,
+        'item_id' => $item->id,
+        'location_id' => $location->id,
+        'quantity' => 5,
+        'remaining_quantity' => 5,
+        'cost_amount_actual' => 50,
+        'cost_amount_expected' => 0,
+        'purchase_amount_actual' => 50,
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'posting_date' => '2026-06-24',
+        'entry_date' => now(),
+        'open' => true,
+    ]);
+    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($receiptEntry);
 
     $customer = Customer::factory()->create([
         'general_business_posting_group_id' => $businessGroup->id,

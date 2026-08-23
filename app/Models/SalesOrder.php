@@ -10,6 +10,7 @@ use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
 use App\Services\DimensionManagementService;
+use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingDateValidator;
@@ -496,6 +497,7 @@ class SalesOrder extends Model implements Approvable
                         'open' => false,
                     ]);
 
+                    app(ItemApplicationService::class)->applyOutbound($itemLedgerEntry->fresh(), 'sales_order_shipment');
                     app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry->fresh());
 
                     $line->item->decrement('inventory', $baseQuantityToShip);

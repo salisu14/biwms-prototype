@@ -36,6 +36,7 @@ use App\Models\ValueEntry;
 use App\Models\Vendor;
 use App\Services\Inventory\CostAdjustmentService;
 use App\Services\Inventory\ExpectedCostClearingService;
+use App\Services\Inventory\ItemApplicationRepairService;
 use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ReturnCostApplicationService;
 use App\Services\Inventory\StockMovementService;
@@ -82,6 +83,113 @@ it('applies outbound inventory fifo across multiple inbound layers and is idempo
         ->and((float) $outbound->fresh()->cost_amount_actual)->toBe(90.0)
         ->and(ItemApplicationEntry::query()->orderBy('id')->pluck('inbound_item_ledger_entry_id')->all())
         ->toBe([$firstInbound->id, $secondInbound->id]);
+});
+
+it('reports historical sales shipment item application repair in dry run without mutation', function (): void {
+    [$outbound] = historicalSalesShipmentRepairFixture();
+
+    expect(Artisan::call('biwms:item-application-repair', [
+        '--entry' => $outbound->entry_number,
+        '--dry-run' => true,
+    ]))->toBe(0);
+
+    $output = Artisan::output();
+
+    expect($output)->toContain('Mode: dry-run. No data was changed.')
+        ->and($output)->toContain('Eligibility: safe_application_metadata_repair')
+        ->and($output)->toContain('Missing Quantity: 12.00000000')
+        ->and(ItemApplicationEntry::query()->where('outbound_item_ledger_entry_id', $outbound->id)->exists())->toBeFalse();
+});
+
+it('repairs historical sales shipment applications safely and idempotently without value or gl adjustment', function (): void {
+    [$outbound, $firstInbound, $secondInbound] = historicalSalesShipmentRepairFixture();
+
+    expect(Artisan::call('biwms:item-application-repair', [
+        '--entry' => $outbound->entry_number,
+        '--apply' => true,
+    ]))->toBe(0);
+    expect(Artisan::call('biwms:item-application-repair', [
+        '--entry' => $outbound->entry_number,
+        '--apply' => true,
+    ]))->toBe(0);
+
+    $applications = ItemApplicationEntry::query()
+        ->where('outbound_item_ledger_entry_id', $outbound->id)
+        ->where('is_reversed', false)
+        ->orderBy('id')
+        ->get();
+
+    expect($applications)->toHaveCount(2)
+        ->and($applications->pluck('inbound_item_ledger_entry_id')->all())->toBe([$firstInbound->id, $secondInbound->id])
+        ->and((float) $applications->sum('applied_quantity'))->toBe(12.0)
+        ->and((float) $applications->sum('cost_amount'))->toBe(155.0)
+        ->and((float) $firstInbound->fresh()->remaining_quantity)->toBe(0.0)
+        ->and((float) $secondInbound->fresh()->remaining_quantity)->toBe(3.0)
+        ->and(ValueEntry::query()->where('item_ledger_entry_no', $outbound->entry_number)->count())->toBe(1)
+        ->and(ValueEntry::query()->where('item_ledger_entry_no', $outbound->entry_number)->first()?->posting_transaction_id)->toBeNull();
+
+    expect(Artisan::call('biwms:costing-reconcile', ['--json' => true]))->toBe(0);
+    $report = json_decode(trim(Artisan::output()), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['outbound_without_applications'])->toBeEmpty()
+        ->and($report['application_quantity_mismatches'])->toBeEmpty()
+        ->and($report['value_entry_cost_mismatches'])->toBeEmpty();
+});
+
+it('refuses historical item application repair when inventory is insufficient or layer history is ambiguous', function (): void {
+    [$insufficientOutbound] = historicalSalesShipmentRepairFixture(firstQuantity: 2, secondQuantity: 3, outboundQuantity: 12, expectedCost: 65);
+    $insufficient = app(ItemApplicationRepairService::class)->analyze($insufficientOutbound);
+
+    [$adjustmentOutbound] = historicalSalesShipmentRepairFixture(suffix: 'ADJ-NEEDED', expectedCost: 100);
+    $adjustmentRequired = app(ItemApplicationRepairService::class)->analyze($adjustmentOutbound);
+
+    [$ambiguousOutbound] = historicalSalesShipmentRepairFixture(suffix: 'AMBIG');
+    $earlierBroken = phase1cItemLedgerEntry(phase1cFixture(CostingMethod::FIFO), ItemLedgerEntryType::SALE, -1, 0, 'SS-EARLIER-BROKEN', '2026-01-02');
+    $earlierBroken->forceFill([
+        'item_id' => $ambiguousOutbound->item_id,
+        'location_id' => $ambiguousOutbound->location_id,
+        'document_type' => 'SALES_ORDER_SHIPMENT',
+    ])->save();
+    $ambiguous = app(ItemApplicationRepairService::class)->analyze($ambiguousOutbound);
+
+    expect($insufficient['eligible'])->toBeFalse()
+        ->and($insufficient['eligibility_classification'])->toBe('insufficient_historical_inventory')
+        ->and($adjustmentRequired['eligible'])->toBeFalse()
+        ->and($adjustmentRequired['eligibility_classification'])->toBe('value_entry_or_gl_adjustment_required')
+        ->and($adjustmentRequired['value_entry_adjustment_required'])->toBeTrue()
+        ->and($ambiguous['eligible'])->toBeFalse()
+        ->and($ambiguous['eligibility_classification'])->toBe('ambiguous_layer_history');
+});
+
+it('does not duplicate existing correct application and still reports genuinely broken outbound entry', function (): void {
+    [$outbound] = historicalSalesShipmentRepairFixture();
+    app(ItemApplicationRepairService::class)->repair($outbound);
+
+    $analysis = app(ItemApplicationRepairService::class)->repair($outbound->fresh());
+    $broken = phase1cItemLedgerEntry(phase1cFixture(CostingMethod::FIFO), ItemLedgerEntryType::SALE, -3, 0, 'SS-BROKEN-APP', '2026-01-03');
+    $broken->forceFill(['document_type' => 'SALES_ORDER_SHIPMENT'])->save();
+
+    expect($analysis['idempotent'])->toBeTrue()
+        ->and(ItemApplicationEntry::query()->where('outbound_item_ledger_entry_id', $outbound->id)->count())->toBe(2);
+
+    expect(Artisan::call('biwms:costing-reconcile', ['--json' => true]))->toBe(0);
+    $report = json_decode(trim(Artisan::output()), true, flags: JSON_THROW_ON_ERROR);
+
+    expect(collect($report['outbound_without_applications'])->pluck('entry_number')->all())->toContain($broken->entry_number)
+        ->and(collect($report['application_quantity_mismatches'])->pluck('entry_number')->all())->toContain($broken->entry_number);
+});
+
+it('rolls back historical item application repair when downstream value accounting fails', function (): void {
+    [$outbound] = historicalSalesShipmentRepairFixture(glPosted: false);
+
+    $this->mock(ValueEntryAccountingOrchestrator::class, function ($mock): void {
+        $mock->shouldReceive('postForItemLedgerEntry')->once()->andThrow(new RuntimeException('Simulated item application repair accounting failure.'));
+    });
+
+    expect(fn () => app(ItemApplicationRepairService::class)->repair($outbound))
+        ->toThrow(RuntimeException::class, 'Simulated item application repair accounting failure');
+
+    expect(ItemApplicationEntry::query()->where('outbound_item_ledger_entry_id', $outbound->id)->exists())->toBeFalse();
 });
 
 it('applies average cost across open layers', function (): void {
@@ -881,6 +989,44 @@ function phase1cItemLedgerEntry(
     }
 
     return $entry;
+}
+
+/**
+ * @return array{0: ItemLedgerEntry, 1: ItemLedgerEntry, 2: ItemLedgerEntry, 3: array<string, mixed>}
+ */
+function historicalSalesShipmentRepairFixture(
+    string $suffix = 'HIST',
+    float $firstQuantity = 5,
+    float $secondQuantity = 10,
+    float $outboundQuantity = 12,
+    float $expectedCost = 155,
+    bool $glPosted = true,
+): array {
+    $fixture = phase1cFixture(CostingMethod::FIFO);
+    $firstInbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, $firstQuantity, $firstQuantity * 10, "PR-{$suffix}-001", '2026-01-01');
+    $secondInbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, $secondQuantity, $secondQuantity * 15, "PR-{$suffix}-002", '2026-01-02');
+    $outbound = phase1cItemLedgerEntry($fixture, ItemLedgerEntryType::SALE, -$outboundQuantity, $expectedCost, "SS-{$suffix}", '2026-01-03');
+
+    $outbound->forceFill([
+        'document_type' => 'SALES_ORDER_SHIPMENT',
+        'remaining_quantity' => 0,
+        'open' => false,
+    ])->save();
+
+    ValueEntry::query()
+        ->where('item_ledger_entry_no', $outbound->entry_number)
+        ->where('value_entry_state', 'actual')
+        ->update([
+            'document_type' => 'SALES_ORDER_SHIPMENT',
+            'document_no' => $outbound->document_number,
+            'cost_amount_actual' => $expectedCost,
+            'cost_amount_actual_acy' => $expectedCost,
+            'unit_cost' => $outboundQuantity > 0 ? $expectedCost / $outboundQuantity : 0,
+            'gl_posted' => $glPosted,
+            'posting_transaction_id' => null,
+        ]);
+
+    return [$outbound->fresh(), $firstInbound->fresh(), $secondInbound->fresh(), $fixture];
 }
 
 /**

@@ -1,6 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Enums\IncomeBalanceType;
+use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Enums\SalesOrderStatus;
 use App\Filament\Resources\SalesInvoices\Pages\PostedSalesInvoices;
@@ -114,6 +117,7 @@ it('blocks sales order shipment when inventory stock is insufficient', function 
     $this->actingAs($fixture['user']);
 
     $fixture['item']->update(['inventory' => 0]);
+    ItemLedgerEntry::query()->where('item_id', $fixture['item']->id)->delete();
 
     $order = SalesOrder::query()->create([
         'order_number' => 'SO-NEGATIVE-001',
@@ -270,6 +274,26 @@ function postedSalesInvoiceHistoryFixture(): array
         'general_product_posting_group_id' => $productGroup->id,
         'inventory_posting_group_id' => $inventoryGroup->id,
         'location_id' => $location->id,
+    ]);
+
+    ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
+        'document_type' => 'PURCHASE_RECEIPT',
+        'document_number' => 'PR-POSTED-001',
+        'document_line_number' => 10000,
+        'item_id' => $item->id,
+        'location_id' => $location->id,
+        'quantity' => 10,
+        'remaining_quantity' => 10,
+        'cost_amount_actual' => 100,
+        'cost_amount_expected' => 0,
+        'purchase_amount_actual' => 100,
+        'general_business_posting_group_id' => $businessGroup->id,
+        'general_product_posting_group_id' => $productGroup->id,
+        'inventory_posting_group_id' => $inventoryGroup->id,
+        'posting_date' => now()->toDateString(),
+        'entry_date' => now(),
+        'open' => true,
     ]);
 
     $customer = Customer::factory()->create([
