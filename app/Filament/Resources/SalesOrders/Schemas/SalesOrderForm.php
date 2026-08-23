@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\SalesOrders\Schemas;
 
 use App\Enums\SalesOrderStatus;
@@ -11,6 +13,7 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Services\Sales\SalesPricingResolver;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -80,8 +83,16 @@ class SalesOrderForm
                                             ->schema([
                                                 Repeater::make('lines')
                                                     ->relationship()
+                                                    ->saveRelationshipsWhenDisabled()
+                                                    ->minItems(1)
                                                     ->live()
                                                     ->schema([
+                                                        Hidden::make('id')
+                                                            ->dehydrated(),
+
+                                                        Hidden::make('line_number')
+                                                            ->dehydrated(),
+
                                                         Grid::make(12)
                                                             ->schema([
                                                                 Select::make('item_id')
@@ -134,6 +145,7 @@ class SalesOrderForm
                                                                     ->numeric()
                                                                     ->default(1)
                                                                     ->required()
+                                                                    ->minValue(0.00000001)
                                                                     ->columnSpan(2)
                                                                     ->live(onBlur: true),
 
@@ -141,6 +153,7 @@ class SalesOrderForm
                                                                     ->label('Price')
                                                                     ->numeric()
                                                                     ->required()
+                                                                    ->minValue(0)
                                                                     ->columnSpan(2)
                                                                     ->live(onBlur: true)
                                                                     ->prefix(fn ($get) => $get('../../currency_code') ?? 'NGN'),
@@ -149,6 +162,7 @@ class SalesOrderForm
                                                                     ->label('Disc. %')
                                                                     ->numeric()
                                                                     ->default(0)
+                                                                    ->minValue(0)
                                                                     ->suffix('%')
                                                                     ->columnSpan(2)
                                                                     ->live(onBlur: true),
@@ -284,9 +298,10 @@ class SalesOrderForm
                                     ]),
                             ])->persistTabInQueryString(),
                     ])->columnSpan(['lg' => 2])
-                    ->disabled(fn ($record) => $record &&
+                    ->saveRelationshipsWhenDisabled()
+                    ->disabled(fn ($record, string $operation): bool => $operation !== 'create' && $record &&
                         $record->status === SalesOrderStatus::APPROVED &&
-                        ! auth()->user()?->hasRole('SUPER_ADMIN')
+                        ! auth()->user()?->hasAnyRole(['super_admin', 'SUPER_ADMIN'])
                     ),
 
                 Group::make()
@@ -337,9 +352,9 @@ class SalesOrderForm
                                     ]),
                             ]),
                     ])->columnSpan(['lg' => 1])
-                    ->disabled(fn ($record) => $record &&
+                    ->disabled(fn ($record, string $operation): bool => $operation !== 'create' && $record &&
                         $record->status === SalesOrderStatus::APPROVED &&
-                        ! auth()->user()?->hasRole('SUPER_ADMIN')
+                        ! auth()->user()?->hasAnyRole(['super_admin', 'SUPER_ADMIN'])
                     ),
             ])->columns(3);
     }
