@@ -1,13 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\BankAccountLedgerEntries\Schemas;
 
 use App\Enums\BankAccountLedgerEntryStatus;
+use App\Models\BankAccountLedgerEntry;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Number;
 
 class BankAccountLedgerEntryInfolist
 {
@@ -46,17 +50,17 @@ class BankAccountLedgerEntryInfolist
                                 TextEntry::make('entry_type')->badge(),
                                 TextEntry::make('amount')
                                     ->label('Amount')
-                                    ->formatStateUsing(fn ($state) => \Illuminate\Support\Number::currency(abs($state), 'NGN'))
+                                    ->formatStateUsing(fn ($state) => Number::currency(abs($state), 'NGN'))
                                     ->color(fn ($state) => $state < 0 ? 'danger' : 'success')
                                     ->weight('bold'),
                                 TextEntry::make('currency_code')->label('Currency'),
                             ]),
                         Grid::make(4)
                             ->schema([
-                                TextEntry::make('debit_amount')->formatStateUsing(fn ($state) => \Illuminate\Support\Number::currency($state, 'NGN')),
-                                TextEntry::make('credit_amount')->formatStateUsing(fn ($state) => \Illuminate\Support\Number::currency($state, 'NGN')),
-                                TextEntry::make('amount_lcy')->label('Amount (LCY)')->formatStateUsing(fn ($state) => \Illuminate\Support\Number::currency($state, 'NGN')),
-                                TextEntry::make('balance')->formatStateUsing(fn ($state) => \Illuminate\Support\Number::currency($state, 'NGN')),
+                                TextEntry::make('debit_amount')->formatStateUsing(fn ($state) => Number::currency($state, 'NGN')),
+                                TextEntry::make('credit_amount')->formatStateUsing(fn ($state) => Number::currency($state, 'NGN')),
+                                TextEntry::make('amount_lcy')->label('Amount (LCY)')->formatStateUsing(fn ($state) => Number::currency($state, 'NGN')),
+                                TextEntry::make('balance')->formatStateUsing(fn ($state) => Number::currency($state, 'NGN')),
                             ]),
                     ]),
 
@@ -100,12 +104,31 @@ class BankAccountLedgerEntryInfolist
                     ->schema([
                         Grid::make(2)
                             ->schema([
-                                TextEntry::make('glEntry.entry_number')->label('G/L Entry')->placeholder('-')->color('primary'),
-                                TextEntry::make('vendorLedgerEntry.entry_number')->label('Vendor Entry')->placeholder('-'),
+                                TextEntry::make('related_gl_entries')
+                                    ->label('G/L Entries')
+                                    ->state(fn (BankAccountLedgerEntry $record): ?string => $record->relatedGlEntriesQuery()
+                                        ->orderBy('entry_number')
+                                        ->pluck('entry_number')
+                                        ->implode(', ') ?: null)
+                                    ->placeholder('-')
+                                    ->color('primary'),
+                                TextEntry::make('related_vendor_entries')
+                                    ->label('Vendor Entries')
+                                    ->state(fn (BankAccountLedgerEntry $record): ?string => $record->relatedVendorLedgerEntriesQuery()
+                                        ->orderBy('entry_number')
+                                        ->pluck('entry_number')
+                                        ->implode(', ') ?: null)
+                                    ->placeholder('-'),
                             ]),
                         Grid::make(2)
                             ->schema([
-                                TextEntry::make('customerLedgerEntry.entry_number')->label('Customer Entry')->placeholder('-'),
+                                TextEntry::make('related_customer_entries')
+                                    ->label('Customer Entries')
+                                    ->state(fn (BankAccountLedgerEntry $record): ?string => $record->relatedCustomerLedgerEntriesQuery()
+                                        ->orderBy('entry_number')
+                                        ->pluck('entry_number')
+                                        ->implode(', ') ?: null)
+                                    ->placeholder('-'),
                                 TextEntry::make('transferEntry.entry_number')->label('Transfer Entry')->placeholder('-'),
                             ]),
                     ]),

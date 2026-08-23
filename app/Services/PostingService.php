@@ -316,7 +316,8 @@ class PostingService
         \DateTime $postingDate,
         string $documentNumber,
         ?int $currencyId = null,
-        ?float $exchangeRate = null
+        ?float $exchangeRate = null,
+        ?int $customerLedgerEntryId = null
     ): array {
         $arAccount = $customer->customerPostingGroup?->receivablesAccount;
         $bankGlAccount = $bankAccount->glAccount;
@@ -325,7 +326,7 @@ class PostingService
             throw new PostingSetupException('Missing account setup for payment receipt.');
         }
 
-        return DB::transaction(function () use ($customer, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $arAccount, $bankGlAccount, $currencyId, $exchangeRate) {
+        return DB::transaction(function () use ($customer, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $arAccount, $bankGlAccount, $currencyId, $exchangeRate, $customerLedgerEntryId) {
             $entries = [];
 
             // Debit Bank
@@ -355,6 +356,7 @@ class PostingService
                 'posting_date' => $postingDate,
                 'currency_id' => $currencyId,
                 'exchange_rate' => $exchangeRate,
+                'cust_ledger_entry_id' => $customerLedgerEntryId,
                 'description' => "Payment received - {$documentNumber}",
             ]);
 
@@ -393,7 +395,8 @@ class PostingService
         \DateTime $postingDate,
         string $documentNumber,
         ?int $currencyId = null,
-        ?float $exchangeRate = null
+        ?float $exchangeRate = null,
+        ?int $vendorLedgerEntryId = null
     ): array {
         $apAccount = $vendor->vendorPostingGroup?->payablesAccount;
         $bankGlAccount = $bankAccount->glAccount;
@@ -402,7 +405,7 @@ class PostingService
             throw new PostingSetupException('Missing account setup for payment disbursement.');
         }
 
-        return DB::transaction(function () use ($vendor, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $apAccount, $bankGlAccount, $currencyId, $exchangeRate) {
+        return DB::transaction(function () use ($vendor, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $apAccount, $bankGlAccount, $currencyId, $exchangeRate, $vendorLedgerEntryId) {
             $entries = [];
 
             // 1. Debit: A/P (decrease payable)
@@ -417,6 +420,7 @@ class PostingService
                 'posting_date' => $postingDate,
                 'currency_id' => $currencyId,
                 'exchange_rate' => $exchangeRate,
+                'vendor_ledger_entry_id' => $vendorLedgerEntryId,
                 'description' => "Payment to {$vendor->name}",
             ]);
 

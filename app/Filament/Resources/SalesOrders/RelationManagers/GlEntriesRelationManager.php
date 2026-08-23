@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\SalesOrders\RelationManagers;
 
+use App\Models\GlEntry;
+use App\Models\SalesOrder;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\Summarizers\Sum;
@@ -24,6 +28,9 @@ class GlEntriesRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->query(fn () => $this->ownerRecord instanceof SalesOrder
+                ? $this->ownerRecord->accountingGlEntriesQuery()
+                : GlEntry::query()->whereRaw('1 = 0'))
             ->recordTitleAttribute('description')
             ->columns([
                 TextColumn::make('posting_date')->date()->sortable(),

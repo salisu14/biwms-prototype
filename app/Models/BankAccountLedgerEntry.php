@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\BankAccountLedgerEntryStatus;
 use App\Enums\BankAccountLedgerEntryType;
 use App\Enums\CheckType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -130,6 +131,74 @@ class BankAccountLedgerEntry extends Model
     public function transferEntry(): BelongsTo
     {
         return $this->belongsTo(self::class, 'transfer_entry_id');
+    }
+
+    public function relatedGlEntriesQuery(): Builder
+    {
+        if (! $this->gl_entry_id && blank($this->document_no)) {
+            return GlEntry::query()->whereRaw('1 = 0');
+        }
+
+        return GlEntry::query()
+            ->where(function (Builder $query): void {
+                if ($this->gl_entry_id) {
+                    $query->whereKey($this->gl_entry_id);
+                }
+
+                if ($this->document_no) {
+                    $query->orWhere(function (Builder $query): void {
+                        $query
+                            ->where('document_type', 'PAYMENT')
+                            ->where('document_number', $this->document_no);
+                    });
+                }
+            });
+    }
+
+    public function relatedCustomerLedgerEntriesQuery(): Builder
+    {
+        if (! $this->customer_ledger_entry_id && ($this->source_type !== Payment::class || ! $this->source_id)) {
+            return CustomerLedgerEntry::query()->whereRaw('1 = 0');
+        }
+
+        return CustomerLedgerEntry::query()
+            ->where(function (Builder $query): void {
+                if ($this->customer_ledger_entry_id) {
+                    $query->whereKey($this->customer_ledger_entry_id);
+                }
+
+                if ($this->source_type === Payment::class && $this->source_id) {
+                    $query->orWhere(function (Builder $query): void {
+                        $query
+                            ->where('source_type', Payment::class)
+                            ->where('source_id', $this->source_id)
+                            ->where('document_number', $this->document_no);
+                    });
+                }
+            });
+    }
+
+    public function relatedVendorLedgerEntriesQuery(): Builder
+    {
+        if (! $this->vendor_ledger_entry_id && ($this->source_type !== Payment::class || ! $this->source_id)) {
+            return VendorLedgerEntry::query()->whereRaw('1 = 0');
+        }
+
+        return VendorLedgerEntry::query()
+            ->where(function (Builder $query): void {
+                if ($this->vendor_ledger_entry_id) {
+                    $query->whereKey($this->vendor_ledger_entry_id);
+                }
+
+                if ($this->source_type === Payment::class && $this->source_id) {
+                    $query->orWhere(function (Builder $query): void {
+                        $query
+                            ->where('source_type', Payment::class)
+                            ->where('source_id', $this->source_id)
+                            ->where('document_number', $this->document_no);
+                    });
+                }
+            });
     }
 
     public function reversedEntry(): BelongsTo

@@ -16,6 +16,7 @@ use App\Services\NumberSeriesService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
 use App\Traits\Approvable as ApprovableTrait;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -289,6 +290,53 @@ class SalesOrder extends Model implements Approvable
         return $this->hasMany(GlEntry::class, 'source_number', 'order_number')
             ->where('source_type', 'CUSTOMER')
             ->whereIn('source_number', $this->postedInvoices()->select('document_number'));
+    }
+
+    public function accountingGlEntriesQuery(): Builder
+    {
+        $shipmentDocumentNumber = $this->getShipmentDocumentNumber();
+
+        $shipmentItemLedgerEntryNumbers = ItemLedgerEntry::query()
+            ->select('entry_number')
+            ->where('source_type', self::class)
+            ->where('source_id', $this->id)
+            ->where('document_type', 'SALES_ORDER_SHIPMENT')
+            ->where('document_number', $shipmentDocumentNumber);
+
+        $shipmentItemLedgerEntryIds = ItemLedgerEntry::query()
+            ->select('id')
+            ->where('source_type', self::class)
+            ->where('source_id', $this->id)
+            ->where('document_type', 'SALES_ORDER_SHIPMENT')
+            ->where('document_number', $shipmentDocumentNumber);
+
+        $shipmentPostingTransactionIds = ValueEntry::query()
+            ->select('posting_transaction_id')
+            ->whereIn('item_ledger_entry_no', $shipmentItemLedgerEntryNumbers)
+            ->where('document_type', 'SALES_ORDER_SHIPMENT')
+            ->where('document_no', $shipmentDocumentNumber)
+            ->whereNotNull('posting_transaction_id');
+
+        $postedInvoiceNumbers = $this->postedInvoices()
+            ->select('document_number');
+
+        return GlEntry::query()
+            ->with('chartOfAccount')
+            ->where(function (Builder $query) use ($shipmentDocumentNumber, $shipmentItemLedgerEntryIds, $shipmentPostingTransactionIds, $postedInvoiceNumbers): void {
+                $query
+                    ->whereIn('posting_transaction_id', $shipmentPostingTransactionIds)
+                    ->orWhere(function (Builder $query) use ($shipmentDocumentNumber, $shipmentItemLedgerEntryIds): void {
+                        $query
+                            ->where('document_type', 'SALES_ORDER_SHIPMENT')
+                            ->where('document_number', $shipmentDocumentNumber)
+                            ->whereIn('item_ledger_entry_id', $shipmentItemLedgerEntryIds);
+                    })
+                    ->orWhere(function (Builder $query) use ($postedInvoiceNumbers): void {
+                        $query
+                            ->where('document_type', 'SALES_INVOICE')
+                            ->whereIn('document_number', $postedInvoiceNumbers);
+                    });
+            });
     }
 
     // ==================== SCOPES ====================

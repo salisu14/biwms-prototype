@@ -16,8 +16,10 @@ use App\Filament\Sales\Resources\SalesOrders\Pages\CreateSalesOrder;
 use App\Filament\Sales\Resources\SalesOrders\Pages\EditSalesOrder;
 use App\Filament\Sales\Resources\SalesOrders\Pages\ListSalesOrders;
 use App\Models\AccountingPeriod;
+use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
+use App\Models\CustomerLedgerEntry;
 use App\Models\CustomerPostingGroup;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralLedgerSetup;
@@ -33,12 +35,15 @@ use App\Models\ItemUomAssignment;
 use App\Models\Location;
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
+use App\Models\Payment;
 use App\Models\Role;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderLine;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Services\Accounting\LedgerSequenceAllocator;
+use App\Services\Finance\PaymentService;
 use App\Support\SalesOrderPostingActionHandler;
 use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -383,6 +388,139 @@ it('post plus invoice is successful and keeps shipment and invoice accounting id
     expect(fn () => $order->fresh()->postShipment())->toThrow(ValidationException::class);
 });
 
+it('traces sales order shipment and posted invoice gl entries through canonical lifecycle ownership', function (): void {
+    $user = salesOrderFilamentUser();
+    $fixture = salesOrderFilamentFixture();
+    salesOrderFilamentNumberSeries();
+    salesOrderFilamentInvoiceNumberSeries();
+    salesOrderFilamentInboundLayer($fixture, 10, 500);
+
+    Livewire::actingAs($user)
+        ->test(CreateSalesOrder::class)
+        ->fillForm(salesOrderFilamentPayload($fixture, SalesOrderStatus::APPROVED))
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $order = SalesOrder::query()->with('lines')->firstOrFail();
+
+    app(SalesOrderPostingActionHandler::class)->postAndInvoice($order);
+
+    $order->refresh();
+    $shipmentDocumentNumber = "SS-{$order->order_number}";
+    $postedInvoice = $order->postedInvoices()->firstOrFail();
+    $outboundEntry = ItemLedgerEntry::query()
+        ->where('document_number', $shipmentDocumentNumber)
+        ->where('entry_type', ItemLedgerEntryType::SALE)
+        ->firstOrFail();
+    $shipmentValueEntry = ValueEntry::query()
+        ->where('document_no', $shipmentDocumentNumber)
+        ->where('item_ledger_entry_no', $outboundEntry->entry_number)
+        ->firstOrFail();
+
+    salesOrderFilamentCreateUnrelatedGlEntry('SALES_INVOICE', 'SI-UNRELATED');
+    salesOrderFilamentCreateUnrelatedGlEntry('COST_ADJUSTMENT', $shipmentDocumentNumber, $outboundEntry->id);
+
+    $glEntries = $order->accountingGlEntriesQuery()
+        ->orderBy('document_type')
+        ->orderBy('entry_number')
+        ->get();
+
+    expect($glEntries)->toHaveCount(4)
+        ->and($glEntries->pluck('document_number')->unique()->values()->all())->toContain($shipmentDocumentNumber, $postedInvoice->document_number)
+        ->and($glEntries->where('posting_transaction_id', $shipmentValueEntry->posting_transaction_id))->toHaveCount(2)
+        ->and($glEntries->where('document_number', $postedInvoice->document_number))->toHaveCount(2)
+        ->and($glEntries->pluck('document_number')->all())->not->toContain('SI-UNRELATED')
+        ->and($glEntries->where('document_type', 'COST_ADJUSTMENT'))->toHaveCount(0);
+
+    salesOrderFilamentBankLedgerNumberSeries();
+    $bankAccount = BankAccount::factory()->receiptOnly()->create([
+        'gl_account_id' => salesOrderFilamentAccount('10600', 'Trace Bank', AccountCategory::ASSET)->id,
+        'current_balance' => 1800,
+        'available_balance' => 1800,
+    ]);
+    $payment = Payment::factory()->customerReceipt()->create([
+        'party_id' => $fixture['customer']->id,
+        'party_name' => $fixture['customer']->name,
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 50000,
+        'payment_amount_lcy' => 50000,
+        'applied_amount' => 0,
+        'unapplied_amount' => 50000,
+        'status' => 'APPROVED',
+        'created_by' => $user->id,
+    ]);
+
+    app(PaymentService::class)->post($payment, $user->id);
+    app(PaymentService::class)->applyToDocument($payment->fresh(), [
+        'document_type' => 'SALES_INVOICE',
+        'document_id' => $postedInvoice->id,
+        'amount' => 1500,
+    ], $user->id);
+
+    $payment->refresh();
+    $postedInvoice->refresh();
+    $paymentBankEntry = $bankAccount->ledgerEntries()->where('document_no', $payment->payment_number)->firstOrFail();
+
+    expect((float) $postedInvoice->remaining_amount)->toBe(0.0)
+        ->and((float) $payment->applied_amount)->toBe(1500.0)
+        ->and((float) $payment->unapplied_amount)->toBe(48500.0)
+        ->and($paymentBankEntry->relatedGlEntriesQuery()->count())->toBe(2)
+        ->and($paymentBankEntry->relatedCustomerLedgerEntriesQuery()->count())->toBe(1)
+        ->and((float) $bankAccount->fresh()->current_balance)->toBe(51800.0);
+});
+
+it('traces customer payment bank ledger to customer ledger and payment gl entries without relying on direct links only', function (): void {
+    $user = salesOrderFilamentUser();
+    $fixture = salesOrderFilamentFixture();
+    salesOrderFilamentBankLedgerNumberSeries();
+    $bankAccount = BankAccount::factory()->receiptOnly()->create([
+        'gl_account_id' => salesOrderFilamentAccount('10600', 'Trace Bank', AccountCategory::ASSET)->id,
+        'current_balance' => 0,
+        'available_balance' => 0,
+    ]);
+    $payment = Payment::factory()->customerReceipt()->create([
+        'party_id' => $fixture['customer']->id,
+        'party_name' => $fixture['customer']->name,
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 50000,
+        'payment_amount_lcy' => 50000,
+        'applied_amount' => 0,
+        'unapplied_amount' => 50000,
+        'status' => 'APPROVED',
+        'created_by' => $user->id,
+    ]);
+
+    app(PaymentService::class)->post($payment, $user->id);
+
+    $bankEntry = $bankAccount->ledgerEntries()->where('document_no', $payment->payment_number)->firstOrFail();
+    $customerEntry = CustomerLedgerEntry::query()
+        ->where('document_number', $payment->payment_number)
+        ->where('customer_id', $fixture['customer']->id)
+        ->firstOrFail();
+
+    expect($bankEntry->gl_entry_id)->not->toBeNull()
+        ->and($bankEntry->customer_ledger_entry_id)->toBe($customerEntry->id)
+        ->and($customerEntry->gl_entry_id)->not->toBeNull()
+        ->and($bankEntry->relatedGlEntriesQuery()->count())->toBe(2)
+        ->and($bankEntry->relatedCustomerLedgerEntriesQuery()->pluck('id')->all())->toBe([$customerEntry->id])
+        ->and(GlEntry::query()->where('cust_ledger_entry_id', $customerEntry->id)->count())->toBe(1);
+
+    $historicalBankEntry = $bankEntry->replicate([
+        'entry_number',
+        'gl_entry_id',
+        'customer_ledger_entry_id',
+        'vendor_ledger_entry_id',
+    ]);
+    $historicalBankEntry->entry_number = $bankEntry->entry_number + 1000;
+    $historicalBankEntry->gl_entry_id = null;
+    $historicalBankEntry->customer_ledger_entry_id = null;
+    $historicalBankEntry->vendor_ledger_entry_id = null;
+    $historicalBankEntry->save();
+
+    expect($historicalBankEntry->relatedGlEntriesQuery()->count())->toBe(2)
+        ->and($historicalBankEntry->relatedCustomerLedgerEntriesQuery()->pluck('id')->all())->toBe([$customerEntry->id]);
+});
+
 function salesOrderFilamentUser(): User
 {
     $role = Role::query()->firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
@@ -627,6 +765,38 @@ function salesOrderFilamentInvoiceNumberSeries(): void
     ]);
 }
 
+function salesOrderFilamentBankLedgerNumberSeries(): void
+{
+    $series = NumberSeries::query()->firstOrCreate(
+        ['code' => 'BANK-LEDGER'],
+        [
+            'description' => 'Bank Ledger Entries',
+            'prefix' => '',
+            'starting_number' => 1,
+            'ending_number' => null,
+            'current_number' => 0,
+            'year' => 2026,
+            'is_active' => true,
+            'allow_manual' => false,
+            'module' => 'finance',
+        ],
+    );
+
+    NumberSeriesLine::query()->firstOrCreate(
+        ['number_series_id' => $series->id, 'starting_date' => now()->startOfYear()->toDateString()],
+        [
+            'prefix' => '',
+            'suffix' => '',
+            'starting_no' => 0,
+            'ending_no' => null,
+            'increment_by' => 1,
+            'last_no_used' => 0,
+            'no_of_digits' => 6,
+            'blocked' => false,
+        ],
+    );
+}
+
 function salesOrderFilamentAccount(string $number, string $name, AccountCategory $category): ChartOfAccount
 {
     return ChartOfAccount::query()->create([
@@ -640,5 +810,29 @@ function salesOrderFilamentAccount(string $number, string $name, AccountCategory
         'income_balance' => $category->isBalanceSheet()
             ? IncomeBalanceType::BALANCE_SHEET
             : IncomeBalanceType::INCOME_STATEMENT,
+    ]);
+}
+
+function salesOrderFilamentCreateUnrelatedGlEntry(string $documentType, string $documentNumber, ?int $itemLedgerEntryId = null): GlEntry
+{
+    return GlEntry::query()->create([
+        'entry_number' => app(LedgerSequenceAllocator::class)->nextGlEntryNumber(),
+        'transaction_number' => app(LedgerSequenceAllocator::class)->nextGlTransactionNumber(),
+        'chart_of_account_id' => salesOrderFilamentAccount('9'.fake()->unique()->numerify('####'), 'Unrelated Trace Account', AccountCategory::ASSET)->id,
+        'debit_amount' => 1,
+        'debit_amount_lcy' => 1,
+        'credit_amount' => 0,
+        'credit_amount_lcy' => 0,
+        'amount' => 1,
+        'amount_lcy' => 1,
+        'source_type' => 'CUSTOMER',
+        'source_module' => 'test',
+        'source_number' => $documentNumber,
+        'document_type' => $documentType,
+        'document_number' => $documentNumber,
+        'posting_date' => '2026-08-23',
+        'document_date' => '2026-08-23',
+        'description' => 'Unrelated trace entry',
+        'item_ledger_entry_id' => $itemLedgerEntryId,
     ]);
 }

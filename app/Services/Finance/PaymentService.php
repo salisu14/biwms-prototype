@@ -7,9 +7,11 @@ namespace App\Services\Finance;
 use App\Events\PaymentApplied;
 use App\Events\PaymentUnapplied;
 use App\Exceptions\PostingSetupException;
+use App\Models\BankAccountLedgerEntry;
 use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
+use App\Models\GlEntry;
 use App\Models\Payment;
 use App\Models\PaymentApplication;
 use App\Models\PostedPurchaseCreditMemo;
@@ -82,17 +84,19 @@ class PaymentService
             }
 
             // 1. Create Ledger Entries
+            $partyLedgerEntry = null;
             if ($payment->payment_direction === 'RECEIPT') {
-                $this->postCustomerReceipt($payment, $userId);
+                $partyLedgerEntry = $this->postCustomerReceipt($payment, $userId);
             } else {
-                $this->postVendorPayment($payment, $userId);
+                $partyLedgerEntry = $this->postVendorPayment($payment, $userId);
             }
 
             // 2. Create Bank Ledger Entry
-            $this->postBankLedgerEntry($payment, $userId);
+            $bankLedgerEntry = $this->postBankLedgerEntry($payment, $userId);
 
             // 3. Create G/L Entries via PostingService
-            $this->postGlEntries($payment);
+            $glEntries = $this->postGlEntries($payment, $partyLedgerEntry);
+            $this->linkPaymentLedgerEntries($payment, $bankLedgerEntry, $partyLedgerEntry, $glEntries);
 
             // 4. Update status
             $payment->update([
@@ -557,7 +561,7 @@ class PaymentService
 
     // --- Internal Posting Helpers ---
 
-    protected function postCustomerReceipt(Payment $payment, int $userId): void
+    protected function postCustomerReceipt(Payment $payment, int $userId): CustomerLedgerEntry
     {
         $customer = $this->resolveCustomerForReceipt($payment);
 
@@ -569,7 +573,7 @@ class PaymentService
         $nextEntryNumber = ((int) ($lastEntry?->entry_number ?? 0)) + 1;
         $runningBalance = (float) ($lastEntry?->running_balance ?? 0) - (float) $payment->payment_amount;
 
-        CustomerLedgerEntry::create([
+        return CustomerLedgerEntry::create([
             'entry_number' => $nextEntryNumber,
             'customer_id' => $customer->id,
             'document_type' => 'PAYMENT',
@@ -597,7 +601,7 @@ class PaymentService
         ]);
     }
 
-    protected function postVendorPayment(Payment $payment, int $userId): void
+    protected function postVendorPayment(Payment $payment, int $userId): VendorLedgerEntry
     {
         $vendor = $this->resolveVendorForPayment($payment);
 
@@ -609,7 +613,7 @@ class PaymentService
         $nextEntryNumber = ((int) ($lastEntry?->entry_number ?? 0)) + 1;
         $runningBalance = (float) ($lastEntry?->running_balance ?? 0) - (float) $payment->payment_amount;
 
-        VendorLedgerEntry::create([
+        return VendorLedgerEntry::create([
             'entry_number' => $nextEntryNumber,
             'vendor_id' => $vendor->id,
             'document_type' => 'PAYMENT',
@@ -714,10 +718,10 @@ class PaymentService
         return $vendor;
     }
 
-    protected function postGlEntries(Payment $payment): void
+    protected function postGlEntries(Payment $payment, CustomerLedgerEntry|VendorLedgerEntry|null $partyLedgerEntry = null): array
     {
         if ($payment->payment_direction === 'RECEIPT') {
-            $this->postingService->postPaymentReceipt(
+            return $this->postingService->postPaymentReceipt(
                 customer: $payment->customer,
                 amount: (float) $payment->payment_amount,
                 bankAccount: $payment->bankAccount,
@@ -725,23 +729,25 @@ class PaymentService
                 postingDate: $payment->posting_date->toDateTime(),
                 documentNumber: $payment->payment_number,
                 currencyId: $payment->currency_id,
-                exchangeRate: (float) $payment->currency_factor
-            );
-        } else {
-            $this->postingService->postPaymentDisbursement(
-                vendor: $payment->vendor,
-                amount: (float) $payment->payment_amount,
-                bankAccount: $payment->bankAccount,
-                discount: (float) $payment->discount_taken,
-                postingDate: $payment->posting_date->toDateTime(),
-                documentNumber: $payment->payment_number,
-                currencyId: $payment->currency_id,
-                exchangeRate: (float) $payment->currency_factor
+                exchangeRate: (float) $payment->currency_factor,
+                customerLedgerEntryId: $partyLedgerEntry instanceof CustomerLedgerEntry ? $partyLedgerEntry->id : null,
             );
         }
+
+        return $this->postingService->postPaymentDisbursement(
+            vendor: $payment->vendor,
+            amount: (float) $payment->payment_amount,
+            bankAccount: $payment->bankAccount,
+            discount: (float) $payment->discount_taken,
+            postingDate: $payment->posting_date->toDateTime(),
+            documentNumber: $payment->payment_number,
+            currencyId: $payment->currency_id,
+            exchangeRate: (float) $payment->currency_factor,
+            vendorLedgerEntryId: $partyLedgerEntry instanceof VendorLedgerEntry ? $partyLedgerEntry->id : null,
+        );
     }
 
-    protected function postBankLedgerEntry(Payment $payment, int $userId): void
+    protected function postBankLedgerEntry(Payment $payment, int $userId): BankAccountLedgerEntry
     {
         $data = [
             'amount' => (float) $payment->payment_amount,
@@ -763,12 +769,49 @@ class PaymentService
         ];
 
         if ($payment->payment_direction === 'RECEIPT') {
-            $this->bankAccountLedgerService->postDeposit($payment->bankAccount, $data);
-
-            return;
+            return $this->bankAccountLedgerService->postDeposit($payment->bankAccount, $data);
         }
 
-        $this->bankAccountLedgerService->postPayment($payment->bankAccount, $data);
+        return $this->bankAccountLedgerService->postPayment($payment->bankAccount, $data);
+    }
+
+    /**
+     * @param  array<int, GlEntry>  $glEntries
+     */
+    protected function linkPaymentLedgerEntries(
+        Payment $payment,
+        BankAccountLedgerEntry $bankLedgerEntry,
+        CustomerLedgerEntry|VendorLedgerEntry|null $partyLedgerEntry,
+        array $glEntries,
+    ): void {
+        $bankGlAccountId = $payment->bankAccount?->gl_account_id;
+        $bankGlEntry = collect($glEntries)
+            ->first(fn (GlEntry $entry): bool => $bankGlAccountId !== null && (int) $entry->chart_of_account_id === (int) $bankGlAccountId);
+
+        $partyGlEntry = collect($glEntries)
+            ->first(function (GlEntry $entry) use ($partyLedgerEntry): bool {
+                if ($partyLedgerEntry instanceof CustomerLedgerEntry) {
+                    return (int) ($entry->cust_ledger_entry_id ?? 0) === $partyLedgerEntry->id;
+                }
+
+                if ($partyLedgerEntry instanceof VendorLedgerEntry) {
+                    return (int) ($entry->vendor_ledger_entry_id ?? 0) === $partyLedgerEntry->id;
+                }
+
+                return false;
+            });
+
+        $bankLedgerEntry->forceFill([
+            'gl_entry_id' => $bankGlEntry?->id,
+            'customer_ledger_entry_id' => $partyLedgerEntry instanceof CustomerLedgerEntry ? $partyLedgerEntry->id : null,
+            'vendor_ledger_entry_id' => $partyLedgerEntry instanceof VendorLedgerEntry ? $partyLedgerEntry->id : null,
+        ])->save();
+
+        if ($partyLedgerEntry && $partyGlEntry) {
+            $partyLedgerEntry->forceFill([
+                'gl_entry_id' => $partyGlEntry->id,
+            ])->save();
+        }
     }
 
     protected function findDocument(string $type, int $id): ?Model
