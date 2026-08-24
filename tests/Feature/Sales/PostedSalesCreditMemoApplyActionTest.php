@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Enums\ApprovalStatus;
+use App\Filament\Resources\SalesCreditMemos\Pages\ViewSalesCreditMemo;
 use App\Filament\Resources\SalesInvoices\Pages\ViewPostedSalesCreditMemo;
 use App\Filament\Resources\SalesInvoices\Pages\ViewPostedSalesInvoice;
 use App\Models\CustomerLedgerApplication;
@@ -11,6 +13,7 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Permission;
 use App\Models\PostedSalesInvoice;
 use App\Models\Role;
+use App\Models\SalesCreditMemo;
 use App\Models\User;
 use App\Models\ValueEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -94,6 +97,50 @@ it('filters eligible target invoices to open same customer posted invoices', fun
         ->and($options)->not->toHaveKey($otherCustomerFixture['postedInvoice']->id);
 });
 
+it('shows the apply action on the normal posted sales credit memo view even when no eligible invoice exists', function (): void {
+    $fixture = postedSalesCreditMemoApplyActionFixture($this, 300.00, 1000.00);
+    postedSalesCreditMemoApplyActionCloseInvoice($fixture);
+
+    Livewire::actingAs(postedSalesCreditMemoApplyActionUser())
+        ->test(ViewSalesCreditMemo::class, ['record' => $fixture['salesCreditMemo']->getRouteKey()])
+        ->assertActionVisible('applyCreditMemo')
+        ->mountAction('applyCreditMemo')
+        ->assertActionMounted('applyCreditMemo')
+        ->assertMountedActionModalSee('No eligible open invoices are available for this customer.');
+
+    expect(CustomerLedgerApplication::query()->count())->toBe(0)
+        ->and((float) $fixture['postedCreditMemo']->fresh()->remaining_amount)->toBe(300.00)
+        ->and((float) $fixture['postedInvoice']->fresh()->remaining_amount)->toBe(0.00);
+});
+
+it('filters eligible invoices on the normal sales credit memo view', function (): void {
+    $fixture = postedSalesCreditMemoApplyActionFixture($this, 300.00, 1000.00);
+    $otherCustomerFixture = postedSalesCreditMemoApplyActionFixture($this, 300.00, 1000.00);
+    $paidFixture = postedSalesCreditMemoApplyActionFixture($this, 300.00, 1000.00);
+
+    $paidFixture['postedInvoice']->forceFill([
+        'customer_id' => $fixture['customer']->id,
+        'remaining_amount' => 0,
+        'paid_in_full' => true,
+    ])->save();
+
+    postedSalesCreditMemoApplyActionInvoiceEntry($paidFixture)->forceFill([
+        'remaining_amount' => 0,
+        'open' => false,
+        'fully_applied' => true,
+    ])->save();
+
+    $component = Livewire::actingAs(postedSalesCreditMemoApplyActionUser())
+        ->test(ViewSalesCreditMemo::class, ['record' => $fixture['salesCreditMemo']->getRouteKey()])
+        ->instance();
+
+    $options = $component->eligiblePostedInvoiceOptions();
+
+    expect($options)->toHaveKey($fixture['postedInvoice']->id)
+        ->and($options)->not->toHaveKey($paidFixture['postedInvoice']->id)
+        ->and($options)->not->toHaveKey($otherCustomerFixture['postedInvoice']->id);
+});
+
 it('applies credit to a posted invoice through the Filament action without creating accounting rows', function (): void {
     $fixture = postedSalesCreditMemoApplyActionFixture($this, 300.00, 1000.00);
     $ledgerEntryCount = CustomerLedgerEntry::query()->count();
@@ -125,6 +172,57 @@ it('applies credit to a posted invoice through the Filament action without creat
         ->and(GlEntry::query()->count())->toBe($glEntryCount)
         ->and(ItemLedgerEntry::query()->count())->toBe($itemLedgerEntryCount)
         ->and(ValueEntry::query()->count())->toBe($valueEntryCount);
+});
+
+it('applies credit through the normal sales credit memo view without changing accounting economics', function (): void {
+    $fixture = postedSalesCreditMemoApplyActionFixture($this, 300.00, 1000.00);
+    $customerBalanceBefore = CustomerLedgerEntry::getBalance($fixture['customer']->id);
+    $ledgerEntryCount = CustomerLedgerEntry::query()->count();
+    $glEntryCount = GlEntry::query()->count();
+    $itemLedgerEntryCount = ItemLedgerEntry::query()->count();
+    $valueEntryCount = ValueEntry::query()->count();
+
+    Livewire::actingAs(postedSalesCreditMemoApplyActionUser())
+        ->test(ViewSalesCreditMemo::class, ['record' => $fixture['salesCreditMemo']->getRouteKey()])
+        ->callAction('applyCreditMemo', data: [
+            'target_invoice_id' => $fixture['postedInvoice']->id,
+            'amount' => 300.00,
+        ])
+        ->assertHasNoActionErrors();
+
+    $fixture['postedCreditMemo']->refresh();
+    $fixture['postedInvoice']->refresh();
+
+    expect((float) $fixture['postedCreditMemo']->remaining_amount)->toBe(0.00)
+        ->and((float) $fixture['postedInvoice']->remaining_amount)->toBe(700.00)
+        ->and(CustomerLedgerApplication::query()->count())->toBe(1)
+        ->and(CustomerLedgerEntry::getBalance($fixture['customer']->id))->toBe($customerBalanceBefore)
+        ->and(CustomerLedgerEntry::query()->count())->toBe($ledgerEntryCount)
+        ->and(CustomerLedgerEntry::query()->where('document_type', 'CREDIT_MEMO_APPLICATION')->count())->toBe(0)
+        ->and(GlEntry::query()->count())->toBe($glEntryCount)
+        ->and(ItemLedgerEntry::query()->count())->toBe($itemLedgerEntryCount)
+        ->and(ValueEntry::query()->count())->toBe($valueEntryCount);
+});
+
+it('hides the normal sales credit memo apply action for closed states and unauthorized users', function (): void {
+    $fixture = postedSalesCreditMemoApplyActionFixture($this, 300.00, 1000.00);
+
+    Livewire::actingAs(postedSalesCreditMemoApplyActionUser(canApply: false))
+        ->test(ViewSalesCreditMemo::class, ['record' => $fixture['salesCreditMemo']->getRouteKey()])
+        ->assertActionHidden('applyCreditMemo');
+
+    foreach ([
+        ['fully_applied' => true, 'remaining_amount' => 0],
+        ['refunded' => true],
+        ['corrected' => true],
+    ] as $attributes) {
+        $fixture = postedSalesCreditMemoApplyActionFixture($this, 300.00, 1000.00);
+        $fixture['postedCreditMemo']->forceFill($attributes)->save();
+
+        Livewire::actingAs(postedSalesCreditMemoApplyActionUser())
+            ->test(ViewSalesCreditMemo::class, ['record' => $fixture['salesCreditMemo']->getRouteKey()])
+            ->assertActionHidden('applyCreditMemo');
+    }
 });
 
 it('renders canonical credit memo application history on the credit memo and invoice pages', function (): void {
@@ -159,6 +257,18 @@ function postedSalesCreditMemoApplyActionFixture($testCase, float $creditAmount,
     );
 
     $fixture = $fixtureFactory($creditAmount);
+
+    $fixture['salesCreditMemo'] = SalesCreditMemo::query()->create([
+        'memo_number' => $fixture['postedCreditMemo']->document_number,
+        'customer_id' => $fixture['customer']->id,
+        'posted_sales_invoice_id' => $fixture['postedInvoice']->id,
+        'status' => ApprovalStatus::POSTED,
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => $creditAmount,
+        'posted_by' => $fixture['user']->id,
+        'posted_at' => now(),
+    ]);
 
     $fixture['postedInvoice']->forceFill([
         'subtotal' => $invoiceAmount,
@@ -201,6 +311,8 @@ function postedSalesCreditMemoApplyActionUser(bool $canApply = true): User
     $permissions = [
         'sales.invoice.view_any',
         'sales.invoice.view',
+        'sales.credit_memo.view_any',
+        'sales.credit_memo.view',
         'sales.posted_sales_invoice.view_any',
         'sales.posted_sales_invoice.view',
     ];
@@ -238,4 +350,20 @@ function postedSalesCreditMemoApplyActionInvoiceEntry(array $fixture): CustomerL
         ->where('source_type', PostedSalesInvoice::class)
         ->where('source_id', $fixture['postedInvoice']->id)
         ->firstOrFail();
+}
+
+function postedSalesCreditMemoApplyActionCloseInvoice(array $fixture): void
+{
+    $fixture['postedInvoice']->forceFill([
+        'amount_paid' => (float) $fixture['postedInvoice']->grand_total,
+        'remaining_amount' => 0,
+        'paid_in_full' => true,
+        'paid_in_full_date' => now(),
+    ])->save();
+
+    postedSalesCreditMemoApplyActionInvoiceEntry($fixture)->forceFill([
+        'remaining_amount' => 0,
+        'open' => false,
+        'fully_applied' => true,
+    ])->save();
 }

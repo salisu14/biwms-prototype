@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Filament\Resources\SalesCreditMemos\Pages;
 
 use App\Contracts\ApprovableStatus;
+use App\Filament\Resources\SalesCreditMemos\Concerns\InteractsWithSalesCreditMemoApplications;
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
+use App\Models\PostedSalesCreditMemo;
 use App\Services\Approval\ApprovalService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -15,6 +17,8 @@ use Filament\Resources\Pages\ViewRecord;
 
 class ViewSalesCreditMemo extends ViewRecord
 {
+    use InteractsWithSalesCreditMemoApplications;
+
     protected static string $resource = SalesCreditMemoResource::class;
 
     protected function getHeaderActions(): array
@@ -23,6 +27,8 @@ class ViewSalesCreditMemo extends ViewRecord
             EditAction::make()
                 ->authorize(fn ($record): bool => auth()->user()?->can('update', $record) === true)
                 ->visible(fn ($record): bool => ! $record->isPosted()),
+
+            $this->applyCreditMemoAction(),
 
             Action::make('submit_for_approval')
                 ->label('Submit for Approval')
@@ -107,5 +113,23 @@ class ViewSalesCreditMemo extends ViewRecord
                         ->send();
                 }),
         ];
+    }
+
+    protected function applicationPostedSalesCreditMemo(): ?PostedSalesCreditMemo
+    {
+        if (! $this->record->isPosted()) {
+            return null;
+        }
+
+        return PostedSalesCreditMemo::query()
+            ->where('document_number', $this->record->memo_number)
+            ->where('customer_id', $this->record->customer_id)
+            ->latest('id')
+            ->first();
+    }
+
+    protected function refreshAfterCreditMemoApplication(?PostedSalesCreditMemo $postedCreditMemo): void
+    {
+        $this->record = $this->record->fresh(['items.item', 'customer', 'invoice', 'postedInvoice']);
     }
 }
