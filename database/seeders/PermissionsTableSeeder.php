@@ -53,7 +53,7 @@ class PermissionsTableSeeder extends Seeder
             'sales.invoice.view_any', 'sales.invoice.view', 'sales.invoice.create', 'sales.invoice.update', 'sales.invoice.delete',
             'sales.invoice.submit', 'sales.invoice.approve', 'sales.invoice.reject', 'sales.invoice.reopen', 'sales.invoice.post', 'sales.invoice.reverse', 'sales.invoice.cancel',
             'sales.posted_sales_invoice.view_any', 'sales.posted_sales_invoice.view', 'sales.posted_sales_invoice.print', 'sales.posted_sales_invoice.export',
-            'sales.credit_memo.submit', 'sales.credit_memo.approve', 'sales.credit_memo.reject', 'sales.credit_memo.reopen', 'sales.credit_memo.post', 'sales.credit_memo.reverse', 'sales.credit_memo.cancel',
+            'sales.credit_memo.submit', 'sales.credit_memo.approve', 'sales.credit_memo.reject', 'sales.credit_memo.reopen', 'sales.credit_memo.post', 'sales.credit_memo.apply', 'sales.credit_memo.reverse', 'sales.credit_memo.cancel',
 
             // Finance
             'finance.payment.view_any', 'finance.payment.view', 'finance.payment.create', 'finance.payment.update', 'finance.payment.delete',

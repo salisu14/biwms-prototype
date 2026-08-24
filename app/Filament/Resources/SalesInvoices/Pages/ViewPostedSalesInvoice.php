@@ -6,6 +6,7 @@ use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Filament\Resources\SalesShipmentHeaders\SalesShipmentHeaderResource;
+use App\Models\CustomerLedgerApplication;
 use App\Models\CustomerLedgerEntry;
 use App\Models\PaymentApplication;
 use App\Models\PostedSalesCreditMemo;
@@ -150,7 +151,26 @@ class ViewPostedSalesInvoice extends Page
                 ];
             });
 
-        $creditMemoApplications = CustomerLedgerEntry::query()
+        $creditMemoApplications = CustomerLedgerApplication::query()
+            ->with('sourceCreditMemo')
+            ->where('target_posted_sales_invoice_id', $this->record->id)
+            ->where('reversed', false)
+            ->get()
+            ->map(function (CustomerLedgerApplication $application): array {
+                return [
+                    'applied_at' => $application->applied_at,
+                    'source_type' => 'Credit Memo',
+                    'source_document' => $application->sourceCreditMemo?->document_number ?? 'Posted Sales Credit Memo',
+                    'reference' => 'Credit memo application',
+                    'amount' => (float) $application->amount,
+                    'balance_after' => (float) $application->target_remaining_after,
+                    'source_url' => $application->sourceCreditMemo
+                        ? SalesInvoiceResource::getUrl('view-posted-credit-memo', ['record' => $application->sourceCreditMemo])
+                        : null,
+                ];
+            });
+
+        $legacyCreditMemoApplications = CustomerLedgerEntry::query()
             ->where('customer_id', $this->record->customer_id)
             ->where('document_type', 'CREDIT_MEMO_APPLICATION')
             ->where('description', 'like', '%'.$this->record->document_number.'%')
@@ -175,6 +195,7 @@ class ViewPostedSalesInvoice extends Page
 
         return $paymentApplications
             ->concat($creditMemoApplications)
+            ->concat($legacyCreditMemoApplications)
             ->sortByDesc(fn (array $application) => optional($application['applied_at'])->timestamp ?? 0)
             ->values();
     }

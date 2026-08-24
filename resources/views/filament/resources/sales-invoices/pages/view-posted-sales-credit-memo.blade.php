@@ -161,24 +161,23 @@
                     <thead class="{{ $headClass }}">
                         <tr>
                             <th class="{{ $headCellClass }}">Applied At</th>
-                            <th class="{{ $headCellClass }}">Status</th>
-                            <th class="{{ $headCellClass }}">Source Type</th>
-                            <th class="{{ $headCellClass }}">Source Document</th>
+                            <th class="{{ $headCellClass }}">Applied By</th>
+                            <th class="{{ $headCellClass }}">Target Invoice</th>
                             <th class="{{ $headCellClass }}">Reference</th>
                             <th class="{{ $headCellClass }} text-right">Amount</th>
-                            <th class="{{ $headCellClass }} text-right">Balance After</th>
+                            <th class="{{ $headCellClass }} text-right">Credit Before</th>
+                            <th class="{{ $headCellClass }} text-right">Credit After</th>
+                            <th class="{{ $headCellClass }} text-right">Invoice Before</th>
+                            <th class="{{ $headCellClass }} text-right">Invoice After</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($this->applications as $application)
                             <tr>
-                                <td class="{{ $bodyCellClass }}">{{ \Illuminate\Support\Carbon::parse($application['applied_at'])->format('Y-m-d H:i') }}</td>
                                 <td class="{{ $bodyCellClass }}">
-                                    <span class="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
-                                        Credit Applied
-                                    </span>
+                                    {{ filled($application['applied_at'] ?? null) ? \Illuminate\Support\Carbon::parse($application['applied_at'])->format('Y-m-d H:i') : '—' }}
                                 </td>
-                                <td class="{{ $bodyCellClass }}">Sales Invoice</td>
+                                <td class="{{ $bodyCellClass }}">{{ $application['applied_by'] ?? '—' }}</td>
                                 <td class="{{ $bodyCellClass }}">
                                     @if(!empty($application['invoice_record_id']))
                                         <a href="{{ \App\Filament\Resources\SalesInvoices\SalesInvoiceResource::getUrl('view-posted', ['record' => $application['invoice_record_id']]) }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
@@ -188,13 +187,16 @@
                                         {{ $application['document_number'] ?? '—' }}
                                     @endif
                                 </td>
-                                <td class="{{ $bodyCellClass }}">Credit memo application</td>
+                                <td class="{{ $bodyCellClass }}">{{ $application['application_reference'] ?? 'Credit memo application' }}</td>
                                 <td class="{{ $bodyCellClass }} text-right">{{ $currencyCode }} {{ number_format((float) ($application['amount'] ?? 0), 2) }}</td>
-                                <td class="{{ $bodyCellClass }} text-right">—</td>
+                                <td class="{{ $bodyCellClass }} text-right">{{ array_key_exists('source_remaining_before', $application) ? $currencyCode . ' ' . number_format((float) $application['source_remaining_before'], 2) : '—' }}</td>
+                                <td class="{{ $bodyCellClass }} text-right">{{ array_key_exists('source_remaining_after', $application) ? $currencyCode . ' ' . number_format((float) $application['source_remaining_after'], 2) : '—' }}</td>
+                                <td class="{{ $bodyCellClass }} text-right">{{ array_key_exists('target_remaining_before', $application) ? $currencyCode . ' ' . number_format((float) $application['target_remaining_before'], 2) : '—' }}</td>
+                                <td class="{{ $bodyCellClass }} text-right">{{ array_key_exists('target_remaining_after', $application) ? $currencyCode . ' ' . number_format((float) $application['target_remaining_after'], 2) : '—' }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="border border-gray-200 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">No applications recorded for this posted sales credit memo yet.</td>
+                                <td colspan="9" class="border border-gray-200 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">No applications recorded for this posted sales credit memo yet.</td>
                             </tr>
                         @endforelse
                     </tbody>

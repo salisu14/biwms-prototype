@@ -54,4 +54,13 @@ class SalesCreditMemoPolicy extends AbstractPermissionPolicy
             'sales_credit_memo_post',
         ]);
     }
+
+    public function apply(User $user): bool
+    {
+        return $this->canAny($user, [
+            'sales.credit_memo.apply',
+            'apply:sales_credit_memo',
+            'sales_credit_memo_apply',
+        ]);
+    }
 }

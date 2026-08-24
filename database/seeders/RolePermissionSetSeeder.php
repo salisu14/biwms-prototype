@@ -38,6 +38,7 @@ class RolePermissionSetSeeder extends Seeder
                 'sales.quote.view_any', 'sales.quote.view', 'sales.quote.create', 'sales.quote.update', 'sales.quote.delete', 'sales.quote.approve', 'sales.quote.convert',
                 'sales.order.view_any', 'sales.order.view', 'sales.order.create', 'sales.order.update', 'sales.order.delete', 'sales.order.approve', 'sales.order.post',
                 'sales.invoice.view_any', 'sales.invoice.view',
+                'sales.credit_memo.apply',
             ],
             'finance-accountant' => [
                 'finance.payment.view_any', 'finance.payment.view', 'finance.payment.create', 'finance.payment.update',
@@ -65,6 +66,7 @@ class RolePermissionSetSeeder extends Seeder
                 'finance.report.view',
                 'fixed_asset.view_any', 'fixed_asset.view', 'fixed_asset.create', 'fixed_asset.update', 'fixed_asset.acquire', 'fixed_asset.depreciate', 'fixed_asset.dispose',
                 'sales.invoice.view_any', 'sales.invoice.view', 'sales.invoice.create', 'sales.invoice.update', 'sales.invoice.delete', 'sales.invoice.post',
+                'sales.credit_memo.apply',
                 'sales.referrer.view_any', 'sales.referrer.view',
                 'sales.customer_referral.view_any', 'sales.customer_referral.view',
                 'sales.referral_commission_setting.view_any', 'sales.referral_commission_setting.view',

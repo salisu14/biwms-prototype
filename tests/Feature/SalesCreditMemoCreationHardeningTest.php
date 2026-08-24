@@ -8,6 +8,7 @@ use App\Filament\Resources\SalesCreditMemos\Pages\CreateSalesCreditMemo;
 use App\Filament\Resources\SalesCreditMemos\Pages\EditSalesCreditMemo;
 use App\Filament\Resources\SalesCreditMemos\Pages\ListSalesCreditMemos;
 use App\Filament\Resources\SalesCreditMemos\Pages\ViewSalesCreditMemo;
+use App\Filament\Resources\SalesCreditMemos\RelationManagers\ItemsRelationManager;
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
 use App\Filament\Resources\SalesCreditMemos\Schemas\SalesCreditMemoForm;
 use App\Models\ApprovalEntry;
@@ -353,6 +354,70 @@ it('renders the same authoritative gross total on sales credit memo list and vie
         ->test(ViewSalesCreditMemo::class, ['record' => $memo->getRouteKey()])
         ->assertSee($memo->memo_number)
         ->assertSee('300.00');
+});
+
+it('renders canonical item identity in the sales credit memo lower items table without changing amounts', function (): void {
+    $user = salesCreditMemoCreationUser();
+    $customer = Customer::factory()->create();
+    $item = Item::factory()->create([
+        'item_code' => '1000',
+        'description' => 'Mai Sasanci',
+        'item_type' => ItemType::FINISHED_GOOD,
+        'unit_price' => 150,
+    ]);
+    $memo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-ITEM-TABLE-001',
+        'customer_id' => $customer->id,
+        'status' => ApprovalStatus::POSTED,
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => 0,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+    ]);
+
+    $line = $memo->items()->create([
+        'item_id' => $item->id,
+        'quantity' => 2,
+        'unit_price' => 150,
+        'vat_percent' => 0,
+        'unit_of_measure_code' => 'PCS',
+    ]);
+
+    expect(ItemsRelationManager::formatItemIdentity($line->fresh('item')))->toBe('1000 - Mai Sasanci')
+        ->and((float) $line->fresh()->quantity)->toBe(2.0)
+        ->and((float) $line->fresh()->unit_price)->toBe(150.0)
+        ->and((float) $line->fresh()->amount)->toBe(300.0)
+        ->and((float) $line->fresh()->vat_amount)->toBe(0.0)
+        ->and((float) $line->fresh()->amount_including_vat)->toBe(300.0);
+
+    Livewire::actingAs($user)
+        ->test(ItemsRelationManager::class, [
+            'ownerRecord' => $memo,
+            'pageClass' => ViewSalesCreditMemo::class,
+        ])
+        ->assertSee('1000 - Mai Sasanci')
+        ->assertSee('2.00')
+        ->assertSee('150.00')
+        ->assertSee('300.00')
+        ->assertTableActionHidden('edit', $line)
+        ->assertTableActionHidden('delete', $line);
+});
+
+it('renders a safe placeholder for historical sales credit memo lines with missing item relationships', function (): void {
+    $line = new SalesCreditMemoLine([
+        'item_id' => null,
+        'quantity' => 2,
+        'unit_price' => 150,
+        'vat_percent' => 0,
+        'unit_of_measure_code' => 'PCS',
+    ]);
+
+    $line->setRelation('item', null);
+
+    expect(ItemsRelationManager::formatItemIdentity($line))->toBe('—')
+        ->and((float) $line->quantity)->toBe(2.0)
+        ->and((float) $line->unit_price)->toBe(150.0);
 });
 
 function salesCreditMemoCreationUser(): User

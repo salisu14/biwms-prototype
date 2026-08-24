@@ -6,6 +6,7 @@ namespace App\Filament\Resources\SalesCreditMemos\RelationManagers;
 
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
 use App\Models\Item;
+use App\Models\SalesCreditMemoLine;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -35,7 +36,8 @@ class ItemsRelationManager extends RelationManager
         return $schema
             ->schema([
                 Select::make('item_id')
-                    ->relationship('item', 'description')
+                    ->relationship('item', 'item_code')
+                    ->getOptionLabelFromRecordUsing(fn (Item $record): string => self::formatItemOption($record))
                     ->searchable()
                     ->preload()
                     ->required()
@@ -109,8 +111,9 @@ class ItemsRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('line_no')
             ->columns([
-                TextColumn::make('item.name')
+                TextColumn::make('item_identity')
                     ->label('Item')
+                    ->state(fn (SalesCreditMemoLine $record): string => self::formatItemIdentity($record))
                     ->description(fn ($record) => "UOM: {$record->unit_of_measure_code}"),
 
                 TextColumn::make('quantity')
@@ -159,6 +162,25 @@ class ItemsRelationManager extends RelationManager
                         ->visible(fn (): bool => ! $this->getOwnerRecord()->isPosted()),
                 ]),
             ]);
+    }
+
+    public static function formatItemIdentity(SalesCreditMemoLine $line): string
+    {
+        $item = $line->item;
+
+        if (! $item instanceof Item) {
+            return '—';
+        }
+
+        return self::formatItemOption($item);
+    }
+
+    private static function formatItemOption(Item $item): string
+    {
+        return trim(implode(' - ', array_filter([
+            $item->item_code,
+            $item->description,
+        ], fn (?string $value): bool => filled($value)))) ?: '—';
     }
 
     /**
