@@ -4,11 +4,13 @@
 
 namespace App\Models;
 
+use App\Exceptions\BusinessException;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class PostedSalesCreditMemo extends Model
@@ -148,6 +150,11 @@ class PostedSalesCreditMemo extends Model
             ->where('document_type', 'CREDIT_MEMO_APPLICATION');
     }
 
+    public function ledgerApplications(): HasMany
+    {
+        return $this->hasMany(CustomerLedgerApplication::class, 'source_posted_sales_credit_memo_id');
+    }
+
     // ==================== SCOPES ====================
 
     public function scopeNotCorrected($query)
@@ -220,91 +227,272 @@ class PostedSalesCreditMemo extends Model
      */
     public function applyToInvoices(array $applications): void
     {
-        // $applications = [['invoice_id' => 1, 'amount' => 100.00], ...]
+        DB::transaction(function () use ($applications): void {
+            /** @var self $creditMemo */
+            $creditMemo = self::query()
+                ->lockForUpdate()
+                ->findOrFail($this->id);
 
-        DB::transaction(function () use ($applications) {
+            if ($creditMemo->corrected) {
+                throw new BusinessException('Corrected sales credit memos cannot be applied.');
+            }
+
             $creditMemoEntry = CustomerLedgerEntry::query()
-                ->where('customer_id', $this->customer_id)
+                ->where('customer_id', $creditMemo->customer_id)
                 ->where('document_type', 'SALES_CREDIT_MEMO')
                 ->where('source_type', self::class)
-                ->where('source_id', $this->id)
+                ->where('source_id', $creditMemo->id)
+                ->lockForUpdate()
                 ->first();
 
             if (! $creditMemoEntry) {
-                throw new \Exception('Customer ledger entry not found for credit memo');
+                throw new BusinessException('Customer ledger entry not found for credit memo.');
             }
 
-            foreach ($applications as $app) {
-                $invoice = PostedSalesInvoice::query()->find($app['invoice_id']);
-                if (! $invoice || $invoice->customer_id !== $this->customer_id) {
-                    continue;
+            if ($creditMemoEntry->reversed) {
+                throw new BusinessException('Reversed sales credit memo ledger entries cannot be applied.');
+            }
+
+            foreach ($applications as $application) {
+                $creditMemoRemainingBefore = round((float) $creditMemoEntry->remaining_amount, 4);
+
+                if ($creditMemoRemainingBefore <= 0.0001) {
+                    throw new BusinessException('Sales credit memo has no remaining amount to apply.');
                 }
 
-                $amount = min(
-                    (float) $app['amount'],
-                    (float) $creditMemoEntry->remaining_amount,
-                    (float) $invoice->remaining_amount
-                );
+                $invoice = $this->lockTargetInvoice($application);
+                $invoiceLedgerEntry = $this->lockTargetInvoiceLedgerEntry($invoice);
+                $amount = round((float) ($application['amount'] ?? 0), 4);
+                $invoiceRemainingBefore = round((float) $invoiceLedgerEntry->remaining_amount, 4);
 
-                if ($amount <= 0) {
-                    continue;
+                $this->validateApplication($creditMemo, $creditMemoEntry, $invoice, $invoiceLedgerEntry, $amount);
+
+                $creditMemoRemainingAfter = round($creditMemoRemainingBefore - $amount, 4);
+                $invoiceRemainingAfter = round($invoiceRemainingBefore - $amount, 4);
+
+                if (abs($creditMemoRemainingAfter) <= 0.0001) {
+                    $creditMemoRemainingAfter = 0.0;
                 }
 
-                $nextEntryNumber = (CustomerLedgerEntry::query()
-                    ->where('customer_id', $this->customer_id)
-                    ->max('entry_number') ?? 0) + 1;
+                if (abs($invoiceRemainingAfter) <= 0.0001) {
+                    $invoiceRemainingAfter = 0.0;
+                }
 
-                $runningBalance = (float) (CustomerLedgerEntry::query()
-                    ->where('customer_id', $this->customer_id)
-                    ->orderByDesc('entry_number')
-                    ->value('running_balance') ?? 0);
-
-                CustomerLedgerEntry::create([
-                    'entry_number' => $nextEntryNumber,
-                    'customer_id' => $this->customer_id,
-                    'posting_date' => now(),
-                    'document_date' => now(),
-                    'document_type' => 'CREDIT_MEMO_APPLICATION',
-                    'document_number' => $this->document_number,
-                    'description' => "Applied to {$invoice->document_number}",
-                    'debit_amount' => 0,
-                    'credit_amount' => $amount,
-                    'amount' => -$amount,
-                    'running_balance' => $runningBalance,
-                    'remaining_amount' => 0,
-                    'open' => false,
-                    'fully_applied' => true,
-                    'currency_code' => $this->currency_code,
-                    'original_debit_amount' => 0,
-                    'original_credit_amount' => $amount,
-                    'currency_factor' => $this->currency_factor ?: 1,
-                    'general_business_posting_group_id' => $this->general_business_posting_group_id,
-                    'customer_posting_group_id' => $this->customer_posting_group_id,
-                    'source_type' => self::class,
-                    'source_id' => $this->id,
-                    'created_by' => $this->posted_by,
+                CustomerLedgerApplication::query()->create([
+                    'customer_id' => $creditMemo->customer_id,
+                    'source_customer_ledger_entry_id' => $creditMemoEntry->id,
+                    'target_customer_ledger_entry_id' => $invoiceLedgerEntry->id,
+                    'source_posted_sales_credit_memo_id' => $creditMemo->id,
+                    'target_posted_sales_invoice_id' => $invoice->id,
+                    'amount' => $amount,
+                    'currency_code' => $creditMemo->currency_code ?: $invoice->currency_code,
+                    'currency_id' => $creditMemo->currency_id ?: $invoice->currency_id,
+                    'source_remaining_before' => $creditMemoRemainingBefore,
+                    'source_remaining_after' => $creditMemoRemainingAfter,
+                    'target_remaining_before' => $invoiceRemainingBefore,
+                    'target_remaining_after' => $invoiceRemainingAfter,
+                    'applied_at' => now(),
+                    'applied_by' => Auth::id(),
+                    'idempotency_key' => $this->applicationIdempotencyKey($creditMemo, $invoice, $amount, $creditMemoRemainingBefore, $invoiceRemainingBefore),
+                    'metadata' => [
+                        'source_document_number' => $creditMemo->document_number,
+                        'target_document_number' => $invoice->document_number,
+                        'application_type' => 'sales_credit_memo_to_sales_invoice',
+                    ],
                 ]);
 
-                $creditMemoEntry->applyToInvoice($invoice, $amount);
+                $creditMemoEntry->forceFill([
+                    'remaining_amount' => $creditMemoRemainingAfter,
+                    'open' => $creditMemoRemainingAfter > 0.0001,
+                    'fully_applied' => $creditMemoRemainingAfter <= 0.0001,
+                    'applied_to_entries' => $this->appendLedgerApplicationSnapshot(
+                        $creditMemoEntry,
+                        $invoiceLedgerEntry,
+                        $invoice,
+                        $amount,
+                    ),
+                ])->save();
+
+                $invoiceLedgerEntry->forceFill([
+                    'remaining_amount' => $invoiceRemainingAfter,
+                    'open' => $invoiceRemainingAfter > 0.0001,
+                    'fully_applied' => $invoiceRemainingAfter <= 0.0001,
+                ])->save();
+
+                $newAmountPaid = round((float) $invoice->amount_paid + $amount, 4);
+
+                $invoice->forceFill([
+                    'amount_paid' => $newAmountPaid,
+                    'remaining_amount' => max(0, $invoiceRemainingAfter),
+                    'paid_in_full' => $invoiceRemainingAfter <= 0.0001,
+                    'paid_in_full_date' => $invoiceRemainingAfter <= 0.0001 ? now() : null,
+                ])->save();
+
+                $creditMemo->refresh();
+                $creditMemoEntry->refresh();
             }
 
             $creditMemoEntry->refresh();
+            $remainingAmount = max(0, round((float) $creditMemoEntry->remaining_amount, 4));
+            $amountApplied = max(0, round(abs((float) $creditMemo->grand_total) - $remainingAmount, 4));
 
-            $amountApplied = max(0, abs((float) $this->grand_total) - (float) $creditMemoEntry->remaining_amount);
-            $this->amount_applied = $amountApplied;
-            $this->remaining_amount = max(0, (float) $creditMemoEntry->remaining_amount);
+            $creditMemo->forceFill([
+                'amount_applied' => $amountApplied,
+                'remaining_amount' => $remainingAmount,
+                'fully_applied' => $remainingAmount <= 0.0001,
+                'fully_applied_date' => $remainingAmount <= 0.0001 ? now() : null,
+            ])->save();
 
-            if ($this->remaining_amount <= 0.01) {
-                $this->fully_applied = true;
-                $this->fully_applied_date = now();
-                $this->remaining_amount = 0;
-            } else {
-                $this->fully_applied = false;
-                $this->fully_applied_date = null;
-            }
-
-            $this->save();
+            $this->setRawAttributes($creditMemo->getAttributes(), true);
         });
+    }
+
+    private function lockTargetInvoice(array $application): PostedSalesInvoice
+    {
+        $invoiceId = $application['invoice_id'] ?? null;
+
+        if (! $invoiceId && isset($application['entry_id'])) {
+            $invoiceId = CustomerLedgerEntry::query()
+                ->whereKey($application['entry_id'])
+                ->where('document_type', 'SALES_INVOICE')
+                ->value('source_id');
+        }
+
+        if (! $invoiceId) {
+            throw new BusinessException('A target posted sales invoice is required.');
+        }
+
+        /** @var PostedSalesInvoice|null $invoice */
+        $invoice = PostedSalesInvoice::query()
+            ->lockForUpdate()
+            ->find($invoiceId);
+
+        if (! $invoice) {
+            throw new BusinessException('Target posted sales invoice was not found.');
+        }
+
+        return $invoice;
+    }
+
+    private function lockTargetInvoiceLedgerEntry(PostedSalesInvoice $invoice): CustomerLedgerEntry
+    {
+        /** @var CustomerLedgerEntry|null $invoiceLedgerEntry */
+        $invoiceLedgerEntry = CustomerLedgerEntry::query()
+            ->where('customer_id', $invoice->customer_id)
+            ->where('document_type', 'SALES_INVOICE')
+            ->where('source_type', PostedSalesInvoice::class)
+            ->where('source_id', $invoice->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $invoiceLedgerEntry) {
+            throw new BusinessException('Customer ledger entry not found for target posted sales invoice.');
+        }
+
+        return $invoiceLedgerEntry;
+    }
+
+    private function validateApplication(
+        self $creditMemo,
+        CustomerLedgerEntry $creditMemoEntry,
+        PostedSalesInvoice $invoice,
+        CustomerLedgerEntry $invoiceLedgerEntry,
+        float $amount,
+    ): void {
+        if ((int) $invoice->customer_id !== (int) $creditMemo->customer_id) {
+            throw new BusinessException('Sales credit memo can only be applied to invoices for the same customer.');
+        }
+
+        if ($invoice->cancelled) {
+            throw new BusinessException('Cancelled posted sales invoices cannot receive credit memo applications.');
+        }
+
+        if ($invoiceLedgerEntry->reversed) {
+            throw new BusinessException('Reversed sales invoice ledger entries cannot receive credit memo applications.');
+        }
+
+        if ((bool) $invoiceLedgerEntry->open === false || (float) $invoiceLedgerEntry->remaining_amount <= 0.0001) {
+            throw new BusinessException('Sales credit memo cannot be applied to a fully paid invoice.');
+        }
+
+        if ($amount <= 0.0001) {
+            throw new BusinessException('Application amount must be greater than zero.');
+        }
+
+        if ($amount - (float) $creditMemoEntry->remaining_amount > 0.0001) {
+            throw new BusinessException('Application amount exceeds the remaining credit memo amount.');
+        }
+
+        if ($amount - (float) $invoiceLedgerEntry->remaining_amount > 0.0001) {
+            throw new BusinessException('Application amount exceeds the remaining invoice amount.');
+        }
+
+        if (($creditMemo->currency_code ?: null) !== ($invoice->currency_code ?: null)) {
+            throw new BusinessException('Sales credit memo and invoice currencies must match.');
+        }
+
+        if ($creditMemo->currency_id && $invoice->currency_id && (int) $creditMemo->currency_id !== (int) $invoice->currency_id) {
+            throw new BusinessException('Sales credit memo and invoice currency records must match.');
+        }
+
+        $creditMemoBusinessId = $this->businessIdForApplication($creditMemo);
+        $invoiceBusinessId = $this->businessIdForApplication($invoice);
+
+        if ($creditMemoBusinessId !== null && $invoiceBusinessId !== null && $creditMemoBusinessId !== $invoiceBusinessId) {
+            throw new BusinessException('Sales credit memo and invoice must belong to the same business.');
+        }
+    }
+
+    private function businessIdForApplication(Model $document): ?int
+    {
+        $dimensions = $document->dimensions;
+
+        if (! is_array($dimensions)) {
+            return null;
+        }
+
+        $businessId = $dimensions['business_id'] ?? $dimensions['business'] ?? null;
+
+        return is_numeric($businessId) ? (int) $businessId : null;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function appendLedgerApplicationSnapshot(
+        CustomerLedgerEntry $creditMemoEntry,
+        CustomerLedgerEntry $invoiceLedgerEntry,
+        PostedSalesInvoice $invoice,
+        float $amount,
+    ): array {
+        return [
+            ...($creditMemoEntry->applied_to_entries ?? []),
+            [
+                'entry_id' => $invoiceLedgerEntry->id,
+                'document_number' => $invoice->document_number,
+                'amount' => $amount,
+                'applied_at' => now()->toDateTimeString(),
+                'trace_type' => CustomerLedgerApplication::class,
+            ],
+        ];
+    }
+
+    private function applicationIdempotencyKey(
+        self $creditMemo,
+        PostedSalesInvoice $invoice,
+        float $amount,
+        float $creditMemoRemainingBefore,
+        float $invoiceRemainingBefore,
+    ): string {
+        return hash('sha256', implode('|', [
+            self::class,
+            $creditMemo->id,
+            PostedSalesInvoice::class,
+            $invoice->id,
+            number_format($amount, 4, '.', ''),
+            number_format($creditMemoRemainingBefore, 4, '.', ''),
+            number_format($invoiceRemainingBefore, 4, '.', ''),
+        ]));
     }
 
     /**

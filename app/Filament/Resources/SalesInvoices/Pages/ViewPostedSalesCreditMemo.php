@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SalesInvoices\Pages;
 
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
+use App\Models\CustomerLedgerApplication;
 use App\Models\CustomerLedgerEntry;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
@@ -81,6 +82,25 @@ class ViewPostedSalesCreditMemo extends Page
 
     public function getApplicationsProperty(): Collection
     {
+        $ledgerApplications = CustomerLedgerApplication::query()
+            ->with('targetInvoice')
+            ->where('source_posted_sales_credit_memo_id', $this->record->id)
+            ->where('reversed', false)
+            ->orderByDesc('applied_at')
+            ->get()
+            ->map(fn (CustomerLedgerApplication $application): array => [
+                'entry_id' => $application->target_customer_ledger_entry_id,
+                'document_number' => $application->targetInvoice?->document_number,
+                'amount' => (float) $application->amount,
+                'applied_at' => optional($application->applied_at)->toDateTimeString(),
+                'invoice_record_id' => $application->target_posted_sales_invoice_id,
+                'trace_type' => CustomerLedgerApplication::class,
+            ]);
+
+        if ($ledgerApplications->isNotEmpty()) {
+            return $ledgerApplications->values();
+        }
+
         $creditMemoEntry = CustomerLedgerEntry::query()
             ->where('source_type', PostedSalesCreditMemo::class)
             ->where('source_id', $this->record->id)

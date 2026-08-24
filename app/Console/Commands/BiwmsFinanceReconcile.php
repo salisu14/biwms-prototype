@@ -35,6 +35,7 @@ class BiwmsFinanceReconcile extends Command
         $report = [
             'gl_debit_credit_imbalances' => $this->glDebitCreditImbalances(),
             'customer_ledger_missing_posting_groups' => $this->customerLedgerMissingPostingGroups(),
+            'legacy_monetary_credit_memo_application_entries' => $this->legacyMonetaryCreditMemoApplicationEntries(),
             'customer_ledger_receivables_mismatches' => $this->customerLedgerReceivablesMismatches(),
             'vendor_ledger_payables_mismatches' => $this->vendorLedgerPayablesMismatches(),
             'bank_ledger_gl_mismatches' => $this->bankLedgerGlMismatches(),
@@ -97,6 +98,17 @@ class BiwmsFinanceReconcile extends Command
             $entry['expected_general_business_posting_group_id'],
             $entry['ledger_customer_posting_group_id'] ?? 'null',
             $entry['ledger_general_business_posting_group_id'] ?? 'null',
+        ));
+
+        $this->section('Legacy monetary credit memo application ledger entries', $report['legacy_monetary_credit_memo_application_entries'], $details, fn (array $entry): string => sprintf(
+            '[%s] entry=%s customer=%s document=%s amount=%s debit=%s credit=%s',
+            $entry['severity'],
+            $entry['entry_id'],
+            $entry['customer_id'],
+            $entry['document_number'],
+            number_format($entry['amount'], 2, '.', ''),
+            number_format($entry['debit_amount'], 2, '.', ''),
+            number_format($entry['credit_amount'], 2, '.', ''),
         ));
 
         $this->section('Vendor ledger vs payables control mismatches', $report['vendor_ledger_payables_mismatches'], $details, fn (array $entry): string => sprintf(
@@ -254,6 +266,48 @@ class BiwmsFinanceReconcile extends Command
                     suggestedRemediation: 'Review the payment-created customer ledger entry, then run php artisan biwms:customer-ledger-posting-groups-repair --dry-run and apply only after approval.'
                 ),
             ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function legacyMonetaryCreditMemoApplicationEntries(): array
+    {
+        return CustomerLedgerEntry::query()
+            ->where('document_type', 'CREDIT_MEMO_APPLICATION')
+            ->where(function ($query): void {
+                $query
+                    ->whereRaw('ABS(COALESCE(amount, 0)) > 0.01')
+                    ->orWhereRaw('ABS(COALESCE(debit_amount, 0)) > 0.01')
+                    ->orWhereRaw('ABS(COALESCE(credit_amount, 0)) > 0.01');
+            })
+            ->orderBy('id')
+            ->limit(250)
+            ->get([
+                'id',
+                'customer_id',
+                'document_number',
+                'amount',
+                'debit_amount',
+                'credit_amount',
+                'posting_date',
+            ])
+            ->map(fn (CustomerLedgerEntry $entry): array => [
+                'entry_id' => $entry->id,
+                'customer_id' => $entry->customer_id,
+                'document_number' => $entry->document_number,
+                'posting_date' => optional($entry->posting_date)->toDateString(),
+                'amount' => round((float) $entry->amount, 2),
+                'debit_amount' => round((float) $entry->debit_amount, 2),
+                'credit_amount' => round((float) $entry->credit_amount, 2),
+                ...$this->findingMetadata(
+                    classification: 'legacy_monetary_credit_memo_application_entry',
+                    severity: 'warning',
+                    suggestedRemediation: 'Review this historical CREDIT_MEMO_APPLICATION customer ledger row. Credit memo applications should be represented by customer_ledger_applications, not by monetary CustomerLedgerEntry rows. Do not delete or rewrite posted ledger data without an approved manual remediation plan.'
+                ),
+            ])
+            ->values()
             ->all();
     }
 
