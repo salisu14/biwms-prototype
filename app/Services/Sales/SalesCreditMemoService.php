@@ -49,6 +49,7 @@ class SalesCreditMemoService
             $creditMemo = SalesCreditMemo::create([
                 'customer_id' => $data->customer_id,
                 'sales_invoice_id' => $data->sales_invoice_id,
+                'posted_sales_invoice_id' => $data->posted_sales_invoice_id,
                 'memo_number' => $data->memo_number ?? $this->generateMemoNumber(),
                 'status' => ApprovalStatus::DRAFT,
                 'reason' => $data->reason,
@@ -58,9 +59,10 @@ class SalesCreditMemoService
             ]);
 
             foreach ($data->items as $line) {
-                $item = Item::query()->findOrFail($line->item_id);
+                $postedInvoiceLine = $this->postedInvoiceLineForData($data, $line);
+                $item = Item::query()->findOrFail($postedInvoiceLine?->item_id ?? $line->item_id);
 
-                $creditMemo->items()->create($this->linePayload($line, $item));
+                $creditMemo->items()->create($this->linePayload($line, $item, $postedInvoiceLine));
             }
 
             $creditMemo->refreshTotal();
@@ -72,27 +74,38 @@ class SalesCreditMemoService
     /**
      * @return array<string, mixed>
      */
-    private function linePayload(SalesCreditMemoLineData $line, Item $item): array
-    {
-        $lineTotal = $line->quantity * $line->unit_price;
-        $discountAmount = $line->line_discount_amount > 0
-            ? $line->line_discount_amount
-            : ($lineTotal * ($line->line_discount_percent / 100));
+    private function linePayload(
+        SalesCreditMemoLineData $line,
+        Item $item,
+        ?PostedSalesInvoiceLine $postedInvoiceLine = null
+    ): array {
+        $quantity = $line->quantity;
+        $unitPrice = $postedInvoiceLine ? abs((float) $postedInvoiceLine->unit_price) : $line->unit_price;
+        $vatPercent = $postedInvoiceLine ? (float) $postedInvoiceLine->vat_percentage : $line->vat_percent;
+        $lineDiscountAmount = $postedInvoiceLine ? abs((float) $postedInvoiceLine->line_discount_amount) : $line->line_discount_amount;
+        $lineDiscountPercent = $postedInvoiceLine ? (float) $postedInvoiceLine->line_discount_percent : $line->line_discount_percent;
+
+        $lineTotal = $quantity * $unitPrice;
+        $discountAmount = $lineDiscountAmount > 0
+            ? $lineDiscountAmount
+            : ($lineTotal * ($lineDiscountPercent / 100));
         $amount = max(0, $lineTotal - $discountAmount);
-        $vatAmount = round($amount * ($line->vat_percent / 100), 2);
+        $vatAmount = round($amount * ($vatPercent / 100), 2);
 
         return [
             'item_id' => $item->id,
-            'quantity' => $line->quantity,
-            'unit_price' => $line->unit_price,
-            'vat_percent' => $line->vat_percent,
-            'description' => $line->description ?? $item->description,
-            'unit_of_measure_code' => $line->unit_of_measure_code ?: $item->base_unit_of_measure,
-            'line_discount_percent' => $line->line_discount_percent,
-            'line_discount_amount' => $line->line_discount_amount,
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'vat_percent' => $vatPercent,
+            'description' => $postedInvoiceLine?->item_description ?? $line->description ?? $item->description,
+            'unit_of_measure_code' => $postedInvoiceLine?->unit_of_measure_code ?: ($line->unit_of_measure_code ?: $item->base_unit_of_measure),
+            'line_discount_percent' => $lineDiscountPercent,
+            'line_discount_amount' => $lineDiscountAmount,
             'amount' => $amount,
             'vat_amount' => $vatAmount,
             'amount_including_vat' => $amount + $vatAmount,
+            'sales_invoice_line_id' => $line->sales_invoice_line_id,
+            'posted_sales_invoice_line_id' => $postedInvoiceLine?->id,
         ];
     }
 
@@ -111,6 +124,7 @@ class SalesCreditMemoService
             $creditMemo->update([
                 'customer_id' => $data->customer_id,
                 'sales_invoice_id' => $data->sales_invoice_id,
+                'posted_sales_invoice_id' => $data->posted_sales_invoice_id,
                 'reason' => $data->reason,
                 'effective_date' => $data->effective_date ?? now(),
                 'currency_code' => $data->currency_code,
@@ -119,9 +133,10 @@ class SalesCreditMemoService
             $creditMemo->items()->delete();
 
             foreach ($data->items as $line) {
-                $item = Item::query()->findOrFail($line->item_id);
+                $postedInvoiceLine = $this->postedInvoiceLineForData($data, $line);
+                $item = Item::query()->findOrFail($postedInvoiceLine?->item_id ?? $line->item_id);
 
-                $creditMemo->items()->create($this->linePayload($line, $item));
+                $creditMemo->items()->create($this->linePayload($line, $item, $postedInvoiceLine));
             }
 
             $creditMemo->refreshTotal();
@@ -167,7 +182,7 @@ class SalesCreditMemoService
         }
 
         DB::transaction(function () use ($creditMemo) {
-            $creditMemo->loadMissing(['items.item', 'customer', 'invoice']);
+            $creditMemo->loadMissing(['items.item', 'items.postedInvoiceLine', 'customer', 'invoice', 'postedInvoice']);
 
             if ($creditMemo->items->isEmpty()) {
                 throw new BusinessException('No lines to post for this sales credit memo.', field: 'items');
@@ -197,7 +212,7 @@ class SalesCreditMemoService
                 'remaining_amount' => abs((float) $creditMemo->total_amount),
                 'posted_at' => now(),
                 'posted_by' => Auth::id(),
-                'corrected_invoice_id' => $correctedPostedInvoice?->id ?? $creditMemo->sales_invoice_id,
+                'corrected_invoice_id' => $correctedPostedInvoice?->id,
                 'corrected_invoice_number' => $correctedPostedInvoice?->document_number ?? $creditMemo->invoice?->invoice_number,
                 'return_reason_comment' => $creditMemo->reason,
             ]);
@@ -282,14 +297,12 @@ class SalesCreditMemoService
 
     private function resolveCorrectedPostedInvoice(SalesCreditMemo $creditMemo): ?PostedSalesInvoice
     {
-        if (! $creditMemo->sales_invoice_id) {
-            return null;
+        if ($creditMemo->posted_sales_invoice_id) {
+            return PostedSalesInvoice::query()->find($creditMemo->posted_sales_invoice_id);
         }
 
-        $postedInvoice = PostedSalesInvoice::query()->find($creditMemo->sales_invoice_id);
-
-        if ($postedInvoice) {
-            return $postedInvoice;
+        if (! $creditMemo->sales_invoice_id) {
+            return null;
         }
 
         $invoiceNumber = $creditMemo->invoice?->invoice_number;
@@ -306,7 +319,25 @@ class SalesCreditMemoService
     private function validateCreditQuantitiesAgainstPostedInvoice(PostedSalesInvoice $postedInvoice, SalesCreditMemo $creditMemo): void
     {
         $postedInvoice->loadMissing('lines');
-        $creditMemo->loadMissing('items.item');
+        $creditMemo->loadMissing('items.item', 'items.postedInvoiceLine');
+
+        if ((int) $postedInvoice->customer_id !== (int) $creditMemo->customer_id) {
+            throw ValidationException::withMessages([
+                'posted_sales_invoice_id' => 'The selected posted invoice does not belong to the credit memo customer.',
+            ]);
+        }
+
+        if ($postedInvoice->cancelled) {
+            throw ValidationException::withMessages([
+                'posted_sales_invoice_id' => 'Cancelled posted invoices cannot be credited.',
+            ]);
+        }
+
+        if ($creditMemo->posted_sales_invoice_id) {
+            $this->validateCreditQuantitiesAgainstPostedInvoiceLines($postedInvoice, $creditMemo);
+
+            return;
+        }
 
         $invoicedQuantityByItem = $postedInvoice->lines
             ->groupBy('item_id')
@@ -338,8 +369,48 @@ class SalesCreditMemoService
         }
     }
 
+    private function validateCreditQuantitiesAgainstPostedInvoiceLines(PostedSalesInvoice $postedInvoice, SalesCreditMemo $creditMemo): void
+    {
+        foreach ($creditMemo->items as $line) {
+            if (! $line->posted_sales_invoice_line_id) {
+                throw ValidationException::withMessages([
+                    'items' => 'Each line on an invoice-linked sales credit memo must reference an original posted invoice line.',
+                ]);
+            }
+
+            $postedInvoiceLine = $line->postedInvoiceLine;
+
+            if (! $postedInvoiceLine || (int) $postedInvoiceLine->posted_sales_invoice_id !== (int) $postedInvoice->id) {
+                throw ValidationException::withMessages([
+                    'items' => 'A selected credit memo line does not belong to the linked posted invoice.',
+                ]);
+            }
+
+            if ((int) $postedInvoiceLine->item_id !== (int) $line->item_id) {
+                throw ValidationException::withMessages([
+                    'items' => 'A selected credit memo item does not match its original posted invoice line.',
+                ]);
+            }
+
+            $requestedQuantity = abs((float) $line->quantity);
+            $availableQuantity = $this->remainingReturnableQuantityForPostedInvoiceLine($postedInvoiceLine);
+
+            if ($requestedQuantity > ($availableQuantity + 0.000001)) {
+                $itemCode = $postedInvoiceLine->item_code ?? $line->item?->item_code ?? ('#'.$line->item_id);
+
+                throw ValidationException::withMessages([
+                    'items' => "Credit quantity for invoice line {$itemCode} exceeds remaining returnable quantity. Available: {$availableQuantity}, requested: {$requestedQuantity}.",
+                ]);
+            }
+        }
+    }
+
     private function correctedInvoiceLineId(?PostedSalesInvoice $postedInvoice, SalesCreditMemoLine $line): ?int
     {
+        if ($line->posted_sales_invoice_line_id) {
+            return (int) $line->posted_sales_invoice_line_id;
+        }
+
         if ($line->sales_invoice_line_id) {
             return (int) $line->sales_invoice_line_id;
         }
@@ -406,8 +477,8 @@ class SalesCreditMemoService
     {
         $postedInvoiceLine = null;
 
-        if ($line->sales_invoice_line_id) {
-            $postedInvoiceLine = PostedSalesInvoiceLine::query()->find($line->sales_invoice_line_id);
+        if ($line->posted_sales_invoice_line_id) {
+            $postedInvoiceLine = PostedSalesInvoiceLine::query()->find($line->posted_sales_invoice_line_id);
         }
 
         if (! $postedInvoiceLine && $postedMemo->corrected_invoice_id) {
@@ -465,6 +536,28 @@ class SalesCreditMemoService
             ]);
         }
 
+        if ($data->posted_sales_invoice_id) {
+            $postedInvoice = PostedSalesInvoice::query()->find($data->posted_sales_invoice_id);
+
+            if (! $postedInvoice) {
+                throw ValidationException::withMessages([
+                    'posted_sales_invoice_id' => 'A valid posted invoice is required.',
+                ]);
+            }
+
+            if ((int) $postedInvoice->customer_id !== $data->customer_id) {
+                throw ValidationException::withMessages([
+                    'posted_sales_invoice_id' => 'The selected posted invoice does not belong to the selected customer.',
+                ]);
+            }
+
+            if ($postedInvoice->cancelled) {
+                throw ValidationException::withMessages([
+                    'posted_sales_invoice_id' => 'Cancelled posted invoices cannot be credited.',
+                ]);
+            }
+        }
+
         if ($data->items->count() === 0) {
             throw ValidationException::withMessages([
                 'items' => 'Sales credit memo must have at least one credit line.',
@@ -484,7 +577,54 @@ class SalesCreditMemoService
                     'items' => 'Each credit memo line must reference a valid item.',
                 ]);
             }
+
+            if ($data->posted_sales_invoice_id) {
+                $postedInvoiceLine = $this->postedInvoiceLineForData($data, $line);
+
+                if (! $postedInvoiceLine) {
+                    throw ValidationException::withMessages([
+                        'items' => 'Each invoice-linked credit memo line must reference a valid posted invoice line.',
+                    ]);
+                }
+
+                if ((int) $postedInvoiceLine->item_id !== $line->item_id) {
+                    throw ValidationException::withMessages([
+                        'items' => 'Credit memo line item must match the selected posted invoice line.',
+                    ]);
+                }
+
+                $availableQuantity = $this->remainingReturnableQuantityForPostedInvoiceLine($postedInvoiceLine);
+
+                if ($line->quantity > ($availableQuantity + 0.000001)) {
+                    throw ValidationException::withMessages([
+                        'items' => "Credit memo line quantity exceeds remaining returnable quantity. Available: {$availableQuantity}, requested: {$line->quantity}.",
+                    ]);
+                }
+            }
         }
+    }
+
+    private function postedInvoiceLineForData(SalesCreditMemoData $data, SalesCreditMemoLineData $line): ?PostedSalesInvoiceLine
+    {
+        if (! $data->posted_sales_invoice_id || ! $line->posted_sales_invoice_line_id) {
+            return null;
+        }
+
+        return PostedSalesInvoiceLine::query()
+            ->whereKey($line->posted_sales_invoice_line_id)
+            ->where('posted_sales_invoice_id', $data->posted_sales_invoice_id)
+            ->first();
+    }
+
+    private function remainingReturnableQuantityForPostedInvoiceLine(PostedSalesInvoiceLine $line): float
+    {
+        $alreadyCredited = PostedSalesCreditMemoLine::query()
+            ->join('posted_sales_credit_memos as headers', 'headers.id', '=', 'posted_sales_credit_memo_lines.posted_sales_credit_memo_id')
+            ->where('posted_sales_credit_memo_lines.corrected_invoice_line_id', $line->id)
+            ->where('headers.corrected', false)
+            ->sum('posted_sales_credit_memo_lines.quantity');
+
+        return max(0.0, abs((float) $line->quantity) - abs((float) $alreadyCredited));
     }
 
     private function generateMemoNumber(): string

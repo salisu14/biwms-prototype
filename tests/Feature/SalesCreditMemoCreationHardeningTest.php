@@ -6,10 +6,12 @@ use App\Enums\ApprovalStatus;
 use App\Enums\ItemType;
 use App\Filament\Resources\SalesCreditMemos\Pages\CreateSalesCreditMemo;
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
+use App\Filament\Resources\SalesCreditMemos\Schemas\SalesCreditMemoForm;
 use App\Models\Customer;
 use App\Models\Item;
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
+use App\Models\PostedSalesInvoice;
 use App\Models\Role;
 use App\Models\SalesCreditMemo;
 use App\Models\SalesCreditMemoLine;
@@ -85,6 +87,71 @@ it('creates a draft sales credit memo through the service owned Filament create 
         ->and(salesCreditMemoCreationNumberSeriesLine()->last_no_used)->toBe(1);
 });
 
+it('lists paid posted invoices for the selected customer and excludes unrelated customers', function (): void {
+    $customer = Customer::factory()->create();
+    $otherCustomer = Customer::factory()->create();
+    $item = Item::factory()->create([
+        'item_type' => ItemType::FINISHED_GOOD,
+        'unit_price' => 150,
+    ]);
+    $paidInvoice = salesCreditMemoCreationPostedInvoice($customer, $item, 'S-INV-PAID-001', paid: true);
+    $otherInvoice = salesCreditMemoCreationPostedInvoice($otherCustomer, $item, 'S-INV-OTHER-001', paid: true);
+
+    $options = salesCreditMemoCreationPostedInvoiceOptions($customer->id);
+
+    expect($options)->toHaveKey($paidInvoice->id)
+        ->and($options[$paidInvoice->id])->toContain('S-INV-PAID-001')
+        ->and($options[$paidInvoice->id])->toContain('PAID')
+        ->and($options)->not->toHaveKey($otherInvoice->id);
+});
+
+it('creates a draft sales credit memo with posted invoice and posted invoice line lineage', function (): void {
+    $user = salesCreditMemoCreationUser();
+    salesCreditMemoCreationNumberSeries();
+    $customer = Customer::factory()->create();
+    $item = Item::factory()->create([
+        'item_type' => ItemType::FINISHED_GOOD,
+        'unit_price' => 150,
+    ]);
+    $postedInvoice = salesCreditMemoCreationPostedInvoice($customer, $item, 'S-INV-LINK-001', paid: true);
+    $postedInvoiceLine = $postedInvoice->lines()->firstOrFail();
+
+    Livewire::actingAs($user)
+        ->test(CreateSalesCreditMemo::class)
+        ->fillForm([
+            'customer_id' => $customer->id,
+            'sales_invoice_id' => null,
+            'posted_sales_invoice_id' => $postedInvoice->id,
+            'effective_date' => now()->toDateString(),
+            'reason' => 'Customer return',
+            'currency_code' => 'NGN',
+            'items' => [[
+                'posted_sales_invoice_line_id' => $postedInvoiceLine->id,
+                'item_id' => $item->id,
+                'description' => $item->description,
+                'quantity' => 2,
+                'unit_price' => 150,
+                'vat_percent' => 0,
+                'unit_of_measure_code' => $item->base_unit_of_measure,
+                'qty_per_unit_of_measure' => 1,
+            ]],
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $memo = SalesCreditMemo::query()
+        ->with('items')
+        ->where('memo_number', 'SCM-000001')
+        ->firstOrFail();
+
+    expect($memo->posted_sales_invoice_id)->toBe($postedInvoice->id)
+        ->and($memo->sales_invoice_id)->toBeNull()
+        ->and($memo->items)->toHaveCount(1)
+        ->and($memo->items->first()->posted_sales_invoice_line_id)->toBe($postedInvoiceLine->id)
+        ->and((float) $memo->items->first()->unit_price)->toBe(150.0)
+        ->and((float) $memo->total_amount)->toBe(300.0);
+});
+
 function salesCreditMemoCreationUser(): User
 {
     $role = Role::query()->firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
@@ -148,6 +215,7 @@ function salesCreditMemoCreationPayload(): array
     return [
         'customer_id' => $customer->id,
         'sales_invoice_id' => null,
+        'posted_sales_invoice_id' => null,
         'effective_date' => now()->toDateString(),
         'reason' => 'Customer return',
         'currency_code' => 'NGN',
@@ -161,4 +229,66 @@ function salesCreditMemoCreationPayload(): array
             'qty_per_unit_of_measure' => 1,
         ]],
     ];
+}
+
+function salesCreditMemoCreationPostedInvoice(Customer $customer, Item $item, string $documentNumber, bool $paid): PostedSalesInvoice
+{
+    $user = User::factory()->create();
+    $grandTotal = 1500.0;
+
+    $invoice = PostedSalesInvoice::query()->create([
+        'document_number' => $documentNumber,
+        'customer_id' => $customer->id,
+        'customer_name' => $customer->name,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'due_date' => now()->addDays(7)->toDateString(),
+        'subtotal' => $grandTotal,
+        'total_amount' => $grandTotal,
+        'grand_total' => $grandTotal,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'amount_paid' => $paid ? $grandTotal : 0,
+        'remaining_amount' => $paid ? 0 : $grandTotal,
+        'paid_in_full' => $paid,
+        'paid_in_full_date' => $paid ? now() : null,
+        'posted_by' => $user->id,
+        'posted_at' => now(),
+        'cancelled' => false,
+    ]);
+
+    $invoice->lines()->create([
+        'item_id' => $item->id,
+        'item_code' => $item->item_code,
+        'item_description' => $item->description,
+        'posting_date' => now()->toDateString(),
+        'quantity' => 10,
+        'unit_of_measure_code' => $item->base_unit_of_measure,
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => 10,
+        'unit_price' => 150,
+        'unit_cost' => 10,
+        'unit_cost_lcy' => 10,
+        'line_total' => $grandTotal,
+        'line_amount' => $grandTotal,
+        'vat_percentage' => 0,
+        'vat_amount' => 0,
+        'amount_including_vat' => $grandTotal,
+        'cost_amount' => 100,
+        'profit_amount' => 1400,
+        'line_number' => 10000,
+    ]);
+
+    return $invoice;
+}
+
+/**
+ * @return array<int, string>
+ */
+function salesCreditMemoCreationPostedInvoiceOptions(int $customerId): array
+{
+    $method = new ReflectionMethod(SalesCreditMemoForm::class, 'eligiblePostedInvoiceOptions');
+    $method->setAccessible(true);
+
+    return $method->invoke(null, $customerId);
 }

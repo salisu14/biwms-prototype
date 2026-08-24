@@ -8,7 +8,9 @@ use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Customer;
 use App\Models\Item;
 use App\Models\Location;
-use App\Models\SalesInvoice;
+use App\Models\PostedSalesCreditMemoLine;
+use App\Models\PostedSalesInvoice;
+use App\Models\PostedSalesInvoiceLine;
 use App\Services\Sales\SalesPricingResolver;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
@@ -84,28 +86,42 @@ class SalesCreditMemoForm
             ->preload()
             ->required()
             ->live()
-            ->disabled(fn ($record) => $record?->isPosted());
+            ->disabled(fn ($record) => $record?->isPosted())
+            ->afterStateUpdated(function (Set $set): void {
+                $set('posted_sales_invoice_id', null);
+                $set('items', []);
+            });
     }
 
     private static function makeInvoiceSelect(): Select
     {
-        return Select::make('sales_invoice_id')
+        return Select::make('posted_sales_invoice_id')
             ->label('Link to Invoice')
-            ->relationship('invoice', 'invoice_number')
+            ->options(fn (Get $get): array => self::eligiblePostedInvoiceOptions((int) ($get('customer_id') ?? 0)))
             ->searchable()
             ->preload()
             ->placeholder('Optional: Select original invoice')
+            ->helperText('Paid invoices remain eligible when returnable invoice quantities are still available.')
             ->disabled(fn ($record) => $record?->isPosted())
             ->live()
-            ->afterStateUpdated(function ($state, Set $set) {
+            ->afterStateUpdated(function ($state, Set $set): void {
+                $set('sales_invoice_id', null);
+
                 if (! $state) {
+                    $set('items', []);
+
                     return;
                 }
 
-                $invoice = SalesInvoice::find($state);
+                $invoice = PostedSalesInvoice::query()
+                    ->with('lines')
+                    ->find($state);
+
                 if ($invoice?->customer_id) {
                     $set('customer_id', $invoice->customer_id);
                 }
+
+                $set('items', self::postedInvoiceLineDefaults($invoice));
             });
     }
 
@@ -136,6 +152,7 @@ class SalesCreditMemoForm
     private static function getRepeaterItemSchema(): array
     {
         return [
+            self::makePostedInvoiceLineSelect(),
             self::makeItemSelect(),
             self::makeDescriptionField(),
             self::makeQuantityField(),
@@ -147,6 +164,31 @@ class SalesCreditMemoForm
         ];
     }
 
+    private static function makePostedInvoiceLineSelect(): Select
+    {
+        return Select::make('posted_sales_invoice_line_id')
+            ->label('Invoice Line')
+            ->options(fn (Get $get): array => self::eligiblePostedInvoiceLineOptions((int) ($get('../../posted_sales_invoice_id') ?? 0)))
+            ->searchable()
+            ->preload()
+            ->live()
+            ->dehydrated()
+            ->visible(fn (Get $get): bool => filled($get('../../posted_sales_invoice_id')))
+            ->required(fn (Get $get): bool => filled($get('../../posted_sales_invoice_id')))
+            ->columnSpan(4)
+            ->afterStateUpdated(function ($state, Set $set): void {
+                if (! $state) {
+                    return;
+                }
+
+                $postedLine = PostedSalesInvoiceLine::query()->find($state);
+
+                if ($postedLine) {
+                    self::populatePostedInvoiceLineFields($postedLine, $set);
+                }
+            });
+    }
+
     private static function makeItemSelect(): Select
     {
         return Select::make('item_id')
@@ -156,7 +198,9 @@ class SalesCreditMemoForm
             ->preload()
             ->required()
             ->live()
-            ->columnSpan(4)
+            ->disabled(fn (Get $get): bool => filled($get('../../posted_sales_invoice_id')))
+            ->dehydrated()
+            ->columnSpan(fn (Get $get): int => filled($get('../../posted_sales_invoice_id')) ? 3 : 4)
             ->afterStateUpdated(function ($state, Set $set, Get $get) {
                 if (! $state) {
                     return;
@@ -260,6 +304,7 @@ class SalesCreditMemoForm
             ->minValue(0)
             ->step(0.01)
             ->live(onBlur: true)
+            ->readOnly(fn (Get $get): bool => filled($get('posted_sales_invoice_line_id')))
             ->columnSpan(3);
     }
 
@@ -273,6 +318,7 @@ class SalesCreditMemoForm
             ->maxValue(100)
             ->step(0.1)
             ->live(onBlur: true)
+            ->readOnly(fn (Get $get): bool => filled($get('posted_sales_invoice_line_id')))
             ->columnSpan(1);
     }
 
@@ -307,6 +353,8 @@ class SalesCreditMemoForm
             ->options(fn (Get $get) => self::getUomOptions($get))
             ->required()
             ->live()
+            ->disabled(fn (Get $get): bool => filled($get('posted_sales_invoice_line_id')))
+            ->dehydrated()
             ->columnSpan(2)
             ->afterStateUpdated(function ($state, Set $set, Get $get) {
                 if (! $state || ! $get('item_id')) {
@@ -442,5 +490,129 @@ class SalesCreditMemoForm
                 'EUR' => 'EUR',
             ])
             ->default('NGN');
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function eligiblePostedInvoiceOptions(int $customerId): array
+    {
+        if ($customerId <= 0) {
+            return [];
+        }
+
+        return PostedSalesInvoice::query()
+            ->where('customer_id', $customerId)
+            ->where('cancelled', false)
+            ->whereHas('lines', fn ($query) => $query->whereNotNull('item_id'))
+            ->orderByDesc('posting_date')
+            ->limit(50)
+            ->get()
+            ->filter(fn (PostedSalesInvoice $invoice): bool => self::hasReturnablePostedInvoiceLine($invoice))
+            ->mapWithKeys(fn (PostedSalesInvoice $invoice): array => [
+                $invoice->id => sprintf(
+                    '%s | %s | %s %s | %s',
+                    $invoice->document_number,
+                    optional($invoice->posting_date)->format('Y-m-d') ?? '-',
+                    $invoice->currency_code ?? 'NGN',
+                    number_format((float) $invoice->grand_total, 2),
+                    $invoice->status,
+                ),
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function eligiblePostedInvoiceLineOptions(int $postedInvoiceId): array
+    {
+        if ($postedInvoiceId <= 0) {
+            return [];
+        }
+
+        return PostedSalesInvoiceLine::query()
+            ->with('item')
+            ->where('posted_sales_invoice_id', $postedInvoiceId)
+            ->whereNotNull('item_id')
+            ->orderBy('line_number')
+            ->get()
+            ->filter(fn (PostedSalesInvoiceLine $line): bool => self::remainingReturnableQuantity($line) > 0.000001)
+            ->mapWithKeys(fn (PostedSalesInvoiceLine $line): array => [
+                $line->id => sprintf(
+                    '%s | %s | Invoiced %s %s | Remaining %s %s',
+                    $line->item_code ?? $line->item?->item_code ?? ('#'.$line->item_id),
+                    $line->item_description,
+                    number_format(abs((float) $line->quantity), 4),
+                    $line->unit_of_measure_code,
+                    number_format(self::remainingReturnableQuantity($line), 4),
+                    $line->unit_of_measure_code,
+                ),
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function postedInvoiceLineDefaults(?PostedSalesInvoice $invoice): array
+    {
+        if (! $invoice) {
+            return [];
+        }
+
+        return $invoice->lines
+            ->filter(fn (PostedSalesInvoiceLine $line): bool => $line->item_id !== null && self::remainingReturnableQuantity($line) > 0.000001)
+            ->map(function (PostedSalesInvoiceLine $line): array {
+                $remainingQuantity = self::remainingReturnableQuantity($line);
+
+                return [
+                    'posted_sales_invoice_line_id' => $line->id,
+                    'item_id' => $line->item_id,
+                    'description' => $line->item_description,
+                    'quantity' => $remainingQuantity,
+                    'unit_price' => abs((float) $line->unit_price),
+                    'vat_percent' => (float) $line->vat_percentage,
+                    'line_discount_percent' => (float) $line->line_discount_percent,
+                    'line_discount_amount' => abs((float) $line->line_discount_amount),
+                    'unit_of_measure_code' => $line->unit_of_measure_code,
+                    'qty_per_unit_of_measure' => (float) $line->qty_per_unit_of_measure,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private static function populatePostedInvoiceLineFields(PostedSalesInvoiceLine $line, Set $set): void
+    {
+        $set('item_id', $line->item_id);
+        $set('description', $line->item_description);
+        $set('unit_price', abs((float) $line->unit_price));
+        $set('vat_percent', (float) $line->vat_percentage);
+        $set('line_discount_percent', (float) $line->line_discount_percent);
+        $set('line_discount_amount', abs((float) $line->line_discount_amount));
+        $set('unit_of_measure_code', $line->unit_of_measure_code);
+        $set('qty_per_unit_of_measure', (float) $line->qty_per_unit_of_measure);
+        $set('quantity', self::remainingReturnableQuantity($line));
+    }
+
+    private static function hasReturnablePostedInvoiceLine(PostedSalesInvoice $invoice): bool
+    {
+        $invoice->loadMissing('lines');
+
+        return $invoice->lines->contains(
+            fn (PostedSalesInvoiceLine $line): bool => $line->item_id !== null && self::remainingReturnableQuantity($line) > 0.000001
+        );
+    }
+
+    private static function remainingReturnableQuantity(PostedSalesInvoiceLine $line): float
+    {
+        $alreadyCredited = PostedSalesCreditMemoLine::query()
+            ->join('posted_sales_credit_memos as headers', 'headers.id', '=', 'posted_sales_credit_memo_lines.posted_sales_credit_memo_id')
+            ->where('posted_sales_credit_memo_lines.corrected_invoice_line_id', $line->id)
+            ->where('headers.corrected', false)
+            ->sum('posted_sales_credit_memo_lines.quantity');
+
+        return max(0.0, abs((float) $line->quantity) - abs((float) $alreadyCredited));
     }
 }

@@ -9,6 +9,7 @@ use App\Enums\ApprovalStatus;
 use App\Services\NumberSeriesService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SalesCreditMemo extends Model implements Approvable
@@ -50,6 +51,7 @@ class SalesCreditMemo extends Model implements Approvable
 
         // BC-style linking
         'sales_invoice_id',
+        'posted_sales_invoice_id',
 
         // Dimensions (very important for ERP)
         //        'dimension_1_id',
@@ -78,19 +80,24 @@ class SalesCreditMemo extends Model implements Approvable
         return $this->hasMany(SalesCreditMemoLine::class, 'sales_credit_memo_id');
     }
 
-    public function customer()
+    public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
     }
 
-    public function approver()
+    public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'posted_by');
     }
 
-    public function invoice()
+    public function invoice(): BelongsTo
     {
         return $this->belongsTo(SalesInvoice::class, 'sales_invoice_id');
+    }
+
+    public function postedInvoice(): BelongsTo
+    {
+        return $this->belongsTo(PostedSalesInvoice::class, 'posted_sales_invoice_id');
     }
 
     /*

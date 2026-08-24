@@ -26,6 +26,7 @@ use App\Models\Payment;
 use App\Models\Permission;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
+use App\Models\PostedSalesInvoiceLine;
 use App\Models\SalesCreditMemo;
 use App\Models\SalesInvoice;
 use App\Models\UnitOfMeasure;
@@ -305,6 +306,113 @@ test('linked sales credit memo reduces receivable returns stock and blocks over-
         ->toThrow(ValidationException::class, 'exceeds invoiced quantity');
 });
 
+test('posted paid sales invoice remains eligible for linked sales credit memo returns with exact line lineage', function () {
+    $fixture = salesPostingFixture();
+    grantSalesCreditMemoPostPermission($fixture['user']);
+    $this->actingAs($fixture['user']);
+
+    $invoice = createApprovedSalesInvoiceForReturn($fixture, 'SI-PAID-RETURN-001', 1);
+    app(SalesInvoiceService::class)->post($invoice);
+
+    $postedInvoice = PostedSalesInvoice::query()
+        ->where('document_number', 'SI-PAID-RETURN-001')
+        ->firstOrFail();
+    $postedInvoice->forceFill([
+        'paid_in_full' => true,
+        'remaining_amount' => 0,
+        'paid_in_full_date' => now(),
+    ])->save();
+
+    $postedInvoiceLine = $postedInvoice->lines()->firstOrFail();
+    $originalOutboundEntryId = $postedInvoiceLine->item_ledger_entry_id;
+
+    $creditMemo = createApprovedLinkedSalesCreditMemo(
+        $fixture,
+        'SCM-PAID-RETURN-001',
+        $postedInvoice,
+        $postedInvoiceLine,
+        0.25,
+    );
+
+    app(SalesCreditMemoService::class)->post($creditMemo);
+
+    $postedMemo = PostedSalesCreditMemo::query()
+        ->where('document_number', 'SCM-PAID-RETURN-001')
+        ->firstOrFail();
+    $postedMemoLine = $postedMemo->lines()->firstOrFail();
+    $returnEntry = ItemLedgerEntry::query()
+        ->where('document_type', 'SALES_CREDIT_MEMO')
+        ->where('document_number', 'SCM-PAID-RETURN-001')
+        ->firstOrFail();
+    $valueEntry = ValueEntry::query()
+        ->where('item_ledger_entry_no', $returnEntry->entry_number)
+        ->where('document_no', 'SCM-PAID-RETURN-001')
+        ->firstOrFail();
+
+    expect($postedInvoice->fresh()->status)->toBe('PAID')
+        ->and($postedMemo->corrected_invoice_id)->toBe($postedInvoice->id)
+        ->and($postedMemo->corrected_invoice_number)->toBe('SI-PAID-RETURN-001')
+        ->and($postedMemoLine->corrected_invoice_line_id)->toBe($postedInvoiceLine->id)
+        ->and((float) $postedMemoLine->quantity)->toBe(-0.25)
+        ->and((float) $returnEntry->quantity)->toBe(72.0)
+        ->and((float) $fixture['item']->fresh()->inventory)->toBe(72.0)
+        ->and($valueEntry->accounting_metadata['original_outbound_item_ledger_entry_id'] ?? null)->toBe($originalOutboundEntryId);
+
+    $glEntries = GlEntry::query()->where('document_number', 'SCM-PAID-RETURN-001')->get();
+    expect(round((float) $glEntries->sum('debit_amount'), 2))
+        ->toBe(round((float) $glEntries->sum('credit_amount'), 2));
+});
+
+test('prior linked sales credit memo returns reduce remaining returnable posted invoice line quantity', function () {
+    $fixture = salesPostingFixture();
+    grantSalesCreditMemoPostPermission($fixture['user']);
+    $this->actingAs($fixture['user']);
+
+    $invoice = createApprovedSalesInvoiceForReturn($fixture, 'SI-PART-RET-001', 1);
+    app(SalesInvoiceService::class)->post($invoice);
+
+    $postedInvoice = PostedSalesInvoice::query()
+        ->where('document_number', 'SI-PART-RET-001')
+        ->firstOrFail();
+    $postedInvoiceLine = $postedInvoice->lines()->firstOrFail();
+
+    app(SalesCreditMemoService::class)->post(createApprovedLinkedSalesCreditMemo(
+        $fixture,
+        'SCM-PART-RET-001',
+        $postedInvoice,
+        $postedInvoiceLine,
+        0.25,
+    ));
+
+    app(SalesCreditMemoService::class)->post(createApprovedLinkedSalesCreditMemo(
+        $fixture,
+        'SCM-PART-RET-002',
+        $postedInvoice,
+        $postedInvoiceLine,
+        0.75,
+    ));
+
+    $overReturnMemo = createApprovedLinkedSalesCreditMemo(
+        $fixture,
+        'SCM-PART-RET-003',
+        $postedInvoice,
+        $postedInvoiceLine,
+        0.01,
+    );
+
+    expect(fn () => app(SalesCreditMemoService::class)->post($overReturnMemo))
+        ->toThrow(ValidationException::class, 'exceeds remaining returnable quantity');
+
+    expect((float) $fixture['item']->fresh()->inventory)->toBe(288.0)
+        ->and((float) PostedSalesCreditMemo::query()
+            ->where('corrected_invoice_id', $postedInvoice->id)
+            ->with('lines')
+            ->get()
+            ->flatMap->lines
+            ->sum(fn ($line): float => abs((float) $line->quantity))
+        )->toBe(1.0);
+});
+
 test('sales credit memo posting requires permission and rolls back on missing setup', function () {
     $fixture = salesPostingFixture(createGeneralPostingSetup: false);
     $this->actingAs($fixture['user']);
@@ -503,4 +611,58 @@ function salesPostingEnsureBankLedgerNumberSeries(): void
             'blocked' => false,
         ]
     );
+}
+
+function createApprovedSalesInvoiceForReturn(array $fixture, string $invoiceNumber, float $quantity): SalesInvoice
+{
+    $invoice = SalesInvoice::query()->create([
+        'invoice_number' => $invoiceNumber,
+        'customer_id' => $fixture['customer']->id,
+        'status' => ApprovalStatus::APPROVED,
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(7)->toDateString(),
+        'currency_code' => 'NGN',
+        'approved_by' => $fixture['user']->id,
+        'approved_at' => now(),
+    ]);
+
+    $invoice->lines()->create([
+        'item_id' => $fixture['item']->id,
+        'description' => 'One carton sale',
+        'quantity' => $quantity,
+        'unit_of_measure' => 'CT',
+        'unit_price' => 1000,
+    ]);
+
+    return $invoice;
+}
+
+function createApprovedLinkedSalesCreditMemo(
+    array $fixture,
+    string $memoNumber,
+    PostedSalesInvoice $postedInvoice,
+    PostedSalesInvoiceLine $postedInvoiceLine,
+    float $quantity,
+): SalesCreditMemo {
+    $creditMemo = SalesCreditMemo::query()->create([
+        'memo_number' => $memoNumber,
+        'customer_id' => $fixture['customer']->id,
+        'sales_invoice_id' => null,
+        'posted_sales_invoice_id' => $postedInvoice->id,
+        'total_amount' => 1000,
+        'status' => ApprovalStatus::APPROVED,
+        'reason' => 'Return',
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+    ]);
+
+    $creditMemo->items()->create([
+        'item_id' => $fixture['item']->id,
+        'posted_sales_invoice_line_id' => $postedInvoiceLine->id,
+        'quantity' => $quantity,
+        'unit_of_measure_code' => 'CT',
+        'unit_price' => 1000,
+    ]);
+
+    return $creditMemo;
 }

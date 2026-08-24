@@ -18,6 +18,8 @@ class SalesCreditMemoLineData extends Data
         public ?string $unit_of_measure_code = null,
         public float $line_discount_percent = 0,
         public float $line_discount_amount = 0,
+        public ?int $sales_invoice_line_id = null,
+        public ?int $posted_sales_invoice_line_id = null,
     ) {}
 }
 
@@ -26,6 +28,7 @@ class SalesCreditMemoData extends Data
     public function __construct(
         public int $customer_id,
         public ?int $sales_invoice_id,
+        public ?int $posted_sales_invoice_id,
         public ?string $memo_number,
         public ?string $effective_date,
         public ?string $currency_code,

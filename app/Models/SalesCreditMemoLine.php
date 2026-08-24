@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,6 +26,7 @@ class SalesCreditMemoLine extends Model
         'amount', // Net
         'amount_including_vat', // Gross
         'sales_invoice_line_id',
+        'posted_sales_invoice_line_id',
     ];
 
     protected $casts = [
@@ -38,7 +41,7 @@ class SalesCreditMemoLine extends Model
         'amount_including_vat' => 'decimal:2',
     ];
 
-    protected static function booted()
+    protected static function booted(): void
     {
         static::saving(function (SalesCreditMemoLine $line) {
             // 1. Calculate Base (Quantity * Price)
@@ -91,5 +94,10 @@ class SalesCreditMemoLine extends Model
     public function invoiceLine(): BelongsTo
     {
         return $this->belongsTo(SalesInvoiceLine::class, 'sales_invoice_line_id');
+    }
+
+    public function postedInvoiceLine(): BelongsTo
+    {
+        return $this->belongsTo(PostedSalesInvoiceLine::class, 'posted_sales_invoice_line_id');
     }
 }
