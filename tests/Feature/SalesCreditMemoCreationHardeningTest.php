@@ -5,17 +5,24 @@ declare(strict_types=1);
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemType;
 use App\Filament\Resources\SalesCreditMemos\Pages\CreateSalesCreditMemo;
+use App\Filament\Resources\SalesCreditMemos\Pages\ViewSalesCreditMemo;
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
 use App\Filament\Resources\SalesCreditMemos\Schemas\SalesCreditMemoForm;
+use App\Models\ApprovalEntry;
 use App\Models\Customer;
+use App\Models\GlEntry;
 use App\Models\Item;
+use App\Models\ItemLedgerEntry;
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
 use App\Models\PostedSalesInvoice;
 use App\Models\Role;
 use App\Models\SalesCreditMemo;
 use App\Models\SalesCreditMemoLine;
+use App\Models\SalesInvoice;
 use App\Models\User;
+use App\Models\ValueEntry;
+use App\Services\Approval\ApprovalService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 
@@ -150,6 +157,120 @@ it('creates a draft sales credit memo with posted invoice and posted invoice lin
         ->and($memo->items->first()->posted_sales_invoice_line_id)->toBe($postedInvoiceLine->id)
         ->and((float) $memo->items->first()->unit_price)->toBe(150.0)
         ->and((float) $memo->total_amount)->toBe(300.0);
+});
+
+it('renders posted original invoice number on the sales credit memo view page', function (): void {
+    $user = salesCreditMemoCreationUser();
+    $customer = Customer::factory()->create();
+    $item = Item::factory()->create(['item_type' => ItemType::FINISHED_GOOD]);
+    $postedInvoice = salesCreditMemoCreationPostedInvoice($customer, $item, 'S-INV-VIEW-001', paid: true);
+    $postedInvoiceLine = $postedInvoice->lines()->firstOrFail();
+    $memo = salesCreditMemoCreationLinkedMemo($customer, $postedInvoice, $postedInvoiceLine);
+
+    Livewire::actingAs($user)
+        ->test(ViewSalesCreditMemo::class, ['record' => $memo->getRouteKey()])
+        ->assertSee('S-INV-VIEW-001')
+        ->assertDontSee('No linked invoice');
+});
+
+it('renders legacy original invoice linkage and no-linkage placeholders safely', function (): void {
+    $user = salesCreditMemoCreationUser();
+    $customer = Customer::factory()->create();
+    $legacyInvoice = SalesInvoice::query()->create([
+        'invoice_number' => 'SI-LEGACY-001',
+        'customer_id' => $customer->id,
+        'status' => ApprovalStatus::APPROVED,
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(7)->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => 100,
+    ]);
+    $legacyMemo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-LEGACY-001',
+        'customer_id' => $customer->id,
+        'sales_invoice_id' => $legacyInvoice->id,
+        'status' => ApprovalStatus::DRAFT,
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => 100,
+    ]);
+    $unlinkedMemo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-NOLINK-001',
+        'customer_id' => $customer->id,
+        'sales_invoice_id' => null,
+        'posted_sales_invoice_id' => null,
+        'status' => ApprovalStatus::DRAFT,
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => 0,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test(ViewSalesCreditMemo::class, ['record' => $legacyMemo->getRouteKey()])
+        ->assertSee('SI-LEGACY-001');
+
+    Livewire::actingAs($user)
+        ->test(ViewSalesCreditMemo::class, ['record' => $unlinkedMemo->getRouteKey()])
+        ->assertSee('No linked invoice');
+});
+
+it('submits draft sales credit memo through canonical approval without posting side effects', function (): void {
+    $user = salesCreditMemoCreationUser();
+    $customer = Customer::factory()->create();
+    $item = Item::factory()->create(['item_type' => ItemType::FINISHED_GOOD]);
+    $postedInvoice = salesCreditMemoCreationPostedInvoice($customer, $item, 'S-INV-SUBMIT-001', paid: true);
+    $postedInvoiceLine = $postedInvoice->lines()->firstOrFail();
+    $memo = salesCreditMemoCreationLinkedMemo($customer, $postedInvoice, $postedInvoiceLine);
+
+    $this->actingAs($user);
+
+    app(ApprovalService::class)->submitForApproval($memo);
+
+    $memo->refresh();
+
+    expect($memo->status)->toBe(ApprovalStatus::APPROVED)
+        ->and($memo->approver_id)->toBe($user->id)
+        ->and($memo->approved_at)->not->toBeNull()
+        ->and($memo->posted_sales_invoice_id)->toBe($postedInvoice->id)
+        ->and($memo->items()->firstOrFail()->posted_sales_invoice_line_id)->toBe($postedInvoiceLine->id)
+        ->and($postedInvoiceLine->fresh()->quantity)->toEqual($postedInvoiceLine->quantity)
+        ->and(ItemLedgerEntry::query()->where('document_number', $memo->memo_number)->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', $memo->memo_number)->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', $memo->memo_number)->exists())->toBeFalse();
+});
+
+it('failed approval does not partially mutate the sales credit memo', function (): void {
+    $user = salesCreditMemoCreationUser();
+    $customer = Customer::factory()->create();
+    $memo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-FAILED-001',
+        'customer_id' => $customer->id,
+        'status' => ApprovalStatus::PENDING,
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => 100,
+    ]);
+    $entry = ApprovalEntry::query()->create([
+        'approvable_type' => SalesCreditMemo::class,
+        'approvable_id' => $memo->id,
+        'sequence_no' => 1,
+        'approver_id' => $user->id,
+        'status' => 'approved',
+    ]);
+
+    $this->actingAs($user);
+
+    expect(fn () => app(ApprovalService::class)->approve($entry))
+        ->toThrow(RuntimeException::class, 'Approval entry is not in a state that can be approved.');
+
+    $memo->refresh();
+
+    expect($memo->status)->toBe(ApprovalStatus::PENDING)
+        ->and($memo->approved_at)->toBeNull()
+        ->and($memo->approver_id)->toBeNull()
+        ->and(ItemLedgerEntry::query()->where('document_number', $memo->memo_number)->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', $memo->memo_number)->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', $memo->memo_number)->exists())->toBeFalse();
 });
 
 function salesCreditMemoCreationUser(): User
@@ -291,4 +412,31 @@ function salesCreditMemoCreationPostedInvoiceOptions(int $customerId): array
     $method->setAccessible(true);
 
     return $method->invoke(null, $customerId);
+}
+
+function salesCreditMemoCreationLinkedMemo(
+    Customer $customer,
+    PostedSalesInvoice $postedInvoice,
+    mixed $postedInvoiceLine,
+): SalesCreditMemo {
+    $memo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-'.$postedInvoice->document_number,
+        'customer_id' => $customer->id,
+        'sales_invoice_id' => null,
+        'posted_sales_invoice_id' => $postedInvoice->id,
+        'status' => ApprovalStatus::DRAFT,
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => 150,
+    ]);
+
+    $memo->items()->create([
+        'item_id' => $postedInvoiceLine->item_id,
+        'posted_sales_invoice_line_id' => $postedInvoiceLine->id,
+        'quantity' => 1,
+        'unit_of_measure_code' => $postedInvoiceLine->unit_of_measure_code,
+        'unit_price' => 150,
+    ]);
+
+    return $memo;
 }

@@ -66,6 +66,7 @@ class SalesCreditMemo extends Model implements Approvable
         'status' => ApprovalStatus::class,
         'effective_date' => 'date',
         'posted_at' => 'datetime',
+        'approved_at' => 'datetime',
         'total_amount' => 'decimal:2',
     ];
 
@@ -86,6 +87,11 @@ class SalesCreditMemo extends Model implements Approvable
     }
 
     public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approver_id');
+    }
+
+    public function poster(): BelongsTo
     {
         return $this->belongsTo(User::class, 'posted_by');
     }

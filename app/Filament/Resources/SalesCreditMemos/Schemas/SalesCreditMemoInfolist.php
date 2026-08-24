@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\SalesCreditMemos\Schemas;
 
+use App\Models\SalesCreditMemo;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -25,8 +28,9 @@ class SalesCreditMemoInfolist
                             ->badge(),
                         TextEntry::make('effective_date')
                             ->date(),
-                        TextEntry::make('invoice.invoice_number')
+                        TextEntry::make('original_invoice_number')
                             ->label('Original Invoice')
+                            ->state(fn (SalesCreditMemo $record): ?string => $record->postedInvoice?->document_number ?? $record->invoice?->invoice_number)
                             ->placeholder('No linked invoice'),
                         TextEntry::make('amount_including_vat')
                             ->label('Total Amount (Gross)')
@@ -62,7 +66,7 @@ class SalesCreditMemoInfolist
                 // Conditional Audit Trail Section
                 Section::make('Audit Trail')
                     ->schema([
-                        TextEntry::make('approver.name')
+                        TextEntry::make('poster.name')
                             ->label('Posted By'),
                         TextEntry::make('posted_at')
                             ->label('Posted Date')
