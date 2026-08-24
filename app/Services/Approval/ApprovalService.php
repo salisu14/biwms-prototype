@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace App\Services\Approval;
 
 use App\Contracts\Approvable;
+use App\Contracts\ApprovableStatus;
+use App\Exceptions\DocumentStateException;
 use App\Models\ApprovalEntry;
 use App\Models\User;
 use App\Notifications\ApprovalRequested;
+use BackedEnum;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Auth\Access\AuthorizationException;
+use UnitEnum;
 
 class ApprovalService
 {
@@ -22,10 +26,13 @@ class ApprovalService
     /**
      * Submit a document for approval.
      * Super admins bypass the approval chain entirely.
+     *
      * @throws \Throwable
      */
     public function submitForApproval(Approvable $model): void
     {
+        $this->ensureCanSubmitForApproval($model);
+
         // Super Admin Bypass
         if (Auth::user()?->hasRole('super_admin')) {
             $this->release($model);
@@ -83,6 +90,8 @@ class ApprovalService
             throw new \RuntimeException('Approval entry is not in a state that can be approved.');
         }
 
+        $this->ensureDocumentIsNotPosted($entry->approvable);
+
         DB::transaction(function () use ($entry, $comment) {
             $entry->update([
                 'status' => 'approved',
@@ -129,6 +138,8 @@ class ApprovalService
         if ($entry->status !== 'created') {
             throw new \RuntimeException('Approval entry is not in a state that can be rejected.');
         }
+
+        $this->ensureDocumentIsNotPosted($entry->approvable);
 
         DB::transaction(function () use ($entry, $reason) {
             $entry->update([
@@ -215,5 +226,24 @@ class ApprovalService
     {
         Notification::send($entry->approver, new ApprovalRequested($entry));
     }
-}
 
+    private function ensureCanSubmitForApproval(Approvable $model): void
+    {
+        $status = data_get($model, 'status');
+
+        if ($status instanceof ApprovableStatus && ! $status->canSubmitForApproval()) {
+            $label = $status instanceof UnitEnum
+                ? ($status instanceof BackedEnum ? (string) $status->value : $status->name)
+                : 'current';
+
+            throw new DocumentStateException("{$label} documents cannot be submitted for approval.");
+        }
+    }
+
+    private function ensureDocumentIsNotPosted(mixed $model): void
+    {
+        if (is_object($model) && method_exists($model, 'isPosted') && $model->isPosted()) {
+            throw new DocumentStateException('Posted documents cannot be changed through approval workflow.');
+        }
+    }
+}

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Contracts\Approvable;
 use App\Enums\ApprovalStatus;
+use App\Exceptions\DocumentStateException;
 use App\Services\NumberSeriesService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Model;
@@ -175,6 +176,10 @@ class SalesCreditMemo extends Model implements Approvable
 
     public function markAsReleased(): void
     {
+        if ($this->isPosted()) {
+            throw new DocumentStateException('Posted sales credit memos cannot be approved again.');
+        }
+
         $this->update([
             'status' => ApprovalStatus::APPROVED,
             'approved_at' => now(),

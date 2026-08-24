@@ -32,8 +32,16 @@ class SalesCreditMemoInfolist
                             ->label('Original Invoice')
                             ->state(fn (SalesCreditMemo $record): ?string => $record->postedInvoice?->document_number ?? $record->invoice?->invoice_number)
                             ->placeholder('No linked invoice'),
-                        TextEntry::make('amount_including_vat')
-                            ->label('Total Amount (Gross)')
+                        TextEntry::make('net_amount')
+                            ->label('Net')
+                            ->state(fn (SalesCreditMemo $record): float => (float) $record->items()->sum('amount'))
+                            ->money(fn (SalesCreditMemo $record): string => $record->currency_code ?? 'NGN'),
+                        TextEntry::make('vat_total')
+                            ->label('VAT')
+                            ->state(fn (SalesCreditMemo $record): float => (float) $record->items()->sum('vat_amount'))
+                            ->money(fn (SalesCreditMemo $record): string => $record->currency_code ?? 'NGN'),
+                        TextEntry::make('total_amount')
+                            ->label('Gross / Total')
                             ->money(fn ($record) => $record->currency_code ?? 'NGN'),
                     ])
                     ->columns(3),

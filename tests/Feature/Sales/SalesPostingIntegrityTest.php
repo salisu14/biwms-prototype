@@ -200,6 +200,8 @@ test('sales credit memo reverses inventory, value, customer, and gl entries usin
         ->firstOrFail();
 
     expect($creditMemo->fresh()->status)->toBe(ApprovalStatus::POSTED)
+        ->and($creditMemo->fresh()->posted_by)->toBe($fixture['user']->id)
+        ->and($creditMemo->fresh()->posted_at)->not->toBeNull()
         ->and((float) $itemLedgerEntry->quantity)->toBe(288.0)
         ->and($itemLedgerEntry->entry_type)->toBe(ItemLedgerEntryType::SALE)
         ->and((float) $fixture['item']->fresh()->inventory)->toBe(576.0);
@@ -217,8 +219,12 @@ test('sales credit memo reverses inventory, value, customer, and gl entries usin
     expect(round((float) $glEntries->sum('debit_amount'), 2))
         ->toBe(round((float) $glEntries->sum('credit_amount'), 2));
 
+    $originalPostedAt = $creditMemo->fresh()->posted_at;
+
     expect(fn () => app(SalesCreditMemoService::class)->post($creditMemo->fresh()))
         ->toThrow(Exception::class, 'Sales credit memo is already posted.');
+
+    expect($creditMemo->fresh()->posted_at->equalTo($originalPostedAt))->toBeTrue();
 });
 
 test('linked sales credit memo reduces receivable returns stock and blocks over-crediting', function () {
@@ -444,6 +450,7 @@ test('sales credit memo posting requires permission and rolls back on missing se
         ->toThrow(Exception::class, 'General posting setup missing');
 
     expect($creditMemo->fresh()->status)->toBe(ApprovalStatus::APPROVED)
+        ->and($creditMemo->fresh()->posted_at)->toBeNull()
         ->and(ItemLedgerEntry::query()->where('document_number', 'SCM-MISSING-SETUP')->exists())->toBeFalse()
         ->and(ValueEntry::query()->where('document_no', 'SCM-MISSING-SETUP')->exists())->toBeFalse()
         ->and(GlEntry::query()->where('document_number', 'SCM-MISSING-SETUP')->exists())->toBeFalse();

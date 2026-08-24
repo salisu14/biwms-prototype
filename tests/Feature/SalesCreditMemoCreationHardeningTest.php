@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemType;
 use App\Filament\Resources\SalesCreditMemos\Pages\CreateSalesCreditMemo;
+use App\Filament\Resources\SalesCreditMemos\Pages\EditSalesCreditMemo;
+use App\Filament\Resources\SalesCreditMemos\Pages\ListSalesCreditMemos;
 use App\Filament\Resources\SalesCreditMemos\Pages\ViewSalesCreditMemo;
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
 use App\Filament\Resources\SalesCreditMemos\Schemas\SalesCreditMemoForm;
@@ -273,6 +275,86 @@ it('failed approval does not partially mutate the sales credit memo', function (
         ->and(GlEntry::query()->where('document_number', $memo->memo_number)->exists())->toBeFalse();
 });
 
+it('hides posted sales credit memo edit and submit actions and blocks direct edit access', function (): void {
+    $user = salesCreditMemoCreationUser();
+    $memo = salesCreditMemoCreationMemoWithGrossTotal(300, ApprovalStatus::POSTED, $user);
+
+    Livewire::actingAs($user)
+        ->test(ListSalesCreditMemos::class)
+        ->assertTableActionHidden('edit', $memo)
+        ->assertTableActionHidden('submit', $memo);
+
+    Livewire::actingAs($user)
+        ->test(ViewSalesCreditMemo::class, ['record' => $memo->getRouteKey()])
+        ->assertActionHidden('edit')
+        ->assertActionHidden('submit_for_approval');
+
+    Livewire::actingAs($user)
+        ->test(EditSalesCreditMemo::class, ['record' => $memo->getRouteKey()])
+        ->assertForbidden();
+});
+
+it('rejects direct resubmission of a posted sales credit memo without side effects', function (): void {
+    $user = salesCreditMemoCreationUser();
+    $memo = salesCreditMemoCreationMemoWithGrossTotal(300, ApprovalStatus::POSTED, $user);
+
+    $this->actingAs($user);
+
+    expect(fn () => app(ApprovalService::class)->submitForApproval($memo))
+        ->toThrow(Exception::class, 'posted documents cannot be submitted for approval');
+
+    expect($memo->fresh()->status)->toBe(ApprovalStatus::POSTED)
+        ->and(ItemLedgerEntry::query()->where('document_number', $memo->memo_number)->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', $memo->memo_number)->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', $memo->memo_number)->exists())->toBeFalse();
+});
+
+it('keeps sales credit memo header total in sync with persisted line gross totals', function (): void {
+    $customer = Customer::factory()->create();
+    $item = Item::factory()->create(['item_type' => ItemType::FINISHED_GOOD]);
+    $memo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-TOTALS-001',
+        'customer_id' => $customer->id,
+        'status' => ApprovalStatus::DRAFT,
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => 0,
+    ]);
+
+    $line = $memo->items()->create([
+        'item_id' => $item->id,
+        'quantity' => 2,
+        'unit_price' => 150,
+        'vat_percent' => 0,
+        'unit_of_measure_code' => $item->base_unit_of_measure,
+    ]);
+
+    expect((float) $memo->fresh()->total_amount)->toBe(300.0);
+
+    $line->update(['quantity' => 3]);
+    expect((float) $memo->fresh()->total_amount)->toBe(450.0);
+
+    $line->delete();
+    expect((float) $memo->fresh()->total_amount)->toBe(0.0);
+});
+
+it('renders the same authoritative gross total on sales credit memo list and view pages', function (): void {
+    $user = salesCreditMemoCreationUser();
+    $memo = salesCreditMemoCreationMemoWithGrossTotal(300, ApprovalStatus::POSTED, $user);
+
+    expect((float) $memo->fresh()->total_amount)->toBe(300.0);
+
+    Livewire::actingAs($user)
+        ->test(ListSalesCreditMemos::class)
+        ->assertSee($memo->memo_number)
+        ->assertSee('300.00');
+
+    Livewire::actingAs($user)
+        ->test(ViewSalesCreditMemo::class, ['record' => $memo->getRouteKey()])
+        ->assertSee($memo->memo_number)
+        ->assertSee('300.00');
+});
+
 function salesCreditMemoCreationUser(): User
 {
     $role = Role::query()->firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
@@ -439,4 +521,33 @@ function salesCreditMemoCreationLinkedMemo(
     ]);
 
     return $memo;
+}
+
+function salesCreditMemoCreationMemoWithGrossTotal(
+    float $grossTotal,
+    ApprovalStatus $status = ApprovalStatus::DRAFT,
+    ?User $poster = null,
+): SalesCreditMemo {
+    $customer = Customer::factory()->create();
+    $item = Item::factory()->create(['item_type' => ItemType::FINISHED_GOOD]);
+    $memo = SalesCreditMemo::query()->create([
+        'memo_number' => 'SCM-GROSS-'.str_pad((string) SalesCreditMemo::query()->count(), 3, '0', STR_PAD_LEFT),
+        'customer_id' => $customer->id,
+        'status' => $status,
+        'effective_date' => now()->toDateString(),
+        'currency_code' => 'NGN',
+        'total_amount' => 0,
+        'posted_by' => $poster?->id,
+        'posted_at' => $status === ApprovalStatus::POSTED ? now() : null,
+    ]);
+
+    $memo->items()->create([
+        'item_id' => $item->id,
+        'quantity' => 2,
+        'unit_price' => $grossTotal / 2,
+        'vat_percent' => 0,
+        'unit_of_measure_code' => $item->base_unit_of_measure,
+    ]);
+
+    return $memo->fresh();
 }

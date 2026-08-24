@@ -43,7 +43,7 @@ class SalesCreditMemosTable
                 TextColumn::make('status')
                     ->badge(),
 
-                TextColumn::make('amount_including_vat')
+                TextColumn::make('total_amount')
                     ->label('Total')
                     ->money(fn ($record) => $record->currency_code ?? 'NGN')
                     ->alignment('right')
@@ -68,6 +68,7 @@ class SalesCreditMemosTable
                     ->label('Submit')
                     ->icon('heroicon-o-paper-airplane')
                     ->color('info')
+                    ->authorize(fn (SalesCreditMemo $record): bool => Auth::user()?->can('submit', $record) === true)
                     ->visible(fn (SalesCreditMemo $record) => $record->status instanceof ApprovableStatus && $record->status->canSubmitForApproval())
                     ->action(function (SalesCreditMemo $record) {
                         app(ApprovalService::class)->submitForApproval($record);
@@ -115,6 +116,7 @@ class SalesCreditMemosTable
                     ->icon('heroicon-m-check-badge')
                     ->color('success')
                     ->requiresConfirmation()
+                    ->authorize(fn (SalesCreditMemo $record): bool => Auth::user()?->can('post', $record) === true)
                     ->visible(fn (SalesCreditMemo $record) => $record->status === ApprovalStatus::APPROVED)
                     ->action(function (SalesCreditMemo $record) {
                         app(SalesCreditMemoService::class)->post($record);
@@ -126,9 +128,9 @@ class SalesCreditMemosTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->authorize('deleteAny'),
                 ]),
             ]);
     }
 }
-

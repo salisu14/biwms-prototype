@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources\SalesCreditMemos\RelationManagers;
 
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
@@ -138,6 +140,7 @@ class ItemsRelationManager extends RelationManager
             ->filters([])
             ->headerActions([
                 CreateAction::make()
+                    ->visible(fn (): bool => ! $this->getOwnerRecord()->isPosted())
                     ->mutateDataUsing(function (array $data): array {
                         $data['line_no'] = self::getNextLineNo();
 
@@ -145,12 +148,15 @@ class ItemsRelationManager extends RelationManager
                     }),
             ])
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                EditAction::make()
+                    ->visible(fn (): bool => ! $this->getOwnerRecord()->isPosted()),
+                DeleteAction::make()
+                    ->visible(fn (): bool => ! $this->getOwnerRecord()->isPosted()),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->visible(fn (): bool => ! $this->getOwnerRecord()->isPosted()),
                 ]),
             ]);
     }

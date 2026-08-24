@@ -23,6 +23,7 @@ use App\Models\SalesCreditMemo;
 use App\Models\SalesCreditMemoLine;
 use App\Models\User;
 use App\Models\ValueEntry;
+use App\Services\Approval\ApprovalService;
 use App\Services\Inventory\ReturnCostApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
@@ -147,7 +148,7 @@ class SalesCreditMemoService
 
     public function submitForApproval(SalesCreditMemo $creditMemo): void
     {
-        $creditMemo->submitForApproval();
+        app(ApprovalService::class)->submitForApproval($creditMemo);
     }
 
     public function approve(SalesCreditMemo $creditMemo, int $userId): void
@@ -171,11 +172,11 @@ class SalesCreditMemoService
             throw new AuthenticationException('Authenticated user is required to post a sales credit memo.');
         }
 
-        Gate::forUser(User::query()->findOrFail($userId))->authorize('post', $creditMemo);
-
         if ($creditMemo->isPosted()) {
             throw new DocumentStateException('Sales credit memo is already posted.');
         }
+
+        Gate::forUser(User::query()->findOrFail($userId))->authorize('post', $creditMemo);
 
         if ($creditMemo->status !== ApprovalStatus::APPROVED) {
             throw new DocumentStateException('Only approved credit memos can be posted.');
@@ -195,6 +196,7 @@ class SalesCreditMemoService
             }
 
             $customer = $creditMemo->customer;
+            $postingTimestamp = now();
 
             $postedMemo = PostedSalesCreditMemo::create([
                 'document_number' => $creditMemo->memo_number,
@@ -210,7 +212,7 @@ class SalesCreditMemoService
                 'total_amount' => $creditMemo->total_amount,
                 'grand_total' => $creditMemo->total_amount,
                 'remaining_amount' => abs((float) $creditMemo->total_amount),
-                'posted_at' => now(),
+                'posted_at' => $postingTimestamp,
                 'posted_by' => Auth::id(),
                 'corrected_invoice_id' => $correctedPostedInvoice?->id,
                 'corrected_invoice_number' => $correctedPostedInvoice?->document_number ?? $creditMemo->invoice?->invoice_number,
@@ -291,6 +293,7 @@ class SalesCreditMemoService
             $creditMemo->update([
                 'status' => ApprovalStatus::POSTED,
                 'posted_by' => Auth::id(),
+                'posted_at' => $creditMemo->posted_at ?? $postingTimestamp,
             ]);
         });
     }

@@ -17,11 +17,22 @@ class EditSalesCreditMemo extends EditRecord
 {
     protected static string $resource = SalesCreditMemoResource::class;
 
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        if ($this->record instanceof SalesCreditMemo && $this->record->isPosted()) {
+            abort(403);
+        }
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             ViewAction::make(),
-            DeleteAction::make(),
+            DeleteAction::make()
+                ->authorize(fn (SalesCreditMemo $record): bool => auth()->user()?->can('delete', $record) === true)
+                ->hidden(fn (SalesCreditMemo $record): bool => $record->isPosted()),
         ];
     }
 
