@@ -134,7 +134,7 @@ class ViewPayment extends ViewRecord
                 ->visible(fn ($record) => $record->party_type === 'CUSTOMER'
                     && filled($record->party_id)
                     && auth()->user()?->can('finance.customer_settlement_history.view') === true)
-                ->url(fn ($record) => CustomerSettlementHistory::getUrl(panel: 'finance', parameters: [
+                ->url(fn ($record) => CustomerSettlementHistory::urlForCurrentPanel([
                     'customer_id' => $record->party_id,
                     'source_document_number' => $record->payment_number,
                 ])),

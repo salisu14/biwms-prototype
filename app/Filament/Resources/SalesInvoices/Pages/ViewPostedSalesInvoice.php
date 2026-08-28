@@ -96,7 +96,7 @@ class ViewPostedSalesInvoice extends Page
                 ->icon('heroicon-o-arrows-right-left')
                 ->color('gray')
                 ->visible(fn (): bool => auth()->user()?->can('finance.customer_settlement_history.view') === true)
-                ->url(CustomerSettlementHistory::getUrl(panel: 'finance', parameters: [
+                ->url(CustomerSettlementHistory::urlForCurrentPanel([
                     'customer_id' => $this->record->customer_id,
                     'target_document_number' => $this->record->document_number,
                 ])),

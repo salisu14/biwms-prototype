@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\AdminPages\CustomerSettlementHistory as AdminCustomerSettlementHistory;
 use App\Filament\Pages\Finance\CustomerSettlementHistory;
 use App\Filament\Resources\Customers\CustomerResource;
 use App\Http\Controllers\CustomerSettlementHistoryExportController;
@@ -172,6 +173,30 @@ it('generates customer links against the admin panel rather than finance', funct
         ->and($url)->not->toContain('/finance/');
 });
 
+it('renders the customer settlement history page in the admin panel for authorized users', function (): void {
+    $viewer = settlementHistoryAdminViewer();
+    $paymentFixture = $this->createPostedReceivableApplicationFixture(1000.00, 400.00);
+    app(PaymentService::class)->applyToDocument($paymentFixture['payment'], [
+        'document_type' => 'SALES_INVOICE',
+        'document_id' => $paymentFixture['postedInvoice']->id,
+        'amount' => 400.00,
+    ], $viewer->id);
+
+    Livewire::actingAs($viewer)
+        ->test(AdminCustomerSettlementHistory::class)
+        ->set('customer_id', $paymentFixture['customer']->id)
+        ->assertSee($paymentFixture['payment']->payment_number)
+        ->assertSee($paymentFixture['postedInvoice']->document_number);
+});
+
+it('denies the admin settlement history page to users without access', function (): void {
+    $user = User::factory()->create();
+
+    Livewire::actingAs($user)
+        ->test(AdminCustomerSettlementHistory::class)
+        ->assertForbidden();
+});
+
 it('renders source and currency filters as selectable options and keeps deep links available', function (): void {
     $viewer = financeSettlementHistoryViewer();
     $paymentFixture = $this->createPostedReceivableApplicationFixture(1000.00, 400.00);
@@ -256,6 +281,35 @@ function financeSettlementHistoryViewer(): User
         'finance.customer_settlement_history.view',
         'finance.customer_settlement_history.export',
         'finance.payment.apply',
+    ]);
+
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    return $user;
+}
+
+function settlementHistoryAdminViewer(): User
+{
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    Permission::query()->firstOrCreate([
+        'name' => 'finance.customer_settlement_history.view',
+        'guard_name' => 'web',
+    ]);
+    Permission::query()->firstOrCreate([
+        'name' => 'finance.customer_settlement_history.export',
+        'guard_name' => 'web',
+    ]);
+    Role::query()->firstOrCreate([
+        'name' => 'super_admin',
+        'guard_name' => 'web',
+    ]);
+
+    $user = User::factory()->create();
+    $user->assignRole('super_admin');
+    $user->givePermissionTo([
+        'finance.customer_settlement_history.view',
+        'finance.customer_settlement_history.export',
     ]);
 
     app(PermissionRegistrar::class)->forgetCachedPermissions();

@@ -50,7 +50,7 @@ class ViewCustomer extends ViewRecord
                 ->icon('heroicon-o-arrows-right-left')
                 ->color('gray')
                 ->visible(fn (): bool => auth()->user()?->can('finance.customer_settlement_history.view') === true)
-                ->url(fn () => CustomerSettlementHistory::getUrl(panel: 'finance', parameters: [
+                ->url(fn () => CustomerSettlementHistory::urlForCurrentPanel([
                     'customer_id' => $this->record->id,
                 ])),
             EditAction::make(),

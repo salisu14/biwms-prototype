@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
+use App\Filament\AdminPages\CustomerSettlementHistory;
 use App\Filament\Pages\AdminDashboard;
 use App\Filament\Pages\Finance\CashFlowStatementReport;
 use App\Filament\Pages\Finance\DepreciationBookReport;
@@ -203,6 +204,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
                 AdminDashboard::class,
+                CustomerSettlementHistory::class,
             ])
             ->navigation(function (NavigationBuilder $builder): NavigationBuilder {
                 return $builder
