@@ -59,11 +59,23 @@
         }
         thead th {
             background: #f3f4f6;
-            font-size: 8px;
+            font-size: 7.5px;
             text-transform: uppercase;
-            letter-spacing: .04em;
+            letter-spacing: .01em;
             text-align: left;
             page-break-inside: avoid;
+            line-height: 1.15;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+        .header-stack {
+            display: block;
+            white-space: normal;
+            line-height: 1.1;
+        }
+        .header-stack .line {
+            display: block;
         }
         .right { text-align: right; white-space: nowrap; }
         .muted { color: #6b7280; font-size: 8px; }
@@ -145,20 +157,20 @@
 <table class="report-table">
     <thead>
         <tr>
-            <th class="col-date">Date</th>
-            <th class="col-customer">Customer</th>
-            <th class="col-type">Type</th>
-            <th class="col-source">Source</th>
-            <th class="col-original">Original Invoice</th>
-            <th class="col-target">Settlement Target</th>
-            <th class="col-amount right">Amount</th>
-            <th class="col-currency">Currency</th>
-            <th class="col-source-before right">Source Before</th>
-            <th class="col-source-after right">Source After</th>
-            <th class="col-target-before right">Target Before</th>
-            <th class="col-target-after right">Target After</th>
-            <th class="col-applied">Applied By</th>
-            <th class="col-trace">Trace</th>
+            <th class="col-date"><span class="header-stack"><span class="line">Date</span></span></th>
+            <th class="col-customer"><span class="header-stack"><span class="line">Customer</span></span></th>
+            <th class="col-type"><span class="header-stack"><span class="line">Type</span></span></th>
+            <th class="col-source"><span class="header-stack"><span class="line">Source</span></span></th>
+            <th class="col-original"><span class="header-stack"><span class="line">Original</span><span class="line">Invoice</span></span></th>
+            <th class="col-target"><span class="header-stack"><span class="line">Settlement</span><span class="line">Target</span></span></th>
+            <th class="col-amount right"><span class="header-stack"><span class="line">Amount</span></span></th>
+            <th class="col-currency"><span class="header-stack"><span class="line">Currency</span></span></th>
+            <th class="col-source-before right"><span class="header-stack"><span class="line">Source</span><span class="line">Before</span></span></th>
+            <th class="col-source-after right"><span class="header-stack"><span class="line">Source</span><span class="line">After</span></span></th>
+            <th class="col-target-before right"><span class="header-stack"><span class="line">Target</span><span class="line">Before</span></span></th>
+            <th class="col-target-after right"><span class="header-stack"><span class="line">Target</span><span class="line">After</span></span></th>
+            <th class="col-applied"><span class="header-stack"><span class="line">Applied</span><span class="line">By</span></span></th>
+            <th class="col-trace"><span class="header-stack"><span class="line">Trace</span></span></th>
         </tr>
     </thead>
     <tbody>
