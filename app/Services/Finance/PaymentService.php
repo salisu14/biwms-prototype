@@ -128,15 +128,23 @@ class PaymentService
     public function applyToDocument(Payment $payment, array $applicationData, ?int $userId = null): PaymentApplication
     {
         $userId = $userId ?? auth()->id();
-        $this->postingDateValidator->validate($payment->posting_date ?? now());
         Gate::forUser(User::query()->findOrFail($userId))->authorize('apply', $payment);
 
         $application = DB::transaction(function () use ($payment, $applicationData, $userId): PaymentApplication {
+            /** @var Payment $payment */
+            $payment = Payment::query()
+                ->with(['bankAccount', 'currency'])
+                ->lockForUpdate()
+                ->findOrFail($payment->id);
+
             if ($payment->status !== 'POSTED') {
                 throw new \Exception('Only posted payments can be applied to documents.');
             }
 
-            $document = $this->findDocument(
+            $this->postingDateValidator->validate($payment->posting_date ?? now());
+
+            /** @var PostedSalesInvoice|PostedSalesCreditMemo|PostedPurchaseInvoice|PostedPurchaseCreditMemo|null $document */
+            $document = $this->lockDocumentForApplication(
                 $applicationData['document_type'],
                 $applicationData['document_id']
             );
@@ -294,11 +302,13 @@ class PaymentService
             ->sortBy('due_date');
 
         foreach ($openDocuments as $doc) {
-            if ($payment->unapplied_amount <= 0) {
+            $payment = $payment->fresh(['bankAccount', 'currency']);
+
+            if (! $payment || (float) $payment->unapplied_amount <= 0) {
                 break;
             }
 
-            $amount = min($payment->unapplied_amount, $doc->remaining_amount);
+            $amount = min((float) $payment->unapplied_amount, (float) $doc->remaining_amount);
 
             $this->applyToDocument($payment, [
                 'document_type' => $this->getDocumentType($doc),
@@ -314,7 +324,6 @@ class PaymentService
     public function unapply(PaymentApplication $application, int $userId): void
     {
         $payment = $application->payment;
-        $this->postingDateValidator->validate($payment->posting_date ?? now());
         Gate::forUser(User::query()->findOrFail($userId))->authorize('unapply', $payment);
 
         if ($application->reversed) {
@@ -322,16 +331,31 @@ class PaymentService
         }
 
         DB::transaction(function () use ($application, $userId) {
-            $payment = $application->payment;
+            /** @var Payment $payment */
+            $payment = Payment::query()
+                ->with(['bankAccount', 'currency'])
+                ->lockForUpdate()
+                ->findOrFail($application->payment_id);
+
+            /** @var PaymentApplication $lockedApplication */
+            $lockedApplication = PaymentApplication::query()
+                ->lockForUpdate()
+                ->findOrFail($application->id);
+
+            if ($lockedApplication->reversed) {
+                throw new \Exception('Payment application is already reversed.');
+            }
+
+            $this->postingDateValidator->validate($payment->posting_date ?? now());
 
             // Reverse document application
-            $document = $this->findDocument($application->document_type, $application->document_id);
+            $document = $this->lockDocumentForApplication($lockedApplication->document_type, $lockedApplication->document_id);
             if ($document && method_exists($document, 'reversePayment')) {
-                $document->reversePayment($application->amount_applied + $application->discount_applied);
+                $document->reversePayment($lockedApplication->amount_applied + $lockedApplication->discount_applied);
             } elseif ($document instanceof PostedSalesInvoice || $document instanceof PostedPurchaseInvoice) {
-                $precision = $this->resolvePrecision($application->currency ?? null, $document->currency_code);
+                $precision = $this->resolvePrecision($lockedApplication->currency ?? null, $document->currency_code);
                 $tolerance = $this->resolveTolerance($precision);
-                $reversalAmount = $this->roundMoney((float) $application->amount_applied + (float) $application->discount_applied + (float) $application->write_off_amount, $precision);
+                $reversalAmount = $this->roundMoney((float) $lockedApplication->amount_applied + (float) $lockedApplication->discount_applied + (float) $lockedApplication->write_off_amount, $precision);
                 $newAmountPaid = $this->roundMoney((float) $document->amount_paid - $reversalAmount, $precision);
                 $newRemaining = $this->roundMoney((float) $document->grand_total - $newAmountPaid, $precision);
                 if (abs($newRemaining) <= $tolerance) {
@@ -354,16 +378,16 @@ class PaymentService
             }
 
             // Mark application reversed
-            $application->update([
+            $lockedApplication->update([
                 'reversed' => true,
                 'reversed_at' => now(),
                 'reversed_by' => $userId,
             ]);
 
             // Update payment totals
-            $payment->applied_amount -= $application->amount_applied;
-            $payment->unapplied_amount += $application->amount_applied;
-            $payment->discount_taken -= $application->discount_applied;
+            $payment->applied_amount -= $lockedApplication->amount_applied;
+            $payment->unapplied_amount += $lockedApplication->amount_applied;
+            $payment->discount_taken -= $lockedApplication->discount_applied;
             $payment->save();
 
             if ($payment->party_type === 'CUSTOMER') {
@@ -379,8 +403,8 @@ class PaymentService
             }
 
             // Reverse Gain/Loss G/L entries if they exist
-            if (abs((float) $application->gain_loss_amount) > 0.001) {
-                $this->postingService->reverseRealizedGainLoss($application);
+            if (abs((float) $lockedApplication->gain_loss_amount) > 0.001) {
+                $this->postingService->reverseRealizedGainLoss($lockedApplication);
             }
         });
 
@@ -821,6 +845,20 @@ class PaymentService
             'SALES_CREDIT_MEMO' => PostedSalesCreditMemo::find($id),
             'PURCHASE_INVOICE' => PostedPurchaseInvoice::find($id),
             'PURCHASE_CREDIT_MEMO' => PostedPurchaseCreditMemo::find($id),
+            default => null,
+        };
+    }
+
+    /**
+     * @return PostedSalesInvoice|PostedSalesCreditMemo|PostedPurchaseInvoice|PostedPurchaseCreditMemo|null
+     */
+    protected function lockDocumentForApplication(string $type, int $id): ?Model
+    {
+        return match ($type) {
+            'SALES_INVOICE' => PostedSalesInvoice::query()->lockForUpdate()->find($id),
+            'SALES_CREDIT_MEMO' => PostedSalesCreditMemo::query()->lockForUpdate()->find($id),
+            'PURCHASE_INVOICE' => PostedPurchaseInvoice::query()->lockForUpdate()->find($id),
+            'PURCHASE_CREDIT_MEMO' => PostedPurchaseCreditMemo::query()->lockForUpdate()->find($id),
             default => null,
         };
     }

@@ -505,6 +505,36 @@ it('applies a vendor payment and keeps vendor ledger balances in sync', function
         ->and((float) $vendor->fresh()->balance)->toBe(25.0);
 });
 
+it('blocks vendor payment over-allocation after a partial application', function () {
+    $user = User::factory()->create();
+    grantPaymentApplyPermission($user);
+
+    $vendor = Vendor::factory()->create();
+    $payment = postedVendorPayment($vendor, $user, 100);
+    $paymentEntry = vendorPaymentLedgerEntry($payment, $vendor, 100);
+    $invoice = postedPurchaseInvoice($vendor, $user, 100);
+    $invoiceEntry = VendorLedgerEntry::createFromInvoice($invoice);
+
+    app(PaymentService::class)->applyToDocument($payment, [
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 70,
+    ], $user->id);
+
+    expect(fn () => app(PaymentService::class)->applyToDocument($payment->fresh(), [
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 70,
+    ], $user->id))->toThrow(Exception::class, 'Payment does not have enough unapplied amount.');
+
+    expect((float) $payment->fresh()->unapplied_amount)->toBe(30.0)
+        ->and((float) $invoice->fresh()->remaining_amount)->toBe(30.0)
+        ->and((float) $invoiceEntry->fresh()->remaining_amount)->toBe(30.0)
+        ->and((float) $paymentEntry->fresh()->remaining_amount)->toBe(30.0)
+        ->and($paymentEntry->fresh()->open)->toBeTrue()
+        ->and((float) $vendor->fresh()->balance)->toBe(0.0);
+});
+
 it('fully applies a vendor payment and closes the purchase invoice ledger entry', function () {
     $user = User::factory()->create();
     grantPaymentApplyPermission($user);
@@ -526,6 +556,39 @@ it('fully applies a vendor payment and closes the purchase invoice ledger entry'
         ->and((float) $invoiceEntry->fresh()->remaining_amount)->toBe(0.0)
         ->and($invoiceEntry->fresh()->open)->toBeFalse()
         ->and((float) $vendor->fresh()->balance)->toBe(0.0);
+});
+
+it('blocks a second vendor payment from over-applying the same posted invoice', function () {
+    $user = User::factory()->create();
+    grantPaymentApplyPermission($user);
+
+    $vendor = Vendor::factory()->create();
+    $paymentA = postedVendorPayment($vendor, $user, 70);
+    $paymentAEntry = vendorPaymentLedgerEntry($paymentA, $vendor, 70);
+    $paymentB = postedVendorPayment($vendor, $user, 70);
+    $paymentBEntry = vendorPaymentLedgerEntry($paymentB, $vendor, 70);
+    $invoice = postedPurchaseInvoice($vendor, $user, 100);
+    $invoiceEntry = VendorLedgerEntry::createFromInvoice($invoice);
+
+    app(PaymentService::class)->applyToDocument($paymentA, [
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 70,
+    ], $user->id);
+
+    expect(fn () => app(PaymentService::class)->applyToDocument($paymentB, [
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_id' => $invoice->id,
+        'amount' => 70,
+    ], $user->id))->toThrow(Exception::class, 'Cannot apply more than the document remaining amount.');
+
+    expect((float) $invoice->fresh()->remaining_amount)->toBe(30.0)
+        ->and((float) $invoiceEntry->fresh()->remaining_amount)->toBe(30.0)
+        ->and((float) $paymentAEntry->fresh()->remaining_amount)->toBe(0.0)
+        ->and($paymentAEntry->fresh()->open)->toBeFalse()
+        ->and((float) $paymentBEntry->fresh()->remaining_amount)->toBe(70.0)
+        ->and($paymentBEntry->fresh()->open)->toBeTrue()
+        ->and((float) $vendor->fresh()->balance)->toBe(-40.0);
 });
 
 it('unapplies payment without changing bank ledger or bank balance and blocks duplicate unapply', function () {

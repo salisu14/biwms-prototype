@@ -8,6 +8,7 @@ use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 class CustomerLedgerEntry extends Model
 {
@@ -232,28 +233,60 @@ class CustomerLedgerEntry extends Model
     /**
      * Apply this payment/credit memo to open invoice entries
      */
-    public function applyToEntries(array $applications): void
+    public function applyToEntries(array $applications): float
     {
-        // $applications = [['entry_id' => 123, 'amount' => 500.00], ...]
+        return DB::transaction(function () use ($applications): float {
+            return $this->applyToEntriesLocked($applications);
+        });
+    }
 
+    /**
+     * @param  array<int, array{entry_id:int, amount:float|int|string}>  $applications
+     */
+    private function applyToEntriesLocked(array $applications): float
+    {
         if (! $this->is_credit_entry) {
             throw new \Exception('Only credit entries can be applied');
         }
 
-        $totalApplied = 0;
-        $appliedEntries = $this->applied_to_entries ?? [];
+        $creditEntry = self::query()
+            ->lockForUpdate()
+            ->findOrFail($this->getKey());
+
+        $lockedEntryIds = collect($applications)
+            ->pluck('entry_id')
+            ->map(fn ($entryId): int => (int) $entryId)
+            ->push((int) $creditEntry->getKey())
+            ->unique()
+            ->sort()
+            ->values();
+
+        $lockedEntries = self::query()
+            ->whereIn('id', $lockedEntryIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        $creditEntry = $lockedEntries->get($creditEntry->getKey()) ?? $creditEntry;
+        if (! $creditEntry->is_credit_entry) {
+            throw new \Exception('Only credit entries can be applied');
+        }
+
+        $totalApplied = 0.0;
+        $appliedEntries = $creditEntry->applied_to_entries ?? [];
 
         foreach ($applications as $app) {
-            $invoiceEntry = self::find($app['entry_id']);
+            $invoiceEntry = $lockedEntries->get((int) $app['entry_id']);
 
             if (! $invoiceEntry || ! $invoiceEntry->is_invoice || ! $invoiceEntry->open) {
                 continue;
             }
 
             $applyAmount = min(
-                $app['amount'],
-                $this->remaining_amount - $totalApplied,
-                $invoiceEntry->remaining_amount
+                (float) $app['amount'],
+                (float) $creditEntry->remaining_amount - $totalApplied,
+                (float) $invoiceEntry->remaining_amount
             );
 
             if ($applyAmount <= 0) {
@@ -261,7 +294,7 @@ class CustomerLedgerEntry extends Model
             }
 
             // Update invoice entry
-            $invoiceEntry->remaining_amount -= $applyAmount;
+            $invoiceEntry->remaining_amount = max(0, (float) $invoiceEntry->remaining_amount - $applyAmount);
             $invoiceEntry->open = $invoiceEntry->remaining_amount > 0.01;
             $invoiceEntry->save();
 
@@ -277,16 +310,18 @@ class CustomerLedgerEntry extends Model
         }
 
         // Update this entry
-        $this->remaining_amount -= $totalApplied;
-        $this->applied_to_entries = $appliedEntries;
-        $this->fully_applied = $this->remaining_amount <= 0.01;
-        $this->open = ! $this->fully_applied;
+        $creditEntry->remaining_amount = max(0, (float) $creditEntry->remaining_amount - $totalApplied);
+        $creditEntry->applied_to_entries = $appliedEntries;
+        $creditEntry->fully_applied = $creditEntry->remaining_amount <= 0.01;
+        $creditEntry->open = ! $creditEntry->fully_applied;
 
-        if ($this->fully_applied) {
-            $this->remaining_amount = 0;
+        if ($creditEntry->fully_applied) {
+            $creditEntry->remaining_amount = 0;
         }
 
-        $this->save();
+        $creditEntry->save();
+
+        return $totalApplied;
     }
 
     /**
@@ -298,41 +333,50 @@ class CustomerLedgerEntry extends Model
             throw new \Exception('Entry must be a credit memo or payment');
         }
 
-        // Find the invoice's ledger entry
-        $invoiceEntry = self::where('document_type', 'SALES_INVOICE')
-            ->where('document_number', $invoice->document_number)
-            ->where('customer_id', $this->customer_id)
-            ->first();
+        DB::transaction(function () use ($invoice, $amount): void {
+            $lockedInvoice = PostedSalesInvoice::query()
+                ->lockForUpdate()
+                ->findOrFail($invoice->id);
 
-        if (! $invoiceEntry) {
-            throw new \Exception('Invoice ledger entry not found');
-        }
+            $invoiceEntry = self::query()
+                ->where('document_type', 'SALES_INVOICE')
+                ->where('document_number', $lockedInvoice->document_number)
+                ->where('customer_id', $this->customer_id)
+                ->lockForUpdate()
+                ->first();
 
-        $applyAmount = $amount ?? min($this->remaining_amount, $invoice->remaining_amount);
+            if (! $invoiceEntry) {
+                throw new \Exception('Invoice ledger entry not found');
+            }
 
-        $this->applyToEntries([[
-            'entry_id' => $invoiceEntry->id,
-            'amount' => $applyAmount,
-        ]]);
+            $applyAmount = $amount ?? (float) $lockedInvoice->remaining_amount;
 
-        // Update invoice paid status
-        $newAmountPaid = (float) $invoice->amount_paid + $applyAmount;
+            $appliedAmount = $this->applyToEntriesLocked([[
+                'entry_id' => $invoiceEntry->id,
+                'amount' => $applyAmount,
+            ]]);
 
-        if ($applyAmount >= $invoice->remaining_amount - 0.01) {
-            $invoice->update([
+            $newAmountPaid = (float) $lockedInvoice->amount_paid + $appliedAmount;
+            $newRemaining = (float) $lockedInvoice->grand_total - $newAmountPaid;
+
+            if ($newRemaining <= 0.01) {
+                $lockedInvoice->update([
+                    'amount_paid' => $newAmountPaid,
+                    'paid_in_full' => true,
+                    'paid_in_full_date' => now(),
+                    'remaining_amount' => 0,
+                ]);
+
+                return;
+            }
+
+            $lockedInvoice->update([
                 'amount_paid' => $newAmountPaid,
-                'paid_in_full' => true,
-                'paid_in_full_date' => now(),
-                'remaining_amount' => 0,
-            ]);
-        } else {
-            $invoice->update([
-                'amount_paid' => $newAmountPaid,
-                'remaining_amount' => max(0, (float) $invoice->remaining_amount - $applyAmount),
+                'remaining_amount' => $newRemaining,
                 'paid_in_full' => false,
                 'paid_in_full_date' => null,
             ]);
-        }
+        });
     }
 
     /**
