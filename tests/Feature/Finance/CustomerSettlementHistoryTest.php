@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Filament\Pages\Finance\CustomerSettlementHistory;
+use App\Filament\Resources\Customers\CustomerResource;
 use App\Http\Controllers\CustomerSettlementHistoryExportController;
 use App\Models\Business;
+use App\Models\Customer;
 use App\Models\CustomerLedgerApplication;
 use App\Models\Permission;
 use App\Models\Role;
@@ -143,6 +145,22 @@ it('exports settlement history as csv and xlsx for authorized finance users', fu
     $response = app(CustomerSettlementHistoryExportController::class)($request, app(CustomerSettlementHistoryService::class));
 
     expect($response->headers->get('content-disposition'))->toContain('customer-settlement-history.csv');
+});
+
+it('generates customer links against the admin panel rather than finance', function (): void {
+    $viewer = financeSettlementHistoryViewer();
+    $customer = Customer::factory()->create();
+
+    $component = Livewire::actingAs($viewer)
+        ->test(CustomerSettlementHistory::class);
+
+    $url = $component->instance()->customerUrl($customer->id);
+
+    expect($url)->not->toBeNull()
+        ->and(parse_url($url, PHP_URL_PATH))->toBe(parse_url(CustomerResource::getUrl('view', parameters: [
+            'record' => $customer->id,
+        ], panel: 'admin'), PHP_URL_PATH))
+        ->and($url)->not->toContain('/finance/');
 });
 
 it('denies settlement history access to users without finance access', function (): void {

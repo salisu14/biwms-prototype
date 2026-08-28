@@ -210,7 +210,13 @@ class CustomerSettlementHistory extends Page implements HasForms
 
     public function customerUrl(?int $customerId): ?string
     {
-        return $customerId ? CustomerResource::getUrl('view', ['record' => $customerId]) : null;
+        return $customerId
+            ? CustomerResource::getUrl(
+                'view',
+                parameters: ['record' => $customerId],
+                panel: 'admin',
+            )
+            : null;
     }
 
     public function sourceDocumentUrl(object $row): ?string
