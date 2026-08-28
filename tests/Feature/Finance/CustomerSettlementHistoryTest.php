@@ -8,6 +8,8 @@ use App\Http\Controllers\CustomerSettlementHistoryExportController;
 use App\Models\Business;
 use App\Models\Customer;
 use App\Models\CustomerLedgerApplication;
+use App\Models\CustomerLedgerEntry;
+use App\Models\GlEntry;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -127,14 +129,18 @@ it('exports settlement history as csv and xlsx for authorized finance users', fu
         'amount' => 400.00,
     ], $viewer->id);
 
+    $beforeCustomerLedgerCount = CustomerLedgerEntry::query()->count();
+    $beforeGeneralLedgerCount = GlEntry::query()->count();
+
     $request = Request::create('/admin/reports/customer-settlement-history/export', 'GET', [
         'customer_id' => $paymentFixture['customer']->id,
-        'format' => 'xlsx',
+        'format' => 'pdf',
     ]);
     $request->setUserResolver(fn () => $viewer);
 
-    $xlsxResponse = app(CustomerSettlementHistoryExportController::class)($request, app(CustomerSettlementHistoryService::class));
-    expect($xlsxResponse->headers->get('content-disposition'))->toContain('customer-settlement-history.xlsx');
+    $pdfResponse = app(CustomerSettlementHistoryExportController::class)($request, app(CustomerSettlementHistoryService::class));
+    expect($pdfResponse->headers->get('content-type'))->toContain('application/pdf')
+        ->and($pdfResponse->headers->get('content-disposition'))->toContain('customer-settlement-history.pdf');
 
     $request = Request::create('/admin/reports/customer-settlement-history/export', 'GET', [
         'customer_id' => $paymentFixture['customer']->id,
@@ -145,6 +151,9 @@ it('exports settlement history as csv and xlsx for authorized finance users', fu
     $response = app(CustomerSettlementHistoryExportController::class)($request, app(CustomerSettlementHistoryService::class));
 
     expect($response->headers->get('content-disposition'))->toContain('customer-settlement-history.csv');
+    expect(CustomerLedgerEntry::query()->count())->toBe($beforeCustomerLedgerCount)
+        ->and(GlEntry::query()->count())->toBe($beforeGeneralLedgerCount)
+        ->and(CustomerLedgerApplication::query()->count())->toBe(0);
 });
 
 it('generates customer links against the admin panel rather than finance', function (): void {
@@ -161,6 +170,46 @@ it('generates customer links against the admin panel rather than finance', funct
             'record' => $customer->id,
         ], panel: 'admin'), PHP_URL_PATH))
         ->and($url)->not->toContain('/finance/');
+});
+
+it('renders source and currency filters as selectable options and keeps deep links available', function (): void {
+    $viewer = financeSettlementHistoryViewer();
+    $paymentFixture = $this->createPostedReceivableApplicationFixture(1000.00, 400.00);
+    app(PaymentService::class)->applyToDocument($paymentFixture['payment'], [
+        'document_type' => 'SALES_INVOICE',
+        'document_id' => $paymentFixture['postedInvoice']->id,
+        'amount' => 400.00,
+    ], $viewer->id);
+
+    Livewire::actingAs($viewer)
+        ->test(CustomerSettlementHistory::class)
+        ->set('customer_id', $paymentFixture['customer']->id)
+        ->set('source_document_number', $paymentFixture['payment']->payment_number)
+        ->set('currency_code', 'NGN')
+        ->assertSee('Source Document')
+        ->assertSee('Currency')
+        ->assertDontSeeHtml('placeholder="PAY-..."')
+        ->assertDontSeeHtml('placeholder="NGN"');
+
+    $component = Livewire::actingAs($viewer)->test(CustomerSettlementHistory::class);
+    expect($component->instance()->sourceDocumentOptions())->toHaveKey($paymentFixture['payment']->payment_number)
+        ->and($component->instance()->currencyOptions())->toHaveKey('NGN');
+});
+
+it('renders a bordered settlement table and hides xlsx while exposing pdf', function (): void {
+    $viewer = financeSettlementHistoryViewer();
+
+    Livewire::actingAs($viewer)
+        ->test(CustomerSettlementHistory::class)
+        ->assertSee('Export CSV')
+        ->assertSee('Export PDF')
+        ->assertDontSee('Export XLSX');
+
+    Livewire::actingAs($viewer)
+        ->test(CustomerSettlementHistory::class)
+        ->assertSeeHtml('border-gray-200')
+        ->assertSeeHtml('px-4 py-3')
+        ->assertSeeHtml('No settlement applications match the selected filters.');
 });
 
 it('denies settlement history access to users without finance access', function (): void {

@@ -8,6 +8,7 @@ use App\Filament\Resources\Customers\CustomerResource;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\Business;
+use App\Models\Currency;
 use App\Models\Customer;
 use App\Services\Finance\CustomerSettlementHistoryService;
 use Filament\Actions\Action;
@@ -107,10 +108,14 @@ class CustomerSettlementHistory extends Page implements HasForms
                             'CREDIT_MEMO_APPLICATION' => 'Sales Credit Memo Application',
                         ])
                         ->placeholder('All settlement types')
+                        ->searchable()
                         ->live(),
-                    TextInput::make('source_document_number')
+                    Select::make('source_document_number')
                         ->label('Source Document')
-                        ->placeholder('PAY-...')
+                        ->options(fn (): array => $this->sourceDocumentOptions())
+                        ->searchable()
+                        ->preload()
+                        ->placeholder('All source documents')
                         ->live(onBlur: true),
                     TextInput::make('target_document_number')
                         ->label('Target Invoice')
@@ -123,10 +128,12 @@ class CustomerSettlementHistory extends Page implements HasForms
                         ->label('Date To')
                         ->afterOrEqual('date_from')
                         ->live(onBlur: true),
-                    TextInput::make('currency_code')
+                    Select::make('currency_code')
                         ->label('Currency')
-                        ->maxLength(3)
-                        ->placeholder('NGN')
+                        ->options(fn (): array => $this->currencyOptions())
+                        ->searchable()
+                        ->preload()
+                        ->placeholder('All currencies')
                         ->live(onBlur: true),
                     Select::make('business_id')
                         ->label('Business')
@@ -172,9 +179,9 @@ class CustomerSettlementHistory extends Page implements HasForms
                 ...$this->filters(),
                 'format' => 'csv',
             ]),
-            'xlsxUrl' => route('reports.customer-settlement-history.export', [
+            'pdfUrl' => route('reports.customer-settlement-history.export', [
                 ...$this->filters(),
-                'format' => 'xlsx',
+                'format' => 'pdf',
             ]),
         ];
     }
@@ -193,12 +200,12 @@ class CustomerSettlementHistory extends Page implements HasForms
                     ...$this->filters(),
                     'format' => 'csv',
                 ])),
-            Action::make('xlsx')
-                ->label('XLSX')
+            Action::make('pdf')
+                ->label('PDF')
                 ->icon('heroicon-o-document-arrow-down')
                 ->url(fn (): string => route('reports.customer-settlement-history.export', [
                     ...$this->filters(),
-                    'format' => 'xlsx',
+                    'format' => 'pdf',
                 ])),
         ];
     }
@@ -233,6 +240,52 @@ class CustomerSettlementHistory extends Page implements HasForms
         return $row->target_document_id
             ? SalesInvoiceResource::getUrl('view-posted', ['record' => $row->target_document_id])
             : null;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function sourceDocumentOptions(): array
+    {
+        $filters = $this->filters();
+        unset($filters['source_document_number']);
+
+        return app(CustomerSettlementHistoryService::class)
+            ->rows($filters)
+            ->mapWithKeys(function (object $row): array {
+                if (! filled($row->source_document_number)) {
+                    return [];
+                }
+
+                return [
+                    (string) $row->source_document_number => $this->sourceDocumentLabel($row),
+                ];
+            })
+            ->sortKeys()
+            ->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function currencyOptions(): array
+    {
+        return Currency::query()
+            ->orderBy('code')
+            ->get()
+            ->mapWithKeys(fn (Currency $currency): array => [
+                $currency->code => trim($currency->code.' — '.($currency->description ?: $currency->code)),
+            ])
+            ->all();
+    }
+
+    public function sourceDocumentLabel(object $row): string
+    {
+        return match ($row->source_document_type) {
+            'PAYMENT' => trim(($row->source_document_number ?? '—').' — Payment'),
+            'SALES_CREDIT_MEMO' => trim(($row->source_document_number ?? '—').' — Sales Credit Memo'),
+            default => trim(($row->source_document_number ?? '—').' — '.str_replace('_', ' ', (string) $row->source_document_type)),
+        };
     }
 
     /**

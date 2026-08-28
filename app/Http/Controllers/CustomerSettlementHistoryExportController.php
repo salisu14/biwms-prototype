@@ -4,16 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Exports\CustomerSettlementHistoryExport;
 use App\Services\Finance\CustomerSettlementHistoryService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
-use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CustomerSettlementHistoryExportController extends Controller
 {
-    public function __invoke(Request $request, CustomerSettlementHistoryService $service): StreamedResponse|BinaryFileResponse
+    public function __invoke(Request $request, CustomerSettlementHistoryService $service): StreamedResponse|Response
     {
         abort_unless($request->user()?->can('finance.customer_settlement_history.export'), 403);
 
@@ -28,8 +27,14 @@ class CustomerSettlementHistoryExportController extends Controller
             'business_id',
         ]);
 
-        if ((string) $request->query('format') === 'xlsx') {
-            return Excel::download(new CustomerSettlementHistoryExport($filters), 'customer-settlement-history.xlsx');
+        if ((string) $request->query('format') === 'pdf') {
+            return Pdf::loadView('pdf.customer-settlement-history', [
+                'rows' => $service->rows($filters),
+                'filters' => $filters,
+                'generatedAt' => now(),
+            ])
+                ->setPaper('a4', 'landscape')
+                ->download('customer-settlement-history.pdf');
         }
 
         return response()->streamDownload(function () use ($service, $filters): void {

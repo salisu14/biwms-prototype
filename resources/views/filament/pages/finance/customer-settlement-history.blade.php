@@ -15,11 +15,12 @@
 
         <x-filament::button
             tag="a"
-            :href="$xlsxUrl"
+            :href="$pdfUrl"
             icon="heroicon-o-document-arrow-down"
             color="gray"
+            target="_blank"
         >
-            Export XLSX
+            Export PDF
         </x-filament::button>
 
         <x-filament::button
@@ -37,33 +38,33 @@
             Read-only trace of payment applications and sales credit memo applications. Original invoice linkage is shown separately from the settlement target.
         </x-slot>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-white/10">
+        <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <table class="min-w-full border-collapse text-sm">
                 <thead>
-                    <tr class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-white/5 dark:text-gray-400">
-                        <th class="px-3 py-3">Date</th>
-                        <th class="px-3 py-3">Customer</th>
-                        <th class="px-3 py-3">Type</th>
-                        <th class="px-3 py-3">Source</th>
-                        <th class="px-3 py-3">Original Invoice</th>
-                        <th class="px-3 py-3">Settlement Target</th>
-                        <th class="px-3 py-3 text-right">Amount</th>
-                        <th class="px-3 py-3">Currency</th>
-                        <th class="px-3 py-3 text-right">Source Before</th>
-                        <th class="px-3 py-3 text-right">Source After</th>
-                        <th class="px-3 py-3 text-right">Target Before</th>
-                        <th class="px-3 py-3 text-right">Target After</th>
-                        <th class="px-3 py-3">Applied By</th>
-                        <th class="px-3 py-3">Trace</th>
+                    <tr class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Date</th>
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Customer</th>
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Type</th>
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Source</th>
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Original Invoice</th>
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Settlement Target</th>
+                        <th class="border border-gray-200 px-4 py-3 text-right dark:border-gray-700">Amount</th>
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Currency</th>
+                        <th class="border border-gray-200 px-4 py-3 text-right dark:border-gray-700">Source Before</th>
+                        <th class="border border-gray-200 px-4 py-3 text-right dark:border-gray-700">Source After</th>
+                        <th class="border border-gray-200 px-4 py-3 text-right dark:border-gray-700">Target Before</th>
+                        <th class="border border-gray-200 px-4 py-3 text-right dark:border-gray-700">Target After</th>
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Applied By</th>
+                        <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Trace</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 dark:divide-white/10">
+                <tbody>
                     @forelse ($rows as $row)
                         <tr>
-                            <td class="whitespace-nowrap px-3 py-3 text-gray-700 dark:text-gray-200">
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top text-gray-700 dark:border-gray-700 dark:text-gray-200">
                                 {{ optional($row->application_date)->format('Y-m-d H:i') ?: $row->application_date }}
                             </td>
-                            <td class="px-3 py-3">
+                            <td class="border border-gray-200 px-4 py-3 align-top dark:border-gray-700">
                                 @if ($url = $this->customerUrl($row->customer_id))
                                     <a href="{{ $url }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
                                         {{ trim(($row->customer_number ? $row->customer_number.' - ' : '').($row->customer_name ?? 'Unknown Customer')) }}
@@ -72,12 +73,12 @@
                                     <span class="text-gray-700 dark:text-gray-200">{{ $row->customer_name ?? '—' }}</span>
                                 @endif
                             </td>
-                            <td class="whitespace-nowrap px-3 py-3">
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top dark:border-gray-700">
                                 <x-filament::badge :color="$row->settlement_type === 'PAYMENT_APPLICATION' ? 'success' : 'warning'">
                                     {{ $row->settlement_type === 'PAYMENT_APPLICATION' ? 'Payment' : 'Sales Credit Memo' }}
                                 </x-filament::badge>
                             </td>
-                            <td class="whitespace-nowrap px-3 py-3">
+                            <td class="border border-gray-200 px-4 py-3 align-top dark:border-gray-700">
                                 @if ($url = $this->sourceDocumentUrl($row))
                                     <a href="{{ $url }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
                                         {{ $row->source_document_number }}
@@ -87,10 +88,10 @@
                                 @endif
                                 <div class="text-xs text-gray-500">{{ str_replace('_', ' ', $row->source_document_type) }}</div>
                             </td>
-                            <td class="whitespace-nowrap px-3 py-3 text-gray-700 dark:text-gray-200">
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top text-gray-700 dark:border-gray-700 dark:text-gray-200">
                                 {{ $row->original_invoice_number ?? '—' }}
                             </td>
-                            <td class="whitespace-nowrap px-3 py-3">
+                            <td class="border border-gray-200 px-4 py-3 align-top dark:border-gray-700">
                                 @if ($url = $this->targetDocumentUrl($row))
                                     <a href="{{ $url }}" class="font-medium text-primary-600 hover:underline dark:text-primary-400">
                                         {{ $row->target_document_number }}
@@ -100,16 +101,16 @@
                                 @endif
                                 <div class="text-xs text-gray-500">{{ str_replace('_', ' ', $row->target_document_type) }}</div>
                             </td>
-                            <td class="whitespace-nowrap px-3 py-3 text-right font-semibold">
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top text-right font-semibold dark:border-gray-700">
                                 {{ number_format((float) $row->amount_applied, 2) }}
                             </td>
-                            <td class="whitespace-nowrap px-3 py-3">{{ $row->currency_code ?? '—' }}</td>
-                            <td class="whitespace-nowrap px-3 py-3 text-right">{{ $row->source_remaining_before === null ? '—' : number_format((float) $row->source_remaining_before, 2) }}</td>
-                            <td class="whitespace-nowrap px-3 py-3 text-right">{{ $row->source_remaining_after === null ? '—' : number_format((float) $row->source_remaining_after, 2) }}</td>
-                            <td class="whitespace-nowrap px-3 py-3 text-right">{{ $row->target_remaining_before === null ? '—' : number_format((float) $row->target_remaining_before, 2) }}</td>
-                            <td class="whitespace-nowrap px-3 py-3 text-right">{{ $row->target_remaining_after === null ? '—' : number_format((float) $row->target_remaining_after, 2) }}</td>
-                            <td class="whitespace-nowrap px-3 py-3">{{ $row->applied_by_name ?? '—' }}</td>
-                            <td class="whitespace-nowrap px-3 py-3">
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top dark:border-gray-700">{{ $row->currency_code ?? '—' }}</td>
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top text-right dark:border-gray-700">{{ $row->source_remaining_before === null ? '—' : number_format((float) $row->source_remaining_before, 2) }}</td>
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top text-right dark:border-gray-700">{{ $row->source_remaining_after === null ? '—' : number_format((float) $row->source_remaining_after, 2) }}</td>
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top text-right dark:border-gray-700">{{ $row->target_remaining_before === null ? '—' : number_format((float) $row->target_remaining_before, 2) }}</td>
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top text-right dark:border-gray-700">{{ $row->target_remaining_after === null ? '—' : number_format((float) $row->target_remaining_after, 2) }}</td>
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top dark:border-gray-700">{{ $row->applied_by_name ?? '—' }}</td>
+                            <td class="whitespace-nowrap border border-gray-200 px-4 py-3 align-top dark:border-gray-700">
                                 <div>#{{ $row->settlement_id }}</div>
                                 <div class="max-w-44 truncate text-xs text-gray-500">{{ $row->reference_key ?? '—' }}</div>
                                 <div class="text-xs text-gray-500">
@@ -119,7 +120,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="14" class="px-3 py-10 text-center text-gray-500">
+                            <td colspan="14" class="border border-gray-200 px-4 py-10 text-center text-gray-500 dark:border-gray-700">
                                 No settlement applications match the selected filters.
                             </td>
                         </tr>
