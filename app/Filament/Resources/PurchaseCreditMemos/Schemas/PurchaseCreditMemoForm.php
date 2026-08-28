@@ -5,11 +5,13 @@ namespace App\Filament\Resources\PurchaseCreditMemos\Schemas;
 use App\Enums\ApprovalStatus;
 use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Item;
+use App\Models\PostedPurchaseInvoice;
+use App\Models\PostedPurchaseInvoiceLine;
 use App\Models\PurchaseInvoice;
 use App\Models\ReasonCode;
 use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -123,20 +125,27 @@ class PurchaseCreditMemoForm
                                     ->helperText('Select a posted purchase invoice. Its lines are loaded; remove or adjust quantities/costs for partial credits.')
                                     ->afterStateUpdated(function ($state, Set $set) {
                                         if ($state) {
-                                            $invoice = PurchaseInvoice::query()
-                                                ->with('lines')
-                                                ->find($state);
-                                            if ($invoice) {
+                                            $invoice = PurchaseInvoice::query()->find($state);
+                                            $postedInvoice = $invoice
+                                                ? PostedPurchaseInvoice::query()
+                                                    ->with('lines')
+                                                    ->where('document_number', $invoice->document_number)
+                                                    ->where('vendor_id', $invoice->vendor_id)
+                                                    ->first()
+                                                : null;
+
+                                            if ($invoice && $postedInvoice) {
                                                 $set('vendor_id', $invoice->vendor_id);
                                                 $set('vendor_name', $invoice->vendor_name);
                                                 $set('corrects_invoice_number', $invoice->document_number);
                                                 $set('currency_code', $invoice->currency_code);
                                                 $set('location_id', $invoice->location_id);
-                                                $set('lines', $invoice->lines
+                                                $set('lines', $postedInvoice->lines
                                                     ->filter(fn ($line) => ! empty($line->item_id))
                                                     ->values()
                                                     ->map(fn ($line) => [
                                                         'is_selected' => true,
+                                                        'corrected_invoice_line_id' => $line->id,
                                                         'item_id' => $line->item_id,
                                                         'item_code' => $line->item_code,
                                                         'quantity' => (float) $line->quantity,
@@ -189,11 +198,17 @@ class PurchaseCreditMemoForm
                                                 if ($state) {
                                                     $correctsInvoiceId = $get('../../corrects_invoice_id');
                                                     if ($correctsInvoiceId) {
-                                                        $invoiceLine = PurchaseInvoice::query()
-                                                            ->with('lines')
-                                                            ->find($correctsInvoiceId)
-                                                            ?->lines
-                                                            ->firstWhere('item_id', $state);
+                                                        $invoice = PurchaseInvoice::query()->find($correctsInvoiceId);
+                                                        $invoiceLine = $invoice
+                                                            ? PostedPurchaseInvoiceLine::query()
+                                                                ->whereHas('postedPurchaseInvoice', function ($query) use ($invoice): void {
+                                                                    $query->where('document_number', $invoice->document_number)
+                                                                        ->where('vendor_id', $invoice->vendor_id);
+                                                                })
+                                                                ->where('item_id', $state)
+                                                                ->orderBy('line_number')
+                                                                ->first()
+                                                            : null;
 
                                                         if ($invoiceLine) {
                                                             $set('unit_cost', (float) $invoiceLine->unit_cost);
@@ -304,6 +319,7 @@ class PurchaseCreditMemoForm
                                         TextInput::make('item_code')->hidden(),
                                         TextInput::make('max_credit_quantity')->hidden(),
                                         TextInput::make('general_product_posting_group_id')->hidden(),
+                                        Hidden::make('corrected_invoice_line_id'),
                                     ])
                                     ->columns(12)
                                     ->reorderable(false),

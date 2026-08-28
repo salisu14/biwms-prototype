@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Purchases;
 
 use App\Data\Purchases\PurchaseCreditMemoData;
+use App\Data\Purchases\PurchaseCreditMemoLineData;
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemLedgerEntryType;
 use App\Models\Item;
@@ -23,6 +24,7 @@ use App\Services\Approval\ApprovalTemplateService;
 use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -41,17 +43,23 @@ class PurchaseCreditMemoService
     public function create(PurchaseCreditMemoData $data): PurchaseCreditMemo
     {
         return DB::transaction(function () use ($data) {
-            if ($data->lines->isEmpty()) {
+            if (count($data->lines) === 0) {
                 throw ValidationException::withMessages(['lines' => 'Select at least one line to credit.']);
             }
 
             $vendor = Vendor::findOrFail($data->vendor_id);
-            $correctedInvoice = $data->corrects_invoice_id
-                ? PurchaseInvoice::find($data->corrects_invoice_id)
-                : null;
+            $correctedInvoice = $this->resolvePurchaseInvoice($data->corrects_invoice_id, $data->external_document_number);
+            $postedCorrectedInvoice = $this->resolvePostedPurchaseInvoice($correctedInvoice);
 
-            if ($correctedInvoice) {
+            if ($correctedInvoice && ! $postedCorrectedInvoice) {
+                throw ValidationException::withMessages([
+                    'corrects_invoice_id' => 'The selected purchase invoice has not been posted yet.',
+                ]);
+            }
+
+            if ($postedCorrectedInvoice) {
                 $this->validateCreditQuantitiesAgainstInvoice($correctedInvoice, $data);
+                $this->ensureInvoiceLinkedMemoHasExactLineage($postedCorrectedInvoice, $data->lines->toArray());
             }
 
             $memo = PurchaseCreditMemo::create([
@@ -77,6 +85,7 @@ class PurchaseCreditMemoService
                     'item_id' => $item->id,
                     'item_code' => $item->item_code,
                     'description' => $line->description ?? $item->description,
+                    'corrected_invoice_line_id' => $this->resolveCorrectedInvoiceLineId($correctedInvoice, $line),
                     'quantity' => $line->quantity,
                     'unit_cost' => $line->unit_cost,
                     'tax_percent' => $line->tax_percent,
@@ -99,17 +108,23 @@ class PurchaseCreditMemoService
         }
 
         return DB::transaction(function () use ($memo, $data) {
-            if ($data->lines->isEmpty()) {
+            if (count($data->lines) === 0) {
                 throw ValidationException::withMessages(['lines' => 'Select at least one line to credit.']);
             }
 
             $vendor = Vendor::findOrFail($data->vendor_id);
-            $correctedInvoice = $data->corrects_invoice_id
-                ? PurchaseInvoice::find($data->corrects_invoice_id)
-                : null;
+            $correctedInvoice = $this->resolvePurchaseInvoice($data->corrects_invoice_id, $data->external_document_number);
+            $postedCorrectedInvoice = $this->resolvePostedPurchaseInvoice($correctedInvoice);
 
-            if ($correctedInvoice) {
+            if ($correctedInvoice && ! $postedCorrectedInvoice) {
+                throw ValidationException::withMessages([
+                    'corrects_invoice_id' => 'The selected purchase invoice has not been posted yet.',
+                ]);
+            }
+
+            if ($postedCorrectedInvoice) {
                 $this->validateCreditQuantitiesAgainstInvoice($correctedInvoice, $data);
+                $this->ensureInvoiceLinkedMemoHasExactLineage($postedCorrectedInvoice, $data->lines->toArray());
             }
 
             $memo->update([
@@ -135,6 +150,7 @@ class PurchaseCreditMemoService
                     'item_id' => $item->id,
                     'item_code' => $item->item_code,
                     'description' => $line->description ?? $item->description,
+                    'corrected_invoice_line_id' => $this->resolveCorrectedInvoiceLineId($correctedInvoice, $line),
                     'quantity' => $line->quantity,
                     'unit_cost' => $line->unit_cost,
                     'tax_percent' => $line->tax_percent,
@@ -173,29 +189,32 @@ class PurchaseCreditMemoService
             throw new \RuntimeException('Unauthenticated user');
         }
 
-        Gate::forUser(User::query()->findOrFail($userId))->authorize('post', $memo);
+        return DB::transaction(function () use ($memo, $userId) {
+            $memo = PurchaseCreditMemo::query()
+                ->with(['lines.item', 'lines.correctedInvoiceLine', 'vendor', 'location', 'correctedInvoice'])
+                ->lockForUpdate()
+                ->findOrFail($memo->id);
 
-        if ($memo->status === ApprovalStatus::POSTED || PostedPurchaseCreditMemo::query()->where('document_number', $memo->document_number)->exists()) {
-            throw new \RuntimeException('Purchase credit memo is already posted.');
-        }
+            Gate::forUser(User::query()->findOrFail($userId))->authorize('post', $memo);
 
-        $approvalRequired = $this->approvalTemplateService->requiresApproval($memo);
+            if ($memo->status === ApprovalStatus::POSTED || PostedPurchaseCreditMemo::query()->where('document_number', $memo->document_number)->exists()) {
+                throw new \RuntimeException('Purchase credit memo is already posted.');
+            }
 
-        if ($approvalRequired && $memo->status !== ApprovalStatus::APPROVED) {
-            throw ValidationException::withMessages(['status' => 'Only approved credit memos can be posted.']);
-        }
+            $approvalRequired = $this->approvalTemplateService->requiresApproval($memo);
 
-        return DB::transaction(function () use ($memo) {
-            $memo->loadMissing(['lines.item', 'vendor', 'location', 'correctedInvoice']);
+            if ($approvalRequired && $memo->status !== ApprovalStatus::APPROVED) {
+                throw ValidationException::withMessages(['status' => 'Only approved credit memos can be posted.']);
+            }
 
             if ($memo->lines->isEmpty()) {
                 throw new \RuntimeException('No lines to post for this purchase credit memo.');
             }
 
-            $correctedPostedInvoice = $this->resolveCorrectedPostedInvoice($memo);
+            $correctedInvoice = $this->resolveCorrectedPostedInvoice($memo);
 
-            if ($correctedPostedInvoice) {
-                $this->validateCreditQuantitiesAgainstPostedInvoice($correctedPostedInvoice, $memo);
+            if ($correctedInvoice) {
+                $this->validateCreditQuantitiesAgainstPostedInvoice($correctedInvoice, $memo);
             }
 
             $subtotal = $memo->lines->sum(
@@ -264,7 +283,7 @@ class PurchaseCreditMemoService
                     'line_total' => $line->grand_total,
                     'general_product_posting_group_id' => $line->general_product_posting_group_id,
                     'inventory_posting_group_id' => $line->item?->inventory_posting_group_id,
-                    'corrected_invoice_line_id' => null,
+                    'corrected_invoice_line_id' => $line->corrected_invoice_line_id,
                 ]);
             }
 
@@ -293,10 +312,10 @@ class PurchaseCreditMemoService
         }
 
         if ($memo->corrects_invoice_id) {
-            $postedInvoice = PostedPurchaseInvoice::query()->find($memo->corrects_invoice_id);
+            $purchaseInvoice = PurchaseInvoice::query()->find($memo->corrects_invoice_id);
 
-            if ($postedInvoice) {
-                return $postedInvoice;
+            if ($purchaseInvoice) {
+                return $this->resolvePostedPurchaseInvoice($purchaseInvoice);
             }
         }
 
@@ -306,27 +325,84 @@ class PurchaseCreditMemoService
             return null;
         }
 
-        return PostedPurchaseInvoice::query()
+        $purchaseInvoice = PurchaseInvoice::query()
             ->where('document_number', $invoiceNumber)
+            ->first();
+
+        return $purchaseInvoice ? $this->resolvePostedPurchaseInvoice($purchaseInvoice) : null;
+    }
+
+    private function resolvePostedPurchaseInvoice(PurchaseInvoice $purchaseInvoice): ?PostedPurchaseInvoice
+    {
+        return PostedPurchaseInvoice::query()
+            ->where('document_number', $purchaseInvoice->document_number)
+            ->where('vendor_id', $purchaseInvoice->vendor_id)
             ->first();
     }
 
-    private function validateCreditQuantitiesAgainstPostedInvoice(PostedPurchaseInvoice $postedInvoice, PurchaseCreditMemo $memo): void
+    private function validateCreditQuantitiesAgainstPostedInvoice(PostedPurchaseInvoice $correctedInvoice, PurchaseCreditMemo $memo): void
     {
-        $postedInvoice->loadMissing('lines');
-        $memo->loadMissing('lines.item');
+        $correctedInvoice->loadMissing('lines');
+        $memo->loadMissing('lines.item', 'lines.correctedInvoiceLine');
 
-        $invoicedQuantityByItem = $postedInvoice->lines
+        $this->lockCanonicalPostedInvoiceLines($correctedInvoice, $memo);
+
+        if ($memo->lines->every(fn (PurchaseCreditMemoLine $line): bool => filled($line->corrected_invoice_line_id))) {
+            $this->validateCreditQuantitiesAgainstPostedInvoiceLines($correctedInvoice, $memo);
+
+            return;
+        }
+
+        $this->validateCreditQuantitiesAgainstPostedInvoiceItems($correctedInvoice, $memo);
+    }
+
+    private function validateCreditQuantitiesAgainstPostedInvoiceLines(PostedPurchaseInvoice $correctedInvoice, PurchaseCreditMemo $memo): void
+    {
+        $postedLineById = $correctedInvoice->lines->keyBy('id');
+        $invoiceLinkConstraints = $this->postedCreditMemoInvoiceLinkConstraints($memo, $correctedInvoice);
+
+        $alreadyCreditedByLine = PostedPurchaseCreditMemoLine::query()
+            ->join('posted_purchase_credit_memos as headers', 'headers.id', '=', 'posted_purchase_credit_memo_lines.credit_memo_id')
+            ->where($invoiceLinkConstraints)
+            ->whereNotNull('posted_purchase_credit_memo_lines.corrected_invoice_line_id')
+            ->groupBy('posted_purchase_credit_memo_lines.corrected_invoice_line_id')
+            ->selectRaw('posted_purchase_credit_memo_lines.corrected_invoice_line_id, COALESCE(SUM(ABS(posted_purchase_credit_memo_lines.quantity)), 0) as quantity')
+            ->pluck('quantity', 'corrected_invoice_line_id');
+
+        foreach ($memo->lines as $line) {
+            $invoiceLineId = (int) ($line->corrected_invoice_line_id ?? 0);
+            $postedLine = $postedLineById->get($invoiceLineId);
+
+            if (! $postedLine) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Credit line references an invoice line that does not belong to the selected posted invoice.',
+                ]);
+            }
+
+            $requestedQuantity = abs((float) $line->quantity);
+            $invoicedQuantity = abs((float) $postedLine->quantity);
+            $alreadyCreditedQuantity = (float) ($alreadyCreditedByLine[$invoiceLineId] ?? 0.0);
+            $availableQuantity = max(0.0, $invoicedQuantity - $alreadyCreditedQuantity);
+
+            if ($requestedQuantity > ($availableQuantity + 0.000001)) {
+                throw ValidationException::withMessages([
+                    'lines' => "Credit quantity for invoice line {$postedLine->line_number} exceeds remaining returnable quantity. Available: {$availableQuantity}, requested: {$requestedQuantity}.",
+                ]);
+            }
+        }
+    }
+
+    private function validateCreditQuantitiesAgainstPostedInvoiceItems(PostedPurchaseInvoice $correctedInvoice, PurchaseCreditMemo $memo): void
+    {
+        $invoiceLinkConstraints = $this->postedCreditMemoInvoiceLinkConstraints($memo, $correctedInvoice);
+
+        $invoicedQuantityByItem = $correctedInvoice->lines
             ->groupBy('item_id')
             ->map(fn ($lines): float => abs((float) $lines->sum('quantity')));
 
         $alreadyCreditedByItem = PostedPurchaseCreditMemoLine::query()
             ->join('posted_purchase_credit_memos as headers', 'headers.id', '=', 'posted_purchase_credit_memo_lines.credit_memo_id')
-            ->where(function ($query) use ($postedInvoice): void {
-                $query
-                    ->where('headers.corrects_invoice_id', $postedInvoice->id)
-                    ->orWhere('headers.corrects_invoice_number', $postedInvoice->document_number);
-            })
+            ->where($invoiceLinkConstraints)
             ->groupBy('posted_purchase_credit_memo_lines.item_id')
             ->selectRaw('posted_purchase_credit_memo_lines.item_id, COALESCE(SUM(ABS(posted_purchase_credit_memo_lines.quantity)), 0) as quantity')
             ->pluck('quantity', 'item_id');
@@ -345,6 +421,137 @@ class PurchaseCreditMemoService
 
                 throw ValidationException::withMessages([
                     'lines' => "Credit quantity for item {$itemCode} exceeds invoiced quantity. Available: {$availableQuantity}, requested: {$requestedQuantity}.",
+                ]);
+            }
+        }
+    }
+
+    private function lockCanonicalPostedInvoiceLines(PostedPurchaseInvoice $correctedInvoice, PurchaseCreditMemo $memo): void
+    {
+        $lineIds = $memo->lines
+            ->pluck('corrected_invoice_line_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->sort()
+            ->values();
+
+        if ($lineIds->isEmpty()) {
+            $correctedInvoice->lines()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            return;
+        }
+
+        $lockedLineIds = $correctedInvoice->lines()
+            ->whereIn('id', $lineIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->pluck('id');
+
+        if ($lockedLineIds->count() !== $lineIds->count()) {
+            throw ValidationException::withMessages([
+                'lines' => 'Credit line references an invoice line that does not belong to the selected posted invoice.',
+            ]);
+        }
+    }
+
+    /**
+     * @return \Closure(Builder): void
+     */
+    private function postedCreditMemoInvoiceLinkConstraints(PurchaseCreditMemo $memo, PostedPurchaseInvoice $correctedInvoice): \Closure
+    {
+        return function ($query) use ($memo, $correctedInvoice): void {
+            $query->where(function ($linkQuery) use ($memo, $correctedInvoice): void {
+                $linkQuery
+                    ->where('headers.corrects_invoice_id', $memo->corrects_invoice_id)
+                    ->orWhere('headers.corrects_invoice_number', $memo->corrects_invoice_number ?: $correctedInvoice->document_number);
+            });
+        };
+    }
+
+    private function resolvePurchaseInvoice(?int $purchaseInvoiceId, ?string $documentNumber): ?PurchaseInvoice
+    {
+        if ($purchaseInvoiceId) {
+            $invoice = PurchaseInvoice::query()->find($purchaseInvoiceId);
+
+            if ($invoice) {
+                return $invoice;
+            }
+        }
+
+        if ($documentNumber) {
+            $invoice = PurchaseInvoice::query()->where('document_number', $documentNumber)->first();
+
+            if ($invoice) {
+                return $invoice;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveCorrectedInvoiceLineId(?PostedPurchaseInvoice $invoice, PurchaseCreditMemoLineData $line): ?int
+    {
+        if (! $invoice) {
+            return null;
+        }
+
+        $invoiceLineId = (int) ($line->corrected_invoice_line_id ?? 0);
+
+        if ($invoiceLineId <= 0) {
+            throw ValidationException::withMessages([
+                'lines' => 'Invoice-linked purchase credit memos require an exact posted invoice line reference for every line.',
+            ]);
+        }
+
+        $invoiceLine = $invoice->lines()->whereKey($invoiceLineId)->first();
+
+        if (! $invoiceLine) {
+            throw ValidationException::withMessages([
+                'lines' => 'Credit line references an invoice line that does not belong to the selected posted invoice.',
+            ]);
+        }
+
+        if ((int) $invoiceLine->item_id !== (int) $line->item_id) {
+            throw ValidationException::withMessages([
+                'lines' => 'Credit line item does not match the selected posted invoice line.',
+            ]);
+        }
+
+        return $invoiceLine->id;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lines
+     */
+    private function ensureInvoiceLinkedMemoHasExactLineage(PostedPurchaseInvoice $invoice, array $lines): void
+    {
+        $invoiceLinesById = $invoice->lines()->get()->keyBy('id');
+
+        foreach ($lines as $line) {
+            $invoiceLineId = (int) ($line['corrected_invoice_line_id'] ?? 0);
+
+            if ($invoiceLineId <= 0) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Invoice-linked purchase credit memos require an exact posted invoice line reference for every line.',
+                ]);
+            }
+
+            $invoiceLine = $invoiceLinesById->get($invoiceLineId);
+
+            if (! $invoiceLine) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Credit line references an invoice line that does not belong to the selected posted invoice.',
+                ]);
+            }
+
+            $lineItemId = (int) ($line['item_id'] ?? 0);
+            if ($lineItemId > 0 && (int) $invoiceLine->item_id !== $lineItemId) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Credit line item does not match the selected posted invoice line.',
                 ]);
             }
         }
@@ -402,7 +609,7 @@ class PurchaseCreditMemoService
         ]);
 
         app(ItemApplicationService::class)->applyOutbound($entry, 'purchase_credit_memo', strict: false);
-        $this->assertValueEntryCreated($entry, $memo->corrects_invoice_number, $memo->correctedInvoice?->posting_date);
+        $this->assertValueEntryCreated($entry, $memo->corrects_invoice_number ?: $memo->correctedInvoice?->document_number, $memo->correctedInvoice?->posting_date);
         app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($entry);
 
         $item->decrement('inventory', $quantityBase);

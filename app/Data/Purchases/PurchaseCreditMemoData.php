@@ -13,6 +13,7 @@ class PurchaseCreditMemoLineData extends Data
         public float $unit_cost,
         public float $tax_percent = 0,
         public ?string $description = null,
+        public ?int $corrected_invoice_line_id = null,
     ) {}
 }
 

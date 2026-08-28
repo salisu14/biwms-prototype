@@ -1,5 +1,6 @@
 <?php
 
+use App\Data\Purchases\PurchaseCreditMemoData;
 use App\Enums\ApprovalStatus;
 use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
@@ -23,6 +24,7 @@ use App\Models\NumberSeriesLine;
 use App\Models\Permission;
 use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedPurchaseInvoice;
+use App\Models\PostedPurchaseInvoiceLine;
 use App\Models\PurchaseCreditMemo;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
@@ -577,6 +579,413 @@ test('linked purchase credit memo reduces payable returns stock and blocks over-
 
     expect(fn () => app(PurchaseCreditMemoService::class)->post($overReturnMemo))
         ->toThrow(ValidationException::class, 'exceeds invoiced quantity');
+});
+
+test('linked purchase credit memo preserves invoice line lineage and cumulative return limits when linked by invoice id only', function () {
+    $fixture = purchasePostingFixture();
+    grantPurchaseCreditMemoPostPermission($fixture['user']);
+    $this->actingAs($fixture['user']);
+
+    $invoice = PurchaseInvoice::query()->create([
+        'document_number' => 'PI-LINE-001',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'location_id' => $fixture['location']->id,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'due_date' => now()->addDays(7)->toDateString(),
+        'status' => ApprovalStatus::APPROVED,
+        'total_amount' => 1000,
+        'total_vat' => 0,
+        'grand_total' => 1000,
+        'remaining_amount' => 1000,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'approved_by' => $fixture['user']->id,
+        'approved_at' => now(),
+        'cancelled' => false,
+    ]);
+
+    $invoiceLine = $invoice->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'item_description' => $fixture['item']->description,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'inventory_posting_group_id' => $fixture['item']->inventory_posting_group_id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'CT',
+        'qty_per_unit_of_measure' => 288,
+        'quantity_base' => 288,
+        'unit_cost' => 1000,
+        'unit_cost_lcy' => 1000,
+        'line_total' => 1000,
+        'vat_percentage' => 0,
+        'vat_amount' => 0,
+        'vat_amount_lcy' => 0,
+        'amount_including_vat' => 1000,
+        'amount_including_vat_lcy' => 1000,
+        'posting_date' => $invoice->posting_date,
+    ]);
+
+    app(PurchaseInvoiceService::class)->post($invoice);
+    $postedInvoiceLine = PostedPurchaseInvoiceLine::query()
+        ->whereHas('postedPurchaseInvoice', function ($query) use ($invoice): void {
+            $query->where('document_number', $invoice->document_number);
+        })
+        ->where('line_number', 10000)
+        ->firstOrFail();
+    $fixture['item']->forceFill(['inventory' => 288])->save();
+
+    $makeMemo = function (string $documentNumber, float $quantity) use ($fixture, $invoice, $postedInvoiceLine): PostedPurchaseCreditMemo {
+        $memo = PurchaseCreditMemo::query()->create([
+            'document_number' => $documentNumber,
+            'vendor_id' => $fixture['vendor']->id,
+            'vendor_name' => $fixture['vendor']->vendor_name,
+            'corrects_invoice_id' => $invoice->id,
+            'posting_date' => now()->toDateString(),
+            'document_date' => now()->toDateString(),
+            'location_id' => $fixture['location']->id,
+            'status' => ApprovalStatus::APPROVED,
+            'currency_code' => 'NGN',
+            'description' => 'Return to vendor',
+        ]);
+
+        $memo->lines()->create([
+            'line_number' => 10000,
+            'item_id' => $fixture['item']->id,
+            'item_code' => $fixture['item']->item_code,
+            'description' => $fixture['item']->description,
+            'corrected_invoice_line_id' => $postedInvoiceLine->id,
+            'quantity' => $quantity,
+            'unit_cost' => 1000,
+            'tax_percent' => 0,
+            'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+            'unit_of_measure_code' => 'CT',
+        ]);
+
+        return app(PurchaseCreditMemoService::class)->post($memo);
+    };
+
+    $postedMemo1 = $makeMemo('PCM-LINE-001', 0.5);
+    $postedMemo2 = $makeMemo('PCM-LINE-002', 0.5);
+
+    expect($postedMemo1->lines()->firstOrFail()->corrected_invoice_line_id)->toBe($postedInvoiceLine->id)
+        ->and($postedMemo2->lines()->firstOrFail()->corrected_invoice_line_id)->toBe($postedInvoiceLine->id)
+        ->and((float) $fixture['item']->fresh()->inventory)->toBe(0.0)
+        ->and((float) VendorLedgerEntry::query()->where('vendor_id', $fixture['vendor']->id)->sum('amount'))->toBe(0.0);
+
+    $overReturnMemo = PurchaseCreditMemo::query()->create([
+        'document_number' => 'PCM-LINE-003',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'corrects_invoice_id' => $invoice->id,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'status' => ApprovalStatus::APPROVED,
+        'currency_code' => 'NGN',
+        'description' => 'Return again',
+    ]);
+
+    $overReturnMemo->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'corrected_invoice_line_id' => $postedInvoiceLine->id,
+        'quantity' => 0.1,
+        'unit_cost' => 1000,
+        'tax_percent' => 0,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'unit_of_measure_code' => 'CT',
+    ]);
+
+    expect(fn () => app(PurchaseCreditMemoService::class)->post($overReturnMemo))
+        ->toThrow(ValidationException::class, 'remaining returnable quantity');
+});
+
+test('linked purchase credit memo still fails with insufficient stock when lineage is valid and returnable quantity remains', function () {
+    $fixture = purchasePostingFixture();
+    grantPurchaseCreditMemoPostPermission($fixture['user']);
+    $this->actingAs($fixture['user']);
+
+    $invoice = PurchaseInvoice::query()->create([
+        'document_number' => 'PI-STOCK-001',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'location_id' => $fixture['location']->id,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'due_date' => now()->addDays(7)->toDateString(),
+        'status' => ApprovalStatus::APPROVED,
+        'total_amount' => 1000,
+        'total_vat' => 0,
+        'grand_total' => 1000,
+        'remaining_amount' => 1000,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'approved_by' => $fixture['user']->id,
+        'approved_at' => now(),
+        'cancelled' => false,
+    ]);
+
+    $invoice->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'item_description' => $fixture['item']->description,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'inventory_posting_group_id' => $fixture['item']->inventory_posting_group_id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'CT',
+        'qty_per_unit_of_measure' => 288,
+        'quantity_base' => 288,
+        'unit_cost' => 1000,
+        'unit_cost_lcy' => 1000,
+        'line_total' => 1000,
+        'vat_percentage' => 0,
+        'vat_amount' => 0,
+        'vat_amount_lcy' => 0,
+        'amount_including_vat' => 1000,
+        'amount_including_vat_lcy' => 1000,
+        'posting_date' => $invoice->posting_date,
+    ]);
+
+    app(PurchaseInvoiceService::class)->post($invoice);
+    $postedInvoiceLine = PostedPurchaseInvoiceLine::query()
+        ->whereHas('postedPurchaseInvoice', function ($query) use ($invoice): void {
+            $query->where('document_number', $invoice->document_number);
+        })
+        ->where('line_number', 10000)
+        ->firstOrFail();
+
+    expect((float) $fixture['item']->fresh()->ledger_on_hand)->toBe(576.0);
+
+    ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::NEGATIVE_ADJUSTMENT,
+        'document_type' => 'NEGATIVE_ADJUSTMENT',
+        'document_number' => 'NEG-ADJ-STOCK-001',
+        'document_line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'location_id' => $fixture['location']->id,
+        'quantity' => -550,
+        'remaining_quantity' => 0,
+        'open' => false,
+        'posting_date' => now()->toDateString(),
+        'entry_date' => now(),
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 0,
+        'purchase_amount_actual' => 0,
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'inventory_posting_group_id' => $fixture['item']->inventory_posting_group_id,
+    ]);
+
+    expect((float) $fixture['item']->fresh()->ledger_on_hand)->toBe(26.0);
+
+    $memo = PurchaseCreditMemo::query()->create([
+        'document_number' => 'PCM-STOCK-001',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'corrects_invoice_id' => $invoice->id,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'status' => ApprovalStatus::APPROVED,
+        'currency_code' => 'NGN',
+        'description' => 'Return to vendor',
+    ]);
+
+    $memo->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'corrected_invoice_line_id' => $postedInvoiceLine->id,
+        'quantity' => 0.25,
+        'unit_cost' => 1000,
+        'tax_percent' => 0,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'unit_of_measure_code' => 'CT',
+    ]);
+
+    expect(fn () => app(PurchaseCreditMemoService::class)->post($memo))
+        ->toThrow(RuntimeException::class, 'Insufficient stock');
+});
+
+test('invoice-linked purchase credit memo requires exact posted invoice line lineage and cannot borrow returnable quantity from another line with the same item', function () {
+    $fixture = purchasePostingFixture();
+    grantPurchaseCreditMemoPostPermission($fixture['user']);
+    $this->actingAs($fixture['user']);
+
+    $invoice = PurchaseInvoice::query()->create([
+        'document_number' => 'PI-LINE-EXACT-001',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'location_id' => $fixture['location']->id,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'due_date' => now()->addDays(7)->toDateString(),
+        'status' => ApprovalStatus::APPROVED,
+        'total_amount' => 3500,
+        'total_vat' => 0,
+        'grand_total' => 3500,
+        'remaining_amount' => 3500,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'approved_by' => $fixture['user']->id,
+        'approved_at' => now(),
+        'cancelled' => false,
+    ]);
+
+    $line1 = $invoice->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'item_description' => $fixture['item']->description,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'inventory_posting_group_id' => $fixture['item']->inventory_posting_group_id,
+        'quantity' => 10,
+        'unit_of_measure_code' => 'CT',
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => 10,
+        'unit_cost' => 100,
+        'unit_cost_lcy' => 100,
+        'line_total' => 1000,
+        'vat_percentage' => 0,
+        'vat_amount' => 0,
+        'vat_amount_lcy' => 0,
+        'amount_including_vat' => 1000,
+        'amount_including_vat_lcy' => 1000,
+        'posting_date' => $invoice->posting_date,
+    ]);
+
+    $line2 = $invoice->lines()->create([
+        'line_number' => 20000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'item_description' => $fixture['item']->description,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'inventory_posting_group_id' => $fixture['item']->inventory_posting_group_id,
+        'quantity' => 20,
+        'unit_of_measure_code' => 'CT',
+        'qty_per_unit_of_measure' => 1,
+        'quantity_base' => 20,
+        'unit_cost' => 125,
+        'unit_cost_lcy' => 125,
+        'line_total' => 2500,
+        'vat_percentage' => 0,
+        'vat_amount' => 0,
+        'vat_amount_lcy' => 0,
+        'amount_including_vat' => 2500,
+        'amount_including_vat_lcy' => 2500,
+        'posting_date' => $invoice->posting_date,
+    ]);
+
+    app(PurchaseInvoiceService::class)->post($invoice);
+    $postedLine1 = PostedPurchaseInvoiceLine::query()
+        ->whereHas('postedPurchaseInvoice', function ($query) use ($invoice): void {
+            $query->where('document_number', $invoice->document_number);
+        })
+        ->where('line_number', 10000)
+        ->firstOrFail();
+    $postedLine2 = PostedPurchaseInvoiceLine::query()
+        ->whereHas('postedPurchaseInvoice', function ($query) use ($invoice): void {
+            $query->where('document_number', $invoice->document_number);
+        })
+        ->where('line_number', 20000)
+        ->firstOrFail();
+    $fixture['item']->forceFill(['inventory' => 10000])->save();
+
+    $missingLineLinkData = PurchaseCreditMemoData::from([
+        'vendor_id' => $fixture['vendor']->id,
+        'corrects_invoice_id' => $invoice->id,
+        'external_document_number' => null,
+        'posting_date' => now(),
+        'document_date' => now(),
+        'location_id' => $fixture['location']->id,
+        'currency_code' => 'NGN',
+        'reason_code' => null,
+        'description' => 'Return to vendor',
+        'lines' => [
+            [
+                'item_id' => $fixture['item']->id,
+                'quantity' => 1,
+                'unit_cost' => 100,
+                'tax_percent' => 0,
+                'description' => $fixture['item']->description,
+            ],
+        ],
+    ]);
+
+    expect(fn () => app(PurchaseCreditMemoService::class)->create($missingLineLinkData))
+        ->toThrow(ValidationException::class, 'exact posted invoice line reference');
+
+    $borrowableQuantityMemo = PurchaseCreditMemo::query()->create([
+        'document_number' => 'PCM-EXACT-002',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'corrects_invoice_id' => $invoice->id,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'status' => ApprovalStatus::APPROVED,
+        'currency_code' => 'NGN',
+        'description' => 'Return to vendor',
+    ]);
+
+    $borrowableQuantityMemo->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'corrected_invoice_line_id' => $postedLine1->id,
+        'quantity' => 10.1,
+        'unit_cost' => 100,
+        'tax_percent' => 0,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'unit_of_measure_code' => 'CT',
+    ]);
+
+    expect(fn () => app(PurchaseCreditMemoService::class)->post($borrowableQuantityMemo))
+        ->toThrow(ValidationException::class, 'Credit quantity for invoice line 10000 exceeds remaining returnable quantity');
+
+    $validMemo = PurchaseCreditMemo::query()->create([
+        'document_number' => 'PCM-EXACT-003',
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'corrects_invoice_id' => $invoice->id,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'status' => ApprovalStatus::APPROVED,
+        'currency_code' => 'NGN',
+        'description' => 'Return to vendor',
+    ]);
+
+    $validMemo->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'corrected_invoice_line_id' => $postedLine2->id,
+        'quantity' => 4,
+        'unit_cost' => 125,
+        'tax_percent' => 0,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'unit_of_measure_code' => 'CT',
+    ]);
+
+    $postedValidMemo = app(PurchaseCreditMemoService::class)->post($validMemo);
+
+    expect($postedValidMemo->lines()->firstOrFail()->corrected_invoice_line_id)->toBe($postedLine2->id);
 });
 
 test('purchase credit memo posting requires permission and rolls back on missing setup', function () {

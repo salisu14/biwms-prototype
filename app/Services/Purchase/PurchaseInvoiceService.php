@@ -31,7 +31,10 @@ class PurchaseInvoiceService
     public function createFromOrder(PurchaseOrder $order): PurchaseInvoice
     {
         return DB::transaction(function () use ($order): PurchaseInvoice {
-            $order->loadMissing(['vendor', 'lines.item']);
+            $order = PurchaseOrder::query()
+                ->with(['vendor', 'lines.item'])
+                ->lockForUpdate()
+                ->findOrFail($order->id);
 
             $linesToInvoice = $order->lines
                 ->map(function ($line): array {
@@ -156,15 +159,20 @@ class PurchaseInvoiceService
 
     public function post(PurchaseInvoice $invoice): PostedPurchaseInvoice
     {
-        if ($invoice->isPosted()) {
-            throw new \RuntimeException('Purchase invoice is already posted.');
-        }
-
-        if ($invoice->status !== ApprovalStatus::APPROVED) {
-            throw new \RuntimeException('Only approved purchase invoices can be posted.');
-        }
-
         return DB::transaction(function () use ($invoice): PostedPurchaseInvoice {
+            $invoice = PurchaseInvoice::query()
+                ->with(['lines.item', 'vendor', 'purchaseOrder'])
+                ->lockForUpdate()
+                ->findOrFail($invoice->id);
+
+            if ($invoice->isPosted()) {
+                throw new \RuntimeException('Purchase invoice is already posted.');
+            }
+
+            if ($invoice->status !== ApprovalStatus::APPROVED) {
+                throw new \RuntimeException('Only approved purchase invoices can be posted.');
+            }
+
             $invoice->loadMissing(['lines.item', 'vendor', 'purchaseOrder']);
 
             if ($invoice->lines->isEmpty()) {

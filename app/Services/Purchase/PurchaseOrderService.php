@@ -84,7 +84,10 @@ class PurchaseOrderService
     public function update(UpdatePurchaseOrderData $data): PurchaseOrder
     {
         return DB::transaction(function () use ($data) {
-            $order = PurchaseOrder::findOrFail($data->purchaseOrderId);
+            $order = PurchaseOrder::query()
+                ->with('lines')
+                ->lockForUpdate()
+                ->findOrFail($data->purchaseOrderId);
 
             if (! $order->can_edit) {
                 throw new Exception("Purchase Order {$order->order_number} is in a status that cannot be edited.");
@@ -227,13 +230,16 @@ class PurchaseOrderService
      */
     public function createReceipt(CreateReceiptData $data): WarehouseReceipt
     {
-        $order = PurchaseOrder::with('lines')->findOrFail($data->purchaseOrderId);
+        return DB::transaction(function () use ($data) {
+            $order = PurchaseOrder::query()
+                ->with('lines.item')
+                ->lockForUpdate()
+                ->findOrFail($data->purchaseOrderId);
 
-        if (! $order->can_receive) {
-            throw new Exception('Purchase Order cannot be received in its current state.');
-        }
+            if (! $order->can_receive) {
+                throw new Exception('Purchase Order cannot be received in its current state.');
+            }
 
-        return DB::transaction(function () use ($order, $data) {
             $receipt = WarehouseReceipt::create([
                 'document_number' => WarehouseReceipt::generateNumber(),
                 'location_id' => $order->location_id,
@@ -290,13 +296,16 @@ class PurchaseOrderService
      */
     public function receivePartial(int $purchaseOrderId, array $lines): PurchaseOrder
     {
-        $order = PurchaseOrder::with('lines')->findOrFail($purchaseOrderId);
+        return DB::transaction(function () use ($purchaseOrderId, $lines): PurchaseOrder {
+            $order = PurchaseOrder::query()
+                ->with('lines')
+                ->lockForUpdate()
+                ->findOrFail($purchaseOrderId);
 
-        if (! in_array($order->status, [PurchaseOrderStatus::PENDING, PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true)) {
-            throw new Exception('Purchase Order cannot be received in its current state.');
-        }
+            if (! in_array($order->status, [PurchaseOrderStatus::PENDING, PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true)) {
+                throw new Exception('Purchase Order cannot be received in its current state.');
+            }
 
-        return DB::transaction(function () use ($order, $lines): PurchaseOrder {
             $orderedLines = $order->lines->sortBy('line_number')->values();
             $receivedAny = false;
             $validationErrors = [];

@@ -67,4 +67,9 @@ class PostedPurchaseCreditMemoLine extends Model
     {
         return $this->belongsTo(InventoryPostingGroup::class);
     }
+
+    public function correctedInvoiceLine(): BelongsTo
+    {
+        return $this->belongsTo(PostedPurchaseInvoiceLine::class, 'corrected_invoice_line_id');
+    }
 }

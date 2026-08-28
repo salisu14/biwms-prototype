@@ -16,6 +16,7 @@ class PurchaseCreditMemoLine extends Model
         'item_id',
         'item_code',
         'description',
+        'corrected_invoice_line_id',
         'quantity',
         'unit_cost',
         'line_total',
@@ -43,6 +44,11 @@ class PurchaseCreditMemoLine extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function correctedInvoiceLine(): BelongsTo
+    {
+        return $this->belongsTo(PostedPurchaseInvoiceLine::class, 'corrected_invoice_line_id');
     }
 
     public function generalProductPostingGroup(): BelongsTo
