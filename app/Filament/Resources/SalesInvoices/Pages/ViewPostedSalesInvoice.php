@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\SalesInvoices\Pages;
 
+use App\Filament\Pages\Finance\CustomerSettlementHistory;
 use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
@@ -89,6 +90,15 @@ class ViewPostedSalesInvoice extends Page
                 ->color('gray')
                 ->url(CustomerSubledgerSummary::getUrl([
                     'customerId' => $this->record->customer_id,
+                ])),
+            Action::make('viewSettlementHistory')
+                ->label('Settlement History')
+                ->icon('heroicon-o-arrows-right-left')
+                ->color('gray')
+                ->visible(fn (): bool => auth()->user()?->can('finance.customer_settlement_history.view') === true)
+                ->url(CustomerSettlementHistory::getUrl(panel: 'finance', parameters: [
+                    'customer_id' => $this->record->customer_id,
+                    'target_document_number' => $this->record->document_number,
                 ])),
             Action::make('printPostedInvoice')
                 ->label('Print Posted Invoice')

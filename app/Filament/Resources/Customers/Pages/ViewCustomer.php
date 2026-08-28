@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Customers\Pages;
 
+use App\Filament\Pages\Finance\CustomerSettlementHistory;
 use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\Customers\CustomerResource;
 use Filament\Actions\Action;
@@ -43,6 +44,14 @@ class ViewCustomer extends ViewRecord
                 ->color('gray')
                 ->url(fn () => CustomerSubledgerSummary::getUrl([
                     'customerId' => $this->record->id,
+                ])),
+            Action::make('viewSettlementHistory')
+                ->label('Settlement History')
+                ->icon('heroicon-o-arrows-right-left')
+                ->color('gray')
+                ->visible(fn (): bool => auth()->user()?->can('finance.customer_settlement_history.view') === true)
+                ->url(fn () => CustomerSettlementHistory::getUrl(panel: 'finance', parameters: [
+                    'customer_id' => $this->record->id,
                 ])),
             EditAction::make(),
         ];

@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\SuperAdminTwoFactorSetupController;
 use App\Http\Controllers\Auth\TwoFactorManagementController;
 use App\Http\Controllers\BalanceSheetPrintController;
 use App\Http\Controllers\CashFlowStatementPrintController;
+use App\Http\Controllers\CustomerSettlementHistoryExportController;
 use App\Http\Controllers\CustomerSubledgerSummaryPrintController;
 use App\Http\Controllers\DepreciationBookReportPrintController;
 use App\Http\Controllers\ExpenseReportExportController;
@@ -136,6 +137,10 @@ Route::get('/admin/reports/fixed-asset-ledger/export', FixedAssetLedgerEntriesPr
 
 Route::get('/admin/reports/customer-subledger-summary/print', CustomerSubledgerSummaryPrintController::class)
     ->name('reports.customer-subledger-summary.print')
+    ->middleware(['web', 'auth']);
+
+Route::get('/admin/reports/customer-settlement-history/export', CustomerSettlementHistoryExportController::class)
+    ->name('reports.customer-settlement-history.export')
     ->middleware(['web', 'auth']);
 
 Route::get('/admin/reports/item-ledger-summary/print', ItemLedgerSummaryPrintController::class)

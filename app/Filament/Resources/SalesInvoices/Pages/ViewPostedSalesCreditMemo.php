@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\SalesInvoices\Pages;
 
+use App\Filament\Pages\Finance\CustomerSettlementHistory;
 use App\Filament\Resources\SalesCreditMemos\Concerns\InteractsWithSalesCreditMemoApplications;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\CustomerLedgerApplication;
@@ -77,6 +78,15 @@ class ViewPostedSalesCreditMemo extends Page
     {
         return [
             $this->applyCreditMemoAction(),
+            Action::make('viewSettlementHistory')
+                ->label('Settlement History')
+                ->icon('heroicon-o-arrows-right-left')
+                ->color('gray')
+                ->visible(fn (): bool => auth()->user()?->can('finance.customer_settlement_history.view') === true)
+                ->url(CustomerSettlementHistory::getUrl(panel: 'finance', parameters: [
+                    'customer_id' => $this->record->customer_id,
+                    'source_document_number' => $this->record->document_number,
+                ])),
             Action::make('back')
                 ->label('Back to Posted Invoices')
                 ->color('gray')

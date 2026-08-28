@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Payments\Pages;
 
+use App\Filament\Pages\Finance\CustomerSettlementHistory;
 use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Models\PostedPurchaseInvoice;
@@ -124,6 +125,18 @@ class ViewPayment extends ViewRecord
                 ->visible(fn ($record) => $record->party_type === 'CUSTOMER' && filled($record->party_id))
                 ->url(fn ($record) => CustomerSubledgerSummary::getUrl([
                     'customerId' => $record->party_id,
+                ])),
+
+            Action::make('openSettlementHistory')
+                ->label('Settlement History')
+                ->icon('heroicon-o-arrows-right-left')
+                ->color('gray')
+                ->visible(fn ($record) => $record->party_type === 'CUSTOMER'
+                    && filled($record->party_id)
+                    && auth()->user()?->can('finance.customer_settlement_history.view') === true)
+                ->url(fn ($record) => CustomerSettlementHistory::getUrl(panel: 'finance', parameters: [
+                    'customer_id' => $record->party_id,
+                    'source_document_number' => $record->payment_number,
                 ])),
 
             Action::make('markReconciled')

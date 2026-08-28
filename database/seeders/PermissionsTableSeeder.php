@@ -66,6 +66,7 @@ class PermissionsTableSeeder extends Seeder
             'finance.general_journal_batch.submit', 'finance.general_journal_batch.approve', 'finance.general_journal_batch.reject', 'finance.general_journal_batch.reopen', 'finance.general_journal_batch.post', 'finance.general_journal_batch.reverse', 'finance.general_journal_batch.cancel',
             'finance.currency_adjustment_ledger.view_any', 'finance.currency_adjustment_ledger.view', 'finance.currency_adjustment_ledger.create', 'finance.currency_adjustment_ledger.update', 'finance.currency_adjustment_ledger.delete',
             'finance.customer_ledger_entry.view_any', 'finance.customer_ledger_entry.view', 'finance.customer_ledger_entry.create', 'finance.customer_ledger_entry.update', 'finance.customer_ledger_entry.delete',
+            'finance.customer_settlement_history.view', 'finance.customer_settlement_history.export',
             'chart_of_account.manage',
             'posting_setup.manage',
             'number_series.manage',

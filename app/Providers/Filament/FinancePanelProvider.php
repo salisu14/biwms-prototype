@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Finance\Widgets\FinanceStatsOverview;
 use App\Filament\Pages\Finance\BalanceSheetReport;
 use App\Filament\Pages\Finance\CashFlowStatementReport;
+use App\Filament\Pages\Finance\CustomerSettlementHistory;
 use App\Filament\Pages\Finance\CustomerSubledgerSummary;
 use App\Filament\Pages\Finance\DepreciationBookReport;
 use App\Filament\Pages\Finance\FixedAssetLedgerEntries;
@@ -22,7 +23,6 @@ use App\Filament\Resources\GeneralJournalBatches\GeneralJournalBatchResource;
 use App\Filament\Resources\JournalLines\JournalLineResource;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
-use App\Models\FixedAsset;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -60,7 +60,7 @@ class FinancePanelProvider extends PanelProvider
             ->favicon(asset('favicon.ico'))
             ->renderHook(
                 PanelsRenderHook::STYLES_AFTER,
-                fn(): string => <<<'HTML'
+                fn (): string => <<<'HTML'
                     <style>
                         html:not(.dark) .fi-body,
                         html:not(.dark) body {
@@ -94,6 +94,7 @@ class FinancePanelProvider extends PanelProvider
                 BalanceSheetReport::class,
                 CashFlowStatementReport::class,
                 CustomerSubledgerSummary::class,
+                CustomerSettlementHistory::class,
                 FixedAssetListReport::class,
                 DepreciationBookReport::class,
                 FixedAssetLedgerEntries::class,
