@@ -7,6 +7,7 @@ use App\Models\PurchaseOrder;
 use App\Services\Purchase\PurchaseReceiptHeaderPrefillService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -31,6 +32,10 @@ class PurchaseReceiptForm
                     ->tabs([
                         Tab::make('General')
                             ->schema([
+                                Hidden::make('business_id')
+                                    ->default(fn (): ?int => request()->integer('business_id') ?: session('active_business_id'))
+                                    ->dehydrated(),
+
                                 Grid::make(3)->schema([
                                     static::makeSystemGeneratedTextInput(
                                         'document_number',

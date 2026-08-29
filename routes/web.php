@@ -20,7 +20,9 @@ use App\Http\Controllers\Manufacturing\ProductionQualityAttachmentController;
 use App\Http\Controllers\PhysicalInventoryJournalPrintController;
 use App\Http\Controllers\ProfitAndLossPrintController;
 use App\Http\Controllers\PurchaseStatisticsReportExportController;
+use App\Http\Controllers\PurchaseThreeWayMatchExportController;
 use App\Http\Controllers\SalesStatisticsReportExportController;
+use App\Http\Controllers\VendorSettlementHistoryExportController;
 use App\Http\Controllers\VoucherPrintController;
 use App\Http\Controllers\WaybillController;
 use App\Models\User;
@@ -143,6 +145,10 @@ Route::get('/admin/reports/customer-settlement-history/export', CustomerSettleme
     ->name('reports.customer-settlement-history.export')
     ->middleware(['web', 'auth']);
 
+Route::get('/admin/reports/vendor-settlement-history/export', VendorSettlementHistoryExportController::class)
+    ->name('reports.vendor-settlement-history.export')
+    ->middleware(['web', 'auth']);
+
 Route::get('/admin/reports/item-ledger-summary/print', ItemLedgerSummaryPrintController::class)
     ->name('reports.item-ledger-summary.print')
     ->middleware(['web', 'auth']);
@@ -161,6 +167,10 @@ Route::get('/admin/reports/sales-statistics/export', SalesStatisticsReportExport
 
 Route::get('/admin/reports/purchase-statistics/export', PurchaseStatisticsReportExportController::class)
     ->name('reports.purchase-statistics.export')
+    ->middleware(['web', 'auth']);
+
+Route::get('/admin/reports/purchase-three-way-match/export', PurchaseThreeWayMatchExportController::class)
+    ->name('reports.purchase-three-way-match.export')
     ->middleware(['web', 'auth']);
 
 Route::middleware(['auth'])->prefix('petty-cash')->group(function () {

@@ -48,7 +48,7 @@ class ProformaInvoiceService
                 'total_qty' => (float) $order->lines->sum('quantity'),
                 'total_qty_display' => $this->formatTotalQuantityByUom($order->lines, 'unit_of_measure_code'),
             ],
-            'company' => $this->getCompanyInfo(),
+            'company' => $this->getCompanyInfo($order->business_id),
         ];
 
         return Pdf::loadView('pdf.proforma-invoice', $data)
@@ -100,9 +100,10 @@ class ProformaInvoiceService
     /**
      * Get Company Information (Fallback search)
      */
-    protected function getCompanyInfo(): array
+    protected function getCompanyInfo(?int $businessId = null): array
     {
-        $header = $this->companyInformationService->getReportHeader();
+        $resolvedBusinessId = $businessId ?? session('active_business_id');
+        $header = $this->companyInformationService->getReportHeader($resolvedBusinessId);
 
         return [
             'name' => $header['name'] ?? config('app.name', 'Bifli WMS'),
@@ -117,7 +118,7 @@ class ProformaInvoiceService
             'logo_url' => $header['logo_url'] ?? null,
             'logo_data_uri' => $header['logo_data_uri'] ?? null,
             'logo_abs_path' => $header['logo_abs_path'] ?? null,
-            'invoice_footer' => $this->companyInformationService->getInvoiceFooter(),
+            'invoice_footer' => $this->companyInformationService->getInvoiceFooter($resolvedBusinessId),
         ];
     }
 

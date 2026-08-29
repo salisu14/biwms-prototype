@@ -6,6 +6,8 @@ use App\Enums\PurchaseOrderStatus;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseReceipt;
+use App\Services\Finance\VendorSettlementHistoryService;
+use App\Services\Purchase\PurchaseThreeWayMatchService;
 use Filament\Pages\Page;
 
 class PurchaseHistory extends Page
@@ -26,6 +28,8 @@ class PurchaseHistory extends Page
             'postedReceiptCount' => PurchaseReceipt::count(),
             'postedInvoiceCount' => PostedPurchaseInvoice::count(),
             'archivedOrderCount' => PurchaseOrder::where('status', PurchaseOrderStatus::CLOSED->value)->count(),
+            'vendorSettlementCount' => app(VendorSettlementHistoryService::class)->rows()->count(),
+            'threeWayMatchCount' => app(PurchaseThreeWayMatchService::class)->generate()['summary']['total_rows'] ?? 0,
         ];
     }
 }

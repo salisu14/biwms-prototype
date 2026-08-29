@@ -69,6 +69,7 @@ class PurchaseInvoiceService
             }
 
             $invoice = PurchaseInvoice::create([
+                'business_id' => $order->business_id ?? (request()?->integer('business_id') ?: session('active_business_id')),
                 'document_number' => $this->generateNumber(),
                 'external_document_number' => null,
                 'order_id' => $order->id,
@@ -255,6 +256,7 @@ class PurchaseInvoiceService
             $posted = PostedPurchaseInvoice::query()->firstOrCreate(
                 ['document_number' => $invoice->document_number],
                 [
+                    'business_id' => $invoice->business_id ?? $order->business_id ?? (request()?->integer('business_id') ?: session('active_business_id')),
                     'external_document_number' => $invoice->external_document_number,
                     'order_id' => $invoice->order_id,
                     'order_number' => $invoice->order_number,

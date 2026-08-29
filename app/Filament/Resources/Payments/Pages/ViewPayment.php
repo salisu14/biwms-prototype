@@ -8,6 +8,7 @@ use App\Filament\Resources\Payments\PaymentResource;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedSalesInvoice;
 use App\Services\Finance\PaymentService;
+use App\Services\Print\PurchaseDocumentPrintService;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -107,6 +108,42 @@ class ViewPayment extends ViewRecord
                         ->title('Application Successful')
                         ->success()
                         ->send();
+                }),
+
+            Action::make('print')
+                ->label('Print Receipt')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->visible(fn ($record) => (auth()->user()?->can('view', $record) ?? false) && $record->status === 'POSTED')
+                ->action(function ($record, PurchaseDocumentPrintService $service) {
+                    return response()->streamDownload(
+                        fn () => print ($service->generateVendorPaymentReceipt($record)->output()),
+                        "{$record->payment_number}.pdf"
+                    );
+                }),
+
+            Action::make('printThermal80')
+                ->label('Print 80mm')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->visible(fn ($record) => (auth()->user()?->can('view', $record) ?? false) && $record->status === 'POSTED')
+                ->action(function ($record, PurchaseDocumentPrintService $service) {
+                    return response()->streamDownload(
+                        fn () => print ($service->generateVendorPaymentReceipt80mm($record)->output()),
+                        "{$record->payment_number}-80mm.pdf"
+                    );
+                }),
+
+            Action::make('printThermal58')
+                ->label('Print 58mm')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->visible(fn ($record) => (auth()->user()?->can('view', $record) ?? false) && $record->status === 'POSTED')
+                ->action(function ($record, PurchaseDocumentPrintService $service) {
+                    return response()->streamDownload(
+                        fn () => print ($service->generateVendorPaymentReceipt58mm($record)->output()),
+                        "{$record->payment_number}-58mm.pdf"
+                    );
                 }),
 
             Action::make('openInvoices')

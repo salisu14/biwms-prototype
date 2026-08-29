@@ -27,6 +27,10 @@ class PurchaseOrderForm
                 Section::make('Order Header')
                     ->description('Define the type, vendor, and general order information.')
                     ->schema([
+                        Hidden::make('business_id')
+                            ->default(fn (): ?int => request()->integer('business_id') ?: session('active_business_id'))
+                            ->dehydrated(),
+
                         Grid::make([
                             'default' => 1,
                             'md' => 2,

@@ -9,6 +9,7 @@ use App\Models\PurchaseOrder;
 use App\Models\Vendor;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -33,6 +34,10 @@ class PurchaseInvoiceForm
                     ->tabs([
                         Tab::make('General')
                             ->schema([
+                                Hidden::make('business_id')
+                                    ->default(fn (): ?int => request()->integer('business_id') ?: session('active_business_id'))
+                                    ->dehydrated(),
+
                                 Grid::make([
                                     'default' => 1,
                                     'md' => 2,

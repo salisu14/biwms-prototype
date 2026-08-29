@@ -17,6 +17,7 @@ class PurchaseOrder extends Model
     protected $table = 'purchase_orders';
 
     protected $fillable = [
+        'business_id',
         'order_number',
         'order_type',
         'vendor_id',
@@ -69,6 +70,8 @@ class PurchaseOrder extends Model
         parent::boot();
 
         static::creating(function ($order) {
+            $order->business_id ??= request()?->integer('business_id') ?: session('active_business_id');
+
             // Default status if not provided
             if (empty($order->status)) {
                 $order->status = PurchaseOrderStatus::PENDING;
@@ -99,6 +102,11 @@ class PurchaseOrder extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function location(): BelongsTo

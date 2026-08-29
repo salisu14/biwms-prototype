@@ -290,7 +290,9 @@ class VendorLedgerEntry extends Model
             ->lockForUpdate()
             ->findOrFail($this->getKey());
 
-        $lockedEntryIds = collect($applications)
+        $normalizedApplications = $this->normalizeApplicationEntries($applications);
+
+        $lockedEntryIds = collect($normalizedApplications)
             ->pluck('entry_id')
             ->map(fn ($entryId): int => (int) $entryId)
             ->push((int) $creditEntry->getKey())
@@ -313,7 +315,7 @@ class VendorLedgerEntry extends Model
         $totalApplied = 0.0;
         $appliedEntries = $creditEntry->applied_to_entries ?? [];
 
-        foreach ($applications as $app) {
+        foreach ($normalizedApplications as $app) {
             $invoiceEntry = $lockedEntries->get((int) $app['entry_id']);
 
             if (! $invoiceEntry || ! $invoiceEntry->is_invoice || ! $invoiceEntry->open) {
@@ -359,6 +361,71 @@ class VendorLedgerEntry extends Model
         $creditEntry->save();
 
         return $totalApplied;
+    }
+
+    /**
+     * Normalize legacy/compatibility application payloads into ledger-entry ids.
+     *
+     * @param  array<int, array<string, float|int|string|null>>  $applications
+     * @return array<int, array{entry_id:int, amount:float|int|string}>
+     */
+    private function normalizeApplicationEntries(array $applications): array
+    {
+        $normalized = [];
+
+        foreach ($applications as $application) {
+            $entryId = $this->resolveApplicationEntryId($application);
+
+            if (! $entryId) {
+                continue;
+            }
+
+            $normalized[] = [
+                'entry_id' => $entryId,
+                'amount' => $application['amount'] ?? 0,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Resolve legacy aliases to the canonical vendor ledger entry id.
+     *
+     * @param  array<string, float|int|string|null>  $application
+     */
+    private function resolveApplicationEntryId(array $application): ?int
+    {
+        foreach (['entry_id', 'ledger_entry_id', 'vendor_ledger_entry_id', 'target_ledger_entry_id'] as $key) {
+            if (isset($application[$key]) && is_numeric($application[$key])) {
+                return (int) $application[$key];
+            }
+        }
+
+        foreach (['invoice_id', 'document_id'] as $key) {
+            if (! isset($application[$key]) || ! is_numeric($application[$key])) {
+                continue;
+            }
+
+            $purchaseInvoice = PostedPurchaseInvoice::query()->find((int) $application[$key])
+                ?? PurchaseInvoice::query()->find((int) $application[$key]);
+
+            if (! $purchaseInvoice) {
+                continue;
+            }
+
+            $ledgerEntryId = self::query()
+                ->where('document_type', 'PURCHASE_INVOICE')
+                ->where('document_number', $purchaseInvoice->document_number)
+                ->where('vendor_id', $this->vendor_id)
+                ->value('id');
+
+            if ($ledgerEntryId) {
+                return (int) $ledgerEntryId;
+            }
+        }
+
+        return null;
     }
 
     /**

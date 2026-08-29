@@ -20,6 +20,8 @@ class PurchaseCreditMemoLineData extends Data
 class PurchaseCreditMemoData extends Data
 {
     public function __construct(
+        public ?int $business_id,
+
         public int $vendor_id,
         public ?int $corrects_invoice_id,
         public ?string $external_document_number,

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 class StatisticsReportService
 {
     /**
-     * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed}  $filters
+     * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed, business_id?: mixed}  $filters
      * @return array<string, mixed>
      */
     public function sales(array $filters = []): array
@@ -24,7 +24,7 @@ class StatisticsReportService
     }
 
     /**
-     * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed}  $filters
+     * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed, business_id?: mixed}  $filters
      * @return array<string, mixed>
      */
     public function purchases(array $filters = []): array
@@ -39,8 +39,8 @@ class StatisticsReportService
     }
 
     /**
-     * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed}  $filters
-     * @return array{date_from: string, date_to: string, gen_bus_posting_group_id: int|null, posting_group: string|null}
+     * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed, business_id?: mixed}  $filters
+     * @return array{date_from: string, date_to: string, gen_bus_posting_group_id: int|null, business_id: int|null, posting_group: string|null}
      */
     public function normalizeFilters(array $filters = []): array
     {
@@ -60,10 +60,15 @@ class StatisticsReportService
             ? (int) $filters['gen_bus_posting_group_id']
             : null;
 
+        $businessId = filled($filters['business_id'] ?? null)
+            ? (int) $filters['business_id']
+            : (filled(session('active_business_id')) ? (int) session('active_business_id') : null);
+
         return [
             'date_from' => $from,
             'date_to' => $to,
             'gen_bus_posting_group_id' => $postingGroupId,
+            'business_id' => $businessId,
             'posting_group' => $postingGroupId !== null
                 ? DB::table('general_business_posting_groups')->where('id', $postingGroupId)->value('description')
                 : null,
@@ -71,7 +76,7 @@ class StatisticsReportService
     }
 
     /**
-     * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed}  $filters
+     * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed, business_id?: mixed}  $filters
      * @return array<string, mixed>
      */
     private function generate(string $type, string $title, string $amountLabel, string $amountColumn, array $filters): array
@@ -101,6 +106,10 @@ class StatisticsReportService
             )
             ->groupBy('gbpg.id', 'gbpg.code', 'gbpg.description')
             ->orderByDesc('amount');
+
+        if ($period['business_id'] !== null) {
+            $query->where('gl_entries.business_id', $period['business_id']);
+        }
 
         if ($period['gen_bus_posting_group_id'] !== null) {
             $query->whereRaw("{$postingGroupIdSql} = ?", [$period['gen_bus_posting_group_id']]);

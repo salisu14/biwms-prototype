@@ -12,6 +12,9 @@ use Spatie\LaravelData\Data;
 class CreatePurchaseOrderData extends Data
 {
     public function __construct(
+        #[Nullable]
+        public ?int $businessId,
+
         #[Required]
         public PurchaseOrderType $orderType,
 

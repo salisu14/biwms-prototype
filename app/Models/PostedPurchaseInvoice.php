@@ -13,7 +13,17 @@ class PostedPurchaseInvoice extends Model
 
     protected $table = 'posted_purchase_invoices';
 
+    protected static function booted(): void
+    {
+        static::creating(function (PostedPurchaseInvoice $invoice): void {
+            $invoice->business_id ??= $invoice->order_id
+                ? PurchaseOrder::query()->whereKey($invoice->order_id)->value('business_id')
+                : (request()?->integer('business_id') ?: session('active_business_id'));
+        });
+    }
+
     protected $fillable = [
+        'business_id',
         'document_number',
         'external_document_number',
         'order_id',
@@ -80,6 +90,11 @@ class PostedPurchaseInvoice extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function purchaseOrder(): BelongsTo

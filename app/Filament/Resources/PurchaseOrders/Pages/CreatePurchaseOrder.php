@@ -17,6 +17,7 @@ class CreatePurchaseOrder extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         $dto = new CreatePurchaseOrderData(
+            businessId: $data['business_id'] ?? null,
             orderType: PurchaseOrderType::from($data['order_type']), // ✅ FIX HERE
             vendorId: $data['vendor_id'],
             locationId: $data['location_id'],

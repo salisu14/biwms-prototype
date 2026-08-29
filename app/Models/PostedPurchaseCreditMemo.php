@@ -17,6 +17,7 @@ class PostedPurchaseCreditMemo extends Model
 
     protected $fillable = [
         // Document Identification
+        'business_id',
         'document_number',
         'external_document_number',
         'vendor_invoice_number',
@@ -89,11 +90,27 @@ class PostedPurchaseCreditMemo extends Model
         'dimensions' => 'array',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (PostedPurchaseCreditMemo $memo): void {
+            $memo->business_id ??= $memo->source_document_id
+                ? PurchaseCreditMemo::query()->whereKey($memo->source_document_id)->value('business_id')
+                : ($memo->corrects_invoice_id
+                    ? PurchaseInvoice::query()->whereKey($memo->corrects_invoice_id)->value('business_id')
+                    : (request()?->integer('business_id') ?: session('active_business_id')));
+        });
+    }
+
     // ==================== RELATIONSHIPS ====================
 
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     /**

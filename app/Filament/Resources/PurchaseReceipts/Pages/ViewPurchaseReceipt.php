@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PurchaseReceipts\Pages;
 
 use App\Filament\Resources\PurchaseReceipts\PurchaseReceiptResource;
 use App\Models\PurchaseReceipt;
+use App\Services\Print\PurchaseDocumentPrintService;
 use App\Services\Purchase\PurchaseReceiptLinePrefillService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -76,6 +77,39 @@ class ViewPurchaseReceipt extends ViewRecord
                     } catch (\Throwable $exception) {
                         Notification::make()->title('Unable to post receipt')->body($exception->getMessage())->danger()->send();
                     }
+                }),
+            Action::make('print')
+                ->label('Print Receipt')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->visible(fn (PurchaseReceipt $record): bool => filled($record->document_number))
+                ->action(function (PurchaseReceipt $record, PurchaseDocumentPrintService $service) {
+                    return response()->streamDownload(
+                        fn () => print ($service->generatePurchaseReceipt($record)->output()),
+                        "{$record->document_number}.pdf"
+                    );
+                }),
+            Action::make('printThermal80')
+                ->label('Print 80mm')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->visible(fn (PurchaseReceipt $record): bool => filled($record->document_number))
+                ->action(function (PurchaseReceipt $record, PurchaseDocumentPrintService $service) {
+                    return response()->streamDownload(
+                        fn () => print ($service->generatePurchaseReceiptThermal80mm($record)->output()),
+                        "{$record->document_number}-80mm.pdf"
+                    );
+                }),
+            Action::make('printThermal58')
+                ->label('Print 58mm')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->visible(fn (PurchaseReceipt $record): bool => filled($record->document_number))
+                ->action(function (PurchaseReceipt $record, PurchaseDocumentPrintService $service) {
+                    return response()->streamDownload(
+                        fn () => print ($service->generatePurchaseReceiptThermal58mm($record)->output()),
+                        "{$record->document_number}-58mm.pdf"
+                    );
                 }),
         ];
     }

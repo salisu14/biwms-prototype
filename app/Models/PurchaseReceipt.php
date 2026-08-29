@@ -17,6 +17,10 @@ class PurchaseReceipt extends Model
     protected static function booted(): void
     {
         static::creating(function (PurchaseReceipt $receipt): void {
+            $receipt->business_id ??= $receipt->purchase_order_id
+                ? PurchaseOrder::query()->whereKey($receipt->purchase_order_id)->value('business_id')
+                : (request()?->integer('business_id') ?: session('active_business_id'));
+
             if (empty($receipt->document_number)) {
                 $receipt->document_number = self::generateDocumentNumber();
             }
@@ -24,6 +28,7 @@ class PurchaseReceipt extends Model
     }
 
     protected $fillable = [
+        'business_id',
         'document_number',
         'external_document_no',
         'vendor_id',
@@ -116,6 +121,11 @@ class PurchaseReceipt extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function lines(): HasMany

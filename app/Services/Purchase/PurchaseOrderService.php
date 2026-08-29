@@ -50,6 +50,7 @@ class PurchaseOrderService
             $vendor = Vendor::findOrFail($data->vendorId);
 
             $order = PurchaseOrder::create([
+                'business_id' => $data->businessId ?? (request()?->integer('business_id') ?: session('active_business_id')),
                 'order_number' => $orderNumber,
                 'order_type' => $data->orderType,
                 'vendor_id' => $data->vendorId,

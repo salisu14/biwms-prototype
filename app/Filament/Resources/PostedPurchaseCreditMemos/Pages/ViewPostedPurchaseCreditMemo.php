@@ -7,6 +7,7 @@ use App\Filament\Resources\PostedPurchaseCreditMemos\PostedPurchaseCreditMemoRes
 use App\Models\PaymentApplication;
 use App\Models\PostedPurchaseCreditMemo;
 use App\Models\VendorLedgerEntry;
+use App\Services\Print\PurchaseDocumentPrintService;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Collection;
@@ -72,6 +73,17 @@ class ViewPostedPurchaseCreditMemo extends Page
                 ->label('Back to Posted Purchase Credit Memos')
                 ->color('gray')
                 ->url(PostedPurchaseCreditMemoResource::getUrl('index')),
+            Action::make('print')
+                ->label('Print Credit Memo')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->visible(fn (): bool => filled($this->record->document_number))
+                ->action(function (PurchaseDocumentPrintService $service) {
+                    return response()->streamDownload(
+                        fn () => print ($service->generatePostedPurchaseCreditMemo($this->record)->output()),
+                        "{$this->record->document_number}.pdf"
+                    );
+                }),
         ];
     }
 

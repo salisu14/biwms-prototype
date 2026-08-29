@@ -13,6 +13,8 @@ use App\Filament\Pages\Finance\FixedAssetListReport;
 use App\Filament\Pages\Finance\GeneralJournals;
 use App\Filament\Pages\Finance\GroupSummaryReport;
 use App\Filament\Pages\Finance\ProfitAndLossReport;
+use App\Filament\Pages\Finance\PurchaseThreeWayMatch;
+use App\Filament\Pages\Finance\VendorSettlementHistory;
 use App\Filament\Pages\MyAttendance;
 use App\Filament\Resources\AccountSchedules\AccountScheduleResource;
 use App\Filament\Resources\BankAccounts\BankAccountResource;
@@ -95,9 +97,11 @@ class FinancePanelProvider extends PanelProvider
                 CashFlowStatementReport::class,
                 CustomerSubledgerSummary::class,
                 CustomerSettlementHistory::class,
+                VendorSettlementHistory::class,
                 FixedAssetListReport::class,
                 DepreciationBookReport::class,
                 FixedAssetLedgerEntries::class,
+                PurchaseThreeWayMatch::class,
             ])
             ->widgets([
                 FinanceStatsOverview::class,

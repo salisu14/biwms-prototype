@@ -24,17 +24,6 @@ class SetActiveBusinessContext
             }
         }
 
-        if (! session()->has('active_business_id')) {
-            $fallbackBusinessId = Business::query()
-                ->where('is_active', true)
-                ->orderBy('id')
-                ->value('id');
-
-            if ($fallbackBusinessId) {
-                session(['active_business_id' => (int) $fallbackBusinessId]);
-            }
-        }
-
         return $next($request);
     }
 }

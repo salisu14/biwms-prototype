@@ -18,6 +18,7 @@ class PurchaseCreditMemo extends Model implements Approvable
     use ApprovableTrait, HasFactory;
 
     protected $fillable = [
+        'business_id',
         'document_number',
         'external_document_number',
         'vendor_id',
@@ -54,6 +55,11 @@ class PurchaseCreditMemo extends Model implements Approvable
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function lines(): HasMany
@@ -98,6 +104,10 @@ class PurchaseCreditMemo extends Model implements Approvable
     protected static function booted(): void
     {
         static::creating(function (PurchaseCreditMemo $memo) {
+            $memo->business_id ??= $memo->corrects_invoice_id
+                ? PurchaseInvoice::query()->whereKey($memo->corrects_invoice_id)->value('business_id')
+                : (request()?->integer('business_id') ?: session('active_business_id'));
+
             if (empty($memo->document_number)) {
                 $memo->document_number = self::generateNumber();
             }

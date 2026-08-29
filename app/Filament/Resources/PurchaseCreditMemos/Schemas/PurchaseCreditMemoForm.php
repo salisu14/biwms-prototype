@@ -35,6 +35,10 @@ class PurchaseCreditMemoForm
                     ->schema([
                         Section::make('General Information')
                             ->schema([
+                                Hidden::make('business_id')
+                                    ->default(fn (): ?int => request()->integer('business_id') ?: session('active_business_id'))
+                                    ->dehydrated(),
+
                                 static::makeSystemGeneratedTextInput(
                                     'document_number',
                                     'Document Number',
@@ -132,11 +136,12 @@ class PurchaseCreditMemoForm
                                                     ->where('document_number', $invoice->document_number)
                                                     ->where('vendor_id', $invoice->vendor_id)
                                                     ->first()
-                                                : null;
+                                            : null;
 
                                             if ($invoice && $postedInvoice) {
                                                 $set('vendor_id', $invoice->vendor_id);
                                                 $set('vendor_name', $invoice->vendor_name);
+                                                $set('business_id', $invoice->business_id ?: $postedInvoice->business_id ?: (request()->integer('business_id') ?: session('active_business_id')));
                                                 $set('corrects_invoice_number', $invoice->document_number);
                                                 $set('currency_code', $invoice->currency_code);
                                                 $set('location_id', $invoice->location_id);

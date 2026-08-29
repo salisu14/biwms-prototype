@@ -19,6 +19,7 @@ class PurchaseReceiptHeaderPrefillService
         $location = $purchaseOrder->location;
 
         $defaults = [
+            'business_id' => $purchaseOrder->business_id,
             'purchase_order_id' => $purchaseOrder->id,
             'purchase_order_no' => $purchaseOrder->order_number,
             'vendor_id' => $purchaseOrder->vendor_id,

@@ -28,17 +28,17 @@
         }
         .history-grid {
             display: grid;
-            grid-template-cols: 1fr;
+            grid-template-columns: 1fr;
             gap: 1rem;
         }
         @media (min-width: 768px) {
             .history-grid {
-                grid-template-cols: repeat(2, 1fr);
+                grid-template-columns: repeat(2, 1fr);
             }
         }
         @media (min-width: 1024px) {
             .history-grid {
-                grid-template-cols: repeat(3, 1fr);
+                grid-template-columns: repeat(3, 1fr);
             }
         }
         .history-card {
@@ -147,6 +147,38 @@
                 </div>
                 <div class="card-footer">
                     Manage Receipts <x-heroicon-m-arrow-right style="width: 0.875rem; height: 0.875rem;"/>
+                </div>
+            </a>
+
+            <a href="{{ \App\Filament\AdminPages\VendorSettlementHistory::getUrl(panel: 'admin') }}" class="history-card card-success">
+                <div class="card-header">
+                    <div class="icon-box">
+                        <x-heroicon-o-arrows-right-left style="width: 1.5rem; height: 1.5rem;"/>
+                    </div>
+                    <div class="count-text">{{ $vendorSettlementCount ?? 0 }}</div>
+                </div>
+                <div class="card-content">
+                    <h3>Vendor Settlement History</h3>
+                    <p>Trace purchase invoice applications, credit memos, and payment settlements.</p>
+                </div>
+                <div class="card-footer">
+                    Open Vendor Trace <x-heroicon-m-arrow-right style="width: 0.875rem; height: 0.875rem;"/>
+                </div>
+            </a>
+
+            <a href="{{ \App\Filament\AdminPages\PurchaseThreeWayMatch::getUrl(panel: 'admin') }}" class="history-card card-warning">
+                <div class="card-header">
+                    <div class="icon-box">
+                        <x-heroicon-o-table-cells style="width: 1.5rem; height: 1.5rem;"/>
+                    </div>
+                    <div class="count-text">{{ $threeWayMatchCount ?? 0 }}</div>
+                </div>
+                <div class="card-content">
+                    <h3>Purchase Three-Way Match</h3>
+                    <p>Compare ordered, received, and invoiced quantities with exception visibility.</p>
+                </div>
+                <div class="card-footer">
+                    Review Matching <x-heroicon-m-arrow-right style="width: 0.875rem; height: 0.875rem;"/>
                 </div>
             </a>
 

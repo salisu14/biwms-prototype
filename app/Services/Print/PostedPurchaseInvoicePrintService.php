@@ -16,7 +16,7 @@ class PostedPurchaseInvoicePrintService
     public function generatePurchaseInvoice(PostedPurchaseInvoice $invoice)
     {
         $invoice->loadMissing(['lines', 'vendor']);
-        $header = $this->companyInformationService->getReportHeader();
+        $header = $this->companyInformationService->getReportHeader($invoice->business_id ?? session('active_business_id'));
         $applications = PaymentApplication::query()
             ->active()
             ->forDocument('PURCHASE_INVOICE', $invoice->id)
@@ -63,7 +63,7 @@ class PostedPurchaseInvoicePrintService
                 'website' => $header['website'] ?? null,
                 'tax_no' => $header['tax_no'] ?? null,
                 'logo_data_uri' => $header['logo_data_uri'] ?? null,
-                'invoice_footer' => $this->companyInformationService->getInvoiceFooter(),
+                'invoice_footer' => $this->companyInformationService->getInvoiceFooter($invoice->business_id ?? session('active_business_id')),
             ],
         ];
 

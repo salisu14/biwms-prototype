@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\AdminPages\CustomerSettlementHistory;
+use App\Filament\AdminPages\PurchaseThreeWayMatch;
+use App\Filament\AdminPages\VendorSettlementHistory;
 use App\Filament\Pages\AdminDashboard;
 use App\Filament\Pages\Finance\CashFlowStatementReport;
 use App\Filament\Pages\Finance\DepreciationBookReport;
@@ -205,6 +207,8 @@ class AdminPanelProvider extends PanelProvider
             ->pages([
                 AdminDashboard::class,
                 CustomerSettlementHistory::class,
+                VendorSettlementHistory::class,
+                PurchaseThreeWayMatch::class,
             ])
             ->navigation(function (NavigationBuilder $builder): NavigationBuilder {
                 return $builder
@@ -470,6 +474,18 @@ class AdminPanelProvider extends PanelProvider
                                     ->url(PurchaseStatisticsReport::getUrl(panel: 'admin'))
                                     ->isActiveWhen(fn () => request()->is('admin/purchase-statistics*'))
                                     ->sort(11),
+
+                                NavigationItem::make('Vendor Settlement History')
+                                    ->icon('heroicon-o-arrows-right-left')
+                                    ->url(VendorSettlementHistory::getUrl(panel: 'admin'))
+                                    ->isActiveWhen(fn () => request()->is('admin/vendor-settlement-history*'))
+                                    ->sort(12),
+
+                                NavigationItem::make('Purchase Three-Way Match')
+                                    ->icon('heroicon-o-table-cells')
+                                    ->url(PurchaseThreeWayMatch::getUrl(panel: 'admin'))
+                                    ->isActiveWhen(fn () => request()->is('admin/purchase-three-way-match*'))
+                                    ->sort(13),
 
                                 NavigationItem::make('WIP Valuation')
                                     ->icon('heroicon-o-currency-dollar')

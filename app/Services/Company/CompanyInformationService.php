@@ -133,9 +133,9 @@ class CompanyInformationService
     /**
      * Get company info for PDF/report headers
      */
-    public function getReportHeader(): array
+    public function getReportHeader(?int $businessId = null): array
     {
-        $company = $this->get();
+        $company = $this->get($businessId);
         $displayName = $company->trading_name ?: $company->company_name;
 
         return [
@@ -158,9 +158,9 @@ class CompanyInformationService
     /**
      * Get company info for invoice footer
      */
-    public function getInvoiceFooter(): string
+    public function getInvoiceFooter(?int $businessId = null): string
     {
-        $company = $this->get();
+        $company = $this->get($businessId);
         $displayName = $company->trading_name ?: $company->company_name;
 
         $parts = array_filter([
@@ -179,7 +179,10 @@ class CompanyInformationService
             return null;
         }
 
-        $absolutePath = public_path('storage/'.$path);
+        $absolutePath = Storage::disk('public')->exists($path)
+            ? Storage::disk('public')->path($path)
+            : public_path('storage/'.$path);
+
         if (! is_file($absolutePath)) {
             return null;
         }

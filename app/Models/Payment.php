@@ -18,6 +18,8 @@ class Payment extends Model
     protected static function booted(): void
     {
         static::creating(function (Payment $payment): void {
+            $payment->business_id ??= request()?->integer('business_id') ?: session('active_business_id');
+
             if (! empty($payment->payment_number)) {
                 return;
             }
@@ -65,6 +67,7 @@ class Payment extends Model
     }
 
     protected $fillable = [
+        'business_id',
         'payment_number',
         'external_reference',
         'payment_direction',
@@ -161,6 +164,11 @@ class Payment extends Model
     public function bankAccount(): BelongsTo
     {
         return $this->belongsTo(BankAccount::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function currency(): BelongsTo

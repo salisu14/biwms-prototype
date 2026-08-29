@@ -16,18 +16,25 @@ class PurchaseStatisticsReportExportController extends Controller
 
     public function __invoke(Request $request, StatisticsReportService $statisticsReportService): View|StreamedResponse
     {
-        $report = $statisticsReportService->purchases($request->only([
-            'date_from',
-            'date_to',
-            'gen_bus_posting_group_id',
-        ]));
+        $businessId = filled($request->query('business_id'))
+            ? (int) $request->query('business_id')
+            : session('active_business_id');
+
+        $report = $statisticsReportService->purchases([
+            ...$request->only([
+                'date_from',
+                'date_to',
+                'gen_bus_posting_group_id',
+            ]),
+            'business_id' => $businessId,
+        ]);
 
         if ((string) $request->query('format') === 'csv') {
             return $this->csv($report, 'purchase-statistics');
         }
 
         return view('reports.statistics-report-print', [
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
             'report' => $report,
         ]);
     }

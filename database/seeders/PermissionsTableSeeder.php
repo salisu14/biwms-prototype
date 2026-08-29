@@ -67,6 +67,8 @@ class PermissionsTableSeeder extends Seeder
             'finance.currency_adjustment_ledger.view_any', 'finance.currency_adjustment_ledger.view', 'finance.currency_adjustment_ledger.create', 'finance.currency_adjustment_ledger.update', 'finance.currency_adjustment_ledger.delete',
             'finance.customer_ledger_entry.view_any', 'finance.customer_ledger_entry.view', 'finance.customer_ledger_entry.create', 'finance.customer_ledger_entry.update', 'finance.customer_ledger_entry.delete',
             'finance.customer_settlement_history.view', 'finance.customer_settlement_history.export',
+            'finance.vendor_settlement_history.view', 'finance.vendor_settlement_history.export',
+            'purchasing.purchase_three_way_match.view', 'purchasing.purchase_three_way_match.export',
             'chart_of_account.manage',
             'posting_setup.manage',
             'number_series.manage',

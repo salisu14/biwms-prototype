@@ -26,6 +26,8 @@ class PurchaseStatisticsReport extends Page implements HasForms
 
     protected string $view = 'filament.pages.finance.purchase-statistics';
 
+    public ?int $business_id = null;
+
     public ?string $date_from = null;
 
     public ?string $date_to = null;
@@ -34,8 +36,13 @@ class PurchaseStatisticsReport extends Page implements HasForms
 
     public function mount(StatisticsReportService $statisticsReportService): void
     {
-        $filters = $statisticsReportService->normalizeFilters();
+        $this->business_id = request()->integer('business_id') ?: (filled(session('active_business_id')) ? (int) session('active_business_id') : null);
 
+        $filters = $statisticsReportService->normalizeFilters([
+            'business_id' => $this->business_id,
+        ]);
+
+        $this->business_id = $filters['business_id'];
         $this->date_from = $filters['date_from'];
         $this->date_to = $filters['date_to'];
         $this->gen_bus_posting_group_id = $filters['gen_bus_posting_group_id'];
@@ -148,6 +155,7 @@ class PurchaseStatisticsReport extends Page implements HasForms
     private function filters(): array
     {
         return [
+            'business_id' => $this->business_id,
             'date_from' => $this->date_from,
             'date_to' => $this->date_to,
             'gen_bus_posting_group_id' => $this->gen_bus_posting_group_id,

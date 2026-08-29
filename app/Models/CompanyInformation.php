@@ -268,16 +268,7 @@ class CompanyInformation extends Model
             return null;
         }
 
-        $fallbackBusinessId = Business::query()
-            ->where('is_active', true)
-            ->orderBy('id')
-            ->value('id');
-
-        if ($fallbackBusinessId) {
-            session(['active_business_id' => (int) $fallbackBusinessId]);
-        }
-
-        return $fallbackBusinessId ? (int) $fallbackBusinessId : null;
+        return null;
     }
 
     private static function normalizeStoredPath(mixed $value): ?string
