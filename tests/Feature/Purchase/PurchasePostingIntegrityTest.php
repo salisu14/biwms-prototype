@@ -34,6 +34,7 @@ use App\Models\ValueEntry;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
+use App\Services\Inventory\ValueEntryService;
 use App\Services\Purchase\PurchaseInvoiceService;
 use App\Services\Purchase\PurchaseOrderService;
 use App\Services\Purchases\PurchaseCreditMemoService;
@@ -243,6 +244,49 @@ test('purchase receipt increases inventory and purchase invoice from receipt doe
         ->where('document_number', $invoice->document_number)
         ->where('vendor_id', $fixture['vendor']->id)
         ->exists())->toBeTrue();
+});
+
+test('purchase receipt rolls back when its value entry cannot be created', function () {
+    $fixture = purchasePostingFixture();
+    $order = PurchaseOrder::query()->create([
+        'order_number' => 'PO-VALUE-FAIL-001',
+        'status' => PurchaseOrderStatus::APPROVED,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'order_date' => now()->toDateString(),
+        'posting_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'payment_terms' => 30,
+        'currency_code' => 'NGN',
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'total_amount' => 100,
+        'total_vat' => 0,
+        'grand_total' => 100,
+        'created_by' => $fixture['user']->id,
+    ]);
+    $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'unit_of_measure' => 'PCS',
+        'unit_cost' => 100,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+    ]);
+
+    $this->mock(ValueEntryService::class, function ($mock): void {
+        $mock->shouldReceive('ensureForItemLedgerEntry')->twice()->andReturnNull();
+    });
+
+    expect(fn () => app(PurchaseOrderService::class)->postReceipt($order))
+        ->toThrow(Exception::class, 'Value Entry could not be created');
+
+    expect(ItemLedgerEntry::query()->where('document_number', 'PO-VALUE-FAIL-001')->count())->toBe(0)
+        ->and(ValueEntry::query()->where('document_no', 'PO-VALUE-FAIL-001')->count())->toBe(0)
+        ->and((float) $fixture['item']->fresh()->inventory)->toBe(0.0)
+        ->and($order->fresh()->status)->toBe(PurchaseOrderStatus::APPROVED);
 });
 
 test('direct purchase invoice increases inventory once and service lines do not affect inventory', function () {

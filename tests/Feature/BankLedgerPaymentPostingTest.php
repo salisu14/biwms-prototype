@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\AccountCategory;
+use App\Enums\IncomeBalanceType;
 use App\Events\PaymentApplied;
 use App\Events\PaymentUnapplied;
 use App\Exceptions\PostingSetupException;
@@ -124,7 +126,10 @@ it('creates a bank ledger entry and reduces bank balance for a vendor payment', 
     $user = User::factory()->create();
     grantPaymentPostingPermission($user);
 
-    $payablesAccount = ChartOfAccount::factory()->create();
+    $payablesAccount = ChartOfAccount::factory()->create([
+        'account_category' => AccountCategory::LIABILITY,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
     $vendorPostingGroup = VendorPostingGroup::factory()->create([
         'payables_account_id' => $payablesAccount->id,
     ]);
@@ -690,7 +695,10 @@ it('routes legacy payment journal line posting through payment service and bank 
     $this->actingAs($user);
     grantPaymentPostingPermission($user);
 
-    $payablesAccount = ChartOfAccount::factory()->create();
+    $payablesAccount = ChartOfAccount::factory()->create([
+        'account_category' => AccountCategory::LIABILITY,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
     $vendorPostingGroup = VendorPostingGroup::factory()->create([
         'payables_account_id' => $payablesAccount->id,
     ]);

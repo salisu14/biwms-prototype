@@ -11,6 +11,7 @@ use App\Models\Dimension;
 use App\Models\DimensionValue;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\UserBusiness;
 use App\Policies\GenericFilamentPolicy;
 use Database\Seeders\PermissionsTableSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -52,7 +53,6 @@ it('allows authorized users to create businesses through the real Filament creat
         'businesses.business.view',
         'businesses.business.create',
     ]);
-
     expect(Gate::forUser($user)->allows('create', Business::class))->toBeTrue()
         ->and($user->can('businesses.business.update'))->toBeFalse();
 
@@ -104,6 +104,7 @@ it('allows authorized users to create the linked Company Information profile for
         'company_information.company_information.view',
         'company_information.company_information.create',
     ]);
+    UserBusiness::query()->create(['user_id' => $user->id, 'business_id' => $business->id]);
 
     expect(Gate::forUser($user)->allows('create', CompanyInformation::class))->toBeTrue()
         ->and($user->can('company_information.company_information.update'))->toBeFalse();

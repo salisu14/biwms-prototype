@@ -11,6 +11,8 @@ use App\Filament\Pages\Finance\VendorSettlementHistory;
 use App\Http\Controllers\PurchaseThreeWayMatchExportController;
 use App\Http\Controllers\VendorSettlementHistoryExportController;
 use App\Models\BankAccount;
+use App\Models\Business;
+use App\Models\CompanyInformation;
 use App\Models\Item;
 use App\Models\Payment;
 use App\Models\Permission;
@@ -39,6 +41,8 @@ it('renders vendor settlement history traces in finance and admin and exports wi
     ]);
 
     $paymentFixture = $this->createPostedPayableFixture(1000.00);
+    $businessId = Business::query()->firstOrFail()->id;
+    $paymentFixture['postedInvoice']->update(['business_id' => $businessId]);
     $payment = Payment::query()->create([
         'payment_number' => 'PAY-REPORT-001',
         'payment_date' => now()->subDays(2),
@@ -57,6 +61,7 @@ it('renders vendor settlement history traces in finance and admin and exports wi
         'unapplied_amount' => 400.00,
         'payment_amount_lcy' => 400.00,
         'created_by' => $viewer->id,
+        'business_id' => $businessId,
     ]);
 
     $this->ensureOpenAccountingPeriod($payment->posting_date);
@@ -69,6 +74,7 @@ it('renders vendor settlement history traces in finance and admin and exports wi
     ], $viewer->id);
 
     $creditMemoFixture = $this->createPostedPurchaseCreditMemoFixture(300.00);
+    $creditMemoFixture['postedCreditMemo']->update(['business_id' => $businessId]);
     $creditMemoFixture['postedCreditMemo']->applyToInvoices([
         [
             'invoice_id' => $creditMemoFixture['postedInvoice']->id,
@@ -88,8 +94,10 @@ it('renders vendor settlement history traces in finance and admin and exports wi
         ->assertSee($payment->payment_number)
         ->assertSee($creditMemoFixture['postedCreditMemo']->document_number);
 
+    ensurePurchaseReportCompanyProfile();
     $request = Request::create('/admin/reports/vendor-settlement-history/export', 'GET', [
         'format' => 'pdf',
+        'business_id' => Business::query()->firstOrFail()->id,
     ]);
     $request->setUserResolver(fn () => $viewer);
 
@@ -105,6 +113,7 @@ it('renders vendor settlement history traces in finance and admin and exports wi
 
     $request = Request::create('/admin/reports/vendor-settlement-history/export', 'GET', [
         'format' => 'csv',
+        'business_id' => Business::query()->firstOrFail()->id,
     ]);
     $request->setUserResolver(fn () => $viewer);
 
@@ -169,8 +178,10 @@ it('renders the purchase three-way match report and exports direct invoice excep
     ]);
 
     $fixture = $this->createPostedPayableFixture(500.00);
+    $businessId = Business::query()->firstOrFail()->id;
     $item = Item::factory()->create();
     $purchaseInvoice = PurchaseInvoice::query()->create([
+        'business_id' => $businessId,
         'document_number' => 'PI-REPORT-001',
         'vendor_id' => $fixture['vendor']->id,
         'vendor_name' => $fixture['vendor']->vendor_name,
@@ -233,8 +244,10 @@ it('renders the purchase three-way match report and exports direct invoice excep
         ->assertSee($purchaseInvoice->document_number)
         ->assertSee($item->item_code);
 
+    ensurePurchaseReportCompanyProfile();
     $request = Request::create('/admin/reports/purchase-three-way-match/export', 'GET', [
         'format' => 'pdf',
+        'business_id' => Business::query()->firstOrFail()->id,
     ]);
     $request->setUserResolver(fn () => $viewer);
 
@@ -250,6 +263,7 @@ it('renders the purchase three-way match report and exports direct invoice excep
 
     $request = Request::create('/admin/reports/purchase-three-way-match/export', 'GET', [
         'format' => 'csv',
+        'business_id' => Business::query()->firstOrFail()->id,
     ]);
     $request->setUserResolver(fn () => $viewer);
 
@@ -266,7 +280,26 @@ it('renders the purchase three-way match report and exports direct invoice excep
 
 function purchaseReportViewer(array $permissionNames): User
 {
+    session()->flush();
     app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $businesses = Business::query()->get();
+    if ($businesses->isEmpty()) {
+        $businesses = collect([Business::query()->create([
+            'code' => 'REPORT-CO',
+            'name' => 'Report Business',
+            'is_active' => true,
+        ])]);
+    }
+
+    foreach ($businesses as $business) {
+        CompanyInformation::query()->firstOrCreate([
+            'business_id' => $business->id,
+        ], [
+            'company_name' => $business->name,
+            'country_code' => 'NGA',
+        ]);
+    }
 
     foreach ($permissionNames as $permissionName) {
         Permission::query()->firstOrCreate([
@@ -286,4 +319,30 @@ function purchaseReportViewer(array $permissionNames): User
     $user->assignRole($role);
 
     return $user;
+}
+
+function ensurePurchaseReportCompanyProfile(): void
+{
+    $businesses = Business::query()->get();
+    if ($businesses->isEmpty()) {
+        $businesses = collect([Business::query()->create([
+            'code' => 'REPORT-CO',
+            'name' => 'Report Business',
+            'is_active' => true,
+        ])]);
+    }
+
+    foreach ($businesses as $business) {
+        CompanyInformation::query()->firstOrCreate(['business_id' => $business->id], [
+            'company_name' => 'Report Test Company',
+            'country_code' => 'NGA',
+        ]);
+    }
+
+    if (! CompanyInformation::query()->whereNull('business_id')->exists()) {
+        CompanyInformation::query()->create([
+            'company_name' => 'Report Test Company',
+            'country_code' => 'NGA',
+        ]);
+    }
 }

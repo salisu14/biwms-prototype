@@ -67,6 +67,28 @@ it('still reports a modern value entry marked gl posted without a control gl lin
         ->and($findings[0]['posting_transaction_id'])->toBe($transaction->id);
 });
 
+it('classifies a zero-value legacy inventory control fallback as informational', function (): void {
+    $fixture = financeInventoryFixture();
+    $itemLedgerEntry = financeInventoryItemLedgerEntry($fixture, ItemLedgerEntryType::PURCHASE, 1, 0);
+    financeInventoryValueEntry($itemLedgerEntry, [
+        'entry_no' => 901,
+        'document_type' => 'INVENTORY_PURCHASE_RECEIPT',
+        'document_no' => 'PO-LEGACY-ZERO',
+        'cost_amount_actual' => 0,
+        'posting_transaction_id' => null,
+        'gl_posted' => false,
+    ]);
+
+    $report = financeInventoryReconcileReport();
+    $finding = collect($report['missing_control_account_entries'])
+        ->firstWhere('value_entry_no', 901);
+
+    expect($finding)->not->toBeNull()
+        ->and($finding['account_number'])->toBe('LEGACY_INVENTORY_CONTROL_TOTAL')
+        ->and($finding['amount'])->toBe(0)
+        ->and($finding['severity'])->toBe('info');
+});
+
 it('allows append-only value entry history for the same item ledger entry without duplicate-source findings', function (): void {
     $fixture = financeInventoryFixture();
     $itemLedgerEntry = financeInventoryItemLedgerEntry($fixture, ItemLedgerEntryType::CONSUMPTION, -17.0657, 13285.6692);

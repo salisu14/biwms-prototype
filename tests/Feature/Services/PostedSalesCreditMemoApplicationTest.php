@@ -192,41 +192,12 @@ it('keeps sales credit memo application trace immutable', function (): void {
 function postedSalesCreditMemoApplicationFixture($testCase, float $creditAmount, float $invoiceAmount): array
 {
     $fixtureFactory = Closure::bind(
-        fn (float $amount): array => $this->createPostedSalesCreditMemoFixture($amount),
+        fn (float $amount): array => $this->createPostedSalesCreditMemoFixture($amount, $invoiceAmount),
         $testCase,
         $testCase::class,
     );
 
     $fixture = $fixtureFactory($creditAmount);
-
-    $fixture['postedInvoice']->update([
-        'subtotal' => $invoiceAmount,
-        'total_amount' => $invoiceAmount,
-        'grand_total' => $invoiceAmount,
-        'amount_paid' => 0,
-        'remaining_amount' => $invoiceAmount,
-        'paid_in_full' => false,
-        'paid_in_full_date' => null,
-    ]);
-
-    postedInvoiceLedgerEntry($fixture)->update([
-        'debit_amount' => $invoiceAmount,
-        'credit_amount' => 0,
-        'amount' => $invoiceAmount,
-        'running_balance' => $invoiceAmount,
-        'remaining_amount' => $invoiceAmount,
-        'open' => true,
-        'fully_applied' => false,
-    ]);
-
-    $fixture['documentEntry']->update([
-        'credit_amount' => $creditAmount,
-        'amount' => -$creditAmount,
-        'running_balance' => $invoiceAmount - $creditAmount,
-        'remaining_amount' => $creditAmount,
-        'open' => true,
-        'fully_applied' => false,
-    ]);
 
     return $fixture;
 }

@@ -871,6 +871,50 @@ it('excludes expected-cost value entries from actual value reconciliation econom
     expect(valueMismatchForEntry($entry))->toBeNull();
 });
 
+it('classifies an un-invoiced purchase receipt expected-cost layer as valid', function (): void {
+    $location = Location::factory()->create();
+    $item = Item::factory()->create(['inventory' => 1, 'location_id' => $location->id]);
+    $entry = ItemLedgerEntry::query()->create([
+        'entry_type' => ItemLedgerEntryType::PURCHASE,
+        'document_type' => 'PURCHASE_RECEIPT',
+        'document_number' => 'PO-EXPECTED-001',
+        'document_line_number' => 10000,
+        'item_id' => $item->id,
+        'location_id' => $location->id,
+        'quantity' => 1,
+        'remaining_quantity' => 1,
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 100,
+        'general_product_posting_group_id' => $item->general_product_posting_group_id,
+        'inventory_posting_group_id' => $item->inventory_posting_group_id,
+        'posting_date' => now(),
+        'entry_date' => now(),
+        'open' => true,
+    ]);
+    $valueEntry = ValueEntry::query()->where('item_ledger_entry_no', $entry->entry_number)->firstOrFail();
+    $valueEntry->forceFill([
+        'quantity' => 1,
+        'valued_quantity' => 1,
+        'remaining_quantity' => 1,
+        'value_entry_state' => 'expected',
+        'expected_cost' => true,
+        'cost_amount_actual' => 0,
+        'cost_amount_expected' => 100,
+    ])->save();
+
+    expect(Artisan::call('biwms:inventory-reconcile', ['--json' => true]))->toBe(0);
+
+    $report = json_decode(trim(Artisan::output()), true, flags: JSON_THROW_ON_ERROR);
+
+    expect(collect($report['value_entry_mismatches'])->firstWhere('entry_number', $entry->entry_number))
+        ->toBeNull()
+        ->and(collect($report['expected_cost_open_receipts'])->firstWhere('entry_number', $entry->entry_number))
+        ->toMatchArray([
+            'classification' => 'valid_expected_cost_receipt',
+            'severity' => 'info',
+        ]);
+});
+
 it('nets append-only reversal pairs in value reconciliation economics', function (): void {
     $entry = createOutputLedgerEntryForValueReconcile('REVERSAL', 100, 100, [
         ['amount' => 20, 'document_type' => 'PROD_OUTPUT_COST_ADJ', 'state' => 'adjustment'],

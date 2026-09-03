@@ -23,18 +23,13 @@ beforeEach(function (): void {
     app(PermissionRegistrar::class)->forgetCachedPermissions();
     $this->seed(PermissionsTableSeeder::class);
 
-    CompanyInformation::getInstance()
-        ->forceFill(['company_name' => 'BIFLI Pilot Company'])
-        ->save();
-
-    CompanyInformation::query()->update(['company_name' => 'BIFLI Pilot Company']);
-
     $business = Business::query()->firstOrCreate(
         ['code' => 'PILOT'],
         ['name' => 'Pilot Business', 'is_active' => true]
     );
+    session(['active_business_id' => $business->id]);
 
-    CompanyInformation::getInstance($business->id)
+    CompanyInformation::getOrCreateForBusiness($business->id)
         ->forceFill(['company_name' => 'BIFLI Pilot Company'])
         ->save();
 });

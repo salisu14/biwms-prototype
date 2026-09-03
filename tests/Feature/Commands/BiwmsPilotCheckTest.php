@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\AccountCategory;
+use App\Enums\IncomeBalanceType;
 use App\Models\BankAccount;
 use App\Models\Business;
 use App\Models\ChartOfAccount;
@@ -83,8 +85,13 @@ it('passes configured pilot data readiness checks with minimum setup', function 
         'blocked' => false,
     ]);
 
+    $payablesAccount = ChartOfAccount::factory()->create([
+        'account_category' => AccountCategory::LIABILITY,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+
     VendorPostingGroup::factory()->create([
-        'payables_account_id' => $account->id,
+        'payables_account_id' => $payablesAccount->id,
         'blocked' => false,
     ]);
 

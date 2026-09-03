@@ -7,10 +7,12 @@ use App\Enums\AccountCategory;
 use App\Enums\AccountStructuralType;
 use App\Enums\SourceType;
 use App\Models\AccountingPeriod;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralLedgerSetup;
 use App\Models\GlEntry;
 use App\Models\PostingTransaction;
+use App\Models\ReferralCommissionSetting;
 use App\Services\Accounting\GeneralLedgerPostingKernel;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\PostingService;
@@ -192,6 +194,39 @@ it('guards legacy PostingService direct entries with account validation', functi
         'document_number' => 'LEGACY-ACCOUNT',
     ]);
 })->throws(ValidationException::class, 'does not allow direct posting');
+
+it('rejects manual journals to commission-controlled accounts', function (): void {
+    $business = Business::query()->create([
+        'code' => 'BIZ-'.str()->upper(str()->random(8)),
+        'name' => 'Commission Control Test Business',
+        'is_active' => true,
+    ]);
+    $accounts = collect([
+        'commission_expense_account_id',
+        'commission_payable_account_id',
+        'commission_rounding_account_id',
+        'commission_payment_clearing_account_id',
+    ])->mapWithKeys(fn (string $column): array => [$column => ChartOfAccount::factory()->create()->id]);
+
+    ReferralCommissionSetting::query()->create(array_merge([
+        'business_id' => $business->id,
+        'is_enabled' => true,
+        'default_commission_basis' => 'POSTED_SALES',
+        'require_plan_assignment' => false,
+        'minimum_eligible_sale_amount' => 0,
+        'commission_decimal_places' => 4,
+    ], $accounts->all()));
+
+    foreach ($accounts as $account) {
+        expect(fn () => app(GeneralLedgerPostingKernel::class)->post(postingKernelIntent([
+            'business_id' => $business->id,
+            'lines' => [
+                ['account_id' => $account, 'debit_amount' => '1.00'],
+                ['account_id' => ChartOfAccount::factory()->create()->id, 'credit_amount' => '1.00'],
+            ],
+        ])))->toThrow(ValidationException::class, 'system controlled and cannot be posted through a manual journal');
+    }
+});
 
 /**
  * @return array{0: ChartOfAccount, 1: ChartOfAccount}

@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\AccountCategory;
+use App\Enums\IncomeBalanceType;
 use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\Contact;
@@ -40,7 +42,12 @@ test('it calculates and posts realized gain/loss during foreign currency applica
     $this->actingAs($user);
 
     // 1. Setup Accounts
-    $apAccount = ChartOfAccount::create(['account_number' => '2100', 'name' => 'Accounts Payable', 'type' => 'LIABILITY']);
+    $apAccount = ChartOfAccount::create([
+        'account_number' => '2100',
+        'name' => 'Accounts Payable',
+        'account_category' => AccountCategory::LIABILITY,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
     $gainAccount = ChartOfAccount::create(['account_number' => '8100', 'name' => 'Realized Gain', 'type' => 'INCOME']);
     $lossAccount = ChartOfAccount::create(['account_number' => '8200', 'name' => 'Realized Loss', 'type' => 'EXPENSE']);
     $bankGlAccount = ChartOfAccount::create(['account_number' => '1100', 'name' => 'Bank', 'type' => 'ASSET']);

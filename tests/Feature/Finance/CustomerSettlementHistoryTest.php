@@ -7,6 +7,7 @@ use App\Filament\Pages\Finance\CustomerSettlementHistory;
 use App\Filament\Resources\Customers\CustomerResource;
 use App\Http\Controllers\CustomerSettlementHistoryExportController;
 use App\Models\Business;
+use App\Models\CompanyInformation;
 use App\Models\Customer;
 use App\Models\CustomerLedgerApplication;
 use App\Models\CustomerLedgerEntry;
@@ -14,6 +15,7 @@ use App\Models\GlEntry;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\UserBusiness;
 use App\Services\Finance\CustomerSettlementHistoryService;
 use App\Services\Finance\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -122,6 +124,23 @@ it('filters settlement history by customer type source target date currency and 
 
 it('exports settlement history as csv and xlsx for authorized finance users', function (): void {
     $viewer = financeSettlementHistoryViewer();
+    $business = Business::query()->create([
+        'code' => 'SETTLEMENT-EXPORT',
+        'name' => 'Settlement Export Business',
+        'is_active' => true,
+    ]);
+    UserBusiness::query()->create([
+        'user_id' => $viewer->id,
+        'business_id' => $business->id,
+        'granted_by' => $viewer->id,
+    ]);
+    CompanyInformation::query()->create([
+        'business_id' => $business->id,
+        'company_name' => $business->name,
+        'country_code' => 'NGA',
+    ]);
+    auth()->login($viewer);
+    session(['active_business_id' => $business->id]);
 
     $paymentFixture = $this->createPostedReceivableApplicationFixture(1000.00, 400.00);
     app(PaymentService::class)->applyToDocument($paymentFixture['payment'], [
@@ -136,6 +155,7 @@ it('exports settlement history as csv and xlsx for authorized finance users', fu
     $request = Request::create('/admin/reports/customer-settlement-history/export', 'GET', [
         'customer_id' => $paymentFixture['customer']->id,
         'format' => 'pdf',
+        'business_id' => $business->id,
     ]);
     $request->setUserResolver(fn () => $viewer);
 
@@ -146,6 +166,7 @@ it('exports settlement history as csv and xlsx for authorized finance users', fu
     $request = Request::create('/admin/reports/customer-settlement-history/export', 'GET', [
         'customer_id' => $paymentFixture['customer']->id,
         'format' => 'csv',
+        'business_id' => $business->id,
     ]);
     $request->setUserResolver(fn () => $viewer);
 

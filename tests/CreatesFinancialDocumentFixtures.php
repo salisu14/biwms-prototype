@@ -422,9 +422,9 @@ trait CreatesFinancialDocumentFixtures
     /**
      * @return array{customer: Customer, postedInvoice: PostedSalesInvoice, postedCreditMemo: PostedSalesCreditMemo, documentEntry: CustomerLedgerEntry, user: User}
      */
-    protected function createPostedSalesCreditMemoFixture(float $creditAmount = 5000.00): array
+    protected function createPostedSalesCreditMemoFixture(float $creditAmount = 5000.00, ?float $invoiceAmount = null): array
     {
-        $receivable = $this->createPostedReceivableFixture(max($creditAmount * 2, 10000));
+        $receivable = $this->createPostedReceivableFixture($invoiceAmount ?? max($creditAmount * 2, 10000));
         $customer = $receivable['customer'];
         $user = $receivable['user'];
         $postedInvoice = $receivable['postedInvoice'];

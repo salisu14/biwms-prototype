@@ -251,7 +251,7 @@ it('renders canonical credit memo application history on the credit memo and inv
 function postedSalesCreditMemoApplyActionFixture($testCase, float $creditAmount, float $invoiceAmount): array
 {
     $fixtureFactory = Closure::bind(
-        fn (float $amount): array => $this->createPostedSalesCreditMemoFixture($amount),
+        fn (float $amount): array => $this->createPostedSalesCreditMemoFixture($amount, $invoiceAmount),
         $testCase,
         $testCase::class,
     );
@@ -269,37 +269,6 @@ function postedSalesCreditMemoApplyActionFixture($testCase, float $creditAmount,
         'posted_by' => $fixture['user']->id,
         'posted_at' => now(),
     ]);
-
-    $fixture['postedInvoice']->forceFill([
-        'subtotal' => $invoiceAmount,
-        'total_amount' => $invoiceAmount,
-        'grand_total' => $invoiceAmount,
-        'amount_paid' => 0,
-        'remaining_amount' => $invoiceAmount,
-        'paid_in_full' => false,
-        'paid_in_full_date' => null,
-        'cancelled' => false,
-    ])->save();
-
-    postedSalesCreditMemoApplyActionInvoiceEntry($fixture)->forceFill([
-        'debit_amount' => $invoiceAmount,
-        'credit_amount' => 0,
-        'amount' => $invoiceAmount,
-        'running_balance' => $invoiceAmount,
-        'remaining_amount' => $invoiceAmount,
-        'open' => true,
-        'fully_applied' => false,
-        'reversed' => false,
-    ])->save();
-
-    $fixture['documentEntry']->forceFill([
-        'credit_amount' => $creditAmount,
-        'amount' => -$creditAmount,
-        'remaining_amount' => $creditAmount,
-        'open' => true,
-        'fully_applied' => false,
-        'reversed' => false,
-    ])->save();
 
     return $fixture;
 }
@@ -361,9 +330,11 @@ function postedSalesCreditMemoApplyActionCloseInvoice(array $fixture): void
         'paid_in_full_date' => now(),
     ])->save();
 
-    postedSalesCreditMemoApplyActionInvoiceEntry($fixture)->forceFill([
-        'remaining_amount' => 0,
-        'open' => false,
-        'fully_applied' => true,
-    ])->save();
+    CustomerLedgerEntry::withoutEvents(function () use ($fixture): void {
+        postedSalesCreditMemoApplyActionInvoiceEntry($fixture)->forceFill([
+            'remaining_amount' => 0,
+            'open' => false,
+            'fully_applied' => true,
+        ])->save();
+    });
 }

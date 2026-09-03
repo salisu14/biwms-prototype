@@ -13,6 +13,7 @@ use App\Enums\SourceType;
 use App\Models\AccountingPeriod;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
@@ -40,7 +41,9 @@ use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
 use App\Services\Finance\BalanceSheetService;
+use App\Services\Finance\CashFlowStatementService;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\GroupSummaryService;
 use App\Services\Finance\PaymentService;
 use App\Services\IncomeStatementService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
@@ -127,7 +130,60 @@ it('reports sales invoice revenue receivables cogs and inventory from general le
         ->and(round((float) $incomeStatement['summary']['total_revenue'], 2))->toBe(1000.0)
         ->and(round((float) $incomeStatement['summary']['total_cogs'], 2))->toBe(400.0)
         ->and(round((float) $incomeStatement['summary']['gross_profit'], 2))->toBe(600.0)
-        ->and(round((float) $balanceSheet['totals']['assets'], 2))->toBe(600.0);
+        ->and(round((float) $balanceSheet['totals']['assets'], 2))->toBe(600.0)
+        ->and(round((float) $balanceSheet['totals']['equity'], 2))->toBe(600.0)
+        ->and(round((float) $balanceSheet['totals']['difference'], 2))->toBe(0.0);
+});
+
+it('uses stored LCY values for foreign-currency-origin G/L statements', function (): void {
+    $cash = financeAccount('11300', 'FCY Cash', AccountCategory::LIQUID_ASSET);
+    $equity = financeAccount('30300', 'FCY Equity', AccountCategory::EQUITY);
+
+    GlEntry::query()->create([
+        'entry_number' => 9101,
+        'transaction_number' => 9101,
+        'chart_of_account_id' => $cash->id,
+        'debit_amount' => 100,
+        'debit_amount_lcy' => 150000,
+        'credit_amount' => 0,
+        'credit_amount_lcy' => 0,
+        'amount' => 100,
+        'amount_lcy' => 150000,
+        'document_type' => 'FCY_TEST',
+        'document_number' => 'FCY-001',
+        'document_date' => '2026-05-10',
+        'posting_date' => '2026-05-10',
+        'description' => 'FCY cash',
+    ]);
+    GlEntry::query()->create([
+        'entry_number' => 9102,
+        'transaction_number' => 9101,
+        'chart_of_account_id' => $equity->id,
+        'debit_amount' => 0,
+        'debit_amount_lcy' => 0,
+        'credit_amount' => 100,
+        'credit_amount_lcy' => 150000,
+        'amount' => -100,
+        'amount_lcy' => -150000,
+        'document_type' => 'FCY_TEST',
+        'document_number' => 'FCY-001',
+        'document_date' => '2026-05-10',
+        'posting_date' => '2026-05-10',
+        'description' => 'FCY equity',
+    ]);
+
+    $trialBalance = app(GeneralLedgerService::class)->trialBalance(
+        now()->parse('2026-05-01'),
+        now()->parse('2026-05-31'),
+    );
+    $generalLedger = app(GeneralLedgerService::class)->generalLedgerReport(
+        now()->parse('2026-05-01'),
+        now()->parse('2026-05-31'),
+    );
+
+    expect(financeTrialRow($trialBalance, '11300')['debit'])->toBe(150000.0)
+        ->and(financeTrialRow($trialBalance, '30300')['credit'])->toBe(150000.0)
+        ->and(financeLedgerSection($generalLedger, '11300')['entries'][0]['debit'])->toBe(150000.0);
 });
 
 it('reports purchase invoice inventory expense and payables from general ledger entries', function (): void {
@@ -594,6 +650,135 @@ it('keeps sales order ship and invoice inventory value movement in agreement wit
 
     expect($report['inventory_value_gl_mismatches'])->toBeEmpty()
         ->and($report['missing_control_account_entries'])->toBeEmpty();
+});
+
+it('isolates every core statement to the explicit business context', function (): void {
+    $businessA = Business::query()->create(['code' => 'FR-A', 'name' => 'Business A', 'is_active' => true]);
+    $businessB = Business::query()->create(['code' => 'FR-B', 'name' => 'Business B', 'is_active' => true]);
+    session(['active_business_id' => $businessA->id]);
+
+    $cash = financeAccount('19000', 'Statement Cash', AccountCategory::LIQUID_ASSET);
+    $revenue = financeAccount('49000', 'Statement Revenue', AccountCategory::REVENUE);
+    BankAccount::factory()->create(['gl_account_id' => $cash->id, 'active' => true]);
+
+    foreach ([[$businessA, 100.0, 'A'], [$businessB, 250.0, 'B']] as [$business, $amount, $suffix]) {
+        $transactionNumber = ((int) GlEntry::query()->max('transaction_number')) + 1;
+
+        foreach ([[$cash, $amount, 0.0], [$revenue, 0.0, $amount]] as [$account, $debit, $credit]) {
+            GlEntry::query()->create([
+                'entry_number' => ((int) GlEntry::query()->max('entry_number')) + 1,
+                'transaction_number' => $transactionNumber,
+                'chart_of_account_id' => $account->id,
+                'debit_amount' => $debit,
+                'credit_amount' => $credit,
+                'amount' => $debit - $credit,
+                'source_type' => SourceType::GENERAL_JOURNAL,
+                'source_number' => "FR-{$suffix}",
+                'document_type' => 'SALES_INVOICE',
+                'document_number' => "FR-{$suffix}",
+                'document_date' => '2026-07-01',
+                'posting_date' => '2026-07-01',
+                'description' => "Business {$suffix} posted sale",
+                'business_id' => $business->id,
+            ]);
+        }
+    }
+
+    $periodStart = now()->parse('2026-07-01');
+    $periodEnd = now()->parse('2026-07-31');
+    $filters = ['business_id' => $businessB->id];
+    $trialBalance = app(GeneralLedgerService::class)->trialBalance($periodStart, $periodEnd, $filters);
+    $generalLedger = app(GeneralLedgerService::class)->generalLedgerReport($periodStart, $periodEnd, $filters);
+    $incomeStatement = app(IncomeStatementService::class)->generate(
+        $periodStart,
+        $periodEnd,
+        businessId: $businessB->id,
+    )->toArray();
+    $balanceSheet = app(BalanceSheetService::class)->generate($periodEnd, $businessB->id);
+    $groupSummary = app(GroupSummaryService::class)->generate($periodStart, $periodEnd, businessId: $businessB->id);
+    $cashFlow = app(CashFlowStatementService::class)->generate(
+        $periodStart,
+        $periodEnd,
+        businessId: $businessB->id,
+    );
+
+    expect($trialBalance['totals']['debit'])->toBe(250.0)
+        ->and($trialBalance['totals']['credit'])->toBe(250.0)
+        ->and(financeLedgerSection($generalLedger, '19000')['entries'])->toHaveCount(1)
+        ->and((float) $incomeStatement['summary']['total_revenue'])->toBe(250.0)
+        ->and((float) $balanceSheet['totals']['assets'])->toBe(250.0)
+        ->and((float) $cashFlow['ending_cash'])->toBe(250.0)
+        ->and(collect($groupSummary['groups'])->flatMap(fn (array $group): array => $group['ledgers'])
+            ->firstWhere('account_no', '19000')['closing_balance'])->toBe(250.0);
+});
+
+it('keeps raw trial-balance health separate from normal-balance presentation', function (): void {
+    $cash = financeAccount('19100', 'Presentation Cash', AccountCategory::LIQUID_ASSET);
+    $equity = financeAccount('39100', 'Presentation Equity', AccountCategory::EQUITY);
+
+    postGl('FR-G3-001', 'OPENING', '2026-08-01', [
+        [$cash, 100, 0, 'Cash opening'],
+        [$equity, 0, 100, 'Equity opening'],
+    ]);
+
+    $report = app(GroupSummaryService::class)->generate(
+        now()->parse('2026-08-01'),
+        now()->parse('2026-08-31'),
+    );
+
+    expect($report['is_balanced'])->toBeTrue()
+        ->and($report['raw_gl_totals']['debit'])->toBe(100.0)
+        ->and($report['raw_gl_totals']['credit'])->toBe(100.0)
+        ->and($report['grand_total']['difference'])->toBe(0.0)
+        ->and($report['display_totals']['debit'])->toBeGreaterThan($report['display_totals']['credit']);
+});
+
+it('counts an account once when presentation buckets overlap', function (): void {
+    $cash = financeAccount('19200', 'Branch Cash', AccountCategory::LIQUID_ASSET);
+    $equity = financeAccount('39200', 'Opening Balance Equity', AccountCategory::EQUITY);
+
+    postGl('FR-G3-002', 'OPENING', '2026-08-02', [
+        [$cash, 250, 0, 'Cash opening'],
+        [$equity, 0, 250, 'Equity opening'],
+    ]);
+
+    $report = app(GroupSummaryService::class)->generate(
+        now()->parse('2026-08-01'),
+        now()->parse('2026-08-31'),
+    );
+    $cashOccurrences = collect($report['groups'])
+        ->flatMap(fn (array $group): array => $group['ledgers'])
+        ->filter(fn (array $ledger): bool => $ledger['account_no'] === '19200')
+        ->count();
+    $equityOccurrences = collect($report['groups'])
+        ->flatMap(fn (array $group): array => $group['ledgers'])
+        ->filter(fn (array $ledger): bool => $ledger['account_no'] === '39200')
+        ->count();
+
+    expect($cashOccurrences)->toBe(1)
+        ->and($equityOccurrences)->toBe(1)
+        ->and($report['raw_gl_totals']['debit'])->toBe(250.0)
+        ->and($report['raw_gl_totals']['credit'])->toBe(250.0);
+});
+
+it('does not add a presentation opening-difference row to raw totals', function (): void {
+    $cash = financeAccount('19300', 'Difference Offset Cash', AccountCategory::LIQUID_ASSET);
+    $equity = financeAccount('39300', 'Difference in opening balances', AccountCategory::EQUITY);
+
+    postGl('FR-G3-003', 'OPENING', '2026-08-03', [
+        [$cash, 801.5, 0, 'Opening offset'],
+        [$equity, 0, 801.5, 'Opening equity'],
+    ]);
+
+    $report = app(GroupSummaryService::class)->generate(
+        now()->parse('2026-08-01'),
+        now()->parse('2026-08-31'),
+    );
+
+    expect($report['raw_gl_totals']['debit'])->toBe(801.5)
+        ->and($report['raw_gl_totals']['credit'])->toBe(801.5)
+        ->and($report['grand_total']['debit'])->toBe(801.5)
+        ->and($report['grand_total']['credit'])->toBe(801.5);
 });
 
 function financeAccount(string $number, string $name, AccountCategory $category): ChartOfAccount

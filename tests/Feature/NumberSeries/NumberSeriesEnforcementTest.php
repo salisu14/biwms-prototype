@@ -17,6 +17,7 @@ use App\Models\Vendor;
 use App\Services\BankAccountLedgerService;
 use App\Services\NumberSeriesService;
 use App\Services\Sales\SalesInvoiceService;
+use Database\Seeders\NumberSeriesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -129,6 +130,15 @@ it('fails clearly when number series configuration is missing, inactive, or exha
         ->toThrow(NumberSeriesException::class, 'Number Series EXHAUSTED-SERIES is exhausted');
 });
 
+it('resolves a uniquely whitespace-padded legacy series without changing its stored code', function () {
+    $series = createNumberSeriesForTest(' VENDOR-OPENING', 'VOB-');
+
+    expect(app(NumberSeriesService::class)->getNextNo('VENDOR-OPENING'))
+        ->toBe('VOB-000001')
+        ->and($series->refresh()->code)->toBe(' VENDOR-OPENING')
+        ->and($series->lines()->first()->last_no_used)->toBe(1);
+});
+
 it('rapid generation remains unique and sequential', function () {
     createNumberSeriesForTest('RAPID-SERIES', 'RAP-');
 
@@ -161,6 +171,25 @@ it('audits number series setup changes and blocks duplicate payment external ref
 
     expect(fn () => Payment::query()->create(paymentPayloadForNumberSeriesTest($vendor, 'BANK-REF-001')))
         ->toThrow(RuntimeException::class, 'Duplicate payment external reference');
+});
+
+it('includes PAYMENT in the canonical number series seeder and preserves a customized configuration on rerun', function () {
+    $this->seed(NumberSeriesSeeder::class);
+
+    $series = NumberSeries::query()->where('code', 'PAYMENT')->firstOrFail();
+
+    expect($series->prefix)->toBe('PAY')
+        ->and($series->description)->toBe('Payments');
+
+    $series->update([
+        'description' => 'Custom Payment Series',
+        'prefix' => 'CUSTPAY',
+    ]);
+
+    $this->seed(NumberSeriesSeeder::class);
+
+    expect($series->refresh()->description)->toBe('Custom Payment Series')
+        ->and($series->prefix)->toBe('CUSTPAY');
 });
 
 function createNumberSeriesForTest(

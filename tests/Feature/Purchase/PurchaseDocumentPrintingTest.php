@@ -13,6 +13,7 @@ use App\Models\PostedPurchaseCreditMemoLine;
 use App\Models\PurchaseReceipt;
 use App\Models\PurchaseReceiptLine;
 use App\Models\User;
+use App\Models\UserBusiness;
 use App\Models\Vendor;
 use App\Services\Company\CompanyInformationService;
 use App\Services\Print\PurchaseDocumentPrintService;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\Storage;
 uses(RefreshDatabase::class);
 
 it('renders printable purchase receipt credit memo and vendor payment documents', function (): void {
+    ensurePurchaseDocumentCompanyProfiles();
     $vendor = Vendor::factory()->create();
     $item = Item::factory()->create([
         'item_code' => 'ITEM-1000',
@@ -205,6 +207,7 @@ it('uses the canonical business company header and thermal layouts without fallb
         'name' => 'Secondary Warehouse',
     ]);
     $user = User::factory()->create();
+    UserBusiness::query()->create(['user_id' => $user->id, 'business_id' => $primaryBusiness->id]);
     $this->actingAs($user);
 
     $receipt = PurchaseReceipt::query()->create([
@@ -420,3 +423,31 @@ it('uses the canonical business company header and thermal layouts without fallb
         ->and(strlen($receiptPdf80))->toBeGreaterThan(0)
         ->and(strlen($receiptPdf58))->toBeGreaterThan(0);
 });
+
+function ensurePurchaseDocumentCompanyProfiles(): void
+{
+    $businesses = Business::query()->get();
+    if ($businesses->isEmpty()) {
+        $businesses = collect([Business::query()->create([
+            'code' => 'PRINT-CO',
+            'name' => 'Print Business',
+            'is_active' => true,
+        ])]);
+    }
+
+    session(['active_business_id' => $businesses->first()->id]);
+
+    foreach ($businesses as $business) {
+        CompanyInformation::query()->firstOrCreate(['business_id' => $business->id], [
+            'company_name' => $business->name,
+            'country_code' => 'NGA',
+        ]);
+    }
+
+    if (! CompanyInformation::query()->whereNull('business_id')->exists()) {
+        CompanyInformation::query()->create([
+            'company_name' => 'Default Test Company',
+            'country_code' => 'NGA',
+        ]);
+    }
+}

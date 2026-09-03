@@ -12,6 +12,7 @@ use App\Enums\PurchaseLineType;
 use App\Enums\SourceType;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
@@ -29,6 +30,7 @@ use App\Models\PostedSalesInvoice;
 use App\Models\PostedSalesInvoiceLine;
 use App\Models\PurchaseReceipt;
 use App\Models\PurchaseReceiptLine;
+use App\Models\SubledgerOpeningBalance;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\ValueEntry;
@@ -180,6 +182,134 @@ it('calculates finance dashboard values from ledgers and g l entries', function 
         ->and($summary['cogs'])->toBe(round((float) $baseline['cogs'] + 200, 2))
         ->and($summary['gross_profit'])->toBe(round((float) $baseline['gross_profit'] + 300, 2))
         ->and($summary['trial_balance']['difference'])->toBe($baseline['trial_balance']['difference']);
+});
+
+it('keeps explicit finance dashboard business scopes isolated', function (): void {
+    $businessA = Business::query()->create(['code' => 'DASH-A', 'name' => 'Dashboard A', 'is_active' => true]);
+    $businessB = Business::query()->create(['code' => 'DASH-B', 'name' => 'Dashboard B', 'is_active' => true]);
+    $revenueA = dashboardAccount('41101', 'Dashboard A Revenue', AccountCategory::REVENUE);
+    $offsetA = dashboardAccount('91101', 'Dashboard A Offset', AccountCategory::EQUITY);
+    $revenueB = dashboardAccount('41102', 'Dashboard B Revenue', AccountCategory::REVENUE);
+    $offsetB = dashboardAccount('91102', 'Dashboard B Offset', AccountCategory::EQUITY);
+
+    dashboardGl('DASH-A-GL', [
+        [$revenueA, 0, 125, 'Business A revenue'],
+        [$offsetA, 125, 0, 'Business A offset'],
+    ], $businessA->id);
+    dashboardGl('DASH-B-GL', [
+        [$revenueB, 0, 900, 'Business B revenue'],
+        [$offsetB, 900, 0, 'Business B offset'],
+    ], $businessB->id);
+
+    $service = app(FinanceDashboardService::class);
+    $periodStart = Carbon::parse('2026-06-01');
+    $periodEnd = Carbon::parse('2026-06-30');
+
+    expect($service->summary($periodStart, $periodEnd, $businessA->id)['revenue'])->toBe(125.0)
+        ->and($service->summary($periodStart, $periodEnd, $businessB->id)['revenue'])->toBe(900.0);
+});
+
+it('converts FCY subledger balances to LCY for finance dashboard totals', function (): void {
+    $business = Business::query()->create(['code' => 'DASH-FCY', 'name' => 'Dashboard FCY', 'is_active' => true]);
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+    $vendor = Vendor::factory()->create();
+
+    CustomerLedgerEntry::query()->create([
+        'entry_number' => dashboardNextCustomerLedgerEntryNumber(),
+        'customer_id' => $customer->id,
+        'business_id' => $business->id,
+        'document_type' => 'SALES_INVOICE',
+        'document_number' => 'FCY-SI-001',
+        'description' => 'FCY receivable',
+        'posting_date' => '2026-06-10',
+        'document_date' => '2026-06-10',
+        'debit_amount' => 100,
+        'credit_amount' => 0,
+        'amount' => 100,
+        'running_balance' => 100,
+        'remaining_amount' => 100,
+        'open' => true,
+        'fully_applied' => false,
+        'currency_code' => 'USD',
+        'currency_factor' => 1500,
+        'original_debit_amount' => 100,
+        'original_credit_amount' => 0,
+        'general_business_posting_group_id' => $customer->general_business_posting_group_id,
+        'customer_posting_group_id' => $customer->customer_posting_group_id,
+        'created_by' => $user->id,
+    ]);
+    VendorLedgerEntry::query()->create([
+        'entry_number' => dashboardNextVendorLedgerEntryNumber(),
+        'vendor_id' => $vendor->id,
+        'business_id' => $business->id,
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_number' => 'FCY-PI-001',
+        'description' => 'FCY payable',
+        'posting_date' => '2026-06-10',
+        'document_date' => '2026-06-10',
+        'debit_amount' => 0,
+        'credit_amount' => 100,
+        'amount' => -100,
+        'running_balance' => -100,
+        'remaining_amount' => 100,
+        'open' => true,
+        'fully_applied' => false,
+        'currency_code' => 'USD',
+        'currency_factor' => 1500,
+        'original_debit_amount' => 0,
+        'original_credit_amount' => 100,
+        'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
+        'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+        'created_by' => $user->id,
+    ]);
+
+    $summary = app(FinanceDashboardService::class)->summary(
+        Carbon::parse('2026-06-01'),
+        Carbon::parse('2026-06-30'),
+        $business->id,
+    );
+
+    expect($summary['receivables'])->toBe(150000.0)
+        ->and($summary['payables'])->toBe(150000.0);
+});
+
+it('does not convert an opening balance ledger remaining amount twice', function (): void {
+    $business = Business::query()->create(['code' => 'DASH-OB', 'name' => 'Dashboard Opening Balance', 'is_active' => true]);
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+
+    CustomerLedgerEntry::query()->create([
+        'entry_number' => dashboardNextCustomerLedgerEntryNumber(),
+        'customer_id' => $customer->id,
+        'business_id' => $business->id,
+        'document_type' => 'ADJUSTMENT',
+        'document_number' => 'COB-DASH-001',
+        'description' => 'Opening balance ledger snapshot',
+        'posting_date' => '2026-06-10',
+        'document_date' => '2026-06-10',
+        'debit_amount' => 150000,
+        'credit_amount' => 0,
+        'amount' => 150000,
+        'running_balance' => 150000,
+        'remaining_amount' => 150000,
+        'open' => true,
+        'fully_applied' => false,
+        'reversed' => false,
+        'currency_code' => 'USD',
+        'currency_factor' => 1500,
+        'source_type' => SubledgerOpeningBalance::class,
+        'source_id' => 1,
+        'created_by' => $user->id,
+    ]);
+
+    $summary = app(FinanceDashboardService::class)->summary(
+        Carbon::parse('2026-06-01'),
+        Carbon::parse('2026-06-30'),
+        $business->id,
+    );
+
+    expect($summary['receivables'])->toBe(150000.0);
 });
 
 it('calculates inventory dashboard quantity and value from item and value entries', function (): void {
@@ -602,7 +732,7 @@ function dashboardItem(string $itemCode, float $reorderPoint = 0): Item
 /**
  * @param  array<int, array{0: ChartOfAccount, 1: float|int, 2: float|int, 3: string}>  $lines
  */
-function dashboardGl(string $documentNumber, array $lines): void
+function dashboardGl(string $documentNumber, array $lines, ?int $businessId = null): void
 {
     $transactionNumber = ((int) GlEntry::query()->max('transaction_number')) + 1;
 
@@ -620,6 +750,7 @@ function dashboardGl(string $documentNumber, array $lines): void
             'document_number' => $documentNumber,
             'document_date' => '2026-06-15',
             'posting_date' => '2026-06-15',
+            'business_id' => $businessId,
             'description' => $description,
         ]);
     }

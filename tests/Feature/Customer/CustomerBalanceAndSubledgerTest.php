@@ -118,6 +118,36 @@ it('reports customer subledger open remaining as a net receivable position', fun
         ->and((float) $report['aging']['current'])->toBe(-300.0);
 });
 
+it('excludes reversed rows from active customer summary exposure and aging', function (): void {
+    $customer = Customer::factory()->create();
+    $user = User::factory()->create();
+
+    CustomerLedgerEntry::query()->create([
+        'entry_number' => 1,
+        'customer_id' => $customer->id,
+        'document_type' => 'SALES_INVOICE',
+        'document_number' => 'SI-REVERSED-001',
+        'description' => 'Reversed invoice',
+        'posting_date' => now()->subDays(40),
+        'document_date' => now()->subDays(40),
+        'due_date' => now()->subDays(10),
+        'debit_amount' => 1000,
+        'credit_amount' => 0,
+        'amount' => 1000,
+        'running_balance' => 1000,
+        'remaining_amount' => 1000,
+        'open' => true,
+        'fully_applied' => false,
+        'reversed' => true,
+        'created_by' => $user->id,
+    ]);
+
+    $report = app(CustomerSubledgerSummaryService::class)->generate(['customer_id' => $customer->id]);
+
+    expect($report['summary']['open_remaining'])->toBe(0.0)
+        ->and(array_sum($report['aging']))->toBe(0.0);
+});
+
 it('posts customer receipts as open credit ledger entries until they are applied', function () {
     $this->ensureOpenAccountingPeriod(now());
     ensureCustomerSubledgerBankLedgerNumberSeries();
