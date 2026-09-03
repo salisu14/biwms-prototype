@@ -7,6 +7,7 @@ namespace App\Filament\Resources\ProductionOrders\Pages;
 use App\Exceptions\MissingNumberSeriesException;
 use App\Filament\Resources\ProductionOrders\ProductionOrderResource;
 use App\Models\Manufacturing\ProductionOrder;
+use App\Services\Business\BusinessContextService;
 use App\Services\Manufacturing\ProductionOrderNumberSeriesSetupService;
 use App\Services\Manufacturing\ProductionOrderService;
 use App\Services\NumberSeriesService;
@@ -34,6 +35,13 @@ class CreateProductionOrder extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         try {
+            $resolvedBusinessId = app(BusinessContextService::class)->resolveId(
+                isset($data['business_id']) ? (int) $data['business_id'] : null,
+            );
+            if ($resolvedBusinessId !== null) {
+                $data['business_id'] = $resolvedBusinessId;
+            }
+
             $data['document_number'] = blank($data['document_number'] ?? null)
                 ? app(ProductionOrderService::class)->generateDocumentNumber()
                 : $data['document_number'];

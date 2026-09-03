@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Payments\Tables;
 
 use App\Services\Finance\PaymentService;
 use App\Services\Workflow\DocumentApprovalWorkflowService;
+use App\Support\Filament\PostingFailureNotifier;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -18,6 +19,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Throwable;
 
 class PaymentsTable
 {
@@ -153,8 +155,15 @@ class PaymentsTable
                         ->visible(fn ($record): bool => auth()->user()?->can('post', $record) ?? false)
                         ->disabled(fn ($record) => $record->status !== 'APPROVED')
                         ->action(function ($record, PaymentService $service): void {
-                            $service->post($record, auth()->id());
-                            Notification::make()->title('Payment Posted')->success()->send();
+                            try {
+                                $service->post($record, auth()->id());
+                                Notification::make()->title('Payment Posted')->success()->send();
+                            } catch (Throwable $exception) {
+                                PostingFailureNotifier::notify($exception, 'Payment was not posted', [
+                                    'payment_id' => $record->getKey(),
+                                    'payment_number' => $record->payment_number,
+                                ]);
+                            }
                         }),
                     Action::make('markReconciled')
                         ->label('Mark Reconciled')

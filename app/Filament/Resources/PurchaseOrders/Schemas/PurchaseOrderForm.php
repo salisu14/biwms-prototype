@@ -6,6 +6,7 @@ use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
 use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Vendor;
+use App\Services\Business\BusinessContextService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Hidden;
@@ -28,7 +29,7 @@ class PurchaseOrderForm
                     ->description('Define the type, vendor, and general order information.')
                     ->schema([
                         Hidden::make('business_id')
-                            ->default(fn (): ?int => request()->integer('business_id') ?: session('active_business_id'))
+                            ->default(fn (): ?int => app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null))
                             ->dehydrated(),
 
                         Grid::make([

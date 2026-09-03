@@ -9,6 +9,7 @@ use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedSalesInvoice;
 use App\Services\Finance\PaymentService;
 use App\Services\Print\PurchaseDocumentPrintService;
+use App\Support\Filament\PostingFailureNotifier;
 use App\Support\Filament\SensitiveActionPasswordConfirmation;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -18,6 +19,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Database\Eloquent\Builder;
+use Throwable;
 
 class ViewPayment extends ViewRecord
 {
@@ -35,11 +37,18 @@ class ViewPayment extends ViewRecord
                 ->requiresConfirmation()
                 ->visible(fn ($record) => (auth()->user()?->can('post', $record) ?? false) && $record->status === 'APPROVED')
                 ->action(function ($record, PaymentService $service) {
-                    $service->post($record, auth()->id());
-                    Notification::make()
-                        ->title('Payment Posted')
-                        ->success()
-                        ->send();
+                    try {
+                        $service->post($record, auth()->id());
+                        Notification::make()
+                            ->title('Payment Posted')
+                            ->success()
+                            ->send();
+                    } catch (Throwable $exception) {
+                        PostingFailureNotifier::notify($exception, 'Payment was not posted', [
+                            'payment_id' => $record->getKey(),
+                            'payment_number' => $record->payment_number,
+                        ]);
+                    }
                 }),
 
             Action::make('apply')

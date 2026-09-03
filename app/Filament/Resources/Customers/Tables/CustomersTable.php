@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Customers\Tables;
 
+use App\Models\CompanyInformation;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -13,6 +14,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Number;
 
 class CustomersTable
 {
@@ -34,12 +36,12 @@ class CustomersTable
                     ->icon('heroicon-m-envelope')
                     ->toggleable(),
                 TextColumn::make('balance')
-                    ->money()
+                    ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                     ->sortable()
                     ->getStateUsing(fn ($record) => $record->balance)
                     ->color(fn ($record) => $record->isOverCreditLimit() ? 'danger' : 'gray'),
                 TextColumn::make('credit_limit')
-                    ->money()
+                    ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('blocked')
                     ->badge()
@@ -84,6 +86,13 @@ class CustomersTable
                         ->label('Delete Selected'),
                 ]),
             ]);
+    }
+
+    private static function baseCurrencyCode(?int $businessId): string
+    {
+        return (string) (CompanyInformation::query()
+            ->where('business_id', $businessId ?: (int) session('active_business_id', 0))
+            ->value('base_currency_code') ?: config('app.base_currency', 'NGN'));
     }
 
     private static function customerSubledgerRouteName(): ?string

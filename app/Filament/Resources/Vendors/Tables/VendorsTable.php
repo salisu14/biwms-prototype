@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Vendors\Tables;
 
+use App\Models\CompanyInformation;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -11,6 +12,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Number;
 
 class VendorsTable
 {
@@ -31,7 +33,7 @@ class VendorsTable
                     ->limit(30),
 
                 TextColumn::make('balance')
-                    ->money()
+                    ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                     ->alignment('right')
                     ->sortable(),
 
@@ -87,5 +89,12 @@ class VendorsTable
                     DeleteBulkAction::make(),
                 ]),
             ])->defaultSort('vendor_code', 'asc');
+    }
+
+    private static function baseCurrencyCode(?int $businessId): string
+    {
+        return (string) (CompanyInformation::query()
+            ->where('business_id', $businessId ?: (int) session('active_business_id', 0))
+            ->value('base_currency_code') ?: config('app.base_currency', 'NGN'));
     }
 }

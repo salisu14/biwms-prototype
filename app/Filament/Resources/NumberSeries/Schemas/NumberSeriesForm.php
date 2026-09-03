@@ -55,9 +55,11 @@ class NumberSeriesForm
                         TextInput::make('prefix')
                             ->label('Visual Prefix')
                             ->required()
+                            ->maxLength(10)
                             ->default('P')
                             ->live()
-                            ->placeholder('e.g., INV'),
+                            ->placeholder('e.g., INV')
+                            ->helperText('Maximum 10 characters.'),
 
                         TextInput::make('year')
                             ->label('Current Year')
@@ -72,6 +74,7 @@ class NumberSeriesForm
                                 $year = $get('year') ?? date('Y');
                                 $prefix = $get('prefix') ?? 'P';
                                 $next = (int) ($get('current_number') ?? 0) + 1;
+
                                 return sprintf('%d-%s-%05d', $year, $prefix, $next);
                             })
                             ->extraAttributes(['class' => 'font-mono text-primary-600 font-bold bg-primary-50 p-2 rounded border border-primary-100']),

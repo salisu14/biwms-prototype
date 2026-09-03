@@ -6,6 +6,7 @@ use App\Enums\UomType;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
 use App\Models\Item;
 use App\Models\PurchaseOrder;
+use App\Models\UnitOfMeasure;
 use App\Services\Purchase\PurchasePriceCalculationService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -18,6 +19,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
@@ -52,22 +54,24 @@ class PurchaseOrderLinesRelationManager extends RelationManager
 
                             $item = Item::find($state);
                             if ($item) {
-                                $set('description', $item->description);
+                                $purchaseOrder = $this->getOwnerRecord();
+                                $vendor = $purchaseOrder->vendor;
+
+                                $set('description', $item->resolvePurchaseDescription($vendor));
                                 $set('item_code', $item->item_code);
 
                                 // Logic to set the ACTIVE unit_of_measure field using Item model method
                                 $baseUom = $item->getDefaultUom(UomType::BASE);
                                 $set('unit_of_measure', $baseUom?->uom_code ?? '');
 
-                                $purchaseOrder = $this->getOwnerRecord();
-                                $vendor = $purchaseOrder->vendor;
-
                                 if ($vendor) {
                                     $priceInfo = app(PurchasePriceCalculationService::class)->getUnitCost(
                                         $vendor,
                                         $item,
                                         (float) ($get('quantity') ?? 1),
-                                        $get('unit_of_measure') ?: $item->base_unit_of_measure
+                                        $get('unit_of_measure') ?: $item->base_unit_of_measure,
+                                        now(),
+                                        $purchaseOrder->business_id
                                     );
 
                                     $set('unit_cost', $priceInfo['direct_unit_cost'] ?? 0);
@@ -88,13 +92,10 @@ class PurchaseOrderLinesRelationManager extends RelationManager
 
                     Select::make('unit_of_measure')
                         ->label('Unit of Measure')
-                        ->options([
-                            'kg' => 'Kilogram',
-                            'g' => 'Gram',
-                            'ltr' => 'Litre',
-                            'pcs' => 'Pieces',
-                            'HOUR' => 'Hour',
-                        ])
+                        ->options(fn (): array => UnitOfMeasure::query()
+                            ->orderBy('uom_code')
+                            ->pluck('description', 'uom_code')
+                            ->all())
                         ->required()
                         ->searchable(),
 
@@ -115,7 +116,20 @@ class PurchaseOrderLinesRelationManager extends RelationManager
 
                 TextInput::make('description')
                     ->label('Description')
-                    ->required()
+                    ->default(function (Get $get): ?string {
+                        $itemId = $get('item_id');
+
+                        if (! $itemId) {
+                            return null;
+                        }
+
+                        $item = Item::find($itemId);
+                        if (! $item) {
+                            return null;
+                        }
+
+                        return $item->resolvePurchaseDescription($this->getOwnerRecord()->vendor);
+                    })
                     ->columnSpanFull(),
 
                 Grid::make(2)->schema([
@@ -255,6 +269,9 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                             if ($item) {
                                 $data['item_code'] = $item->item_code;
                                 $data['general_product_posting_group_id'] = $item->general_product_posting_group_id;
+                                if (blank($data['description'] ?? null)) {
+                                    $data['description'] = $item->resolvePurchaseDescription($purchaseOrder->vendor);
+                                }
                             }
                         }
 
@@ -279,6 +296,15 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                 EditAction::make()
                     ->mutateDataUsing(function (array $data): array {
                         // Recalculate line totals on edit
+                        $purchaseOrder = $this->getOwnerRecord();
+
+                        if (isset($data['item_id'])) {
+                            $item = Item::find($data['item_id']);
+                            if ($item && blank($data['description'] ?? null)) {
+                                $data['description'] = $item->resolvePurchaseDescription($purchaseOrder->vendor);
+                            }
+                        }
+
                         $qty = (float) ($data['quantity'] ?? 0);
                         $cost = (float) ($data['unit_cost'] ?? 0);
                         $vatRate = (float) ($data['vat_percentage'] ?? 0);

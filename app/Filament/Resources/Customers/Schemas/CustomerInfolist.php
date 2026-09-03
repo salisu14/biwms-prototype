@@ -4,12 +4,14 @@ namespace App\Filament\Resources\Customers\Schemas;
 
 use App\Filament\Resources\CustomerGroups\CustomerGroupResource;
 use App\Filament\Resources\Locations\LocationResource;
+use App\Models\CompanyInformation;
 use App\Models\Customer;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Number;
 use Symfony\Component\Routing\Exception\RouteNotFoundException;
 
 class CustomerInfolist
@@ -50,19 +52,19 @@ class CustomerInfolist
                     Section::make('Financial Status')
                         ->schema([
                             TextEntry::make('balance')
-                                ->money()
+                                ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                                 ->weight('bold')
                                 ->color(fn ($record) => $record->isOverCreditLimit() ? 'danger' : 'success'),
                             TextEntry::make('open_balance')
                                 ->label('Open Balance')
-                                ->money(),
+                                ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id))),
                             TextEntry::make('overdue_balance')
                                 ->label('Overdue')
-                                ->money()
+                                ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                                 ->color('danger'),
                             TextEntry::make('available_credit')
                                 ->label('Available Credit')
-                                ->money()
+                                ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                                 ->placeholder('Unlimited'),
                         ])->columnSpan(1),
                 ]),
@@ -104,6 +106,13 @@ class CustomerInfolist
                         ])->columnSpan(1),
                 ]),
             ]);
+    }
+
+    private static function baseCurrencyCode(?int $businessId): string
+    {
+        return (string) (CompanyInformation::query()
+            ->where('business_id', $businessId ?: (int) session('active_business_id', 0))
+            ->value('base_currency_code') ?: config('app.base_currency', 'NGN'));
     }
 
     /**

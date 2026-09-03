@@ -122,13 +122,13 @@ class BankAccountForm
                                                 ->numeric()
                                                 ->step(0.0001)
                                                 ->disabled()
-                                                ->dehydrated()
+                                                ->dehydrated(false)
                                                 ->prefix(fn ($record) => $record?->currency?->symbol ?? '$'),
                                             TextInput::make('available_balance')
                                                 ->numeric()
                                                 ->step(0.0001)
                                                 ->disabled()
-                                                ->dehydrated()
+                                                ->dehydrated(false)
                                                 ->prefix(fn ($record) => $record?->currency?->symbol ?? '$'),
                                         ]),
                                     ])->compact(),

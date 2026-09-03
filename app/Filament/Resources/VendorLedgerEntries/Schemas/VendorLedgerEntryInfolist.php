@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\VendorLedgerEntries\Schemas;
 
 use App\Filament\Resources\VendorLedgerEntries\VendorLedgerEntryResource;
+use App\Models\CompanyInformation;
 use App\Models\VendorLedgerEntry;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -35,22 +36,30 @@ class VendorLedgerEntryInfolist
                         TextEntry::make('currency_code')->badge()->color('gray'),
 
                         TextEntry::make('debit_amount')
-                            ->label('Debit')
-                            ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->debit_amount, $record->currency_code ?? config('app.default_currency', 'USD')))
+                            ->label('Debit (LCY)')
+                            ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->debit_amount, self::baseCurrencyCode($record->business_id)))
                             ->color('danger'),
-//                            ->visible(fn ($record) => $record->debit_amount > 0),
+                        //                            ->visible(fn ($record) => $record->debit_amount > 0),
 
                         TextEntry::make('credit_amount')
-                            ->label('Credit')
-                            ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->credit_amount, $record->currency_code ?? config('app.default_currency', 'USD')))
+                            ->label('Credit (LCY)')
+                            ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->credit_amount, self::baseCurrencyCode($record->business_id)))
                             ->color('success'),
-//                            ->visible(fn ($record) => $record->credit_amount > 0),
+                        //                            ->visible(fn ($record) => $record->credit_amount > 0),
 
                         TextEntry::make('remaining_amount')
-                            ->label('Remaining')
-                            ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->remaining_amount, $record->currency_code ?? config('app.default_currency', 'USD')))
+                            ->label('Remaining (LCY)')
+                            ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->remaining_amount, self::baseCurrencyCode($record->business_id)))
                             ->weight('bold')
                             ->color(fn ($record) => $record->open ? 'warning' : 'success'),
+
+                        TextEntry::make('original_debit_amount')
+                            ->label('Original Debit (FCY)')
+                            ->state(fn (VendorLedgerEntry $record): string => Number::format((float) $record->original_debit_amount, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD'))),
+
+                        TextEntry::make('original_credit_amount')
+                            ->label('Original Credit (FCY)')
+                            ->state(fn (VendorLedgerEntry $record): string => Number::format((float) $record->original_credit_amount, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD'))),
 
                         IconEntry::make('open')->label('Open?')->boolean(),
                         IconEntry::make('fully_applied')->label('Fully Applied?')->boolean(),
@@ -73,8 +82,8 @@ class VendorLedgerEntryInfolist
                             ->color('danger'),
 
                         TextEntry::make('discount_available')
-                            ->label('Discount Available')
-                            ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->discount_available, $record->currency_code ?? config('app.default_currency', 'USD')))
+                            ->label('Discount Available (LCY)')
+                            ->state(fn (VendorLedgerEntry $record): string => Number::currency((float) $record->discount_available, self::baseCurrencyCode($record->business_id)))
                             ->visible(fn (VendorLedgerEntry $record): bool => $record->discount_available > 0),
 
                         TextEntry::make('payment_discount_percent')->suffix('%')->placeholder('-'),
@@ -101,5 +110,12 @@ class VendorLedgerEntryInfolist
                         TextEntry::make('comment')->placeholder('-')->columnSpanFull(),
                     ])->columns(3)->collapsed(),
             ]);
+    }
+
+    private static function baseCurrencyCode(?int $businessId): string
+    {
+        return (string) (CompanyInformation::query()
+            ->where('business_id', $businessId ?: (int) session('active_business_id', 0))
+            ->value('base_currency_code') ?: config('app.base_currency', 'NGN'));
     }
 }

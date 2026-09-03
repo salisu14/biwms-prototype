@@ -2,12 +2,15 @@
 
 namespace App\Filament\Resources\VendorLedgerEntries\Tables;
 
+use App\Models\CompanyInformation;
+use App\Models\VendorLedgerEntry;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Number;
 
 class VendorLedgerEntriesTable
 {
@@ -58,28 +61,38 @@ class VendorLedgerEntriesTable
                     ->color(fn ($record) => $record->open && $record->due_date && $record->due_date < now() ? 'danger' : 'gray'),
 
                 TextColumn::make('debit_amount')
-                    ->label('Debit')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'NGN')))
+                    ->label('Debit (LCY)')
+                    ->formatStateUsing(fn ($state, VendorLedgerEntry $record): string => Number::currency((float) $state, self::baseCurrencyCode($record->business_id)))
                     ->sortable()
                     ->alignEnd()
                     ->color('danger'),
-//                    ->visible(fn ($record) => $record?->debit_amount > 0),
+                //                    ->visible(fn ($record) => $record?->debit_amount > 0),
 
                 TextColumn::make('credit_amount')
-                    ->label('Credit')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'NGN')))
+                    ->label('Credit (LCY)')
+                    ->formatStateUsing(fn ($state, VendorLedgerEntry $record): string => Number::currency((float) $state, self::baseCurrencyCode($record->business_id)))
                     ->sortable()
                     ->alignEnd()
                     ->color('success'),
-//                    ->visible(fn ($record) => $record?->credit_amount > 0),
+                //                    ->visible(fn ($record) => $record?->credit_amount > 0),
 
                 TextColumn::make('remaining_amount')
-                    ->label('Remaining')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'NGN')))
+                    ->label('Remaining (LCY)')
+                    ->formatStateUsing(fn ($state, VendorLedgerEntry $record): string => Number::currency((float) $state, self::baseCurrencyCode($record->business_id)))
                     ->sortable()
                     ->alignEnd()
                     ->weight('bold')
                     ->color(fn ($record) => $record->open ? 'warning' : 'gray'),
+
+                TextColumn::make('original_debit_amount')
+                    ->label('Debit (FCY)')
+                    ->formatStateUsing(fn ($state, VendorLedgerEntry $record): string => number_format((float) $state, 2).' '.($record->currency_code ?: '—'))
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('original_credit_amount')
+                    ->label('Credit (FCY)')
+                    ->formatStateUsing(fn ($state, VendorLedgerEntry $record): string => number_format((float) $state, 2).' '.($record->currency_code ?: '—'))
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('aging_category')
                     ->label('Aging')
@@ -153,5 +166,12 @@ class VendorLedgerEntriesTable
                 ViewAction::make(),
             ])
             ->defaultSort('entry_number', 'desc');
+    }
+
+    private static function baseCurrencyCode(?int $businessId): string
+    {
+        return (string) (CompanyInformation::query()
+            ->where('business_id', $businessId ?: (int) session('active_business_id', 0))
+            ->value('base_currency_code') ?: config('app.base_currency', 'NGN'));
     }
 }

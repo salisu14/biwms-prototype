@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\OpeningInventory;
 use App\Models\UnitOfMeasure;
+use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use App\Support\DecimalMath;
 use App\Support\DecimalPrecision;
@@ -57,7 +58,7 @@ class OpeningInventoryForm
                                 fn (Builder $query): Builder => $query->where('is_active', true),
                             )
                             ->default(
-                                fn (): ?int => session('active_business_id')
+                                fn (): ?int => app(BusinessContextService::class)->resolveId()
                                     ?: Business::query()
                                         ->where('is_active', true)
                                         ->value('id')

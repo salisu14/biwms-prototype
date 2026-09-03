@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\VendorLedgerEntries\Pages;
 
 use App\Filament\Resources\VendorLedgerEntries\VendorLedgerEntryResource;
+use App\Models\CompanyInformation;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
@@ -16,7 +17,7 @@ class EditVendorLedgerEntry extends EditRecord
     {
         $record = $this->getRecord();
         $vendorCode = $record->vendor?->vendor_code ?? 'Vendor';
-        $amount = Number::currency((float) $record->amount, $record->currency_code ?? config('app.default_currency', 'USD'));
+        $amount = Number::currency((float) $record->amount, static::baseCurrencyCode($record->business_id));
 
         return $record->entry_number
             .' • '.$vendorCode
@@ -45,5 +46,12 @@ class EditVendorLedgerEntry extends EditRecord
             ViewAction::make(),
             DeleteAction::make(),
         ];
+    }
+
+    private static function baseCurrencyCode(?int $businessId): string
+    {
+        return (string) (CompanyInformation::query()
+            ->where('business_id', $businessId ?: (int) session('active_business_id', 0))
+            ->value('base_currency_code') ?: config('app.base_currency', 'NGN'));
     }
 }

@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources\Vendors\Schemas;
 
+use App\Models\CompanyInformation;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Number;
 
 class VendorInfolist
 {
@@ -32,18 +34,18 @@ class VendorInfolist
                         ->columnSpan(1)
                         ->schema([
                             TextEntry::make('balance')
-                                ->money()
+                                ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                                 ->weight('black')
                                 ->color(fn ($state) => $state > 0 ? 'danger' : 'success'),
 
                             TextEntry::make('overdue_balance')
                                 ->label('Overdue Amount')
-                                ->money()
+                                ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                                 ->color('danger'),
 
                             TextEntry::make('available_credit')
                                 ->label('Unapplied Credit')
-                                ->money()
+                                ->formatStateUsing(fn ($state, $record): string => Number::currency((float) $state, static::baseCurrencyCode($record->business_id)))
                                 ->color('info'),
                         ]),
                 ]),
@@ -62,7 +64,7 @@ class VendorInfolist
                     ->schema([
                         IconEntry::make('is_active')->label('Relationship Active')->boolean(),
                         IconEntry::make('blocked')->label('Blocked from Posting')->boolean(),
-                        TextEntry::make('blocked_reason')->visible(fn($record) => $record->blocked)->color('danger'),
+                        TextEntry::make('blocked_reason')->visible(fn ($record) => $record->blocked)->color('danger'),
                         TextEntry::make('payment_terms_code')->label('Terms'),
                         TextEntry::make('lead_time_days')->label('Lead Time')->suffix(' Days'),
                     ]),
@@ -73,5 +75,12 @@ class VendorInfolist
                         TextEntry::make('notes')->markdown()->placeholder('No internal notes.'),
                     ]),
             ]);
+    }
+
+    private static function baseCurrencyCode(?int $businessId): string
+    {
+        return (string) (CompanyInformation::query()
+            ->where('business_id', $businessId ?: (int) session('active_business_id', 0))
+            ->value('base_currency_code') ?: config('app.base_currency', 'NGN'));
     }
 }

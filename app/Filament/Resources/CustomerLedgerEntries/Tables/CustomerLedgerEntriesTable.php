@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\CustomerLedgerEntries\Tables;
 
+use App\Models\CompanyInformation;
+use App\Models\CustomerLedgerEntry;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\IconColumn;
@@ -12,6 +14,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Number;
 
 class CustomerLedgerEntriesTable
 {
@@ -36,24 +39,32 @@ class CustomerLedgerEntriesTable
                     ->searchable()
                     ->wrap(),
                 TextColumn::make('debit_amount')
-                    ->label('Debit')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
+                    ->label('Debit (LCY)')
+                    ->formatStateUsing(fn ($state, CustomerLedgerEntry $record): string => Number::currency((float) $state, self::baseCurrencyCode($record->business_id)))
                     ->sortable()
                     ->summarize(Sum::make()->label('Total Dr')),
                 TextColumn::make('credit_amount')
-                    ->label('Credit')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
+                    ->label('Credit (LCY)')
+                    ->formatStateUsing(fn ($state, CustomerLedgerEntry $record): string => Number::currency((float) $state, self::baseCurrencyCode($record->business_id)))
                     ->sortable()
                     ->summarize(Sum::make()->label('Total Cr')),
                 TextColumn::make('running_balance')
-                    ->label('Balance')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
+                    ->label('Balance (LCY)')
+                    ->formatStateUsing(fn ($state, CustomerLedgerEntry $record): string => Number::currency((float) $state, self::baseCurrencyCode($record->business_id)))
                     ->sortable(),
                 TextColumn::make('remaining_amount')
-                    ->label('Remaining')
-                    ->formatStateUsing(fn ($state, $record) => number_format((float) $state, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD')))
+                    ->label('Remaining (LCY)')
+                    ->formatStateUsing(fn ($state, CustomerLedgerEntry $record): string => Number::currency((float) $state, self::baseCurrencyCode($record->business_id)))
                     ->sortable()
                     ->toggleable(),
+                TextColumn::make('original_debit_amount')
+                    ->label('Debit (FCY)')
+                    ->formatStateUsing(fn ($state, CustomerLedgerEntry $record): string => number_format((float) $state, 2).' '.($record->currency_code ?: '—'))
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('original_credit_amount')
+                    ->label('Credit (FCY)')
+                    ->formatStateUsing(fn ($state, CustomerLedgerEntry $record): string => number_format((float) $state, 2).' '.($record->currency_code ?: '—'))
+                    ->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('open')
                     ->label('Open')
                     ->boolean(),
@@ -98,5 +109,12 @@ class CustomerLedgerEntriesTable
                 ViewAction::make(),
             ])
             ->toolbarActions([]);
+    }
+
+    private static function baseCurrencyCode(?int $businessId): string
+    {
+        return (string) (CompanyInformation::query()
+            ->where('business_id', $businessId ?: (int) session('active_business_id', 0))
+            ->value('base_currency_code') ?: config('app.base_currency', 'NGN'));
     }
 }

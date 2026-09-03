@@ -21,6 +21,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\Summarizers\Sum;
@@ -79,6 +80,8 @@ class LinesRelationManager extends RelationManager
 
                             $item = Item::find($state);
                             if ($item) {
+                                $purchaseOrder = $this->getOwnerRecord();
+
                                 // 1. Set the hidden Database ID (Fixes SQL Not Null constraint)
                                 $set('item_id', $item->id);
 
@@ -86,7 +89,7 @@ class LinesRelationManager extends RelationManager
                                 $set('item_code', $item->item_code);
 
                                 // 3. Set Description
-                                $set('description', $item->description);
+                                $set('description', $item->resolvePurchaseDescription($purchaseOrder->vendor));
 
                                 // 4. Set VAT Group
                                 $set('vat_product_posting_group_id', $item->vat_product_posting_group_id);
@@ -171,7 +174,20 @@ class LinesRelationManager extends RelationManager
 
                 TextInput::make('description')
                     ->label('Description')
-                    ->required()
+                    ->default(function (Get $get): ?string {
+                        $itemId = $get('item_id');
+
+                        if (! $itemId) {
+                            return null;
+                        }
+
+                        $item = Item::find($itemId);
+                        if (! $item) {
+                            return null;
+                        }
+
+                        return $item->resolvePurchaseDescription($this->getOwnerRecord()->vendor);
+                    })
                     ->columnSpanFull(),
 
                 Grid::make(2)->schema([
@@ -326,6 +342,9 @@ class LinesRelationManager extends RelationManager
                             if ($item) {
                                 $data['item_code'] = $item->item_code;
                                 $data['general_product_posting_group_id'] = $item->general_product_posting_group_id;
+                                if (blank($data['description'] ?? null)) {
+                                    $data['description'] = $item->resolvePurchaseDescription($purchaseOrder->vendor);
+                                }
                             }
                         } elseif ($data['type'] === PurchaseLineType::FIXED_ASSET->value && isset($data['asset_id'])) {
                             $asset = FixedAsset::find($data['asset_id']);

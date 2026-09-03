@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PurchaseReceipts\Schemas;
 
 use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\PurchaseOrder;
+use App\Services\Business\BusinessContextService;
 use App\Services\Purchase\PurchaseReceiptHeaderPrefillService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -33,7 +34,7 @@ class PurchaseReceiptForm
                         Tab::make('General')
                             ->schema([
                                 Hidden::make('business_id')
-                                    ->default(fn (): ?int => request()->integer('business_id') ?: session('active_business_id'))
+                                    ->default(fn (): ?int => app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null))
                                     ->dehydrated(),
 
                                 Grid::make(3)->schema([

@@ -7,6 +7,7 @@ use App\Models\BankAccount;
 use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\Vendor;
+use App\Services\Business\BusinessContextService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Hidden;
@@ -33,7 +34,7 @@ class PaymentForm
                             ->icon('heroicon-m-document-text')
                             ->schema([
                                 Hidden::make('business_id')
-                                    ->default(fn (): ?int => request()->integer('business_id') ?: session('active_business_id'))
+                                    ->default(fn (): ?int => app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null))
                                     ->dehydrated(),
 
                                 Grid::make(3)->schema([

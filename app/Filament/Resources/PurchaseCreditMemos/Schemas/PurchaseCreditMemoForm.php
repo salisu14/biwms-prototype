@@ -10,6 +10,7 @@ use App\Models\PostedPurchaseInvoiceLine;
 use App\Models\PurchaseInvoice;
 use App\Models\ReasonCode;
 use App\Models\Vendor;
+use App\Services\Business\BusinessContextService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
@@ -36,7 +37,7 @@ class PurchaseCreditMemoForm
                         Section::make('General Information')
                             ->schema([
                                 Hidden::make('business_id')
-                                    ->default(fn (): ?int => request()->integer('business_id') ?: session('active_business_id'))
+                                    ->default(fn (): ?int => app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null))
                                     ->dehydrated(),
 
                                 static::makeSystemGeneratedTextInput(
@@ -141,7 +142,7 @@ class PurchaseCreditMemoForm
                                             if ($invoice && $postedInvoice) {
                                                 $set('vendor_id', $invoice->vendor_id);
                                                 $set('vendor_name', $invoice->vendor_name);
-                                                $set('business_id', $invoice->business_id ?: $postedInvoice->business_id ?: (request()->integer('business_id') ?: session('active_business_id')));
+                                                $set('business_id', $invoice->business_id ?: $postedInvoice->business_id ?: app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null));
                                                 $set('corrects_invoice_number', $invoice->document_number);
                                                 $set('currency_code', $invoice->currency_code);
                                                 $set('location_id', $invoice->location_id);
