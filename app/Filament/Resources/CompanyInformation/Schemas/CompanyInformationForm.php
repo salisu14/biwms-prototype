@@ -6,6 +6,7 @@ use App\Enums\CountryCode;
 use App\Enums\CurrencyCode;
 use App\Enums\FiscalMonth;
 use App\Models\Business;
+use App\Services\Business\BusinessContextService;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -35,7 +36,7 @@ class CompanyInformationForm
                                         return 'Will become active when selected in the business switcher.';
                                     }
 
-                                    $activeBusinessId = (int) session('active_business_id', 0);
+                                    $activeBusinessId = app(BusinessContextService::class)->resolveId();
                                     $recordBusinessId = (int) ($record->business_id ?? 0);
 
                                     return $activeBusinessId === $recordBusinessId
@@ -45,10 +46,8 @@ class CompanyInformationForm
                             Select::make('business_id')
                                 ->label('Business / Trade Name')
                                 ->options(
-                                    Business::query()
-                                        ->where('is_active', true)
-                                        ->orderBy('name')
-                                        ->pluck('name', 'id')
+                                    collect(app(BusinessContextService::class)->authorizedBusinesses())
+                                        ->mapWithKeys(fn (Business $business): array => [$business->getKey() => $business->name])
                                         ->all()
                                 )
                                 ->searchable()

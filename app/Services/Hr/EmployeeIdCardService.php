@@ -13,6 +13,7 @@ use App\Models\EmployeeIdCardPrintBatchItem;
 use App\Models\EmployeeIdCardTemplate;
 use App\Models\EmployeeIdCardVerificationLog;
 use App\Services\AuditTrailService;
+use App\Services\Business\BusinessContextService;
 use BaconQrCode\Renderer\GDLibRenderer;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
@@ -250,9 +251,15 @@ class EmployeeIdCardService
         return $card->fresh(['employee.department', 'template']);
     }
 
-    public function companyInformation(): CompanyInformation
+    public function companyInformation(?int $businessId = null): CompanyInformation
     {
-        return CompanyInformation::getInstance();
+        $resolvedBusinessId = app(BusinessContextService::class)->resolveId($businessId);
+
+        if ($resolvedBusinessId > 0) {
+            return CompanyInformation::requireForBusiness($resolvedBusinessId);
+        }
+
+        return new CompanyInformation(['company_name' => config('app.name', 'BIWMS')]);
     }
 
     public function qrPayload(EmployeeIdCard|Employee $cardOrEmployee): string
@@ -306,7 +313,7 @@ class EmployeeIdCardService
             : $this->ensureIssued($cardOrEmployee)->loadMissing(['employee.department', 'template']);
 
         $employee = $card->employee;
-        $company = $this->companyInformation();
+        $company = $this->companyInformation((int) $card->business_id);
         $photoUrl = $this->publicStorageUrl($employee?->photo_path);
         $logoUrl = $company->logo_url;
         $qrPayload = $this->qrPayload($card);
@@ -349,16 +356,7 @@ class EmployeeIdCardService
     {
         $company ??= $this->companyInformation();
 
-        $logoPaths = collect([
-            $company->logo_path,
-            CompanyInformation::query()
-                ->whereNull('business_id')
-                ->whereNotNull('logo_path')
-                ->value('logo_path'),
-            CompanyInformation::query()
-                ->whereNotNull('logo_path')
-                ->value('logo_path'),
-        ])->filter();
+        $logoPaths = collect([$company->logo_path])->filter();
 
         foreach ($logoPaths as $logoPath) {
             $dataUri = $this->imageDataUriFromStoragePath((string) $logoPath, ['public']);

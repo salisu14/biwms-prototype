@@ -65,15 +65,7 @@ class CompanyInformation extends Model
         $resolvedBusinessId = $businessId ?? self::resolveCurrentBusinessId();
 
         if ($resolvedBusinessId !== null) {
-            return self::query()->firstOrCreate(
-                ['business_id' => $resolvedBusinessId],
-                [
-                    'company_name' => 'Your Company Name',
-                    'country_code' => 'NGA',
-                    'base_currency_code' => 'NGN',
-                    'fiscal_year_start_month' => '01',
-                ]
-            );
+            return self::getOrCreateForBusiness($resolvedBusinessId);
         }
 
         return self::query()->firstOrCreate(
@@ -86,6 +78,42 @@ class CompanyInformation extends Model
                 'fiscal_year_start_month' => '01',
             ]
         );
+    }
+
+    public static function getOrCreateForBusiness(int $businessId): self
+    {
+        if ($businessId <= 0) {
+            throw new \InvalidArgumentException('A valid business is required for Company Information.');
+        }
+
+        return self::query()->firstOrCreate(
+            ['business_id' => $businessId],
+            [
+                'company_name' => 'Your Company Name',
+                'country_code' => 'NGA',
+                'base_currency_code' => 'NGN',
+                'fiscal_year_start_month' => '01',
+            ]
+        );
+    }
+
+    public static function findForBusiness(?int $businessId): ?self
+    {
+        return $businessId !== null && $businessId > 0
+            ? self::query()->where('business_id', $businessId)->first()
+            : null;
+    }
+
+    public static function requireForBusiness(int $businessId): self
+    {
+        return self::findForBusiness($businessId)
+            ?? throw new \RuntimeException('Company Information has not been configured for the selected business.');
+    }
+
+    public static function requireLegacyGlobal(): self
+    {
+        return self::query()->whereNull('business_id')->orderBy('id')->first()
+            ?? throw new \RuntimeException('Legacy global Company Information has not been configured.');
     }
 
     public static function updateInstance(array $data, ?int $businessId = null): self

@@ -9,12 +9,15 @@ use App\Filament\Resources\CompanyInformation\Pages\ViewCompanyInformation;
 use App\Filament\Resources\CompanyInformation\Schemas\CompanyInformationForm;
 use App\Filament\Resources\CompanyInformation\Schemas\CompanyInformationInfolist;
 use App\Filament\Resources\CompanyInformation\Tables\CompanyInformationTable;
+use App\Models\Business;
 use App\Models\CompanyInformation;
+use App\Services\Business\BusinessContextService;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class CompanyInformationResource extends Resource
 {
@@ -43,6 +46,27 @@ class CompanyInformationResource extends Resource
     public static function canDelete($model): bool
     {
         return false;
+    }
+
+    public static function canCreate(): bool
+    {
+        if (! parent::canCreate()) {
+            return false;
+        }
+
+        $businessId = app(BusinessContextService::class)->resolveId();
+
+        return $businessId !== null
+            && ! CompanyInformation::query()->where('business_id', $businessId)->exists();
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $businessIds = collect(app(BusinessContextService::class)->authorizedBusinesses())
+            ->map(fn (Business $business): int => (int) $business->getKey())
+            ->all();
+
+        return parent::getEloquentQuery()->whereIn('business_id', $businessIds);
     }
 
     public static function form(Schema $schema): Schema

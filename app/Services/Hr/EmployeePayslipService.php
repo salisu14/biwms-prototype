@@ -134,7 +134,9 @@ class EmployeePayslipService
     public function payslipViewData(EmployeePayslip $payslip, bool $forPdf = false): array
     {
         $payslip->loadMissing(['earnings', 'deductions', 'employee.department', 'payrollPeriod']);
-        $company = CompanyInformation::getInstance($payslip->business_id);
+        $company = $payslip->business_id
+            ? CompanyInformation::requireForBusiness((int) $payslip->business_id)
+            : $this->employeeIdCardService->companyInformation();
 
         return [
             'payslip' => $payslip,
@@ -192,7 +194,9 @@ class EmployeePayslipService
 
         $document = $firstLine->document()->with('period')->firstOrFail();
         $employee = $firstLine->employee()->with('department')->firstOrFail();
-        $company = CompanyInformation::getInstance();
+        $company = $document->business_id
+            ? CompanyInformation::requireForBusiness((int) $document->business_id)
+            : $this->employeeIdCardService->companyInformation();
 
         $earnings = $employeeLines->filter(fn (PayrollLine $line): bool => $this->isLineType($line, PayCodeType::EARNING));
         $deductions = $employeeLines->filter(fn (PayrollLine $line): bool => $this->isLineType($line, PayCodeType::DEDUCTION));
@@ -220,7 +224,7 @@ class EmployeePayslipService
             'department_name' => $employee->department?->name ?? $employee->department_code,
             'job_title' => $employee->job_title,
             'company_name' => $company->company_name,
-            'company_address' => CompanyInformation::getFullAddress(),
+            'company_address' => implode(', ', $company->getAddressLines()),
             'company_phone' => $company->phone_no ?? $company->mobile_no,
             'company_email' => $company->email,
             'company_logo_path' => $company->logo_path,

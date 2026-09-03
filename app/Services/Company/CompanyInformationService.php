@@ -2,19 +2,40 @@
 
 namespace App\Services\Company;
 
+use App\Models\Business;
 use App\Models\CompanyInformation;
+use App\Services\Business\BusinessContextService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class CompanyInformationService
 {
+    public function __construct(
+        private readonly BusinessContextService $businessContext
+    ) {}
+
     /**
      * Get or create the active business company profile.
      */
     public function get(?int $businessId = null): CompanyInformation
     {
-        return CompanyInformation::getInstance($businessId);
+        $resolvedBusinessId = $this->resolveBusinessId($businessId);
+
+        return $resolvedBusinessId === null
+            ? throw new RuntimeException('Business context is required to read Company Information.')
+            : CompanyInformation::requireForBusiness($resolvedBusinessId);
+    }
+
+    public function resolveBusinessId(?int $requestedBusinessId = null): ?int
+    {
+        return $this->businessContext->resolveId($requestedBusinessId);
+    }
+
+    public function resolveOwnedBusinessId(?int $requestedBusinessId = null, ?Business $ownedBusiness = null): ?int
+    {
+        return $this->businessContext->resolveId($requestedBusinessId, $ownedBusiness);
     }
 
     /**
@@ -22,8 +43,13 @@ class CompanyInformationService
      */
     public function update(array $data, ?int $businessId = null): CompanyInformation
     {
-        $resolvedBusinessId = $businessId ?? (isset($data['business_id']) ? (int) $data['business_id'] : null);
-        $company = CompanyInformation::getInstance($resolvedBusinessId);
+        $requestedBusinessId = $businessId ?? (isset($data['business_id']) ? (int) $data['business_id'] : null);
+        $resolvedBusinessId = $this->resolveBusinessId($requestedBusinessId);
+        if ($resolvedBusinessId === null) {
+            throw new RuntimeException('Business context is required to initialize Company Information.');
+        }
+
+        $company = CompanyInformation::getOrCreateForBusiness($resolvedBusinessId);
 
         return $this->updateRecord($company, $data, $resolvedBusinessId);
     }
@@ -135,7 +161,17 @@ class CompanyInformationService
      */
     public function getReportHeader(?int $businessId = null): array
     {
-        $company = $this->get($businessId);
+        $resolvedBusinessId = $this->resolveBusinessId($businessId);
+        $company = $resolvedBusinessId !== null
+            ? CompanyInformation::query()->where('business_id', $resolvedBusinessId)->first()
+            : null;
+
+        if (! $company) {
+            throw new RuntimeException($resolvedBusinessId === null
+                ? 'Business context is required to render this report.'
+                : 'Company Information has not been configured for the selected business.');
+        }
+
         $displayName = $company->trading_name ?: $company->company_name;
 
         return [
@@ -160,14 +196,14 @@ class CompanyInformationService
      */
     public function getInvoiceFooter(?int $businessId = null): string
     {
-        $company = $this->get($businessId);
-        $displayName = $company->trading_name ?: $company->company_name;
+        $header = $this->getReportHeader($businessId);
+        $displayName = $header['name'];
 
         $parts = array_filter([
             $displayName,
-            $company->phone_no ? "Tel: {$company->phone_no}" : null,
-            $company->email,
-            $company->tax_registration_no ? "Tax No: {$company->tax_registration_no}" : null,
+            $header['phone'] ? "Tel: {$header['phone']}" : null,
+            $header['email'],
+            $header['tax_no'] ? "Tax No: {$header['tax_no']}" : null,
         ]);
 
         return implode(' | ', $parts);
