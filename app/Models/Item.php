@@ -439,6 +439,31 @@ class Item extends Model
             ->first();
     }
 
+    public function resolvePurchaseDescription(?Vendor $vendor = null): string
+    {
+        if ($vendor) {
+            $vendorDescription = trim((string) ($this->vendorItems()
+                ->where('vendor_id', $vendor->id)
+                ->value('vendor_item_name') ?? ''));
+
+            if ($vendorDescription !== '') {
+                return $vendorDescription;
+            }
+        }
+
+        $itemDescription = trim((string) ($this->description ?? ''));
+        if ($itemDescription !== '') {
+            return $itemDescription;
+        }
+
+        $secondaryDescription = trim((string) ($this->description_2 ?? ''));
+        if ($secondaryDescription !== '') {
+            return $secondaryDescription;
+        }
+
+        return trim((string) ($this->item_code ?? '')) ?: '—';
+    }
+
     /**
      * Categories
      */

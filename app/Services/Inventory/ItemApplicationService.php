@@ -136,6 +136,10 @@ class ItemApplicationService
             $query->where('location_id', $outbound->location_id);
         }
 
+        if ($outbound->business_id !== null) {
+            $query->where('business_id', $outbound->business_id);
+        }
+
         if ($method === CostingMethod::SPECIFIC->value && $outbound->applied_entry_id) {
             return $query->where('id', $outbound->applied_entry_id)->get();
         }

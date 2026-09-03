@@ -21,6 +21,7 @@ use App\Models\Manufacturing\ProductionOrderRoutingLine;
 use App\Models\Manufacturing\RoutingVersion;
 use App\Models\User;
 use App\Services\AuditTrailService;
+use App\Services\Business\BusinessOwnershipService;
 use App\Services\Inventory\CostingService;
 use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
@@ -41,6 +42,8 @@ use Illuminate\Support\Facades\Log;
 
 class ProductionOrderService
 {
+    private bool $finishingCanonicalWorkflow = false;
+
     private const MAX_DECIMAL_15_4 = 99999999999.9999;
 
     private const MAX_BOM_EXPLOSION_DEPTH = 25;
@@ -200,6 +203,7 @@ class ProductionOrderService
                 }
 
                 $itemLedgerEntry = ItemLedgerEntry::create([
+                    'business_id' => $order->business_id,
                     'entry_type' => ItemLedgerEntryType::CONSUMPTION,
                     'item_id' => $component->item_id,
                     // ✅ FIXED: Always use negative BASE quantity for consumption
@@ -286,6 +290,10 @@ class ProductionOrderService
                 throw new \Exception('Cannot overproduce');
             }
 
+            $businessId = $order->business_id === null
+                ? null
+                : app(BusinessOwnershipService::class)->requireId($order->business_id, 'production order');
+
             $expectedUnitCost = DecimalMath::unitCost($order->cost_rollup ?? $order->unit_cost ?? 0);
             $expectedCostAmount = DecimalMath::amount(DecimalMath::mul($quantityBase, $expectedUnitCost, DecimalPrecision::AMOUNT_SCALE));
             $locationId = Location::query()
@@ -293,6 +301,7 @@ class ProductionOrderService
                 ->value('id');
 
             $itemLedgerEntry = ItemLedgerEntry::create([
+                'business_id' => $businessId,
                 'entry_type' => ItemLedgerEntryType::OUTPUT,
                 'item_id' => $order->item_id,
                 // ✅ FIXED: Use BASE quantity for Output
@@ -465,7 +474,12 @@ class ProductionOrderService
                 timeUnit: (string) ($routingLine->run_time_unit ?? $routingLine->setup_time_unit ?? '')
             );
 
+            $businessId = $order->business_id === null
+                ? null
+                : app(BusinessOwnershipService::class)->requireId($order->business_id, 'production order');
+
             $capacityLedgerEntry = CapacityLedgerEntry::create([
+                'business_id' => $businessId,
                 'production_order_id' => $order->id,
                 'routing_line_id' => $routingLineId,
                 'work_center_id' => $routingLine->work_center_id,
@@ -656,7 +670,12 @@ class ProductionOrderService
                 $order->capexProject->increment('actual_amount', $settlement['variance'] ?? $variance);
             }
 
-            $this->changeStatus($order, ProductionOrderStatus::FINISHED, $userId);
+            $this->finishingCanonicalWorkflow = true;
+            try {
+                $this->changeStatus($order, ProductionOrderStatus::FINISHED, $userId);
+            } finally {
+                $this->finishingCanonicalWorkflow = false;
+            }
 
             $order->forceFill([
                 'posted' => true,
@@ -730,6 +749,10 @@ class ProductionOrderService
         }
 
         if ($newStatus === ProductionOrderStatus::FINISHED) {
+            if (! $this->finishingCanonicalWorkflow) {
+                throw new \Exception('Production orders must be finished through the canonical finish workflow');
+            }
+
             $this->validateForFinish($order);
         }
 

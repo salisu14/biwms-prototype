@@ -12,6 +12,7 @@ use App\Models\Manufacturing\ProductionOrder;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceLine;
 use App\Models\ValueEntry;
+use App\Services\Business\BusinessOwnershipService;
 use App\Support\DecimalMath;
 use App\Support\DecimalPrecision;
 use Illuminate\Support\Facades\Log;
@@ -47,6 +48,11 @@ class ValueEntryService
                 $unitCost = DecimalMath::unitCost($entry->item?->unit_cost);
             }
             $productionOrder = $entry->source instanceof ProductionOrder ? $entry->source : null;
+            $businessId = $entry->business_id;
+            if ($productionOrder) {
+                app(BusinessOwnershipService::class)->assertSame($productionOrder->business_id, $businessId, 'value entry and production order');
+                $businessId ??= $productionOrder->business_id;
+            }
             $entryType = strtolower($this->entryTypeValue($entry->entry_type));
             $isConsumption = $entryType === 'consumption';
             $isOutput = $entryType === 'output';
@@ -89,6 +95,7 @@ class ValueEntryService
                 'prod_order_line_item_no' => $productionOrder ? (string) ($entry->item?->item_code ?? $entry->item_id) : null,
                 'user_id' => auth()->id() ? (string) auth()->id() : null,
                 'expected_cost' => $isExpectedCost,
+                'business_id' => $businessId,
             ];
 
             $valueEntry = ValueEntry::query()->where($lookup)->first();
@@ -128,6 +135,8 @@ class ValueEntryService
             $entry->loadMissing(['productionOrder.item', 'routingLine', 'workCenter', 'machineCenter']);
 
             $productionOrder = $entry->productionOrder;
+            $businessId = $entry->business_id ?? $productionOrder?->business_id;
+            app(BusinessOwnershipService::class)->assertSame($productionOrder?->business_id, $businessId, 'value entry and production order');
             $routingLine = $entry->routingLine;
             $quantity = DecimalMath::quantity(DecimalMath::add($entry->setup_time, $entry->run_time, DecimalPrecision::QUANTITY_SCALE));
             $directCostAmount = DecimalMath::amount($entry->direct_cost);
@@ -168,6 +177,7 @@ class ValueEntryService
                 'routing_reference_no' => $routingLineNumber,
                 'operation_no' => $routingLine?->operation_no,
                 'user_id' => $userId ? (string) $userId : (auth()->id() ? (string) auth()->id() : null),
+                'business_id' => $businessId,
             ];
 
             $directValueEntry = $this->updateOrCreateCapacityValueEntry(

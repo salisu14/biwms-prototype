@@ -168,6 +168,7 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
         }
 
         $capacityEntry = CapacityLedgerEntry::create([
+            'business_id' => $line->productionOrder?->business_id,
             'work_center_id' => $line->work_center_id,
             'machine_center_id' => $line->machine_center_id,
             'production_order_id' => $line->production_order_id,
@@ -269,6 +270,7 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
 
     private function createItemLedgerEntry(ProductionJournalLine $line, string $direction): ItemLedgerEntry
     {
+        $businessId = $line->productionOrder?->business_id;
         $unitCost = (float) ($line->unit_cost ?? 0);
         if ($unitCost === 0.0 && $line->item) {
             $unitCost = $this->costingService->getUnitCost(
@@ -290,6 +292,7 @@ class ProductionJournalPostingRoutine extends AbstractJournalPostingRoutine
         };
 
         return ItemLedgerEntry::create([
+            'business_id' => $businessId,
             'item_id' => $line->item_id,
             'posting_date' => $line->posting_date,
             'entry_type' => $entryType,
