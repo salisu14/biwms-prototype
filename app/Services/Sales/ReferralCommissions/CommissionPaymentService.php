@@ -15,6 +15,7 @@ use App\Enums\CommissionPaymentLineStatus;
 use App\Enums\CommissionPaymentMethod;
 use App\Enums\CommissionSettlementBatchStatus;
 use App\Enums\PettyCashTransactionType;
+use App\Enums\SourceType;
 use App\Models\BankAccount;
 use App\Models\CommissionLedgerEntry;
 use App\Models\CommissionLiabilityPosting;
@@ -252,7 +253,7 @@ class CommissionPaymentService
                 'document_type' => 'COMMISSION_PAYMENT',
                 'document_number' => $locked->batch_number,
                 'source_module' => 'sales',
-                'source_type' => CommissionPaymentBatch::class,
+                'source_type' => SourceType::COMMISSION->value,
                 'source_id' => $locked->id,
                 'source_number' => $locked->batch_number,
                 'description' => 'Commission payment batch '.$locked->batch_number,

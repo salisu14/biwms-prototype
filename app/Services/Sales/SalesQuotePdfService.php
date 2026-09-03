@@ -98,7 +98,7 @@ class SalesQuotePdfService
         });
 
         $totalAmount = $items->sum('line_total');
-        $header = $this->companyInformationService->getReportHeader();
+        $header = $this->companyInformationService->getReportHeader($quote->business_id ?? null);
 
         return Pdf::loadView('pdf.sales-quote', [
             'quote' => $quote,

@@ -8,6 +8,7 @@ use App\Enums\CommissionLedgerEntryStatus;
 use App\Enums\CommissionLedgerEntryType;
 use App\Enums\CommissionLiabilityPostingStatus;
 use App\Enums\CommissionSettlementBatchStatus;
+use App\Enums\SourceType;
 use App\Models\CommissionLedgerEntry;
 use App\Models\CommissionLiabilityPosting;
 use App\Models\CommissionSettlementBatch;
@@ -97,7 +98,7 @@ class CommissionLiabilityPostingService
                 'document_type' => 'COMMISSION_LIABILITY',
                 'document_number' => $liability->document_number,
                 'source_module' => 'sales',
-                'source_type' => CommissionLiabilityPosting::class,
+                'source_type' => SourceType::COMMISSION->value,
                 'source_id' => $liability->id,
                 'source_number' => $liability->document_number,
                 'description' => 'Commission liability recognition '.$batch->settlement_number,
@@ -184,7 +185,7 @@ class CommissionLiabilityPostingService
                 'document_type' => 'COMMISSION_LIABILITY_REVERSAL',
                 'document_number' => 'REV-'.$liability->document_number,
                 'source_module' => 'sales',
-                'source_type' => CommissionLiabilityPosting::class,
+                'source_type' => SourceType::COMMISSION->value,
                 'source_id' => $liability->id,
                 'source_number' => $liability->document_number,
                 'description' => $reason ?: 'Commission liability reversal',

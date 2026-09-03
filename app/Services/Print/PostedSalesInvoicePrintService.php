@@ -15,7 +15,7 @@ class PostedSalesInvoicePrintService
     public function generateTaxInvoice(PostedSalesInvoice $invoice)
     {
         $invoice->loadMissing(['lines', 'customer']);
-        $header = $this->companyInformationService->getReportHeader();
+        $header = $this->companyInformationService->getReportHeader($invoice->business_id);
 
         $data = [
             'title' => 'TAX INVOICE',
@@ -52,7 +52,7 @@ class PostedSalesInvoicePrintService
                 'tax_no' => $header['tax_no'] ?? null,
                 'registration_no' => $header['registration_no'] ?? null,
                 'logo_url' => $header['logo_url'] ?? null,
-                'invoice_footer' => $this->companyInformationService->getInvoiceFooter(),
+                'invoice_footer' => $this->companyInformationService->getInvoiceFooter($invoice->business_id),
             ],
         ];
 

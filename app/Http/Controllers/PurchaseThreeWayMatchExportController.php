@@ -17,9 +17,9 @@ class PurchaseThreeWayMatchExportController extends Controller
     {
         abort_unless($request->user()?->can('purchasing.purchase_three_way_match.export'), 403);
 
-        $businessId = filled($request->query('business_id'))
-            ? (int) $request->query('business_id')
-            : (filled(session('active_business_id')) ? (int) session('active_business_id') : null);
+        $businessId = $companyInformationService->resolveBusinessId(
+            filled($request->query('business_id')) ? (int) $request->query('business_id') : null,
+        );
 
         $filters = $request->only([
             'vendor_id',

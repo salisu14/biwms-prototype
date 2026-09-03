@@ -9,10 +9,13 @@ use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
 use App\Models\PurchaseInvoiceLine;
 use App\Models\PurchaseOrderLine;
 use App\Models\PurchaseReceiptLine;
+use App\Services\Business\BusinessContextService;
 use Illuminate\Support\Collection;
 
 class PurchaseThreeWayMatchService
 {
+    public function __construct(private readonly BusinessContextService $businessContext) {}
+
     /**
      * @param  array<string, mixed>  $filters
      * @return array{
@@ -52,9 +55,9 @@ class PurchaseThreeWayMatchService
     public function normalizeFilters(array $filters = []): array
     {
         return [
-            'business_id' => filled($filters['business_id'] ?? null)
-                ? (int) $filters['business_id']
-                : (filled(session('active_business_id')) ? (int) session('active_business_id') : null),
+            'business_id' => $this->businessContext->resolveId(
+                filled($filters['business_id'] ?? null) ? (int) $filters['business_id'] : null
+            ),
             'vendor_id' => filled($filters['vendor_id'] ?? null) ? (int) $filters['vendor_id'] : null,
             'purchase_order_id' => filled($filters['purchase_order_id'] ?? null) ? (int) $filters['purchase_order_id'] : null,
             'date_from' => filled($filters['date_from'] ?? null) ? (string) $filters['date_from'] : null,

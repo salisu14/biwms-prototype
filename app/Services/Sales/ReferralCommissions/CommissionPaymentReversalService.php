@@ -11,6 +11,7 @@ use App\Enums\CommissionPaymentApplicationType;
 use App\Enums\CommissionPaymentBatchStatus;
 use App\Enums\CommissionPaymentLineStatus;
 use App\Enums\CommissionPaymentMethod;
+use App\Enums\SourceType;
 use App\Models\BankAccount;
 use App\Models\CommissionLedgerEntry;
 use App\Models\CommissionPaymentApplication;
@@ -68,7 +69,7 @@ class CommissionPaymentReversalService
                 'document_type' => 'COMMISSION_PAYMENT_REVERSAL',
                 'document_number' => 'REV-'.$locked->batch_number,
                 'source_module' => 'sales',
-                'source_type' => 'commission_payment',
+                'source_type' => SourceType::COMMISSION->value,
                 'source_id' => $locked->id,
                 'source_number' => $locked->batch_number,
                 'description' => $reason ?: 'Commission payment reversal',

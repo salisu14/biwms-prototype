@@ -101,7 +101,7 @@ class PurchaseDocumentPrintService
 
     private function companyPayload(?int $businessId = null): array
     {
-        $resolvedBusinessId = $businessId ?? session('active_business_id');
+        $resolvedBusinessId = $this->companyInformationService->resolveBusinessId($businessId);
         $header = $this->companyInformationService->getReportHeader($resolvedBusinessId);
 
         return [

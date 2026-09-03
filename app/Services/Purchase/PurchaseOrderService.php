@@ -21,7 +21,9 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
 use App\Models\WarehouseReceipt;
+use App\Services\Business\BusinessContextService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
+use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PutAwayWorksheetService;
@@ -50,7 +52,7 @@ class PurchaseOrderService
             $vendor = Vendor::findOrFail($data->vendorId);
 
             $order = PurchaseOrder::create([
-                'business_id' => $data->businessId ?? (request()?->integer('business_id') ?: session('active_business_id')),
+                'business_id' => app(BusinessContextService::class)->resolveId($data->businessId),
                 'order_number' => $orderNumber,
                 'order_type' => $data->orderType,
                 'vendor_id' => $data->vendorId,
@@ -135,11 +137,16 @@ class PurchaseOrderService
                 $unitCost = (float) ($priceInfo['direct_unit_cost'] ?? 0);
             }
 
+            $description = $line['description'] ?? null;
+            if (blank($description) && $item) {
+                $description = $item->resolvePurchaseDescription($vendor);
+            }
+
             $attributes = [
                 'line_number' => $index + 1,
                 'item_id' => $line['item_id'],
                 'variant_code' => $line['variant_code'] ?? null,
-                'description' => $line['description'],
+                'description' => $description,
                 'quantity' => $line['quantity'],
                 'unit_cost' => $unitCost,
                 'unit_of_measure' => $line['unit_of_measure'],
@@ -423,7 +430,13 @@ class PurchaseOrderService
 
                 if ($line->item?->isInventoryItem()) {
                     $receiptItemLedgerEntry = $this->createReceiptItemLedgerEntry($order, $line, $quantityToReceive);
-                    app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($receiptItemLedgerEntry);
+                    $valueEntry = app(ValueEntryService::class)->ensureForItemLedgerEntry($receiptItemLedgerEntry);
+
+                    if (! $valueEntry) {
+                        throw new Exception("Value Entry could not be created for purchase receipt line {$line->id}.");
+                    }
+
+                    app(ValueEntryAccountingOrchestrator::class)->post($valueEntry);
                 }
 
                 $receivedAny = true;

@@ -16,6 +16,7 @@ use App\Models\PurchaseInvoiceLine;
 use App\Models\PurchaseOrder;
 use App\Models\ValueEntry;
 use App\Models\VendorLedgerEntry;
+use App\Services\Business\BusinessContextService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
@@ -69,7 +70,7 @@ class PurchaseInvoiceService
             }
 
             $invoice = PurchaseInvoice::create([
-                'business_id' => $order->business_id ?? (request()?->integer('business_id') ?: session('active_business_id')),
+                'business_id' => $order->business_id ?? app(BusinessContextService::class)->resolveId(),
                 'document_number' => $this->generateNumber(),
                 'external_document_number' => null,
                 'order_id' => $order->id,
@@ -256,7 +257,7 @@ class PurchaseInvoiceService
             $posted = PostedPurchaseInvoice::query()->firstOrCreate(
                 ['document_number' => $invoice->document_number],
                 [
-                    'business_id' => $invoice->business_id ?? $order->business_id ?? (request()?->integer('business_id') ?: session('active_business_id')),
+                    'business_id' => $invoice->business_id ?? $order->business_id ?? app(BusinessContextService::class)->resolveId(),
                     'external_document_number' => $invoice->external_document_number,
                     'order_id' => $invoice->order_id,
                     'order_number' => $invoice->order_number,

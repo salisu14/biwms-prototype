@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Purchase;
 
 use App\Models\Item;
+use App\Models\PostedPurchaseInvoiceLine;
 use App\Models\PurchasePrice;
 use App\Models\Vendor;
-use App\Models\VendorLedgerEntry;
 
 class PurchasePriceCalculationService
 {
@@ -19,7 +19,8 @@ class PurchasePriceCalculationService
         Item $item,
         float $quantity = 1,
         ?string $unitOfMeasure = null,
-        ?\DateTime $date = null
+        ?\DateTime $date = null,
+        ?int $businessId = null
     ): array {
         $date = $date ?? now();
         $unitOfMeasure = $unitOfMeasure ?? $item->base_unit_of_measure;
@@ -28,7 +29,7 @@ class PurchasePriceCalculationService
         $specificPrice = $this->getSpecificPrice($vendor, $item, $quantity, $unitOfMeasure, $date);
 
         // 2. Get last direct cost from item ledger
-        $lastDirectCost = $this->getLastDirectCost($vendor, $item);
+        $lastDirectCost = $this->getLastDirectCost($vendor, $item, $date, $businessId);
 
         // 3. Get standard cost from item card
         $standardCost = $item->standard_cost;
@@ -87,22 +88,33 @@ class PurchasePriceCalculationService
     }
 
     /**
-     * Get last direct cost from vendor/item ledger entries
+     * Get the most recent posted purchase invoice line cost for this vendor/item.
      */
-    private function getLastDirectCost(Vendor $vendor, Item $item): ?float
+    private function getLastDirectCost(Vendor $vendor, Item $item, \DateTime $date, ?int $businessId = null): ?float
     {
-        $lastEntry = VendorLedgerEntry::where('vendor_id', $vendor->id)
-            ->whereHas('itemLedgerEntries', function ($q) use ($item) {
-                $q->where('item_id', $item->id);
-            })
-            ->where('document_type', 'invoice')
-            ->latest('posting_date')
-            ->first();
+        $query = PostedPurchaseInvoiceLine::query()
+            ->select('posted_purchase_invoice_lines.*')
+            ->join('posted_purchase_invoices', 'posted_purchase_invoices.id', '=', 'posted_purchase_invoice_lines.posted_purchase_invoice_id')
+            ->where('posted_purchase_invoices.vendor_id', $vendor->id)
+            ->where('posted_purchase_invoices.cancelled', false)
+            ->where('posted_purchase_invoice_lines.item_id', $item->id)
+            ->whereDate('posted_purchase_invoices.posting_date', '<=', $date->format('Y-m-d'))
+            ->orderByDesc('posted_purchase_invoices.posting_date')
+            ->orderByDesc('posted_purchase_invoices.id')
+            ->orderByDesc('posted_purchase_invoice_lines.line_number')
+            ->orderByDesc('posted_purchase_invoice_lines.id');
 
-        return $lastEntry?->itemLedgerEntries()
-            ->where('item_id', $item->id)
-            ->latest()
-            ->first()?->unit_cost;
+        if ($businessId !== null) {
+            $query->where('posted_purchase_invoices.business_id', $businessId);
+        }
+
+        $lastEntry = $query->first();
+
+        if (! $lastEntry) {
+            return null;
+        }
+
+        return (float) ($lastEntry->unit_cost_lcy ?? $lastEntry->unit_cost ?? 0);
     }
 
     /**

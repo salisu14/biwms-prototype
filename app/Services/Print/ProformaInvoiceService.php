@@ -90,7 +90,7 @@ class ProformaInvoiceService
                 'total_qty' => (float) $order->lines->sum('quantity'),
                 'total_qty_display' => $this->formatTotalQuantityByUom($order->lines, 'unit_of_measure'),
             ],
-            'company' => $this->getCompanyInfo(),
+            'company' => $this->getCompanyInfo($order->business_id),
         ];
 
         return Pdf::loadView('pdf.proforma-invoice', $data)
@@ -102,7 +102,7 @@ class ProformaInvoiceService
      */
     protected function getCompanyInfo(?int $businessId = null): array
     {
-        $resolvedBusinessId = $businessId ?? session('active_business_id');
+        $resolvedBusinessId = $this->companyInformationService->resolveBusinessId($businessId);
         $header = $this->companyInformationService->getReportHeader($resolvedBusinessId);
 
         return [

@@ -13,13 +13,7 @@
             Export CSV
         </x-filament::button>
 
-        <x-filament::button
-            tag="a"
-            :href="$pdfUrl"
-            icon="heroicon-o-document-arrow-down"
-            color="gray"
-            target="_blank"
-        >
+        <x-filament::button tag="a" :href="$pdfUrl" icon="heroicon-o-document-arrow-down" color="gray" target="_blank">
             Export PDF
         </x-filament::button>
 

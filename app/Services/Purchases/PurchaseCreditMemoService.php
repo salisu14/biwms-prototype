@@ -21,6 +21,7 @@ use App\Models\ValueEntry;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Services\Approval\ApprovalTemplateService;
+use App\Services\Business\BusinessContextService;
 use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
@@ -63,7 +64,7 @@ class PurchaseCreditMemoService
             }
 
             $memo = PurchaseCreditMemo::create([
-                'business_id' => $data->business_id ?? (request()?->integer('business_id') ?: session('active_business_id')),
+                'business_id' => app(BusinessContextService::class)->resolveId($data->business_id),
                 'document_number' => PurchaseCreditMemo::generateNumber(),
                 'vendor_id' => $data->vendor_id,
                 'vendor_name' => $vendor->vendor_name,
@@ -234,7 +235,7 @@ class PurchaseCreditMemoService
             ])->save();
 
             $postedMemo = PostedPurchaseCreditMemo::create([
-                'business_id' => $memo->business_id ?? (request()?->integer('business_id') ?: session('active_business_id')),
+                'business_id' => $memo->business_id ?? app(BusinessContextService::class)->resolveId(),
                 'document_number' => $memo->document_number,
                 'external_document_number' => $memo->external_document_number,
                 'vendor_id' => $memo->vendor_id,
