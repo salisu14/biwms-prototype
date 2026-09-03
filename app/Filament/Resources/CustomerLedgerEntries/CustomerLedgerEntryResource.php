@@ -7,6 +7,7 @@ use App\Filament\Resources\CustomerLedgerEntries\Pages\ViewCustomerLedgerEntry;
 use App\Filament\Resources\CustomerLedgerEntries\Schemas\CustomerLedgerEntryForm;
 use App\Filament\Resources\CustomerLedgerEntries\Schemas\CustomerLedgerEntryInfolist;
 use App\Filament\Resources\CustomerLedgerEntries\Tables\CustomerLedgerEntriesTable;
+use App\Models\CompanyInformation;
 use App\Models\CustomerLedgerEntry;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -123,7 +124,9 @@ class CustomerLedgerEntryResource extends Resource
                 $record->document_number,
             ]))),
             'Posting Date' => $record->posting_date?->toDateString() ?? '—',
-            'Amount' => Number::currency((float) $record->amount, $record->currency_code ?? config('app.default_currency', 'USD')),
+            'Amount' => Number::currency((float) $record->amount, (string) (CompanyInformation::query()
+                ->where('business_id', $record->business_id ?: (int) session('active_business_id', 0))
+                ->value('base_currency_code') ?: config('app.base_currency', 'NGN'))),
         ];
     }
 

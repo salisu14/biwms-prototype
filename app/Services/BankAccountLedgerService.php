@@ -4,17 +4,25 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\AccountCategory;
 use App\Enums\BankAccountLedgerEntryStatus;
 use App\Enums\BankAccountLedgerEntryType;
 use App\Enums\CheckType;
+use App\Enums\SourceType;
+use App\Exceptions\BusinessException;
 use App\Exceptions\PostingSetupException;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
+use App\Models\ChartOfAccount;
+use App\Models\GeneralLedgerSetup;
+use App\Models\User;
 use App\Models\VendorLedgerEntry;
 use App\Services\Finance\GeneralLedgerService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class BankAccountLedgerService
 {
@@ -143,6 +151,169 @@ class BankAccountLedgerService
             ]);
 
             return $entry->fresh();
+        });
+    }
+
+    /**
+     * Fund a bank account through the controlled opening-balance workflow.
+     *
+     * The bank ledger remains the source for the running balance while the
+     * posting kernel owns the balanced bank/equity G/L transaction.
+     */
+    public function postOpeningBalance(
+        BankAccount $bankAccount,
+        string|float|int $amount,
+        ?int $offsetAccountId,
+        \DateTimeInterface|string $postingDate,
+        string $description,
+        ?string $externalDocumentNo = null,
+        ?int $userId = null,
+        array $dimensions = [],
+    ): BankAccountLedgerEntry {
+        $actorId = $userId ?? Auth::id();
+
+        if (! $actorId) {
+            throw new AuthorizationException('Authentication is required to post a bank opening balance.');
+        }
+
+        Gate::forUser(User::query()->findOrFail($actorId))->authorize('openingBalance', $bankAccount);
+
+        return DB::transaction(function () use ($bankAccount, $amount, $postingDate, $description, $externalDocumentNo, $userId, $dimensions): BankAccountLedgerEntry {
+            $bankAccount = BankAccount::query()
+                ->with(['glAccount', 'currency'])
+                ->lockForUpdate()
+                ->findOrFail($bankAccount->getKey());
+
+            if (! $bankAccount->active) {
+                throw new BusinessException('The bank account is inactive.', title: 'Opening balance was not posted');
+            }
+
+            if (! $bankAccount->glAccount || ! $bankAccount->glAccount->allowsDirectPosting()) {
+                throw new BusinessException('The bank account must have an active, direct-posting G/L account.', title: 'Opening balance was not posted');
+            }
+
+            if ((float) $amount <= 0) {
+                throw new BusinessException('Opening balance amount must be greater than zero.', title: 'Opening balance was not posted');
+            }
+
+            $setup = GeneralLedgerSetup::query()->lockForUpdate()->first();
+            $configuredOffsetAccountId = $setup?->opening_balance_equity_account_id;
+
+            if (! $configuredOffsetAccountId) {
+                throw new BusinessException('Configure an Opening Balance Equity account before posting a bank opening balance.', title: 'Opening balance was not posted');
+            }
+
+            $offsetAccount = ChartOfAccount::query()->lockForUpdate()->find((int) $configuredOffsetAccountId);
+            if (! $offsetAccount) {
+                throw new BusinessException('The configured Opening Balance Equity account does not exist.', title: 'Opening balance was not posted');
+            }
+
+            if ($offsetAccount->id === (int) $bankAccount->gl_account_id) {
+                throw new BusinessException('Opening Balance Equity account cannot be the same as the bank G/L account.', title: 'Opening balance was not posted');
+            }
+
+            if ($offsetAccount->account_category !== AccountCategory::EQUITY
+                || ! $offsetAccount->allowsDirectPosting()
+                || $offsetAccount->isSystemControlled()) {
+                throw new BusinessException('The configured Opening Balance Equity account must be an active, direct-posting, non-system-controlled Equity account.', title: 'Opening balance was not posted');
+            }
+
+            app(PostingDateValidator::class)->validate($postingDate);
+
+            $documentNo = 'OB-BANK-'.$bankAccount->getKey();
+            $alreadyPosted = BankAccountLedgerEntry::query()
+                ->where('bank_account_id', $bankAccount->id)
+                ->where('document_type', 'OPENING_BALANCE')
+                ->where('source_type', SourceType::BANK->value)
+                ->where('source_id', $bankAccount->id)
+                ->exists();
+
+            if ($alreadyPosted) {
+                throw new BusinessException('An opening balance has already been posted for this bank account.', title: 'Opening balance was not posted');
+            }
+
+            $currencyCode = $bankAccount->currency?->code ?? $this->currencyService->getLCY()->code;
+            $exchangeRate = $currencyCode === $this->currencyService->getLCY()->code
+                ? 1
+                : $bankAccount->currency?->getExchangeRate($postingDate) ?? 1;
+            $actorId = $userId ?? Auth::id();
+            $transaction = $this->glService->postTransaction([
+                [
+                    'account_id' => $bankAccount->gl_account_id,
+                    'debit_amount' => $amount,
+                    'credit_amount' => 0,
+                    'description' => $description,
+                    'dimensions' => $dimensions,
+                    'source_type' => SourceType::BANK->value,
+                    'source_number' => $documentNo,
+                ],
+                [
+                    'account_id' => $offsetAccount->id,
+                    'debit_amount' => 0,
+                    'credit_amount' => $amount,
+                    'description' => $description,
+                    'dimensions' => $dimensions,
+                    'source_type' => SourceType::BANK->value,
+                    'source_number' => $documentNo,
+                ],
+            ], [
+                'posting_date' => $postingDate,
+                'document_date' => $postingDate,
+                'document_type' => 'OPENING_BALANCE',
+                'document_number' => $documentNo,
+                'source_module' => 'finance',
+                'source_type' => SourceType::BANK->value,
+                'source_id' => $bankAccount->id,
+                'source_number' => $documentNo,
+                'external_document_number' => $externalDocumentNo,
+                'description' => $description,
+                'currency_code' => $currencyCode,
+                'exchange_rate' => $exchangeRate,
+                'dimensions' => $dimensions,
+                'actor_id' => $actorId,
+                'idempotency_key' => 'OPENING_BALANCE:BANK:'.$bankAccount->id,
+                'transaction_key' => 'OPENING_BALANCE:BANK:'.$bankAccount->id,
+            ]);
+
+            $bankEntry = $this->postDeposit($bankAccount, [
+                'amount' => $amount,
+                'posting_date' => $postingDate,
+                'document_date' => $postingDate,
+                'document_type' => 'OPENING_BALANCE',
+                'document_no' => $documentNo,
+                'external_document_no' => $externalDocumentNo,
+                'description' => $description,
+                'currency_code' => $currencyCode,
+                'currency_factor' => $exchangeRate,
+                'source_type' => SourceType::BANK->value,
+                'source_id' => $bankAccount->id,
+                'source_no' => $documentNo,
+                'user_id' => $actorId,
+                'dimensions' => $dimensions,
+            ]);
+
+            $bankGlEntry = $transaction->glEntries
+                ->firstWhere('chart_of_account_id', $bankAccount->gl_account_id);
+            $bankEntry->update(['gl_entry_id' => $bankGlEntry?->id]);
+
+            app(AuditTrailService::class)->recordGeneric(
+                eventType: 'opening_balance',
+                action: 'bank_opening_balance_posted',
+                auditable: $bankAccount,
+                documentType: 'OPENING_BALANCE',
+                documentNo: $documentNo,
+                userId: $actorId,
+                description: "Opening balance posted for bank account {$bankAccount->account_code}",
+                metadata: [
+                    'amount' => $amount,
+                    'posting_date' => (string) $postingDate,
+                    'offset_account_id' => $offsetAccount->id,
+                    'bank_ledger_entry_id' => $bankEntry->id,
+                    'posting_transaction_id' => $transaction->id,
+                ],
+            );
+
+            return $bankEntry->fresh();
         });
     }
 

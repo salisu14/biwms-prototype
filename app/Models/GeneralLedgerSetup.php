@@ -22,6 +22,7 @@ class GeneralLedgerSetup extends Model
         'allow_posting_from', 'allow_posting_to',
         'retained_earnings_account_id',
         'default_expense_offset_account_id',
+        'opening_balance_equity_account_id',
     ];
 
     protected $casts = [
@@ -59,5 +60,10 @@ class GeneralLedgerSetup extends Model
     public function defaultExpenseOffsetAccount()
     {
         return $this->belongsTo(ChartOfAccount::class, 'default_expense_offset_account_id');
+    }
+
+    public function openingBalanceEquityAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'opening_balance_equity_account_id');
     }
 }

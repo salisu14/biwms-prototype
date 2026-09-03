@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Services\Accounting\ControlAccountAssignmentService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -30,6 +31,18 @@ class CustomerPostingGroup extends Model
     protected $casts = [
         'blocked' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (CustomerPostingGroup $group): void {
+            if ($group->exists && ! $group->isDirty('receivables_account_id')) {
+                return;
+            }
+
+            app(ControlAccountAssignmentService::class)
+                ->validateCustomerReceivables($group->receivables_account_id === null ? null : (int) $group->receivables_account_id);
+        });
+    }
 
     // Relationships
     public function receivablesAccount(): BelongsTo
@@ -62,7 +75,6 @@ class CustomerPostingGroup extends Model
     {
         return $this->belongsTo(ChartOfAccount::class, 'credit_rounding_account_id');
     }
-
 
     public function customers(): HasMany
     {

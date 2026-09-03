@@ -7,6 +7,7 @@ use App\Filament\Resources\VendorLedgerEntries\Pages\ViewVendorLedgerEntry;
 use App\Filament\Resources\VendorLedgerEntries\Schemas\VendorLedgerEntryForm;
 use App\Filament\Resources\VendorLedgerEntries\Schemas\VendorLedgerEntryInfolist;
 use App\Filament\Resources\VendorLedgerEntries\Tables\VendorLedgerEntriesTable;
+use App\Models\CompanyInformation;
 use App\Models\VendorLedgerEntry;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -60,6 +61,11 @@ class VendorLedgerEntryResource extends Resource
     }
 
     public static function canEdit(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canCreate(): bool
     {
         return false;
     }
@@ -118,7 +124,9 @@ class VendorLedgerEntryResource extends Resource
                 $record->document_number,
             ]))),
             'Posting Date' => $record->posting_date?->toDateString() ?? '—',
-            'Amount' => Number::currency((float) $record->amount, $record->currency_code ?? config('app.default_currency', 'USD')),
+            'Amount' => Number::currency((float) $record->amount, (string) (CompanyInformation::query()
+                ->where('business_id', $record->business_id ?: (int) session('active_business_id', 0))
+                ->value('base_currency_code') ?: config('app.base_currency', 'NGN'))),
         ];
     }
 

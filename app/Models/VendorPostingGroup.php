@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Accounting\ControlAccountAssignmentService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +25,20 @@ class VendorPostingGroup extends Model
     protected $casts = [
         'blocked' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (VendorPostingGroup $group): void {
+            if ($group->exists && ! $group->isDirty('payables_account_id')) {
+                return;
+            }
+
+            if ($group->payables_account_id !== null) {
+                app(ControlAccountAssignmentService::class)
+                    ->validateVendorPayables((int) $group->payables_account_id);
+            }
+        });
+    }
 
     // Relationships
     public function payablesAccount(): BelongsTo

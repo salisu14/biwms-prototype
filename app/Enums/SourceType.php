@@ -10,6 +10,8 @@ enum SourceType: string
     case BANK = 'BANK';
     case FIXED_ASSET = 'FIXED_ASSET';
     case EMPLOYEE = 'EMPLOYEE';
+    case COMMISSION = 'COMMISSION';
+    case PETTY_CASH = 'PETTY_CASH';
     case GENERAL_JOURNAL = 'GENERAL_JOURNAL';
 
     public function label(): string
@@ -21,6 +23,8 @@ enum SourceType: string
             self::BANK => 'Bank Account',
             self::FIXED_ASSET => 'Fixed Asset',
             self::EMPLOYEE => 'Employee',
+            self::COMMISSION => 'Commission',
+            self::PETTY_CASH => 'Petty Cash',
             self::GENERAL_JOURNAL => 'General Journal',
         };
     }
@@ -34,6 +38,8 @@ enum SourceType: string
             self::BANK => 'bg-indigo-100 text-indigo-800',
             self::FIXED_ASSET => 'bg-purple-100 text-purple-800',
             self::EMPLOYEE => 'bg-teal-100 text-teal-800',
+            self::COMMISSION => 'bg-pink-100 text-pink-800',
+            self::PETTY_CASH => 'bg-orange-100 text-orange-800',
             self::GENERAL_JOURNAL => 'bg-gray-100 text-gray-800',
         };
     }
@@ -47,6 +53,8 @@ enum SourceType: string
             self::BANK => 'heroicon-o-building-library',
             self::FIXED_ASSET => 'heroicon-o-wrench-screwdriver',
             self::EMPLOYEE => 'heroicon-o-user',
+            self::COMMISSION => 'heroicon-o-banknotes',
+            self::PETTY_CASH => 'heroicon-o-wallet',
             self::GENERAL_JOURNAL => 'heroicon-o-book-open',
         };
     }

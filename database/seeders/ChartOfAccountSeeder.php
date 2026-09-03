@@ -6,7 +6,9 @@ namespace Database\Seeders;
 
 use App\Enums\AccountCategory;
 use App\Enums\AccountStructuralType;
+use App\Enums\IncomeBalanceType;
 use App\Models\ChartOfAccount;
+use App\Models\GeneralLedgerSetup;
 use Illuminate\Database\Seeder;
 
 class ChartOfAccountSeeder extends Seeder
@@ -201,6 +203,15 @@ class ChartOfAccountSeeder extends Seeder
                 'direct_posting' => true,
                 'parent_account_number' => '30000',
             ],
+            [
+                'account_number' => '32100',
+                'name' => 'Retained Earnings',
+                'structural_type' => AccountStructuralType::POSTING,
+                'account_category' => AccountCategory::EQUITY,
+                'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+                'direct_posting' => true,
+                'parent_account_number' => '30000',
+            ],
         ];
 
         foreach ($accounts as $accountData) {
@@ -216,6 +227,16 @@ class ChartOfAccountSeeder extends Seeder
                 ['account_number' => $accountData['account_number']],
                 $accountData
             );
+        }
+
+        $openingBalanceEquity = ChartOfAccount::query()
+            ->where('account_number', '30100')
+            ->first();
+
+        if ($openingBalanceEquity) {
+            GeneralLedgerSetup::instance()->update([
+                'opening_balance_equity_account_id' => $openingBalanceEquity->id,
+            ]);
         }
     }
 

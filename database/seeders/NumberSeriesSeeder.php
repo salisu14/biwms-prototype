@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Models\NumberSeries;
+use App\Models\NumberSeriesLine;
 use App\Services\Manufacturing\ProductionOrderNumberSeriesSetupService;
 use App\Services\Sales\ReferralCommissions\ReferralCommissionPlanNumberSeriesSetupService;
 use App\Services\Sales\ReferrerNumberSeriesSetupService;
@@ -89,6 +90,36 @@ class NumberSeriesSeeder extends Seeder
                 'module' => 'finance',
             ],
             [
+                'code' => 'PAYMENT',
+                'description' => 'Payments',
+                'prefix' => 'PAY',
+                'starting_number' => 1,
+                'ending_number' => 999999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'finance',
+            ],
+            [
+                'code' => 'CUSTOMER-OPENING',
+                'description' => 'Customer Opening Balances',
+                'prefix' => 'COB',
+                'starting_number' => 1,
+                'ending_number' => 999999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'finance',
+            ],
+            [
+                'code' => 'VENDOR-OPENING',
+                'description' => 'Vendor Opening Balances',
+                'prefix' => 'VOB',
+                'starting_number' => 1,
+                'ending_number' => 999999,
+                'current_number' => 0,
+                'year' => 2026,
+                'module' => 'finance',
+            ],
+            [
                 'code' => 'COMM-LIAB',
                 'description' => 'Commission Liability Postings',
                 'prefix' => 'CLP',
@@ -111,7 +142,22 @@ class NumberSeriesSeeder extends Seeder
         ];
 
         foreach ($series as $s) {
-            NumberSeries::firstOrCreate(['code' => $s['code']], $s);
+            $numberSeries = NumberSeries::firstOrCreate(['code' => $s['code']], $s);
+
+            if (in_array($numberSeries->code, ['CUSTOMER-OPENING', 'VENDOR-OPENING'], true)) {
+                NumberSeriesLine::firstOrCreate(
+                    ['number_series_id' => $numberSeries->id, 'starting_date' => '2026-01-01'],
+                    [
+                        'starting_no' => 0,
+                        'ending_no' => 999999,
+                        'increment_by' => 1,
+                        'last_no_used' => 0,
+                        'no_of_digits' => 5,
+                        'prefix' => $numberSeries->prefix,
+                        'blocked' => false,
+                    ],
+                );
+            }
         }
 
         app(ProductionOrderNumberSeriesSetupService::class)->ensure();

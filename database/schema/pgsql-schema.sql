@@ -4384,7 +4384,7 @@ CREATE TABLE public.gl_entries (
     shortcut_dimension_2_code character varying(20),
     is_closing_entry boolean DEFAULT false NOT NULL,
     closing_fiscal_year integer,
-    CONSTRAINT gl_entries_source_type_check CHECK (((source_type)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'VENDOR'::character varying, 'ITEM'::character varying, 'BANK'::character varying, 'FIXED_ASSET'::character varying, 'EMPLOYEE'::character varying, 'GENERAL_JOURNAL'::character varying])::text[])))
+    CONSTRAINT gl_entries_source_type_check CHECK (((source_type)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'VENDOR'::character varying, 'ITEM'::character varying, 'BANK'::character varying, 'FIXED_ASSET'::character varying, 'EMPLOYEE'::character varying, 'COMMISSION'::character varying, 'PETTY_CASH'::character varying, 'GENERAL_JOURNAL'::character varying])::text[])))
 );
 
 

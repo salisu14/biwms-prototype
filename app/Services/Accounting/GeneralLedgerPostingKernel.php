@@ -165,6 +165,12 @@ final class GeneralLedgerPostingKernel
                 throw ValidationException::withMessages(['account_id' => "G/L account {$account->account_number} does not allow direct posting."]);
             }
 
+            if ($account->isSystemControlled() && $intent->sourceType === SourceType::GENERAL_JOURNAL->value) {
+                throw ValidationException::withMessages([
+                    'account_id' => "G/L account {$account->account_number} is system controlled and cannot be posted through a manual journal.",
+                ]);
+            }
+
             if (
                 $intent->businessId !== null
                 && Schema::hasColumn($account->getTable(), 'business_id')
