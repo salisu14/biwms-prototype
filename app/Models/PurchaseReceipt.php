@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +20,7 @@ class PurchaseReceipt extends Model
         static::creating(function (PurchaseReceipt $receipt): void {
             $receipt->business_id ??= $receipt->purchase_order_id
                 ? PurchaseOrder::query()->whereKey($receipt->purchase_order_id)->value('business_id')
-                : (request()?->integer('business_id') ?: session('active_business_id'));
+                : app(BusinessContextService::class)->resolveId();
 
             if (empty($receipt->document_number)) {
                 $receipt->document_number = self::generateDocumentNumber();

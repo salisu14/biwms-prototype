@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -97,7 +98,7 @@ class PostedPurchaseCreditMemo extends Model
                 ? PurchaseCreditMemo::query()->whereKey($memo->source_document_id)->value('business_id')
                 : ($memo->corrects_invoice_id
                     ? PurchaseInvoice::query()->whereKey($memo->corrects_invoice_id)->value('business_id')
-                    : (request()?->integer('business_id') ?: session('active_business_id')));
+                    : app(BusinessContextService::class)->resolveId());
         });
     }
 

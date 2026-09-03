@@ -19,6 +19,7 @@ class ItemLedgerEntry extends Model
 
     protected $fillable = [
         'entry_number',
+        'business_id',
         'entry_type',
         'document_type',
         'document_line_number',
@@ -48,6 +49,7 @@ class ItemLedgerEntry extends Model
     ];
 
     protected $casts = [
+        'business_id' => 'integer',
         'entry_type' => ItemLedgerEntryType::class,
         'quantity' => 'decimal:8',
         'remaining_quantity' => 'decimal:8',
@@ -64,6 +66,11 @@ class ItemLedgerEntry extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function source()
@@ -174,6 +181,20 @@ class ItemLedgerEntry extends Model
         static::creating(function (ItemLedgerEntry $entry) {
             if (! $entry->entry_number) {
                 $entry->entry_number = (static::max('entry_number') ?? 0) + 1;
+            }
+
+            if ($entry->business_id === null && $entry->source_type && $entry->source_id && class_exists((string) $entry->source_type)) {
+                $source = $entry->source()->first();
+                if ($source && array_key_exists('business_id', $source->getAttributes())) {
+                    $entry->business_id = $source->business_id;
+                }
+            }
+
+            if ($entry->business_id !== null && $entry->source_type && $entry->source_id && class_exists((string) $entry->source_type)) {
+                $sourceBusinessId = $entry->source()->value('business_id');
+                if ($sourceBusinessId !== null && (int) $sourceBusinessId !== (int) $entry->business_id) {
+                    throw new \InvalidArgumentException('Item ledger entry business does not match its source.');
+                }
             }
 
             // Future Safety Net placeholder

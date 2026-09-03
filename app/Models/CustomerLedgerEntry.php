@@ -4,11 +4,15 @@
 
 namespace App\Models;
 
+use App\Exceptions\BusinessException;
+use App\Services\Finance\GeneralLedgerService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class CustomerLedgerEntry extends Model
 {
@@ -19,6 +23,7 @@ class CustomerLedgerEntry extends Model
     protected $fillable = [
         'entry_number',
         'customer_id',
+        'business_id',
         'document_type',
         'document_number',
         'external_document_number',
@@ -72,13 +77,45 @@ class CustomerLedgerEntry extends Model
         'reversed_at' => 'datetime',
         'dimensions' => 'array',
         'currency_id' => 'integer',
+        'business_id' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (CustomerLedgerEntry $entry): void {
+            if (! $entry->exists) {
+                return;
+            }
+
+            $immutableFields = [
+                'entry_number', 'customer_id', 'business_id', 'document_type', 'document_number',
+                'external_document_number', 'description', 'comment', 'posting_date',
+                'document_date', 'due_date', 'debit_amount', 'credit_amount', 'amount',
+                'running_balance', 'currency_id', 'currency_code', 'original_debit_amount',
+                'original_credit_amount', 'currency_factor', 'general_business_posting_group_id',
+                'customer_posting_group_id', 'source_id', 'source_type', 'created_by',
+            ];
+
+            if (array_intersect($immutableFields, array_keys($entry->getDirty())) !== []) {
+                throw new BusinessException('Posted customer ledger facts are immutable. Use an approved posting, settlement, or reversal service.');
+            }
+        });
+
+        static::deleting(function (): void {
+            throw new BusinessException('Posted customer ledger entries cannot be deleted.');
+        });
+    }
 
     // ==================== RELATIONSHIPS ====================
 
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function currency(): BelongsTo
@@ -127,12 +164,14 @@ class CustomerLedgerEntry extends Model
     public function scopeOpen($query)
     {
         return $query->where('open', true)
+            ->where('reversed', false)
             ->where('remaining_amount', '!=', 0);
     }
 
     public function scopeOverdue($query, ?int $days = null)
     {
         $query = $query->where('open', true)
+            ->where('reversed', false)
             ->where('due_date', '<', now());
 
         if ($days) {
@@ -281,8 +320,22 @@ class CustomerLedgerEntry extends Model
         foreach ($normalizedApplications as $app) {
             $invoiceEntry = $lockedEntries->get((int) $app['entry_id']);
 
-            if (! $invoiceEntry || ! $invoiceEntry->is_invoice || ! $invoiceEntry->open) {
-                continue;
+            if (! $invoiceEntry || ! $invoiceEntry->is_invoice) {
+                throw new BusinessException('Customer settlement target must be a customer invoice ledger entry.');
+            }
+
+            if (! $invoiceEntry->open) {
+                throw new BusinessException('Customer invoice ledger entry is already settled.');
+            }
+
+            if ($creditEntry->business_id !== null && $invoiceEntry->business_id !== null
+                && (int) $creditEntry->business_id !== (int) $invoiceEntry->business_id) {
+                throw new BusinessException('Customer settlement entries must belong to the same business.');
+            }
+
+            if (filled($creditEntry->currency_code) && filled($invoiceEntry->currency_code)
+                && strtoupper((string) $creditEntry->currency_code) !== strtoupper((string) $invoiceEntry->currency_code)) {
+                throw new BusinessException('Customer settlement entries must use the same currency.');
             }
 
             $applyAmount = min(
@@ -450,37 +503,83 @@ class CustomerLedgerEntry extends Model
      */
     public function reverse(int $userId, string $reason): self
     {
-        if ($this->reversed) {
-            throw new \Exception('Entry is already reversed');
-        }
+        return DB::transaction(function () use ($userId, $reason): self {
+            $original = self::query()->lockForUpdate()->findOrFail($this->getKey());
 
-        return \DB::transaction(function () use ($userId, $reason) {
-            // Create reversal entry (opposite amounts)
+            if ($original->reversed) {
+                throw new \Exception('Entry is already reversed');
+            }
+
+            $originalGlEntries = $original->reversalGlEntries();
+            $originalGlEntry = $originalGlEntries->first();
+            if (! $originalGlEntry) {
+                throw new \Exception('Cannot reverse a customer ledger entry without its original G/L transaction.');
+            }
+
+            if ($original->applied_to_entries) {
+                $original->unapplyAll();
+            }
+
+            $reversalDocumentNumber = Str::limit('REV-'.$original->document_number, 20, '');
+
+            $reversalTransaction = app(GeneralLedgerService::class)->postTransaction(
+                $originalGlEntries->map(fn (GlEntry $entry): array => [
+                    'account_id' => $entry->chart_of_account_id,
+                    'debit_amount' => $entry->credit_amount,
+                    'credit_amount' => $entry->debit_amount,
+                    'description' => "Reversal of {$original->document_number}: {$reason}",
+                    'source_type' => 'CUSTOMER',
+                    'source_number' => $reversalDocumentNumber,
+                    'customer_ledger_entry_id' => $original->id,
+                ])->all(),
+                [
+                    'source_module' => 'finance',
+                    'source_type' => 'CUSTOMER',
+                    'source_id' => $original->customer_id,
+                    'source_number' => $reversalDocumentNumber,
+                    'document_type' => 'CUSTOMER_LEDGER_REVERSAL',
+                    'document_number' => $reversalDocumentNumber,
+                    'posting_date' => now(),
+                    'description' => "Reversal of {$original->document_number}: {$reason}",
+                    'currency_code' => $original->currency_code,
+                    'exchange_rate' => $original->currency_factor,
+                    'dimensions' => $original->dimensions ?? [],
+                    'actor_id' => $userId,
+                    'reversal_of_transaction_id' => $originalGlEntry->posting_transaction_id,
+                    'idempotency_key' => 'customer-ledger-reversal:'.$original->id,
+                    'transaction_key' => 'customer-ledger-reversal:'.$original->id,
+                ]
+            );
+
             $reversal = self::create([
-                'entry_number' => $this->getNextEntryNumber($this->customer_id),
-                'customer_id' => $this->customer_id,
+                'entry_number' => self::getNextEntryNumber($original->customer_id),
+                'customer_id' => $original->customer_id,
+                'business_id' => $original->business_id,
                 'document_type' => 'ADJUSTMENT',
-                'document_number' => 'REV-'.$this->document_number,
-                'description' => "Reversal of {$this->document_number}: {$reason}",
+                'document_number' => $reversalDocumentNumber,
+                'description' => "Reversal of {$original->document_number}: {$reason}",
                 'posting_date' => now(),
                 'document_date' => now(),
-                'debit_amount' => $this->credit_amount, // Swap
-                'credit_amount' => $this->debit_amount,   // Swap
-                'amount' => -$this->amount,
-                'running_balance' => $this->calculateNewBalance($this->customer_id, -$this->amount),
-                'remaining_amount' => 0, // Reversal is closed immediately
+                'debit_amount' => $original->credit_amount,
+                'credit_amount' => $original->debit_amount,
+                'amount' => -$original->amount,
+                'running_balance' => self::calculateNewBalance($original->customer_id, -$original->amount),
+                'remaining_amount' => 0,
                 'open' => false,
-                'currency_code' => $this->currency_code,
-                'original_debit_amount' => $this->original_credit_amount,
-                'original_credit_amount' => $this->original_debit_amount,
-                'currency_factor' => $this->currency_factor,
-                'general_business_posting_group_id' => $this->general_business_posting_group_id,
-                'customer_posting_group_id' => $this->customer_posting_group_id,
+                'currency_code' => $original->currency_code,
+                'original_debit_amount' => $original->original_credit_amount,
+                'original_credit_amount' => $original->original_debit_amount,
+                'currency_factor' => $original->currency_factor,
+                'general_business_posting_group_id' => $original->general_business_posting_group_id,
+                'customer_posting_group_id' => $original->customer_posting_group_id,
+                'gl_entry_id' => $reversalTransaction->glEntries->firstWhere('chart_of_account_id', $originalGlEntry->chart_of_account_id)?->id,
+                'source_id' => $original->source_id,
+                'source_type' => $original->source_type,
                 'created_by' => $userId,
+                'dimensions' => $original->dimensions,
             ]);
 
-            // Mark original as reversed
-            $this->update([
+            $original->update([
                 'reversed' => true,
                 'reversed_at' => now(),
                 'reversed_by' => $userId,
@@ -489,16 +588,21 @@ class CustomerLedgerEntry extends Model
                 'open' => false,
             ]);
 
-            // If original was applied, unapply first
-            if ($this->applied_to_entries) {
-                $this->unapplyAll();
-            }
-
-            // Create corresponding G/L reversal
-            // (Implementation depends on your G/L service)
-
             return $reversal;
         });
+    }
+
+    /** @return Collection<int, GlEntry> */
+    private function reversalGlEntries(): Collection
+    {
+        $query = GlEntry::query()->orderBy('id');
+        if ($this->gl_entry_id && ($entry = GlEntry::query()->find($this->gl_entry_id))?->posting_transaction_id) {
+            return $query->where('posting_transaction_id', $entry->posting_transaction_id)->get();
+        }
+
+        return $query->where('document_number', $this->document_number)
+            ->whereIn('document_type', ['SALES_INVOICE', 'SALES_CREDIT_MEMO', 'PAYMENT'])
+            ->get();
     }
 
     /**
@@ -551,6 +655,7 @@ class CustomerLedgerEntry extends Model
         return self::create([
             'entry_number' => self::getNextEntryNumber($invoice->customer_id),
             'customer_id' => $invoice->customer_id,
+            'business_id' => $invoice->business_id,
             'document_type' => 'SALES_INVOICE',
             'document_number' => $invoice->document_number,
             'external_document_number' => $invoice->external_document_number,
@@ -570,7 +675,12 @@ class CustomerLedgerEntry extends Model
             'currency_factor' => $invoice->currency_factor,
             'general_business_posting_group_id' => $invoice->general_business_posting_group_id,
             'customer_posting_group_id' => $invoice->customer_posting_group_id,
-            'gl_entry_id' => $invoice->glEntries()->first()?->id,
+            'gl_entry_id' => GlEntry::query()
+                ->where('document_type', 'SALES_INVOICE')
+                ->where('document_number', $invoice->document_number)
+                ->where('chart_of_account_id', $invoice->customer?->customerPostingGroup?->receivables_account_id)
+                ->orderBy('id')
+                ->value('id'),
             'source_id' => $invoice->id,
             'source_type' => PostedSalesInvoice::class,
             'created_by' => $invoice->posted_by,
@@ -587,6 +697,7 @@ class CustomerLedgerEntry extends Model
         return self::create([
             'entry_number' => self::getNextEntryNumber($creditMemo->customer_id),
             'customer_id' => $creditMemo->customer_id,
+            'business_id' => $creditMemo->business_id,
             'document_type' => 'SALES_CREDIT_MEMO',
             'document_number' => $creditMemo->document_number,
             'external_document_number' => $creditMemo->external_document_number,
@@ -606,7 +717,12 @@ class CustomerLedgerEntry extends Model
             'currency_factor' => $creditMemo->currency_factor,
             'general_business_posting_group_id' => $creditMemo->general_business_posting_group_id,
             'customer_posting_group_id' => $creditMemo->customer_posting_group_id,
-            'gl_entry_id' => $creditMemo->glEntries()->first()?->id,
+            'gl_entry_id' => GlEntry::query()
+                ->where('document_type', 'SALES_CREDIT_MEMO')
+                ->where('document_number', $creditMemo->document_number)
+                ->where('chart_of_account_id', $creditMemo->customer?->customerPostingGroup?->receivables_account_id)
+                ->orderBy('id')
+                ->value('id'),
             'source_id' => $creditMemo->id,
             'source_type' => PostedSalesCreditMemo::class,
             'created_by' => $creditMemo->posted_by,
@@ -628,6 +744,7 @@ class CustomerLedgerEntry extends Model
         $entry = self::create([
             'entry_number' => self::getNextEntryNumber($customerId),
             'customer_id' => $customerId,
+            'business_id' => null,
             'document_type' => match ($paymentMethod) {
                 'CASH' => 'CASH_RECEIPT',
                 'BANK_TRANSFER' => 'BANK_TRANSFER',
@@ -669,7 +786,8 @@ class CustomerLedgerEntry extends Model
      */
     public static function getBalance(int $customerId, ?\DateTime $asOf = null): float
     {
-        $query = self::forCustomer($customerId)->notReversed();
+        // Reversal rows are append-only; the original and correction must net.
+        $query = self::forCustomer($customerId);
 
         if ($asOf) {
             $query->where('posting_date', '<=', $asOf);

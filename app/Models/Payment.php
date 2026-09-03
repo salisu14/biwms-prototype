@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -18,7 +19,7 @@ class Payment extends Model
     protected static function booted(): void
     {
         static::creating(function (Payment $payment): void {
-            $payment->business_id ??= request()?->integer('business_id') ?: session('active_business_id');
+            $payment->business_id ??= app(BusinessContextService::class)->resolveId();
 
             if (! empty($payment->payment_number)) {
                 return;

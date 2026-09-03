@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ApprovalStatus;
+use App\Services\Business\BusinessContextService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class SalesInvoice extends Model
 {
     protected $fillable = [
+        'business_id',
         'invoice_number',
         'customer_id',
         'sales_order_id',
@@ -32,7 +34,22 @@ class SalesInvoice extends Model
         'due_date' => 'date',
         'posted_at' => 'datetime',
         'total_amount' => 'decimal:2',
+        'business_id' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (SalesInvoice $invoice): void {
+            $invoice->business_id ??= $invoice->sales_order_id
+                ? SalesOrder::query()->whereKey($invoice->sales_order_id)->value('business_id')
+                : app(BusinessContextService::class)->resolveId();
+        });
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
 
     public function location(): BelongsTo
     {

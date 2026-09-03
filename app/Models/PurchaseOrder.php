@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
+use App\Services\Business\BusinessContextService;
 use App\Services\Purchase\PurchaseOrderService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -70,7 +71,7 @@ class PurchaseOrder extends Model
         parent::boot();
 
         static::creating(function ($order) {
-            $order->business_id ??= request()?->integer('business_id') ?: session('active_business_id');
+            $order->business_id ??= app(BusinessContextService::class)->resolveId();
 
             // Default status if not provided
             if (empty($order->status)) {

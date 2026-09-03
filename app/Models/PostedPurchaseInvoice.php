@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Business\BusinessContextService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,7 +19,7 @@ class PostedPurchaseInvoice extends Model
         static::creating(function (PostedPurchaseInvoice $invoice): void {
             $invoice->business_id ??= $invoice->order_id
                 ? PurchaseOrder::query()->whereKey($invoice->order_id)->value('business_id')
-                : (request()?->integer('business_id') ?: session('active_business_id'));
+                : app(BusinessContextService::class)->resolveId();
         });
     }
 

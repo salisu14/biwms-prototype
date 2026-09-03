@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Contracts\Approvable;
 use App\Enums\ApprovalStatus;
+use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -106,7 +107,7 @@ class PurchaseCreditMemo extends Model implements Approvable
         static::creating(function (PurchaseCreditMemo $memo) {
             $memo->business_id ??= $memo->corrects_invoice_id
                 ? PurchaseInvoice::query()->whereKey($memo->corrects_invoice_id)->value('business_id')
-                : (request()?->integer('business_id') ?: session('active_business_id'));
+                : app(BusinessContextService::class)->resolveId();
 
             if (empty($memo->document_number)) {
                 $memo->document_number = self::generateNumber();

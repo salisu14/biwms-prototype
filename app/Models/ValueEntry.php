@@ -117,6 +117,7 @@ class ValueEntry extends Model
     ];
 
     private const FILLABLE_ADJUSTMENT_KEYS = [
+        'business_id',
         'cost_adjusted',
         'cost_adjustment_date',
         'cost_adjustment_entry_no',

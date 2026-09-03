@@ -60,6 +60,8 @@ class GlEntry extends Model
         'sourceable_id',
         'sourceable_type',
         'reversal_of_transaction_id',
+        'payment_application_id',
+        'reversal_of_gl_entry_id',
         'shortcut_dimension_1_code',
         'shortcut_dimension_2_code',
     ];
@@ -86,6 +88,8 @@ class GlEntry extends Model
         'reconciled' => 'boolean',
         'is_closing_entry' => 'boolean',
         'closing_fiscal_year' => 'integer',
+        'payment_application_id' => 'integer',
+        'reversal_of_gl_entry_id' => 'integer',
     ];
 
     // Relationships
@@ -102,6 +106,11 @@ class GlEntry extends Model
     public function itemLedgerEntry(): BelongsTo
     {
         return $this->belongsTo(ItemLedgerEntry::class);
+    }
+
+    public function paymentApplication(): BelongsTo
+    {
+        return $this->belongsTo(PaymentApplication::class);
     }
 
     public function sourceable()

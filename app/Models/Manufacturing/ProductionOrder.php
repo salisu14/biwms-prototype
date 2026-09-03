@@ -9,6 +9,7 @@ use App\Enums\ProductionCostSettlementClassification;
 use App\Enums\ProductionCostSettlementStatus;
 use App\Enums\ProductionOrderSourceType;
 use App\Enums\ProductionOrderStatus;
+use App\Models\Business;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralPostingSetup;
 use App\Models\GeneralProductPostingGroup;
@@ -43,6 +44,7 @@ class ProductionOrder extends Model
 
     protected $fillable = [
         'document_number',
+        'business_id',
         'status',
         'source_type',
         'source_id', // Item ID, Family ID, or Sales Order ID
@@ -141,6 +143,11 @@ class ProductionOrder extends Model
 
     // ==================== RELATIONSHIPS ====================
     // Add to existing ProductionOrder model
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
 
     public function warehouseActivities(): HasMany
     {

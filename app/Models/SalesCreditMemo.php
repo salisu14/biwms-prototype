@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Contracts\Approvable;
 use App\Enums\ApprovalStatus;
 use App\Exceptions\DocumentStateException;
+use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Model;
@@ -23,10 +24,14 @@ class SalesCreditMemo extends Model implements Approvable
             if (empty($memo->memo_number)) {
                 $memo->memo_number = self::generateMemoNumber();
             }
+            $memo->business_id ??= $memo->posted_sales_invoice_id
+                ? PostedSalesInvoice::query()->whereKey($memo->posted_sales_invoice_id)->value('business_id')
+                : app(BusinessContextService::class)->resolveId();
         });
     }
 
     protected $fillable = [
+        'business_id',
         'customer_id',
         'memo_number',
 
@@ -69,6 +74,7 @@ class SalesCreditMemo extends Model implements Approvable
         'posted_at' => 'datetime',
         'approved_at' => 'datetime',
         'total_amount' => 'decimal:2',
+        'business_id' => 'integer',
     ];
 
     /*
@@ -85,6 +91,11 @@ class SalesCreditMemo extends Model implements Approvable
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function approver(): BelongsTo

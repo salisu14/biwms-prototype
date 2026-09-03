@@ -41,9 +41,7 @@ class NumberSeriesService
 
         return DB::transaction(function () use ($seriesCode, $postingDate, $modifySeries) {
 
-            $series = NumberSeries::where('code', $seriesCode)
-                ->lockForUpdate()
-                ->first();
+            $series = $this->findSeriesForCode($seriesCode);
 
             if (! $series) {
                 throw new MissingNumberSeriesException("Number Series {$seriesCode} does not exist", [$seriesCode], codeIdentifier: 'number_series_missing');
@@ -168,7 +166,13 @@ class NumberSeriesService
      */
     public function getLastNoUsed(string $seriesCode): ?string
     {
-        $line = NumberSeriesLine::whereHas('series', fn ($q) => $q->where('code', $seriesCode))
+        $series = $this->findSeriesForCode($seriesCode);
+
+        if (! $series) {
+            return null;
+        }
+
+        $line = NumberSeriesLine::where('number_series_id', $series->id)
             ->where('starting_date', '<=', now())
             ->orderBy('starting_date', 'desc')
             ->first();
@@ -182,8 +186,14 @@ class NumberSeriesService
     public function simulateGetNextNo(string $seriesCode, int $count = 1): array
     {
         $numbers = [];
+        $series = $this->findSeriesForCode($seriesCode);
+
+        if (! $series) {
+            return $numbers;
+        }
+
         $currentLine = $this->getSeriesLine(
-            NumberSeries::where('code', $seriesCode)->first(),
+            $series,
             now()
         );
 
@@ -195,6 +205,32 @@ class NumberSeriesService
         }
 
         return $numbers;
+    }
+
+    private function findSeriesForCode(string $seriesCode): ?NumberSeries
+    {
+        $series = NumberSeries::where('code', $seriesCode)
+            ->lockForUpdate()
+            ->first();
+
+        if ($series) {
+            return $series;
+        }
+
+        $normalizedCode = trim($seriesCode);
+        $matches = NumberSeries::whereRaw('BTRIM(code) = ?', [$normalizedCode])
+            ->lockForUpdate()
+            ->get();
+
+        if ($matches->count() > 1) {
+            throw new NumberSeriesException(
+                "Multiple Number Series records resolve to {$normalizedCode}; correct the setup before posting.",
+                [$normalizedCode],
+                codeIdentifier: 'number_series_ambiguous',
+            );
+        }
+
+        return $matches->first();
     }
 
     private function getSeriesLine(NumberSeries $series, DateTimeInterface $date): ?NumberSeriesLine

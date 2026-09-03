@@ -2,8 +2,9 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Business;
+use App\Services\Business\BusinessContextService;
 use Closure;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -14,13 +15,13 @@ class SetActiveBusinessContext
         $requestedBusinessId = $request->integer('business_id');
 
         if ($requestedBusinessId > 0) {
-            $isValid = Business::query()
-                ->whereKey($requestedBusinessId)
-                ->where('is_active', true)
-                ->exists();
-
-            if ($isValid) {
-                session(['active_business_id' => $requestedBusinessId]);
+            app(BusinessContextService::class)->setActive($requestedBusinessId);
+        } elseif (filled(session('active_business_id'))) {
+            try {
+                app(BusinessContextService::class)->resolve();
+            } catch (AuthorizationException) {
+                session()->forget('active_business_id');
+                abort(403, 'Your active business access is no longer valid.');
             }
         }
 

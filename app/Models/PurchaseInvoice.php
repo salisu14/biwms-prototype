@@ -5,6 +5,7 @@
 namespace App\Models;
 
 use App\Enums\ApprovalStatus;
+use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,7 +21,7 @@ class PurchaseInvoice extends Model
         static::creating(function (PurchaseInvoice $invoice): void {
             $invoice->business_id ??= $invoice->order_id
                 ? PurchaseOrder::query()->whereKey($invoice->order_id)->value('business_id')
-                : (request()?->integer('business_id') ?: session('active_business_id'));
+                : app(BusinessContextService::class)->resolveId();
 
             if (empty($invoice->document_number)) {
                 $invoice->document_number = self::generateNumber();

@@ -5,6 +5,7 @@
 namespace App\Models;
 
 use App\Exceptions\BusinessException;
+use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +20,17 @@ class PostedSalesCreditMemo extends Model
 
     protected $table = 'posted_sales_credit_memos';
 
+    protected static function booted(): void
+    {
+        static::creating(function (PostedSalesCreditMemo $memo): void {
+            $memo->business_id ??= $memo->corrected_invoice_id
+                ? PostedSalesInvoice::query()->whereKey($memo->corrected_invoice_id)->value('business_id')
+                : (data_get($memo->dimensions, 'business_id') ?: app(BusinessContextService::class)->resolveId());
+        });
+    }
+
     protected $fillable = [
+        'business_id',
         'document_number',
         'external_document_number',
         'corrected_invoice_id',
@@ -86,6 +97,7 @@ class PostedSalesCreditMemo extends Model
         'corrected' => 'boolean',
         'corrected_at' => 'datetime',
         'dimensions' => 'array',
+        'business_id' => 'integer',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -93,6 +105,11 @@ class PostedSalesCreditMemo extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function correctedInvoice(): BelongsTo
@@ -435,8 +452,8 @@ class PostedSalesCreditMemo extends Model
             throw new BusinessException('Sales credit memo and invoice currency records must match.');
         }
 
-        $creditMemoBusinessId = $this->businessIdForApplication($creditMemo);
-        $invoiceBusinessId = $this->businessIdForApplication($invoice);
+        $creditMemoBusinessId = $creditMemo->business_id ?? $this->businessIdForApplication($creditMemo);
+        $invoiceBusinessId = $invoice->business_id ?? $this->businessIdForApplication($invoice);
 
         if ($creditMemoBusinessId !== null && $invoiceBusinessId !== null && $creditMemoBusinessId !== $invoiceBusinessId) {
             throw new BusinessException('Sales credit memo and invoice must belong to the same business.');

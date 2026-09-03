@@ -20,6 +20,7 @@ class CapacityLedgerEntry extends Model
 
     protected $fillable = [
         'production_order_id',
+        'business_id',
         'routing_line_id',
         'work_center_id',
         'machine_center_id',
@@ -46,6 +47,7 @@ class CapacityLedgerEntry extends Model
     ];
 
     protected $casts = [
+        'business_id' => 'integer',
         'posting_date' => 'date',
         'setup_time' => 'decimal:4',
         'run_time' => 'decimal:4',
@@ -67,6 +69,29 @@ class CapacityLedgerEntry extends Model
     public function productionOrder(): BelongsTo
     {
         return $this->belongsTo(ProductionOrder::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $entry): void {
+            if ($entry->production_order_id && $entry->business_id === null) {
+                $entry->business_id = $entry->productionOrder()->value('business_id');
+            }
+        });
+
+        static::saving(function (self $entry): void {
+            if ($entry->production_order_id && $entry->business_id !== null) {
+                $orderBusinessId = $entry->productionOrder()->value('business_id');
+                if ($orderBusinessId !== null && (int) $orderBusinessId !== (int) $entry->business_id) {
+                    throw new \InvalidArgumentException('Capacity ledger entry business does not match its production order.');
+                }
+            }
+        });
     }
 
     /**

@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Services\Business\BusinessContextService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,7 +16,17 @@ class PostedSalesInvoice extends Model
 
     protected $table = 'posted_sales_invoices';
 
+    protected static function booted(): void
+    {
+        static::creating(function (PostedSalesInvoice $invoice): void {
+            $invoice->business_id ??= $invoice->order_id
+                ? SalesOrder::query()->whereKey($invoice->order_id)->value('business_id')
+                : (data_get($invoice->dimensions, 'business_id') ?: app(BusinessContextService::class)->resolveId());
+        });
+    }
+
     protected $fillable = [
+        'business_id',
         'document_number',
         'external_document_number',
         'order_id',
@@ -78,6 +89,7 @@ class PostedSalesInvoice extends Model
         'cancelled' => 'boolean',
         'cancelled_at' => 'datetime',
         'dimensions' => 'array',
+        'business_id' => 'integer',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -85,6 +97,11 @@ class PostedSalesInvoice extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function salesOrder(): BelongsTo

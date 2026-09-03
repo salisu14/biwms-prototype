@@ -119,7 +119,7 @@ use App\Http\Middleware\AddSecurityHeaders;
 use App\Http\Middleware\EnforceAdminAbsoluteSessionLifetime;
 use App\Http\Middleware\EnforceAdminIdleTimeout;
 use App\Http\Middleware\SetActiveBusinessContext;
-use App\Models\Business;
+use App\Services\Business\BusinessContextService;
 use Filament\Actions\Action;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -171,10 +171,7 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(
                 PanelsRenderHook::TOPBAR_START,
                 function (): string {
-                    $businesses = Business::query()
-                        ->where('is_active', true)
-                        ->orderBy('name')
-                        ->get(['id', 'code', 'name']);
+                    $businesses = collect(app(BusinessContextService::class)->authorizedBusinesses());
 
                     if ($businesses->isEmpty()) {
                         return '';

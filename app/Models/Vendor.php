@@ -171,16 +171,18 @@ class Vendor extends Model
 
     public function getOpenBalanceAttribute(): float
     {
-        return $this->ledgerEntries()
+        return (float) $this->ledgerEntries()
             ->where('open', true)
-            ->sum('remaining_amount');
+            ->get()
+            ->sum(fn (VendorLedgerEntry $entry): float => $entry->signed_remaining_amount);
     }
 
     public function getOverdueBalanceAttribute(): float
     {
-        return $this->ledgerEntries()
+        return (float) $this->ledgerEntries()
             ->overdue()
-            ->sum('remaining_amount');
+            ->get()
+            ->sum(fn (VendorLedgerEntry $entry): float => $entry->signed_remaining_amount);
     }
 
     public function getAgingAttribute(): array

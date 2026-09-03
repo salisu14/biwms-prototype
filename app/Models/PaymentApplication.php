@@ -14,6 +14,7 @@ class PaymentApplication extends Model
 
     protected $fillable = [
         'payment_id',
+        'business_id',
         'document_type',
         'document_id',
         'document_number',
@@ -48,13 +49,26 @@ class PaymentApplication extends Model
         'reversed' => 'boolean',
         'reversed_at' => 'datetime',
         'currency_id' => 'integer',
+        'business_id' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (PaymentApplication $application): void {
+            $application->business_id ??= $application->payment?->business_id;
+        });
+    }
 
     // ==================== RELATIONSHIPS ====================
 
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function currency(): BelongsTo
@@ -81,6 +95,11 @@ class PaymentApplication extends Model
     public function reverser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reversed_by');
+    }
+
+    public function fxGlEntries()
+    {
+        return $this->hasMany(GlEntry::class, 'payment_application_id');
     }
 
     // ==================== SCOPES ====================

@@ -9,6 +9,7 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
+use App\Services\Business\BusinessContextService;
 use App\Services\DimensionManagementService;
 use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
@@ -29,6 +30,7 @@ class SalesOrder extends Model implements Approvable
     use ApprovableTrait, HasFactory;
 
     protected $fillable = [
+        'business_id',
         'order_number',
         'external_document_number',
         'order_type',
@@ -102,6 +104,7 @@ class SalesOrder extends Model implements Approvable
         'approved_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'dimensions' => 'array',
+        'business_id' => 'integer',
         'status' => SalesOrderStatus::class,
         'order_type' => SalesOrderType::class,
         'shipping_method' => ShippingMethod::class,
@@ -121,6 +124,7 @@ class SalesOrder extends Model implements Approvable
         parent::boot();
 
         static::creating(function (SalesOrder $order) {
+            $order->business_id ??= app(BusinessContextService::class)->resolveId();
             // Generate order number if missing
             if (empty($order->order_number)) {
                 $order->order_number = self::generateOrderNumber($order->order_type);
@@ -218,6 +222,11 @@ class SalesOrder extends Model implements Approvable
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
     }
 
     public function location(): BelongsTo
