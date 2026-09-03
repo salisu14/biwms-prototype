@@ -26,7 +26,7 @@ class PhysicalInventoryJournalPrintController extends Controller
             'lines.unitOfMeasure',
         ]);
 
-        $header = $companyInformationService->getReportHeader();
+        $header = $companyInformationService->getReportHeader($journal->business_id ?? null);
 
         $data = [
             'journal' => $journal,

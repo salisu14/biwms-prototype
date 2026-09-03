@@ -101,7 +101,7 @@ class CustomerSettlementHistoryService
                 NULL::text as reference_key,
                 source_cle.id as source_ledger_entry_id,
                 target_cle.id as target_ledger_entry_id,
-                COALESCE(NULLIF(p.dimensions->>'business_id', '')::bigint, NULLIF(psi.dimensions->>'business_id', '')::bigint) as business_id,
+                COALESCE(p.business_id, psi.business_id) as business_id,
                 psi.document_number as original_invoice_number,
                 'canonical'::text as trace_status
             ");
@@ -112,7 +112,7 @@ class CustomerSettlementHistoryService
             'target_document_number' => 'pa.document_number',
             'application_date' => 'pa.applied_at',
             'currency_code' => 'COALESCE(p.currency_code, psi.currency_code)',
-            'business_id' => "COALESCE(NULLIF(p.dimensions->>'business_id', '')::bigint, NULLIF(psi.dimensions->>'business_id', '')::bigint)",
+            'business_id' => 'COALESCE(p.business_id, psi.business_id)',
         ]);
     }
 
@@ -156,7 +156,7 @@ class CustomerSettlementHistoryService
                 cla.idempotency_key as reference_key,
                 cla.source_customer_ledger_entry_id as source_ledger_entry_id,
                 cla.target_customer_ledger_entry_id as target_ledger_entry_id,
-                COALESCE(NULLIF(pscm.dimensions->>'business_id', '')::bigint, NULLIF(psi.dimensions->>'business_id', '')::bigint) as business_id,
+                COALESCE(pscm.business_id, psi.business_id) as business_id,
                 COALESCE(original_psi.document_number, pscm.corrected_invoice_number) as original_invoice_number,
                 'canonical'::text as trace_status
             ");
@@ -167,7 +167,7 @@ class CustomerSettlementHistoryService
             'target_document_number' => 'psi.document_number',
             'application_date' => 'cla.applied_at',
             'currency_code' => 'cla.currency_code',
-            'business_id' => "COALESCE(NULLIF(pscm.dimensions->>'business_id', '')::bigint, NULLIF(psi.dimensions->>'business_id', '')::bigint)",
+            'business_id' => 'COALESCE(pscm.business_id, psi.business_id)',
         ]);
     }
 

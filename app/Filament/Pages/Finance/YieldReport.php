@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages\Finance;
 
 use App\Models\Manufacturing\ProductionOrder;
+use App\Services\Business\BusinessContextService;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Pages\Page;
@@ -28,7 +29,7 @@ use UnitEnum;
  *   Standard Consumption (from BOM qty × order qty)
  *   Actual Consumption  (from production_order_components.actual_quantity_consumed)
  *   Consumption Variance (actual - standard, positive = over-consumed)
- *   Standard Output     (production_order.quantity)
+ *   Standard Output     (production_order.quantity_base, the posting UOM)
  *   Actual Output       (from item_ledger_entries type=output for this prod order)
  *   Output Variance     (standard - actual, positive = shortfall)
  *   Yield %             (actual_output / standard_output × 100)
@@ -56,9 +57,12 @@ class YieldReport extends Page implements HasTable
 
     public function table(Table $table): Table
     {
+        $businessId = app(BusinessContextService::class)->resolveId();
+
         return $table
             ->query(
                 ProductionOrder::query()
+                    ->when($businessId !== null, fn ($query) => $query->where('production_orders.business_id', $businessId))
                     ->with(['item'])
                     ->select('production_orders.*')
                     ->selectRaw('coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at) as production_date_ref')
@@ -84,10 +88,11 @@ class YieldReport extends Page implements HasTable
                     ->selectRaw(
                         "(SELECT COALESCE(SUM(ile.quantity), 0)
                            FROM item_ledger_entries ile
-                          WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
+                          WHERE ile.source_type = ?
                             AND ile.source_id = production_orders.id
                             AND LOWER(ile.entry_type) = 'output'
-                         ) AS actual_output"
+                         ) AS actual_output",
+                        [ProductionOrder::class]
                     )
                     ->selectRaw(
                         '(
@@ -103,14 +108,15 @@ class YieldReport extends Page implements HasTable
                     )
                     ->selectRaw(
                         "(
-                            production_orders.quantity -
+                            COALESCE(NULLIF(production_orders.quantity_base, 0), production_orders.quantity) -
                             (SELECT COALESCE(SUM(ile.quantity), 0)
                                FROM item_ledger_entries ile
-                              WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
+                              WHERE ile.source_type = ?
                                 AND ile.source_id = production_orders.id
                                 AND LOWER(ile.entry_type) = 'output'
                             )
-                        ) AS output_variance"
+                        ) AS output_variance",
+                        [ProductionOrder::class]
                     )
             )
             ->columns([
@@ -175,8 +181,9 @@ class YieldReport extends Page implements HasTable
 
                 // ── OUTPUT ───────────────────────────────────────────────────────
 
-                TextColumn::make('quantity')
+                TextColumn::make('planned_output_base')
                     ->label('Std Output')
+                    ->state(fn ($record) => (float) ($record->quantity_base ?: $record->quantity))
                     ->numeric(decimalPlaces: 2)
                     ->alignment('right')
                     ->color('gray')
@@ -192,7 +199,6 @@ class YieldReport extends Page implements HasTable
 
                 TextColumn::make('output_variance')
                     ->label('Output Variance')
-                    ->state(fn ($record) => (float) $record->quantity - (float) $record->actual_output)
                     ->numeric(decimalPlaces: 2)
                     ->alignment('right')
                     ->color(fn ($state) => $state > 0 ? 'danger' : ($state < 0 ? 'info' : null))
@@ -200,19 +206,14 @@ class YieldReport extends Page implements HasTable
 
                 TextColumn::make('yield_pct')
                     ->label('Yield %')
-                    ->state(fn ($record) => $record->quantity > 0
-                        ? round(((float) $record->actual_output / (float) $record->quantity) * 100, 1)
-                        : 0
-                    )
-                    ->numeric(decimalPlaces: 1)
-                    ->suffix('%')
+                    ->state(fn ($record) => self::yieldDisplay($record))
                     ->alignment('right')
-                    ->color(fn ($state) => match (true) {
-                        $state >= 98 => 'success',
-                        $state >= 90 => 'warning',
+                    ->color(fn ($state) => is_numeric($state) ? match (true) {
+                        (float) $state >= 98 => 'success',
+                        (float) $state >= 90 => 'warning',
                         default => 'danger',
-                    })
-                    ->weight(fn ($state) => $state < 90 ? 'bold' : null),
+                    } : 'gray')
+                    ->weight(fn ($state) => is_numeric($state) && (float) $state < 90 ? 'bold' : null),
 
                 TextColumn::make('unit_of_measure_code')
                     ->label('UOM')
@@ -251,13 +252,35 @@ class YieldReport extends Page implements HasTable
                     ->query(fn (Builder $query) => $query->whereRaw(
                         "(SELECT COALESCE(SUM(ile.quantity), 0)
                            FROM item_ledger_entries ile
-                          WHERE ile.source_type = 'App\\\\Models\\\\Manufacturing\\\\ProductionOrder'
+                          WHERE ile.source_type = ?
                             AND ile.source_id = production_orders.id
                             AND LOWER(ile.entry_type) = 'output'
-                         ) < production_orders.quantity * 0.9"
+                         ) < COALESCE(NULLIF(production_orders.quantity_base, 0), production_orders.quantity) * 0.9",
+                        [ProductionOrder::class]
                     )),
             ])
             ->striped()
             ->paginated([25, 50, 100, 'all']);
+    }
+
+    private static function yieldDisplay(ProductionOrder $record): string|float
+    {
+        $status = $record->status?->value ?? (string) $record->status;
+        $planned = (float) ($record->quantity_base ?: $record->quantity);
+        $actual = (float) $record->actual_output;
+
+        if ($planned <= 0) {
+            return 'N/A';
+        }
+
+        if ($actual <= 0 && in_array($status, ['SIMULATED', 'PLANNED', 'FIRM_PLANNED'], true)) {
+            return 'N/A';
+        }
+
+        if ($actual <= 0 && $status === 'RELEASED') {
+            return 'Pending';
+        }
+
+        return round(($actual / $planned) * 100, 1);
     }
 }

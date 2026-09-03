@@ -12,6 +12,7 @@ use App\Models\CustomerLedgerEntry;
 use App\Models\Payment;
 use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
+use App\Services\Company\CompanyInformationService;
 use App\Services\Customer\CustomerSubledgerSummaryService;
 use Filament\Pages\Page;
 
@@ -33,6 +34,8 @@ class CustomerSubledgerSummary extends Page
 
     public ?string $monthFilter = null;
 
+    public ?int $businessId = null;
+
     public ?Customer $customer = null;
 
     public string $printUrl = '';
@@ -48,6 +51,9 @@ class CustomerSubledgerSummary extends Page
         $this->monthFilter = filled(request()->query('monthFilter'))
             ? (string) request()->query('monthFilter')
             : null;
+        $this->businessId = app(CompanyInformationService::class)->resolveBusinessId(
+            request()->integer('business_id') ?: (request()->integer('businessId') ?: null),
+        );
 
         $this->customer = $this->customerId !== null
             ? Customer::query()->find($this->customerId)
@@ -57,6 +63,7 @@ class CustomerSubledgerSummary extends Page
             'customerId' => $this->customerId,
             'documentTypeFilter' => $this->documentTypeFilter,
             'monthFilter' => $this->monthFilter,
+            'business_id' => $this->businessId,
         ], fn ($value) => filled($value));
 
         $this->printUrl = route('reports.customer-subledger-summary.print', $query);
@@ -69,6 +76,7 @@ class CustomerSubledgerSummary extends Page
             'customer_id' => $this->customerId,
             'document_type' => $this->documentTypeFilter,
             'month_filter' => $this->monthFilter,
+            'business_id' => $this->businessId,
         ]);
 
         return [

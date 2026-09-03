@@ -12,7 +12,7 @@
                         tag="a"
                         color="gray"
                         icon="heroicon-o-arrow-down-tray"
-                        :href="route('reports.fixed-asset-list.print', array_merge($this->formData ?? [], ['format' => 'csv']))"
+                        :href="route('reports.fixed-asset-list.print', array_merge($this->formData ?? [], ['business_id' => $this->businessId, 'format' => 'csv']))"
                     >
                         CSV
                     </x-filament::button>
@@ -20,7 +20,7 @@
                         tag="a"
                         color="info"
                         icon="heroicon-o-printer"
-                        :href="route('reports.fixed-asset-list.print', $this->formData ?? [])"
+                        :href="route('reports.fixed-asset-list.print', array_merge($this->formData ?? [], ['business_id' => $this->businessId]))"
                         target="_blank"
                     >
                         Print

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages\Finance;
 
+use App\Services\Company\CompanyInformationService;
 use App\Services\Finance\GroupSummaryService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -29,8 +30,14 @@ class GroupSummaryReport extends Page implements HasForms
 
     public ?array $formData = [];
 
+    public ?int $businessId = null;
+
     public function mount(): void
     {
+        $this->businessId = app(CompanyInformationService::class)->resolveBusinessId(
+            request()->integer('business_id') ?: null,
+        );
+
         $this->form->fill([
             'startDate' => now()->startOfYear()->toDateString(),
             'endDate' => now()->toDateString(),
@@ -83,7 +90,7 @@ class GroupSummaryReport extends Page implements HasForms
         $category = $this->formData['category'] ?: null;
         $includeSubLedgers = (bool) ($this->formData['includeSubLedgers'] ?? true);
 
-        return app(GroupSummaryService::class)->generate($start, $end, $category, $includeSubLedgers);
+        return app(GroupSummaryService::class)->generate($start, $end, $category, $includeSubLedgers, $this->businessId);
     }
 
     /** @return array<string, string> */
@@ -99,7 +106,7 @@ class GroupSummaryReport extends Page implements HasForms
         $service = app(GroupSummaryService::class);
         $options = ['' => 'Trial Balance (All Groups)'];
 
-        foreach ($service->getActiveCategories($start, $end) as $key => $label) {
+        foreach ($service->getActiveCategories($start, $end, $this->businessId) as $key => $label) {
             $options[$key] = $label;
         }
 

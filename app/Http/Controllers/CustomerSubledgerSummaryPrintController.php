@@ -22,11 +22,17 @@ class CustomerSubledgerSummaryPrintController extends Controller
         $customerId = $request->integer('customerId') ?: null;
         $documentTypeFilter = $request->filled('documentTypeFilter') ? (string) $request->query('documentTypeFilter') : null;
         $monthFilter = $request->filled('monthFilter') ? (string) $request->query('monthFilter') : null;
+        $businessId = $this->companyInformationService->resolveBusinessId(
+            $request->filled('business_id')
+                ? (int) $request->query('business_id')
+                : ($request->filled('businessId') ? (int) $request->query('businessId') : null),
+        );
 
         $report = $service->generate([
             'customer_id' => $customerId,
             'document_type' => $documentTypeFilter,
             'month_filter' => $monthFilter,
+            'business_id' => $businessId,
         ]);
 
         if ((string) $request->query('format') === 'csv') {
@@ -70,7 +76,7 @@ class CustomerSubledgerSummaryPrintController extends Controller
         }
 
         return view('reports.customer-subledger-summary-print', [
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
             'report' => $report,
             'customer' => $report['customer'] ?? null,
             'documentTypeFilter' => $documentTypeFilter,

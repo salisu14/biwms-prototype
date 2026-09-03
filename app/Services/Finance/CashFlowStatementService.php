@@ -12,21 +12,26 @@ use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\GlEntry;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class CashFlowStatementService
 {
+    private ?int $businessId = null;
+
     public function generate(
         Carbon $startDate,
         Carbon $endDate,
         string $method = 'indirect',
         ?int $cashFlowScheduleId = null,
         ?int $profitAndLossScheduleId = null,
-        ?int $balanceSheetScheduleId = null
+        ?int $balanceSheetScheduleId = null,
+        ?int $businessId = null
     ): array {
+        $this->businessId = $businessId;
         $resolvedMethod = in_array($method, ['direct', 'indirect'], true) ? $method : 'indirect';
-        $cashAccountIds = $this->resolveCashAccountIds();
+        $cashAccountIds = $this->cashAccountIdsForBusiness($this->resolveCashAccountIds());
         $cashAccountNames = ChartOfAccount::query()
             ->whereIn('id', $cashAccountIds->all())
             ->orderBy('account_number')
@@ -123,7 +128,8 @@ class CashFlowStatementService
         string $method = 'indirect',
         ?int $cashFlowScheduleId = null,
         ?int $profitAndLossScheduleId = null,
-        ?int $balanceSheetScheduleId = null
+        ?int $balanceSheetScheduleId = null,
+        ?int $businessId = null
     ): array {
         $current = $this->generate(
             $startDate,
@@ -132,6 +138,7 @@ class CashFlowStatementService
             $cashFlowScheduleId,
             $profitAndLossScheduleId,
             $balanceSheetScheduleId,
+            $businessId,
         );
 
         if ($compareStartDate === null || $compareEndDate === null) {
@@ -145,6 +152,7 @@ class CashFlowStatementService
             $cashFlowScheduleId,
             $profitAndLossScheduleId,
             $balanceSheetScheduleId,
+            $businessId,
         );
 
         $current['compare_period'] = [
@@ -557,10 +565,10 @@ class CashFlowStatementService
             return 0.0;
         }
 
-        return (float) GlEntry::query()
+        return (float) $this->glQuery()
             ->whereIn('chart_of_account_id', $cashAccountIds->all())
             ->whereDate('posting_date', '<=', $asOfDate)
-            ->sum(DB::raw('debit_amount - credit_amount'));
+            ->sum(DB::raw('COALESCE(debit_amount_lcy, debit_amount) - COALESCE(credit_amount_lcy, credit_amount)'));
     }
 
     /**
@@ -574,7 +582,7 @@ class CashFlowStatementService
             return collect();
         }
 
-        $transactionNumbers = GlEntry::query()
+        $transactionNumbers = $this->glQuery()
             ->whereIn('chart_of_account_id', $cashAccountIds->all())
             ->whereBetween('posting_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->pluck('transaction_number')
@@ -586,7 +594,7 @@ class CashFlowStatementService
             return collect();
         }
 
-        return GlEntry::query()
+        return $this->glQuery()
             ->with('chartOfAccount')
             ->whereIn('transaction_number', $transactionNumbers->all())
             ->whereBetween('posting_date', [$startDate->toDateString(), $endDate->toDateString()])
@@ -597,7 +605,7 @@ class CashFlowStatementService
             ->map(function (Collection $entries) use ($cashAccountIds, $mapping): ?array {
                 $cashDelta = (float) $entries
                     ->filter(fn (GlEntry $entry): bool => $cashAccountIds->contains((int) $entry->chart_of_account_id))
-                    ->sum(fn (GlEntry $entry): float => (float) $entry->debit_amount - (float) $entry->credit_amount);
+                    ->sum(fn (GlEntry $entry): float => (float) ($entry->debit_amount_lcy ?? $entry->debit_amount) - (float) ($entry->credit_amount_lcy ?? $entry->credit_amount));
 
                 if (abs($cashDelta) <= 0.005) {
                     return null;
@@ -783,7 +791,7 @@ class CashFlowStatementService
             return 0.0;
         }
 
-        $entries = GlEntry::query()
+        $entries = $this->glQuery()
             ->with('chartOfAccount')
             ->whereBetween('posting_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->whereIn('chart_of_account_id', $incomeStatementAccountIds->all())
@@ -791,7 +799,7 @@ class CashFlowStatementService
 
         return (float) $entries->sum(function (GlEntry $entry): float {
             $category = $entry->chartOfAccount?->account_category?->value;
-            $debitMinusCredit = (float) $entry->debit_amount - (float) $entry->credit_amount;
+            $debitMinusCredit = (float) ($entry->debit_amount_lcy ?? $entry->debit_amount) - (float) ($entry->credit_amount_lcy ?? $entry->credit_amount);
 
             return match ($category) {
                 AccountCategory::REVENUE->value => $debitMinusCredit * -1,
@@ -809,7 +817,7 @@ class CashFlowStatementService
             return 0.0;
         }
 
-        $entries = GlEntry::query()
+        $entries = $this->glQuery()
             ->with('chartOfAccount')
             ->whereBetween('posting_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->whereIn('chart_of_account_id', $operatingExpenseAccountIds->all())
@@ -830,7 +838,7 @@ class CashFlowStatementService
             })
             ->get();
 
-        return (float) $entries->sum(fn (GlEntry $entry): float => (float) $entry->debit_amount - (float) $entry->credit_amount);
+        return (float) $entries->sum(fn (GlEntry $entry): float => (float) ($entry->debit_amount_lcy ?? $entry->debit_amount) - (float) ($entry->credit_amount_lcy ?? $entry->credit_amount));
     }
 
     /**
@@ -857,10 +865,10 @@ class CashFlowStatementService
             return 0.0;
         }
 
-        return (float) GlEntry::query()
+        return (float) $this->glQuery()
             ->whereIn('chart_of_account_id', $accountIds->all())
             ->whereDate('posting_date', '<=', $asOfDate)
-            ->sum(DB::raw('debit_amount - credit_amount'));
+            ->sum(DB::raw('COALESCE(debit_amount_lcy, debit_amount) - COALESCE(credit_amount_lcy, credit_amount)'));
     }
 
     /**
@@ -881,5 +889,32 @@ class CashFlowStatementService
         }
 
         return (($current - $compare) / abs($compare)) * 100;
+    }
+
+    private function glQuery(): Builder
+    {
+        return GlEntry::query()->when(
+            $this->businessId !== null,
+            fn (Builder $query): Builder => $query->where('business_id', $this->businessId),
+        );
+    }
+
+    /**
+     * BankAccount has no persisted business ownership in the current schema.
+     * Restrict the cash universe to accounts with G/L activity in the selected
+     * business so another business's unused bank account cannot enter the report.
+     */
+    private function cashAccountIdsForBusiness(Collection $accountIds): Collection
+    {
+        if ($this->businessId === null || $accountIds->isEmpty()) {
+            return $accountIds;
+        }
+
+        return $this->glQuery()
+            ->whereIn('chart_of_account_id', $accountIds->all())
+            ->distinct()
+            ->pluck('chart_of_account_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values();
     }
 }

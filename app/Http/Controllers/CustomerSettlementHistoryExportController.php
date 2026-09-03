@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Services\Company\CompanyInformationService;
 use App\Services\Finance\CustomerSettlementHistoryService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -12,9 +13,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CustomerSettlementHistoryExportController extends Controller
 {
-    public function __invoke(Request $request, CustomerSettlementHistoryService $service): StreamedResponse|Response
+    public function __invoke(Request $request, CustomerSettlementHistoryService $service, ?CompanyInformationService $companyInformationService = null): StreamedResponse|Response
     {
         abort_unless($request->user()?->can('finance.customer_settlement_history.export'), 403);
+
+        $companyInformationService ??= app(CompanyInformationService::class);
 
         $filters = $request->only([
             'customer_id',
@@ -26,12 +29,17 @@ class CustomerSettlementHistoryExportController extends Controller
             'currency_code',
             'business_id',
         ]);
+        $businessId = $companyInformationService->resolveBusinessId($request->integer('business_id') ?: null);
+        $filters['business_id'] = $businessId;
 
         if ((string) $request->query('format') === 'pdf') {
+            $company = $companyInformationService->getReportHeader($businessId);
+
             return Pdf::loadView('pdf.customer-settlement-history', [
                 'rows' => $service->rows($filters),
                 'filters' => $filters,
                 'generatedAt' => now(),
+                'company' => $company,
             ])
                 ->setPaper('a4', 'landscape')
                 ->download('customer-settlement-history.pdf');

@@ -19,6 +19,7 @@ class ExpenseReportExportController extends Controller
 
     public function __invoke(Request $request): View|StreamedResponse
     {
+        $businessId = $this->companyInformationService->resolveBusinessId($request->integer('business_id') ?: null);
         $period = (string) $request->query('period', 'monthly');
         $anchorDate = Carbon::parse((string) $request->query('anchorDate', now()->toDateString()));
         $categoryCode = filled($request->query('categoryCode'))
@@ -90,7 +91,7 @@ class ExpenseReportExportController extends Controller
 
         return view('reports.expense-report-print', [
             'report' => $report,
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
         ]);
     }
 

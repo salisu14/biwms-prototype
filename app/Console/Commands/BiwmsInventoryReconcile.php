@@ -36,6 +36,7 @@ class BiwmsInventoryReconcile extends Command
         $stockMismatches = $this->stockMismatches();
         $negativeStockViolations = $this->negativeStockViolations();
         $openItemLedgerEntries = $this->openItemLedgerEntries();
+        $expectedCostOpenReceipts = $this->expectedCostOpenReceipts();
         $missingValueEntries = $this->missingValueEntries();
         $valueEntryMismatches = $this->valueEntryMismatches();
         $missingLedgerDocuments = $this->missingLedgerDocuments();
@@ -75,6 +76,7 @@ class BiwmsInventoryReconcile extends Command
             'stock_mismatches' => $stockMismatches,
             'negative_stock_violations' => $negativeStockViolations,
             'open_item_ledger_entries' => $openItemLedgerEntries,
+            'expected_cost_open_receipts' => $expectedCostOpenReceipts,
             'missing_value_entries' => $missingValueEntries,
             'value_entry_mismatches' => $valueEntryMismatches,
             'missing_item_ledger_entries_for_posted_documents' => $missingLedgerDocuments,
@@ -153,6 +155,15 @@ class BiwmsInventoryReconcile extends Command
             $entry['document_number'],
             number_format($entry['quantity'], 4, '.', ''),
             number_format($entry['remaining_quantity'], 4, '.', ''),
+        ));
+        $this->section('Valid open expected-cost receipts', $expectedCostOpenReceipts, $details, fn (array $entry): string => sprintf(
+            '[%s] #%s %s %s qty=%s expected_remaining=%s',
+            $entry['severity'],
+            $entry['entry_number'],
+            $entry['item_code'],
+            $entry['document_number'],
+            number_format($entry['quantity'], 4, '.', ''),
+            number_format($entry['expected_remaining_quantity'], 4, '.', ''),
         ));
         $this->section('Missing value entries', $missingValueEntries, $details, fn (array $entry): string => sprintf(
             '[%s] #%s %s %s',
@@ -718,6 +729,69 @@ class BiwmsInventoryReconcile extends Command
     }
 
     /**
+     * Receipt layers with expected cost and no actual invoice valuation are
+     * valid until the related purchase invoice is posted.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function expectedCostOpenReceipts(): array
+    {
+        return ItemLedgerEntry::query()
+            ->with('item:id,item_code')
+            ->where('document_type', 'PURCHASE_RECEIPT')
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('value_entries')
+                    ->whereColumn('value_entries.item_ledger_entry_no', 'item_ledger_entries.entry_number')
+                    ->where('value_entries.value_entry_state', 'expected')
+                    ->where('value_entries.expected_cost', true);
+            })
+            ->get()
+            ->map(function (ItemLedgerEntry $entry): ?array {
+                $actualQuantity = (float) ValueEntry::query()
+                    ->where('item_ledger_entry_no', $entry->entry_number)
+                    ->where('value_entry_state', 'actual')
+                    ->where(function ($query): void {
+                        $query->where('expected_cost', false)->orWhereNull('expected_cost');
+                    })
+                    ->sum('quantity');
+                $expectedQuantity = (float) ValueEntry::query()
+                    ->where('item_ledger_entry_no', $entry->entry_number)
+                    ->where('value_entry_state', 'expected')
+                    ->where('expected_cost', true)
+                    ->sum('quantity');
+                $expectedRemainingQuantity = (float) ValueEntry::query()
+                    ->where('item_ledger_entry_no', $entry->entry_number)
+                    ->where('value_entry_state', 'expected')
+                    ->where('expected_cost', true)
+                    ->sum('remaining_quantity');
+
+                if (abs($actualQuantity) > 0.0001
+                    || abs($expectedQuantity - (float) $entry->quantity) > 0.0001
+                    || $expectedRemainingQuantity <= 0.0001) {
+                    return null;
+                }
+
+                return [
+                    'entry_number' => $entry->entry_number,
+                    'item_id' => $entry->item_id,
+                    'item_code' => $entry->item?->item_code,
+                    'document_number' => $entry->document_number,
+                    'quantity' => round((float) $entry->quantity, 4),
+                    'expected_remaining_quantity' => round($expectedRemainingQuantity, 4),
+                    ...$this->findingMetadata(
+                        classification: 'valid_expected_cost_receipt',
+                        severity: 'info',
+                        suggestedRemediation: 'No action required. Complete the related purchase invoice actualization when the supplier invoice is posted.'
+                    ),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     private function valueEntryMismatches(): array
@@ -739,7 +813,26 @@ class BiwmsInventoryReconcile extends Command
                             ->orWhereNull('expected_cost');
                     })
                     ->sum('quantity');
+                $expectedValueEntryQuantity = (float) ValueEntry::query()
+                    ->where('item_ledger_entry_no', $entry->entry_number)
+                    ->where('value_entry_state', 'expected')
+                    ->where('expected_cost', true)
+                    ->sum('quantity');
+                $expectedRemainingQuantity = (float) ValueEntry::query()
+                    ->where('item_ledger_entry_no', $entry->entry_number)
+                    ->where('value_entry_state', 'expected')
+                    ->where('expected_cost', true)
+                    ->sum('remaining_quantity');
                 $valueEntryCost = (float) $economicValueService->economicActualValueForItemLedgerEntry($entry);
+
+                $isOpenExpectedCostReceipt = $entry->document_type === 'PURCHASE_RECEIPT'
+                    && abs($actualValueEntryQuantity) <= 0.0001
+                    && abs($expectedValueEntryQuantity - (float) $entry->quantity) <= 0.0001
+                    && $expectedRemainingQuantity > 0.0001;
+
+                if ($isOpenExpectedCostReceipt) {
+                    return null;
+                }
 
                 $quantityMatches = abs((float) $entry->quantity - $actualValueEntryQuantity) <= 0.0001;
                 $costMatches = (float) $entry->quantity < 0

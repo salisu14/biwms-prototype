@@ -6,11 +6,14 @@ namespace App\Services\Customer;
 
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
+use App\Services\Business\BusinessContextService;
 
 class CustomerSubledgerSummaryService
 {
+    public function __construct(private readonly BusinessContextService $businessContext) {}
+
     /**
-     * @param  array{customer_id?: int|null, document_type?: string|null, month_filter?: string|null}  $filters
+     * @param  array{customer_id?: int|null, document_type?: string|null, month_filter?: string|null, business_id?: int|null}  $filters
      * @return array<string, mixed>
      */
     public function generate(array $filters = []): array
@@ -18,12 +21,16 @@ class CustomerSubledgerSummaryService
         $customerId = filled($filters['customer_id'] ?? null) ? (int) $filters['customer_id'] : null;
         $documentType = filled($filters['document_type'] ?? null) ? (string) $filters['document_type'] : null;
         $monthFilter = filled($filters['month_filter'] ?? null) ? (string) $filters['month_filter'] : null;
+        $businessId = $this->businessContext->resolveId(
+            filled($filters['business_id'] ?? null) ? (int) $filters['business_id'] : null
+        );
 
         $customer = $customerId !== null ? Customer::query()->find($customerId) : null;
 
         $entries = CustomerLedgerEntry::query()
             ->with('customer')
             ->when($customerId !== null, fn ($query) => $query->where('customer_id', $customerId))
+            ->when($businessId !== null, fn ($query) => $query->where('business_id', $businessId))
             ->when($documentType !== null, fn ($query) => $query->where('document_type', $documentType))
             ->when($monthFilter !== null, fn ($query) => $query->whereRaw("to_char(posting_date, 'YYYY-MM') = ?", [$monthFilter]))
             ->orderByDesc('posting_date')
@@ -57,7 +64,9 @@ class CustomerSubledgerSummaryService
             ->all();
 
         $today = now()->startOfDay();
-        $openEntries = $entries->filter(fn (CustomerLedgerEntry $entry): bool => (bool) $entry->open && abs((float) $entry->remaining_amount) > 0);
+        $openEntries = $entries->filter(fn (CustomerLedgerEntry $entry): bool => (bool) $entry->open
+            && ! $entry->reversed
+            && abs((float) $entry->remaining_amount) > 0);
         $aging = [
             'current' => 0.0,
             '1_30' => 0.0,
@@ -103,7 +112,7 @@ class CustomerSubledgerSummaryService
                 'credit' => (float) $entries->sum('credit_amount'),
                 'net' => (float) $entries->sum(fn (CustomerLedgerEntry $entry): float => (float) $entry->debit_amount - (float) $entry->credit_amount),
                 'open_remaining' => (float) $entries
-                    ->where('open', true)
+                    ->filter(fn (CustomerLedgerEntry $entry): bool => (bool) $entry->open && ! $entry->reversed)
                     ->sum(fn (CustomerLedgerEntry $entry): float => $entry->signed_remaining_amount),
             ],
         ];

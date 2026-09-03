@@ -17,6 +17,7 @@ class CashFlowStatementPrintController extends Controller
 
     public function __invoke(Request $request, CashFlowStatementService $service): View|StreamedResponse
     {
+        $businessId = $this->companyInformationService->resolveBusinessId($request->integer('business_id') ?: null);
         $startDate = Carbon::parse((string) $request->query('startDate', now()->startOfMonth()->toDateString()))->startOfDay();
         $endDate = Carbon::parse((string) $request->query('endDate', now()->toDateString()))->endOfDay();
         $compareStartDate = $request->filled('compareStartDate')
@@ -43,7 +44,7 @@ class CashFlowStatementPrintController extends Controller
             $method,
             $cashFlowScheduleId,
             $profitAndLossScheduleId,
-            $balanceSheetScheduleId
+            $balanceSheetScheduleId, $businessId
         );
 
         if ((string) $request->query('format') === 'csv') {
@@ -94,7 +95,7 @@ class CashFlowStatementPrintController extends Controller
 
         return view('reports.cash-flow-statement-print', [
             'reportData' => $reportData,
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
         ]);
     }
 }

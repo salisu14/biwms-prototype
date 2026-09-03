@@ -12,6 +12,7 @@ use App\Models\CustomerPostingGroup;
 use App\Models\GlEntry;
 use App\Models\InventoryPostingSetup;
 use App\Models\Payment;
+use App\Models\PostingTransaction;
 use App\Models\ValueEntry;
 use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
@@ -39,6 +40,8 @@ class BiwmsFinanceReconcile extends Command
             'customer_ledger_receivables_mismatches' => $this->customerLedgerReceivablesMismatches(),
             'vendor_ledger_payables_mismatches' => $this->vendorLedgerPayablesMismatches(),
             'bank_ledger_gl_mismatches' => $this->bankLedgerGlMismatches(),
+            'valid_bank_opening_balance_corrections' => $this->validBankOpeningBalanceCorrections(),
+            'invalid_bank_opening_balance_corrections' => $this->invalidBankOpeningBalanceCorrections(),
             'inventory_value_gl_mismatches' => $this->inventoryValueGlMismatches(),
             'missing_control_account_entries' => $this->missingControlAccountEntries(),
             'value_entries_gl_posted_without_posting_transaction' => $this->valueEntriesGlPostedWithoutPostingTransaction(),
@@ -129,6 +132,25 @@ class BiwmsFinanceReconcile extends Command
             number_format($entry['subledger_balance'], 2, '.', ''),
             number_format($entry['gl_balance'], 2, '.', ''),
             number_format($entry['difference'], 2, '.', ''),
+        ));
+
+        $this->section('Valid bank opening-balance corrections', $report['valid_bank_opening_balance_corrections'], $details, fn (array $entry): string => sprintf(
+            '[%s] %s %s amount=%s original_tx=%s correction_tx=%s',
+            $entry['severity'],
+            $entry['bank_account_code'],
+            $entry['document_number'],
+            number_format($entry['amount'], 2, '.', ''),
+            $entry['original_transaction_id'],
+            $entry['correction_transaction_id'],
+        ));
+
+        $this->section('Invalid bank opening-balance corrections', $report['invalid_bank_opening_balance_corrections'], $details, fn (array $entry): string => sprintf(
+            '[%s] %s %s transaction=%s reason=%s',
+            $entry['severity'],
+            $entry['document_type'],
+            $entry['document_number'],
+            $entry['posting_transaction_id'],
+            $entry['reason'],
         ));
 
         $this->section('Inventory value entries vs inventory G/L mismatches', $report['inventory_value_gl_mismatches'], $details, fn (array $entry): string => sprintf(
@@ -317,13 +339,17 @@ class BiwmsFinanceReconcile extends Command
     private function customerLedgerReceivablesMismatches(): array
     {
         return CustomerPostingGroup::query()
-            ->with('receivablesAccount:id,account_number,name')
             ->whereNotNull('receivables_account_id')
+            ->select('receivables_account_id')
+            ->distinct()
+            ->with('receivablesAccount:id,account_number,name')
             ->get()
             ->map(function (CustomerPostingGroup $group): ?array {
+                $groupIds = CustomerPostingGroup::query()
+                    ->where('receivables_account_id', $group->receivables_account_id)
+                    ->pluck('id');
                 $subledgerBalance = (float) CustomerLedgerEntry::query()
-                    ->where('customer_posting_group_id', $group->id)
-                    ->where('reversed', false)
+                    ->whereIn('customer_posting_group_id', $groupIds)
                     ->sum(DB::raw('debit_amount - credit_amount'));
 
                 $glBalance = $this->glDebitMinusCredit((int) $group->receivables_account_id);
@@ -335,7 +361,11 @@ class BiwmsFinanceReconcile extends Command
 
                 return [
                     'posting_group_id' => $group->id,
-                    'posting_group_code' => $group->code,
+                    'posting_group_code' => CustomerPostingGroup::query()
+                        ->whereIn('id', $groupIds)
+                        ->orderBy('code')
+                        ->pluck('code')
+                        ->implode(', '),
                     'chart_of_account_id' => $group->receivables_account_id,
                     'account_number' => $group->receivablesAccount?->account_number,
                     'subledger_balance' => round($subledgerBalance, 2),
@@ -365,7 +395,6 @@ class BiwmsFinanceReconcile extends Command
             ->map(function (VendorPostingGroup $group): ?array {
                 $subledgerBalance = (float) VendorLedgerEntry::query()
                     ->where('vendor_posting_group_id', $group->id)
-                    ->where('reversed', false)
                     ->sum(DB::raw('credit_amount - debit_amount'));
 
                 $glBalance = $this->glCreditMinusDebit((int) $group->payables_account_id);
@@ -535,6 +564,8 @@ class BiwmsFinanceReconcile extends Command
                 'gl.sourceable_type',
                 DB::raw('COALESCE(SUM(gl.debit_amount - gl.credit_amount), 0) as amount'),
             ])
+            ->reject(fn ($entry): bool => $entry->document_type === 'BANK_OPENING_CORRECTION'
+                && $this->validBankOpeningBalanceCorrection((string) $entry->document_number) !== null)
             ->map(fn ($entry): array => [
                 'control_type' => 'BANK',
                 'bank_account_id' => $entry->bank_account_id,
@@ -555,6 +586,151 @@ class BiwmsFinanceReconcile extends Command
     }
 
     /**
+     * Return only corrections that are proven to be G/L-only reclassifications.
+     * Invalid correction-shaped rows remain visible through the ordinary bank
+     * control diagnostic above.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function validBankOpeningBalanceCorrections(): array
+    {
+        return PostingTransaction::query()
+            ->where('document_type', 'BANK_OPENING_CORRECTION')
+            ->where('status', 'completed')
+            ->whereNotNull('reversal_of_transaction_id')
+            ->whereNotNull('idempotency_key')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (PostingTransaction $transaction): ?array => $this->validBankOpeningBalanceCorrection($transaction->document_number))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Correction-shaped transactions are surfaced when they fail validation,
+     * even if the ordinary bank-control query cannot identify their account.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function invalidBankOpeningBalanceCorrections(): array
+    {
+        return PostingTransaction::query()
+            ->where('document_type', 'BANK_OPENING_CORRECTION')
+            ->orderBy('id')
+            ->get()
+            ->reject(fn (PostingTransaction $transaction): bool => $this->validBankOpeningBalanceCorrection($transaction->document_number) !== null)
+            ->map(fn (PostingTransaction $transaction): array => [
+                'severity' => 'critical',
+                'classification' => 'invalid_bank_opening_balance_correction',
+                'posting_transaction_id' => $transaction->id,
+                'document_type' => $transaction->document_type,
+                'document_number' => $transaction->document_number,
+                'reason' => 'One or more bank opening-balance correction invariants failed.',
+                ...$this->findingMetadata(
+                    classification: 'invalid_bank_opening_balance_correction',
+                    severity: 'critical',
+                    suggestedRemediation: 'Trace the correction transaction, original opening balance, bank account, and Opening Balance Equity account. Do not create a second bank ledger entry or edit posted history directly.'
+                ),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function validBankOpeningBalanceCorrection(string $documentNumber): ?array
+    {
+        $transaction = PostingTransaction::query()
+            ->where('document_type', 'BANK_OPENING_CORRECTION')
+            ->where('document_number', $documentNumber)
+            ->where('status', 'completed')
+            ->whereNotNull('reversal_of_transaction_id')
+            ->whereNotNull('idempotency_key')
+            ->with('glEntries')
+            ->first();
+
+        if (! $transaction) {
+            return null;
+        }
+
+        $original = PostingTransaction::query()->find($transaction->reversal_of_transaction_id);
+        $bank = $original?->source_type === 'BANK'
+            ? BankAccount::query()->find($original->source_id)
+            : null;
+
+        if (! $original || $original->document_type !== 'OPENING_BALANCE' || ! $bank) {
+            return null;
+        }
+
+        $originalLedger = BankAccountLedgerEntry::query()
+            ->where('bank_account_id', $bank->id)
+            ->where('document_type', 'OPENING_BALANCE')
+            ->where('document_no', $original->document_number)
+            ->whereNull('deleted_at')
+            ->whereNull('voided_at')
+            ->first();
+        $setup = DB::table('general_ledger_setup')->first();
+        $lines = $transaction->glEntries;
+        $amount = $originalLedger ? round((float) $originalLedger->amount, 2) : 0.0;
+        $debitLines = $lines->filter(fn (GlEntry $line): bool => (float) $line->debit_amount > 0 && (float) $line->credit_amount == 0);
+        $creditLines = $lines->filter(fn (GlEntry $line): bool => (float) $line->credit_amount > 0 && (float) $line->debit_amount == 0);
+        $bankDebit = $debitLines->firstWhere('chart_of_account_id', $bank->gl_account_id);
+        $equityCredit = $setup?->opening_balance_equity_account_id
+            ? $creditLines->firstWhere('chart_of_account_id', $setup->opening_balance_equity_account_id)
+            : null;
+        $expectedKey = 'BANK_OPENING_CORRECTION:BANK:'.$bank->id.':ORIGINAL_TX:'.$original->id;
+        $sameKeyCount = PostingTransaction::query()
+            ->where('document_type', 'BANK_OPENING_CORRECTION')
+            ->where(function ($query) use ($expectedKey): void {
+                $query->where('transaction_key', $expectedKey)
+                    ->orWhere('idempotency_key', $expectedKey);
+            })
+            ->count();
+        $correctionLedgerExists = BankAccountLedgerEntry::query()
+            ->where('bank_account_id', $bank->id)
+            ->where('document_no', $transaction->document_number)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (
+            ! $originalLedger
+            || $transaction->reversal_of_transaction_id !== $original->id
+            || $transaction->transaction_key !== $expectedKey
+            || $transaction->idempotency_key !== $expectedKey
+            || $sameKeyCount !== 1
+            || $transaction->business_id !== $original->business_id
+            || $lines->count() !== 2
+            || $debitLines->count() !== 1
+            || $creditLines->count() !== 1
+            || ! $bankDebit
+            || ! $equityCredit
+            || ! $setup?->opening_balance_equity_account_id
+            || (int) $setup->opening_balance_equity_account_id === (int) $bank->gl_account_id
+            || abs((float) $bankDebit->debit_amount - $amount) > 0.01
+            || abs((float) $equityCredit->credit_amount - $amount) > 0.01
+            || abs((float) $debitLines->sum('debit_amount') - (float) $creditLines->sum('credit_amount')) > 0.01
+            || $correctionLedgerExists
+        ) {
+            return null;
+        }
+
+        return [
+            'severity' => 'info',
+            'classification' => 'valid_bank_opening_balance_correction',
+            'bank_account_id' => $bank->id,
+            'bank_account_code' => $bank->account_code,
+            'document_type' => $transaction->document_type,
+            'document_number' => $transaction->document_number,
+            'amount' => $amount,
+            'original_transaction_id' => $original->id,
+            'correction_transaction_id' => $transaction->id,
+            'suggested_remediation' => 'No remediation required; this is a validated G/L-only bank opening-balance reclassification with no additional cash movement.',
+        ];
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     private function customerLedgerEntriesMissingReceivablesGl(): array
@@ -566,8 +742,16 @@ class BiwmsFinanceReconcile extends Command
             ->whereNotExists(function ($query): void {
                 $query->selectRaw('1')
                     ->from('gl_entries as gl')
-                    ->whereColumn('gl.chart_of_account_id', 'cpg.receivables_account_id')
-                    ->whereColumn('gl.document_number', 'cle.document_number');
+                    ->where(function ($query): void {
+                        $query
+                            ->whereColumn('gl.chart_of_account_id', 'cpg.receivables_account_id')
+                            ->whereColumn('gl.document_number', 'cle.document_number')
+                            ->orWhere(function ($query): void {
+                                $query
+                                    ->where('gl.document_type', 'CUSTOMER_CTRL_RECLASS')
+                                    ->whereColumn('gl.external_document_number', 'cle.document_number');
+                            });
+                    });
             })
             ->groupBy('cle.document_type', 'cle.document_number', 'coa.account_number')
             ->orderBy('cle.document_number')
@@ -714,23 +898,30 @@ class BiwmsFinanceReconcile extends Command
                 've.item_ledger_entry_no',
                 DB::raw($this->inventoryValueEffectSql('ve', 'amount')),
             ])
-            ->map(fn ($entry): array => [
-                'control_type' => 'INVENTORY',
-                'account_number' => 'LEGACY_INVENTORY_CONTROL_TOTAL',
-                'value_entry_no' => $entry->entry_no,
-                'posting_transaction_id' => null,
-                'item_no' => $entry->item_no,
-                'item_ledger_entry_no' => $entry->item_ledger_entry_no,
-                'document_type' => $entry->document_type,
-                'document_number' => $entry->document_number,
-                'amount' => round((float) $entry->amount, 2),
-                'source_hint' => 'Legacy Value Entry document fallback',
-                ...$this->findingMetadata(
-                    classification: 'missing_control_account_entry',
-                    severity: 'critical',
-                    suggestedRemediation: 'This legacy Value Entry has no matching inventory/WIP G/L control entry by document or item ledger metadata. Review source posting before planning a controlled correction.'
-                ),
-            ]);
+            ->map(function ($entry): array {
+                $amount = round((float) $entry->amount, 2);
+                $hasMonetaryEffect = abs($amount) > 0.01;
+
+                return [
+                    'control_type' => 'INVENTORY',
+                    'account_number' => 'LEGACY_INVENTORY_CONTROL_TOTAL',
+                    'value_entry_no' => $entry->entry_no,
+                    'posting_transaction_id' => null,
+                    'item_no' => $entry->item_no,
+                    'item_ledger_entry_no' => $entry->item_ledger_entry_no,
+                    'document_type' => $entry->document_type,
+                    'document_number' => $entry->document_number,
+                    'amount' => $amount,
+                    'source_hint' => 'Legacy Value Entry document fallback',
+                    ...$this->findingMetadata(
+                        classification: 'missing_control_account_entry',
+                        severity: $hasMonetaryEffect ? 'critical' : 'info',
+                        suggestedRemediation: $hasMonetaryEffect
+                            ? 'This legacy Value Entry has no matching inventory/WIP G/L control entry by document or item ledger metadata. Review source posting before planning a controlled correction.'
+                            : 'Legacy metadata is incomplete, but this row has no monetary inventory effect. Retain it for historical traceability and do not repair automatically.'
+                    ),
+                ];
+            });
 
         return $modernRows
             ->merge($legacyRows)

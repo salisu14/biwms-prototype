@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages\Finance;
 
 use App\Filament\Resources\ItemLedgerEntries\ItemLedgerEntryResource;
+use App\Services\Business\BusinessContextService;
 use App\Services\Inventory\ItemLedgerSummaryService;
 use Filament\Pages\Page;
 
@@ -28,6 +29,8 @@ class ItemLedgerSummary extends Page
 
     public ?int $locationId = null;
 
+    public ?int $businessId = null;
+
     public string $printUrl = '';
 
     public string $csvUrl = '';
@@ -42,8 +45,10 @@ class ItemLedgerSummary extends Page
             : null;
         $this->itemId = request()->integer('itemId') ?: null;
         $this->locationId = request()->integer('locationId') ?: null;
+        $this->businessId = app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null);
 
         $query = array_filter([
+            'business_id' => $this->businessId,
             'entryTypeFilter' => $this->entryTypeFilter,
             'monthFilter' => $this->monthFilter,
             'itemId' => $this->itemId,
@@ -61,6 +66,7 @@ class ItemLedgerSummary extends Page
             'month_filter' => $this->monthFilter,
             'item_id' => $this->itemId,
             'location_id' => $this->locationId,
+            'business_id' => $this->businessId,
         ]);
 
         return [

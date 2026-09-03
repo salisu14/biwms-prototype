@@ -29,7 +29,9 @@ class FinanceStatsOverview extends BaseWidget
                 ->description('G/L debit and credit health')
                 ->color($summary['trial_balance']['is_balanced'] ? 'success' : 'danger'),
             Stat::make('Finance Reconcile', (string) $summary['reconciliation_warnings']['total'])
-                ->description('Report-only warning count')
+                ->description(($summary['reconciliation_scope'] ?? 'global') === 'global'
+                    ? 'Global report-only warning count'
+                    : 'Business report-only warning count')
                 ->color($summary['reconciliation_warnings']['critical'] > 0 ? 'danger' : 'success'),
         ];
     }

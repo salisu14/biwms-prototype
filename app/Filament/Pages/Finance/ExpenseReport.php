@@ -5,6 +5,7 @@ namespace App\Filament\Pages\Finance;
 use App\Filament\Resources\ExpenseTransactions\ExpenseTransactionResource;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseTransaction;
+use App\Services\Business\BusinessContextService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -29,8 +30,11 @@ class ExpenseReport extends Page implements HasForms
 
     public ?array $formData = [];
 
+    public ?int $businessId = null;
+
     public function mount(): void
     {
+        $this->businessId = app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null);
         $this->form->fill([
             'period' => 'monthly',
             'anchorDate' => now()->toDateString(),
@@ -99,6 +103,7 @@ class ExpenseReport extends Page implements HasForms
                     'anchorDate' => $this->formData['anchorDate'] ?? now()->toDateString(),
                     'categoryCode' => $this->formData['categoryCode'] ?? null,
                     'expenseType' => $this->formData['expenseType'] ?? null,
+                    'business_id' => $this->businessId,
                 ]), shouldOpenInNewTab: true),
             Action::make('csv')
                 ->label('CSV')
@@ -109,6 +114,7 @@ class ExpenseReport extends Page implements HasForms
                     'anchorDate' => $this->formData['anchorDate'] ?? now()->toDateString(),
                     'categoryCode' => $this->formData['categoryCode'] ?? null,
                     'expenseType' => $this->formData['expenseType'] ?? null,
+                    'business_id' => $this->businessId,
                 ])),
         ];
     }

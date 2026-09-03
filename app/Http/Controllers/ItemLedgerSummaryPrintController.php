@@ -20,6 +20,7 @@ class ItemLedgerSummaryPrintController extends Controller
 
     public function __invoke(Request $request, ItemLedgerSummaryService $service): View|StreamedResponse
     {
+        $businessId = $this->companyInformationService->resolveBusinessId($request->integer('business_id') ?: null);
         $entryTypeFilter = $request->filled('entryTypeFilter') ? (string) $request->query('entryTypeFilter') : null;
         $monthFilter = $request->filled('monthFilter') ? (string) $request->query('monthFilter') : null;
         $itemId = $request->integer('itemId') ?: null;
@@ -70,7 +71,7 @@ class ItemLedgerSummaryPrintController extends Controller
         }
 
         return view('reports.item-ledger-summary-print', [
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
             'report' => $report,
             'entryTypeFilter' => $entryTypeFilter,
             'monthFilter' => $monthFilter,

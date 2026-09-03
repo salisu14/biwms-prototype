@@ -7,6 +7,7 @@ namespace App\Filament\Pages\Finance;
 use App\Filament\Resources\FixedAssets\FixedAssetResource;
 use App\Models\FALedgerEntry;
 use App\Models\FixedAsset;
+use App\Services\Business\BusinessContextService;
 use Filament\Pages\Page;
 use Illuminate\Support\Carbon;
 
@@ -32,6 +33,8 @@ class FixedAssetLedgerEntries extends Page
 
     public ?FixedAsset $asset = null;
 
+    public ?int $businessId = null;
+
     public function mount(): void
     {
         $this->fixedAssetId = request()->integer('fixedAssetId') ?: null;
@@ -44,6 +47,7 @@ class FixedAssetLedgerEntries extends Page
         $this->monthFilter = filled(request()->query('monthFilter'))
             ? (string) request()->query('monthFilter')
             : null;
+        $this->businessId = app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null);
 
         $this->asset = $this->fixedAssetId !== null
             ? FixedAsset::query()->with(['faClass', 'location', 'depreciationBook'])->find($this->fixedAssetId)
@@ -114,6 +118,7 @@ class FixedAssetLedgerEntries extends Page
                 ? FixedAssetResource::getUrl('view', ['record' => $this->asset])
                 : null,
             'csvExportUrl' => route('reports.fixed-asset-ledger.export', [
+                'business_id' => $this->businessId,
                 'fixedAssetId' => $this->fixedAssetId,
                 'asOfDate' => $this->asOfDate,
                 'typeFilter' => $this->typeFilter,
@@ -121,6 +126,7 @@ class FixedAssetLedgerEntries extends Page
                 'format' => 'csv',
             ]),
             'printExportUrl' => route('reports.fixed-asset-ledger.export', [
+                'business_id' => $this->businessId,
                 'fixedAssetId' => $this->fixedAssetId,
                 'asOfDate' => $this->asOfDate,
                 'typeFilter' => $this->typeFilter,

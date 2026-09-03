@@ -16,9 +16,9 @@ class PurchaseStatisticsReportExportController extends Controller
 
     public function __invoke(Request $request, StatisticsReportService $statisticsReportService): View|StreamedResponse
     {
-        $businessId = filled($request->query('business_id'))
-            ? (int) $request->query('business_id')
-            : session('active_business_id');
+        $businessId = $this->companyInformationService->resolveBusinessId(
+            filled($request->query('business_id')) ? (int) $request->query('business_id') : null,
+        );
 
         $report = $statisticsReportService->purchases([
             ...$request->only([
@@ -34,7 +34,7 @@ class PurchaseStatisticsReportExportController extends Controller
         }
 
         return view('reports.statistics-report-print', [
-            'company' => $this->companyInformationService->getReportHeader($businessId),
+            'company' => $this->companyInformationService->getReportHeader($report['period']['business_id'] ?? $businessId),
             'report' => $report,
         ]);
     }

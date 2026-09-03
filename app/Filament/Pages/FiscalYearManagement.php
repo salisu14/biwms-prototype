@@ -44,36 +44,41 @@ class FiscalYearManagement extends Page
                     ->schema([
                         Select::make('retained_earnings_account_id')
                             ->label('Retained Earnings Account')
-                            ->options(
-                                ChartOfAccount::query()
-                                    ->whereIn('account_type', ['EQUITY', 'LIABILITY'])
-                                    ->orderBy('account_number')
-                                    ->get()
-                                    ->mapWithKeys(fn (ChartOfAccount $account): array => [$account->id => "{$account->account_number} - {$account->name}"])
-                                    ->toArray()
-                            )
+                            ->options(fn (): array => self::retainedEarningsAccountOptions())
                             ->searchable()
+                            ->preload()
+                            ->helperText(fn (): string => self::retainedEarningsAccountOptions() === []
+                                ? 'Create an active, direct-posting Equity account in Chart of Accounts first.'
+                                : 'The equity account that receives year-end profit or loss.')
                             ->required()
                             ->default(fn () => GeneralLedgerSetup::instance()->retained_earnings_account_id),
                         Select::make('default_expense_offset_account_id')
                             ->label('Default Expense Offset Account')
-                            ->options(
-                                ChartOfAccount::query()
-                                    ->whereIn('account_category', [
-                                        AccountCategory::ASSET->value,
-                                        AccountCategory::LIQUID_ASSET->value,
-                                        AccountCategory::LIABILITY->value,
-                                        AccountCategory::PAYABLE->value,
-                                    ])
-                                    ->orderBy('account_number')
-                                    ->get()
-                                    ->mapWithKeys(fn (ChartOfAccount $account): array => [$account->id => "{$account->account_number} - {$account->name}"])
-                                    ->toArray()
-                            )
+                            ->options(fn (): array => self::expenseOffsetAccountOptions())
                             ->searchable()
+                            ->preload()
                             ->nullable()
-                            ->helperText('Used when posting an expense without a vendor or employee payable account.')
+                            ->helperText(fn (): string => self::expenseOffsetAccountOptions() === []
+                                ? 'Create an active, direct-posting asset, cash, liability, or payable account first.'
+                                : 'Used when an expense has no vendor or employee payable account.')
                             ->default(fn () => GeneralLedgerSetup::instance()->default_expense_offset_account_id),
+                        Select::make('opening_balance_equity_account_id')
+                            ->label('Bank Opening Balance Offset Account')
+                            ->options(fn (): array => ChartOfAccount::query()
+                                ->where('structural_type', 'posting')
+                                ->where('account_category', AccountCategory::EQUITY->value)
+                                ->where('direct_posting', true)
+                                ->where('blocked', false)
+                                ->orderBy('account_number')
+                                ->get()
+                                ->filter(fn (ChartOfAccount $account): bool => ! $account->isSystemControlled())
+                                ->mapWithKeys(fn (ChartOfAccount $account): array => [$account->id => $account->account_number.' - '.$account->name])
+                                ->all())
+                            ->searchable()
+                            ->preload()
+                            ->nullable()
+                            ->helperText('Used as the credit offset when a bank opening balance is posted.')
+                            ->default(fn () => GeneralLedgerSetup::instance()->opening_balance_equity_account_id),
                         DatePicker::make('allow_posting_from')
                             ->required()
                             ->default(fn () => GeneralLedgerSetup::instance()->allow_posting_from),
@@ -226,5 +231,31 @@ class FiscalYearManagement extends Page
             'periods' => AccountingPeriod::query()->orderByDesc('start_date')->limit(20)->get(),
             'reopenLogs' => FiscalReopenLog::query()->with('requester')->latest('id')->limit(20)->get(),
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function retainedEarningsAccountOptions(): array
+    {
+        return ChartOfAccount::query()
+            ->retainedEarningsEligible()
+            ->orderBy('account_number')
+            ->get()
+            ->mapWithKeys(fn (ChartOfAccount $account): array => [$account->id => "{$account->account_number} - {$account->name}"])
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function expenseOffsetAccountOptions(): array
+    {
+        return ChartOfAccount::query()
+            ->expenseOffsetEligible()
+            ->orderBy('account_number')
+            ->get()
+            ->mapWithKeys(fn (ChartOfAccount $account): array => [$account->id => "{$account->account_number} - {$account->name}"])
+            ->all();
     }
 }

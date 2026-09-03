@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages\Finance;
 
 use App\Models\AccountSchedule;
+use App\Services\Company\CompanyInformationService;
 use App\Services\Finance\BalanceSheetService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -28,8 +29,14 @@ class BalanceSheetReport extends Page implements HasForms
 
     public ?array $formData = [];
 
+    public ?int $businessId = null;
+
     public function mount(): void
     {
+        $this->businessId = app(CompanyInformationService::class)->resolveBusinessId(
+            request()->integer('business_id') ?: null,
+        );
+
         $this->form->fill([
             'asOfDate' => now()->toDateString(),
         ]);
@@ -66,11 +73,10 @@ class BalanceSheetReport extends Page implements HasForms
     {
         $asOfDate = Carbon::parse($this->formData['asOfDate'] ?? now()->toDateString());
         $scheduleId = $this->formData['scheduleId'] ?? null;
-
         if (! empty($scheduleId)) {
-            return app(BalanceSheetService::class)->generateFromSchedule((int) $scheduleId, $asOfDate);
+            return app(BalanceSheetService::class)->generateFromSchedule((int) $scheduleId, $asOfDate, $this->businessId);
         }
 
-        return app(BalanceSheetService::class)->generate($asOfDate);
+        return app(BalanceSheetService::class)->generate($asOfDate, $this->businessId);
     }
 }

@@ -19,6 +19,7 @@ class FixedAssetLedgerEntriesPrintController extends Controller
 
     public function __invoke(Request $request): View|StreamedResponse
     {
+        $businessId = app(CompanyInformationService::class)->resolveBusinessId($request->integer('business_id') ?: null);
         $fixedAssetId = $request->integer('fixedAssetId') ?: null;
         $asOfDate = $request->date('asOfDate')?->toDateString();
         $typeFilter = $request->filled('typeFilter') ? (string) $request->query('typeFilter') : null;
@@ -82,7 +83,7 @@ class FixedAssetLedgerEntriesPrintController extends Controller
         }
 
         return view('reports.fixed-asset-ledger-entries-print', [
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
             'asset' => $asset,
             'entries' => $entries,
             'asOfDate' => $asOfDate,

@@ -16,18 +16,22 @@ class SalesStatisticsReportExportController extends Controller
 
     public function __invoke(Request $request, StatisticsReportService $statisticsReportService): View|StreamedResponse
     {
-        $report = $statisticsReportService->sales($request->only([
+        $businessId = $this->companyInformationService->resolveBusinessId(
+            filled($request->query('business_id')) ? (int) $request->query('business_id') : null,
+        );
+
+        $report = $statisticsReportService->sales([...$request->only([
             'date_from',
             'date_to',
             'gen_bus_posting_group_id',
-        ]));
+        ]), 'business_id' => $businessId]);
 
         if ((string) $request->query('format') === 'csv') {
             return $this->csv($report, 'sales-statistics');
         }
 
         return view('reports.statistics-report-print', [
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($report['period']['business_id'] ?? null),
             'report' => $report,
         ]);
     }

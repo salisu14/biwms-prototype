@@ -7,18 +7,25 @@ use App\Models\ItemLedgerEntry;
 use App\Models\Manufacturing\ProductionOrder;
 use App\Models\Manufacturing\ProductionOrderComponent;
 use App\Models\ValueEntry;
+use App\Services\Business\BusinessContextService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class ManufacturingDashboardService
 {
+    public function __construct(private readonly BusinessContextService $businessContext) {}
+
+    private ?int $businessId = null;
+
     /**
      * @return array<string, mixed>
      */
-    public function summary(?Carbon $startDate = null, ?Carbon $endDate = null): array
+    public function summary(?Carbon $startDate = null, ?Carbon $endDate = null, ?int $businessId = null): array
     {
         $startDate ??= now()->startOfMonth();
         $endDate ??= now();
+        $businessId = $this->businessContext->resolveId($businessId);
+        $this->businessId = $businessId;
 
         return [
             'period' => [
@@ -27,11 +34,16 @@ class ManufacturingDashboardService
             ],
             'open_production_orders' => ProductionOrder::query()
                 ->whereIn('status', ['PLANNED', 'FIRM_PLANNED', 'RELEASED'])
+                ->when($this->businessId !== null, fn ($query) => $query->where('business_id', $this->businessId))
                 ->count(),
             'wip_value' => round($this->wipValue(), 2),
             'output_quantity' => round($this->outputQuantity($startDate, $endDate), 4),
             'component_shortages' => $this->componentShortages(),
             'production_variance' => round($this->productionVariance($startDate, $endDate), 2),
+            'ownership_limitations' => $businessId !== null
+                ? ['production_orders', 'item_ledger_entries']
+                : [],
+            'reconciliation_scope' => 'not_applicable',
         ];
     }
 
@@ -39,6 +51,7 @@ class ManufacturingDashboardService
     {
         return (float) ValueEntry::query()
             ->whereNotNull('production_order_no')
+            ->when($this->businessId !== null, fn ($query) => $query->where('business_id', $this->businessId))
             ->sum(DB::raw('CASE WHEN item_ledger_entry_type = 7 THEN -ABS(cost_amount_actual) ELSE cost_amount_actual END'));
     }
 
@@ -47,6 +60,7 @@ class ManufacturingDashboardService
         return (float) ItemLedgerEntry::query()
             ->where('entry_type', ItemLedgerEntryType::OUTPUT)
             ->whereBetween('posting_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->when($this->businessId !== null, fn ($query) => $query->where('business_id', $this->businessId))
             ->sum('quantity');
     }
 
@@ -56,14 +70,22 @@ class ManufacturingDashboardService
     private function componentShortages(): array
     {
         return ProductionOrderComponent::query()
+            ->join('production_orders', 'production_orders.id', '=', 'production_order_components.production_order_id')
             ->join('items', 'items.id', '=', 'production_order_components.item_id')
-            ->leftJoin('item_ledger_entries as ile', 'ile.item_id', '=', 'production_order_components.item_id')
+            ->leftJoin('item_ledger_entries as ile', function ($join): void {
+                $join->on('ile.item_id', '=', 'production_order_components.item_id');
+                if ($this->businessId !== null) {
+                    $join->where('ile.business_id', $this->businessId);
+                }
+            })
             ->where('production_order_components.remaining_quantity', '>', 0)
+            ->when($this->businessId !== null, fn ($query) => $query->where('production_orders.business_id', $this->businessId))
             ->groupBy(
                 'production_order_components.id',
                 'production_order_components.production_order_id',
                 'production_order_components.item_id',
                 'production_order_components.remaining_quantity',
+                'production_orders.business_id',
                 'items.item_code',
                 'items.description'
             )
@@ -97,6 +119,7 @@ class ManufacturingDashboardService
         return (float) ValueEntry::query()
             ->whereNotNull('production_order_no')
             ->whereBetween('posting_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->when($this->businessId !== null, fn ($query) => $query->where('business_id', $this->businessId))
             ->sum('variance_amount');
     }
 }

@@ -2,55 +2,61 @@
 
 namespace App\Services\Dashboard;
 
+use App\Services\Business\BusinessContextService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 
 class ReconciliationWarningService
 {
+    public function __construct(private readonly BusinessContextService $businessContext) {}
+
     /**
      * @return array{
-     *     finance: array{total: int, critical: int, warning: int, info: int, sections: array<string, int>},
-     *     inventory: array{total: int, critical: int, warning: int, info: int, sections: array<string, int>}
+     *     finance: array{total: int, critical: int, warning: int, info: int, sections: array<string, int>, scope: string},
+     *     inventory: array{total: int, critical: int, warning: int, info: int, sections: array<string, int>, scope: string}
      * }
      */
-    public function summary(): array
+    public function summary(?int $businessId = null): array
     {
-        return Cache::remember('dashboard.reconciliation_warnings', now()->addMinutes(5), fn (): array => [
-            'finance' => $this->financeWarnings(),
-            'inventory' => $this->inventoryWarnings(),
+        $businessId = $this->businessContext->resolveId($businessId);
+        $cacheKey = 'dashboard.reconciliation_warnings.'.($businessId ?? 'global');
+
+        return Cache::remember($cacheKey, now()->addMinutes(5), fn (): array => [
+            'finance' => $this->financeWarnings($businessId),
+            'inventory' => $this->inventoryWarnings($businessId),
         ]);
     }
 
     /**
      * @return array{total: int, critical: int, warning: int, info: int, sections: array<string, int>}
      */
-    public function financeWarnings(): array
+    public function financeWarnings(?int $businessId = null): array
     {
-        return $this->warningCountsFromCommand('biwms:finance-reconcile');
+        return $this->warningCountsFromCommand('biwms:finance-reconcile', $businessId);
     }
 
     /**
      * @return array{total: int, critical: int, warning: int, info: int, sections: array<string, int>}
      */
-    public function inventoryWarnings(): array
+    public function inventoryWarnings(?int $businessId = null): array
     {
-        return $this->warningCountsFromCommand('biwms:inventory-reconcile');
+        return $this->warningCountsFromCommand('biwms:inventory-reconcile', $businessId);
     }
 
     /**
-     * @return array{total: int, critical: int, warning: int, info: int, sections: array<string, int>}
+     * @return array{total: int, critical: int, warning: int, info: int, sections: array<string, int>, scope: string}
      */
-    private function warningCountsFromCommand(string $command): array
+    private function warningCountsFromCommand(string $command, ?int $businessId = null): array
     {
         Artisan::call($command, ['--json' => true]);
 
         $report = json_decode(trim(Artisan::output()), true);
 
         if (! is_array($report)) {
-            return $this->emptyCounts();
+            return $this->emptyCounts($businessId);
         }
 
-        $counts = $this->emptyCounts();
+        $counts = $this->emptyCounts($businessId);
 
         foreach ($report as $section => $rows) {
             if (! is_array($rows) || ! array_is_list($rows)) {
@@ -76,9 +82,9 @@ class ReconciliationWarningService
     }
 
     /**
-     * @return array{total: int, critical: int, warning: int, info: int, sections: array<string, int>}
+     * @return array{total: int, critical: int, warning: int, info: int, sections: array<string, int>, scope: string}
      */
-    private function emptyCounts(): array
+    private function emptyCounts(?int $businessId = null): array
     {
         return [
             'total' => 0,
@@ -86,6 +92,9 @@ class ReconciliationWarningService
             'warning' => 0,
             'info' => 0,
             'sections' => [],
+            // The current reconciliation commands are global. Keep this explicit
+            // so a business dashboard does not present global findings as scoped.
+            'scope' => 'global',
         ];
     }
 }

@@ -12,6 +12,7 @@ use App\Filament\Resources\SalesInvoices\SalesInvoiceResource;
 use App\Models\Business;
 use App\Models\Currency;
 use App\Models\Customer;
+use App\Services\Company\CompanyInformationService;
 use App\Services\Finance\CustomerSettlementHistoryService;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -67,7 +68,9 @@ abstract class CustomerSettlementHistoryPage extends Page implements HasForms
         $this->date_from = request()->filled('date_from') ? (string) request()->query('date_from') : null;
         $this->date_to = request()->filled('date_to') ? (string) request()->query('date_to') : null;
         $this->currency_code = request()->filled('currency_code') ? (string) request()->query('currency_code') : null;
-        $this->business_id = request()->integer('business_id') ?: null;
+        $this->business_id = app(CompanyInformationService::class)->resolveBusinessId(
+            request()->integer('business_id') ?: null,
+        );
     }
 
     public static function getNavigationGroup(): ?string
@@ -201,20 +204,6 @@ abstract class CustomerSettlementHistoryPage extends Page implements HasForms
                 ->label('Refresh')
                 ->icon('heroicon-o-arrow-path')
                 ->action('refreshReport'),
-            Action::make('csv')
-                ->label('CSV')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->url(fn (): string => route('reports.customer-settlement-history.export', [
-                    ...$this->filters(),
-                    'format' => 'csv',
-                ])),
-            Action::make('pdf')
-                ->label('PDF')
-                ->icon('heroicon-o-document-arrow-down')
-                ->url(fn (): string => route('reports.customer-settlement-history.export', [
-                    ...$this->filters(),
-                    'format' => 'pdf',
-                ])),
         ];
     }
 

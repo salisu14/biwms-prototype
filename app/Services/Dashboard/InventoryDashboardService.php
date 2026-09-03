@@ -5,23 +5,29 @@ namespace App\Services\Dashboard;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\ValueEntry;
+use App\Services\Business\BusinessContextService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class InventoryDashboardService
 {
+    private ?int $businessId = null;
+
     public function __construct(
-        private readonly ReconciliationWarningService $reconciliationWarningService
+        private readonly ReconciliationWarningService $reconciliationWarningService,
+        private readonly BusinessContextService $businessContext
     ) {}
 
     /**
      * @return array<string, mixed>
      */
-    public function summary(?Carbon $startDate = null, ?Carbon $endDate = null): array
+    public function summary(?Carbon $startDate = null, ?Carbon $endDate = null, ?int $businessId = null): array
     {
         $startDate ??= now()->startOfMonth();
         $endDate ??= now();
-        $inventoryWarnings = $this->reconciliationWarningService->inventoryWarnings();
+        $businessId = $this->businessContext->resolveId($businessId);
+        $this->businessId = $businessId;
+        $inventoryWarnings = $this->reconciliationWarningService->inventoryWarnings($businessId);
 
         return [
             'period' => [
@@ -36,17 +42,24 @@ class InventoryDashboardService
             'top_moving_items' => $this->topMovingItems($startDate, $endDate),
             'low_stock_items' => $this->lowStockItems(),
             'expiring_items' => $this->expiringItems(),
+            'ownership_limitations' => $businessId !== null
+                ? ['item_ledger_entries', 'items', 'locations']
+                : [],
+            'reconciliation_scope' => $inventoryWarnings['scope'] ?? 'global',
         ];
     }
 
     private function stockQuantity(): float
     {
-        return (float) ItemLedgerEntry::query()->sum('quantity');
+        return (float) ItemLedgerEntry::query()
+            ->when($this->businessId !== null, fn ($query) => $query->where('business_id', $this->businessId))
+            ->sum('quantity');
     }
 
     private function stockValue(): float
     {
         return (float) ValueEntry::query()
+            ->when($this->businessId !== null, fn ($query) => $query->where('business_id', $this->businessId))
             ->selectRaw($this->inventoryValueEffectSql().' as stock_value')
             ->value('stock_value');
     }
@@ -58,6 +71,7 @@ class InventoryDashboardService
                 ItemLedgerEntry::query()
                     ->select('item_id', 'location_id', 'lot_number', 'serial_number')
                     ->selectRaw('COALESCE(SUM(quantity), 0) as quantity')
+                    ->when($this->businessId !== null, fn ($query) => $query->where('business_id', $this->businessId))
                     ->groupBy('item_id', 'location_id', 'lot_number', 'serial_number'),
                 'stock'
             )
@@ -73,6 +87,7 @@ class InventoryDashboardService
         return ItemLedgerEntry::query()
             ->join('items', 'items.id', '=', 'item_ledger_entries.item_id')
             ->whereBetween('item_ledger_entries.posting_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->when($this->businessId !== null, fn ($query) => $query->where('item_ledger_entries.business_id', $this->businessId))
             ->groupBy('items.id', 'items.item_code', 'items.description')
             ->orderByDesc(DB::raw('SUM(ABS(item_ledger_entries.quantity))'))
             ->limit(5)

@@ -11,6 +11,7 @@
                         color="info"
                         icon="heroicon-o-printer"
                         :href="route('reports.group-summary.print', [
+                            'business_id' => $this->businessId,
                             'startDate' => $this->formData['startDate'] ?? null,
                             'endDate' => $this->formData['endDate'] ?? null,
                             'category' => $this->formData['category'] ?? null,
@@ -31,8 +32,14 @@
                     <h2 class="text-lg font-semibold">{{ $report['report_type'] === 'GROUP_SUMMARY' ? 'Group Summary' : 'Trial Balance' }}</h2>
                     <p class="text-sm text-gray-500">Closing balance ({{ $report['period']['start'] }} - {{ $report['period']['end'] }})</p>
                 </div>
-                <div class="text-sm {{ $report['is_balanced'] ? 'text-success-600' : 'text-danger-600' }}">
-                    {{ $report['is_balanced'] ? 'Balanced' : 'Unbalanced' }}
+                <div class="text-right text-sm {{ $report['is_balanced'] ? 'text-success-600' : 'text-danger-600' }}">
+                    <div class="font-semibold">Trial Balance Status</div>
+                    <div>{{ $report['is_balanced'] ? 'Balanced' : 'Unbalanced' }}</div>
+                    <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Raw G/L Debit: NGN {{ number_format((float) $report['raw_gl_totals']['debit'], 2) }}<br>
+                        Raw G/L Credit: NGN {{ number_format((float) $report['raw_gl_totals']['credit'], 2) }}<br>
+                        Raw Difference: NGN {{ number_format((float) $report['raw_gl_totals']['difference'], 2) }}
+                    </div>
                 </div>
             </div>
 
@@ -72,7 +79,7 @@
                             <td colspan="3" class="py-5"></td>
                         </tr>
                         <tr class="bg-primary-50 text-primary-900 ring-1 ring-primary-200 dark:bg-primary-900/20 dark:text-primary-100 dark:ring-primary-700/40">
-                            <td class="px-6 py-5 text-base font-black uppercase tracking-wide">Grand Total</td>
+                            <td class="px-6 py-5 text-base font-black uppercase tracking-wide">Raw G/L Grand Total</td>
                             <td class="whitespace-nowrap border-l border-primary-200 px-8 py-5 pr-12 text-right text-lg font-black tabular-nums dark:border-primary-700/40">NGN {{ number_format((float) $report['grand_total']['debit'], 2) }}</td>
                             <td class="whitespace-nowrap border-l-2 border-primary-300 py-5 pl-12 pr-8 text-right text-lg font-black tabular-nums dark:border-primary-600/50">NGN {{ number_format((float) $report['grand_total']['credit'], 2) }}</td>
                         </tr>

@@ -18,16 +18,17 @@ class GroupSummaryPrintController extends Controller
 
     public function __invoke(Request $request, GroupSummaryService $service): View
     {
+        $businessId = $this->companyInformationService->resolveBusinessId($request->integer('business_id') ?: null);
         $start = Carbon::parse((string) $request->query('startDate', now()->startOfYear()->toDateString()));
         $end = Carbon::parse((string) $request->query('endDate', now()->toDateString()));
         $category = $request->query('category') ?: null;
         $includeSubLedgers = filter_var($request->query('includeSubLedgers', '1'), FILTER_VALIDATE_BOOL);
 
-        $report = $service->generate($start, $end, $category, $includeSubLedgers);
+        $report = $service->generate($start, $end, $category, $includeSubLedgers, $businessId);
 
         return view('reports.group-summary-print', [
             'report' => $report,
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
         ]);
     }
 }

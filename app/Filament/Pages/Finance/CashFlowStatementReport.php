@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages\Finance;
 
 use App\Models\AccountSchedule;
+use App\Services\Company\CompanyInformationService;
 use App\Services\Finance\CashFlowStatementService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -28,8 +29,14 @@ class CashFlowStatementReport extends Page implements HasForms
 
     public ?array $formData = [];
 
+    public ?int $businessId = null;
+
     public function mount(): void
     {
+        $this->businessId = app(CompanyInformationService::class)->resolveBusinessId(
+            request()->integer('business_id') ?: null,
+        );
+
         $this->form->fill([
             'startDate' => now()->startOfMonth()->toDateString(),
             'endDate' => now()->toDateString(),
@@ -129,7 +136,8 @@ class CashFlowStatementReport extends Page implements HasForms
             $method,
             $cashFlowScheduleId,
             $profitAndLossScheduleId,
-            $balanceSheetScheduleId
+            $balanceSheetScheduleId,
+            $this->businessId,
         );
     }
 }

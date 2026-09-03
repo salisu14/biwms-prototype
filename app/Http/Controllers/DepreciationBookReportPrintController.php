@@ -18,6 +18,7 @@ class DepreciationBookReportPrintController extends Controller
 
     public function __invoke(Request $request, DepreciationBookReportService $service): View|StreamedResponse
     {
+        $businessId = $this->companyInformationService->resolveBusinessId($request->integer('business_id') ?: null);
         $reportData = $service->generate([
             'as_of_date' => $request->date('as_of_date')?->toDateString(),
             'fa_class_id' => $request->integer('fa_class_id') ?: null,
@@ -58,7 +59,7 @@ class DepreciationBookReportPrintController extends Controller
 
         return view('reports.depreciation-book-report-print', [
             'reportData' => $reportData,
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
         ]);
     }
 }

@@ -18,13 +18,16 @@ class BalanceSheetPrintController extends Controller
 
     public function __invoke(Request $request, BalanceSheetService $service): View
     {
+        $businessId = $this->companyInformationService->resolveBusinessId($request->integer('business_id') ?: null);
         $asOfDate = Carbon::parse((string) $request->query('asOfDate', now()->toDateString()));
 
-        $reportData = $service->generate($asOfDate);
+        $reportData = filled($request->query('scheduleId'))
+            ? $service->generateFromSchedule((int) $request->query('scheduleId'), $asOfDate, $businessId)
+            : $service->generate($asOfDate, $businessId);
 
         return view('reports.balance-sheet-print', [
             'reportData' => $reportData,
-            'company' => $this->companyInformationService->getReportHeader(),
+            'company' => $this->companyInformationService->getReportHeader($businessId),
         ]);
     }
 }

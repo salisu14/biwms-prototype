@@ -3,11 +3,14 @@
 namespace App\Services\Finance;
 
 use App\Models\GlEntry;
+use App\Services\Business\BusinessContextService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class StatisticsReportService
 {
+    public function __construct(private readonly BusinessContextService $businessContext) {}
+
     /**
      * @param  array{date_from?: mixed, date_to?: mixed, gen_bus_posting_group_id?: mixed, business_id?: mixed}  $filters
      * @return array<string, mixed>
@@ -60,9 +63,9 @@ class StatisticsReportService
             ? (int) $filters['gen_bus_posting_group_id']
             : null;
 
-        $businessId = filled($filters['business_id'] ?? null)
-            ? (int) $filters['business_id']
-            : (filled(session('active_business_id')) ? (int) session('active_business_id') : null);
+        $businessId = $this->businessContext->resolveId(
+            filled($filters['business_id'] ?? null) ? (int) $filters['business_id'] : null
+        );
 
         return [
             'date_from' => $from,
@@ -84,6 +87,7 @@ class StatisticsReportService
         $period = $this->normalizeFilters($filters);
 
         $postingGroupIdSql = 'COALESCE(gl_entries.general_business_posting_group_id, coa.gen_bus_posting_group_id)';
+        $amountExpression = "COALESCE(gl_entries.{$amountColumn}_lcy, gl_entries.{$amountColumn})";
 
         $query = GlEntry::query()
             ->join('chart_of_accounts as coa', 'gl_entries.chart_of_account_id', '=', 'coa.id')
@@ -91,17 +95,17 @@ class StatisticsReportService
                 $join->on('gbpg.id', '=', DB::raw($postingGroupIdSql));
             })
             ->whereBetween('gl_entries.posting_date', [$period['date_from'], $period['date_to']])
-            ->where("gl_entries.{$amountColumn}", '>', 0)
+            ->whereRaw("{$amountExpression} > 0")
             ->where('coa.structural_type', 'posting')
             ->select(
                 'gbpg.id as gen_bus_posting_group_id',
                 'gbpg.code as group_code',
                 'gbpg.description as group_name',
-                DB::raw("COALESCE(SUM(gl_entries.{$amountColumn}), 0) as amount"),
+                DB::raw("COALESCE(SUM({$amountExpression}), 0) as amount"),
                 DB::raw('COUNT(*) as transaction_count'),
-                DB::raw("COALESCE(AVG(gl_entries.{$amountColumn}), 0) as average_amount"),
-                DB::raw("COALESCE(MAX(gl_entries.{$amountColumn}), 0) as max_amount"),
-                DB::raw("COALESCE(MIN(gl_entries.{$amountColumn}), 0) as min_amount"),
+                DB::raw("COALESCE(AVG({$amountExpression}), 0) as average_amount"),
+                DB::raw("COALESCE(MAX({$amountExpression}), 0) as max_amount"),
+                DB::raw("COALESCE(MIN({$amountExpression}), 0) as min_amount"),
                 DB::raw('COUNT(DISTINCT gl_entries.chart_of_account_id) as accounts_used'),
             )
             ->groupBy('gbpg.id', 'gbpg.code', 'gbpg.description')

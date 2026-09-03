@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Inventory;
 
 use App\Models\ItemLedgerEntry;
+use App\Services\Business\BusinessContextService;
 
 class ItemLedgerSummaryService
 {
+    public function __construct(private readonly BusinessContextService $businessContext) {}
+
     /**
      * @param  array{entry_type?: string|null, month_filter?: string|null, item_id?: int|null, location_id?: int|null}  $filters
      * @return array<string, mixed>
@@ -18,6 +21,9 @@ class ItemLedgerSummaryService
         $monthFilter = filled($filters['month_filter'] ?? null) ? (string) $filters['month_filter'] : null;
         $itemId = filled($filters['item_id'] ?? null) ? (int) $filters['item_id'] : null;
         $locationId = filled($filters['location_id'] ?? null) ? (int) $filters['location_id'] : null;
+        $businessId = $this->businessContext->resolveId(
+            filled($filters['business_id'] ?? null) ? (int) $filters['business_id'] : null
+        );
 
         $entries = ItemLedgerEntry::query()
             ->with(['item', 'location'])
@@ -25,6 +31,7 @@ class ItemLedgerSummaryService
             ->when($monthFilter !== null, fn ($query) => $query->whereRaw("to_char(posting_date, 'YYYY-MM') = ?", [$monthFilter]))
             ->when($itemId !== null, fn ($query) => $query->where('item_id', $itemId))
             ->when($locationId !== null, fn ($query) => $query->where('location_id', $locationId))
+            ->when($businessId !== null, fn ($query) => $query->where('business_id', $businessId))
             ->orderByDesc('posting_date')
             ->orderByDesc('entry_number')
             ->get();

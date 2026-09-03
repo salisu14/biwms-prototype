@@ -6,6 +6,7 @@ namespace App\Services\Finance;
 
 use App\Events\PaymentApplied;
 use App\Events\PaymentUnapplied;
+use App\Exceptions\BusinessException;
 use App\Exceptions\PostingSetupException;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\Currency;
@@ -58,29 +59,29 @@ class PaymentService
                 ->findOrFail($payment->id);
 
             if ($payment->status === 'POSTED') {
-                throw new \Exception('Payment is already posted.');
+                throw new BusinessException('Payment is already posted.', title: 'Payment was not posted');
             }
 
             if ($payment->status !== 'APPROVED') {
-                throw new \Exception('Only approved payments can be posted.');
+                throw new BusinessException('Only approved payments can be posted.', title: 'Payment was not posted');
             }
 
             if ((float) $payment->payment_amount <= 0) {
-                throw new \Exception('Payment amount must be greater than zero.');
+                throw new BusinessException('Payment amount must be greater than zero.', title: 'Payment was not posted');
             }
 
             if (! $payment->bankAccount) {
-                throw new \Exception('A bank account is required before posting this payment.');
+                throw new BusinessException('A bank account is required before posting this payment.', title: 'Payment was not posted');
             }
 
             $this->postingDateValidator->validate($payment->posting_date ?? now());
 
             if ($payment->payment_direction === 'RECEIPT' && ! $payment->bankAccount->allow_receipts) {
-                throw new \Exception('The selected bank account is not enabled for receipts.');
+                throw new BusinessException('The selected bank account is not enabled for receipts.', title: 'Payment was not posted');
             }
 
             if ($payment->payment_direction !== 'RECEIPT' && ! $payment->bankAccount->allow_payments) {
-                throw new \Exception('The selected bank account is not enabled for payments.');
+                throw new BusinessException('The selected bank account is not enabled for payments.', title: 'Payment was not posted');
             }
 
             // 1. Create Ledger Entries
@@ -153,6 +154,8 @@ class PaymentService
                 throw new \Exception('Document not found');
             }
 
+            $this->assertDocumentIsPostable($document, (string) $applicationData['document_type']);
+
             // Validate party
             $documentPartyId = $document->customer_id ?? $document->vendor_id;
             if ($documentPartyId !== $payment->party_id) {
@@ -162,6 +165,17 @@ class PaymentService
             $expectedDocumentType = $payment->party_type === 'CUSTOMER' ? 'SALES_INVOICE' : 'PURCHASE_INVOICE';
             if (($applicationData['document_type'] ?? null) !== $expectedDocumentType) {
                 throw new \Exception('Document type does not match payment party type.');
+            }
+
+            $paymentBusinessId = $payment->business_id;
+            $documentBusinessId = $document->business_id ?? null;
+            if ($paymentBusinessId !== null && $documentBusinessId !== null && (int) $paymentBusinessId !== (int) $documentBusinessId) {
+                throw new \Exception('Payment and document must belong to the same business.');
+            }
+
+            if (filled($payment->currency_code) && filled($document->currency_code)
+                && strtoupper((string) $payment->currency_code) !== strtoupper((string) $document->currency_code)) {
+                throw new \Exception('Payment and document currencies must match.');
             }
 
             $precision = $this->resolvePrecision($payment->currency ?? null, $payment->currency_code);
@@ -207,6 +221,15 @@ class PaymentService
             $remainingBefore = $this->roundMoney((float) $document->remaining_amount, $precision);
             $discountApplied = $this->roundMoney((float) ($applicationData['discount'] ?? 0), $precision);
             $writeOffAmount = $this->roundMoney((float) ($applicationData['write_off'] ?? 0), $precision);
+
+            if ($discountApplied < 0 || $writeOffAmount < 0) {
+                throw new \Exception('Discounts and write-offs cannot be negative.');
+            }
+
+            if ($amountToApply + $discountApplied + $writeOffAmount - (float) $document->remaining_amount > $tolerance) {
+                throw new \Exception('The payment, discount, and write-off exceed the document remaining amount.');
+            }
+
             $documentRemainingAfter = $this->roundMoney($remainingBefore - $amountToApply - $discountApplied - $writeOffAmount, $precision);
             if (abs($documentRemainingAfter) <= $tolerance) {
                 $documentRemainingAfter = 0.0;
@@ -214,6 +237,7 @@ class PaymentService
 
             $application = PaymentApplication::create([
                 'payment_id' => $payment->id,
+                'business_id' => $paymentBusinessId ?? $documentBusinessId,
                 'document_type' => $applicationData['document_type'],
                 'document_id' => $document->id,
                 'document_number' => $document->document_number,
@@ -600,6 +624,7 @@ class PaymentService
         return CustomerLedgerEntry::create([
             'entry_number' => $nextEntryNumber,
             'customer_id' => $customer->id,
+            'business_id' => $payment->business_id,
             'document_type' => 'PAYMENT',
             'document_number' => $payment->payment_number,
             'external_document_number' => $payment->external_reference,
@@ -863,6 +888,17 @@ class PaymentService
         };
     }
 
+    private function assertDocumentIsPostable(Model $document, string $documentType): void
+    {
+        if ($documentType === 'SALES_INVOICE' && (! $document instanceof PostedSalesInvoice || $document->cancelled)) {
+            throw new \Exception('Only an active posted sales invoice can receive a payment.');
+        }
+
+        if ($documentType === 'PURCHASE_INVOICE' && (! $document instanceof PostedPurchaseInvoice || $document->cancelled)) {
+            throw new \Exception('Only an active posted purchase invoice can receive a payment.');
+        }
+    }
+
     protected function getDocumentType(Model $document): string
     {
         return match (get_class($document)) {
@@ -878,12 +914,14 @@ class PaymentService
     {
         if ($payment->party_type === 'CUSTOMER') {
             return PostedSalesInvoice::forCustomer($payment->party_id)
+                ->when($payment->business_id !== null, fn (Builder $query) => $query->where('business_id', $payment->business_id))
                 ->where(fn (Builder $query) => $query
                     ->where('paid_in_full', false)
                     ->orWhereNull('paid_in_full'))
                 ->get();
         } else {
             return PostedPurchaseInvoice::forVendor($payment->party_id)
+                ->when($payment->business_id !== null, fn (Builder $query) => $query->where('business_id', $payment->business_id))
                 ->where(fn (Builder $query) => $query
                     ->where('paid_in_full', false)
                     ->orWhereNull('paid_in_full'))

@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Finance;
 
 use App\Models\GeneralBusinessPostingGroup;
+use App\Services\Business\BusinessContextService;
 use App\Services\Finance\StatisticsReportService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -36,7 +37,7 @@ class PurchaseStatisticsReport extends Page implements HasForms
 
     public function mount(StatisticsReportService $statisticsReportService): void
     {
-        $this->business_id = request()->integer('business_id') ?: (filled(session('active_business_id')) ? (int) session('active_business_id') : null);
+        $this->business_id = app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null);
 
         $filters = $statisticsReportService->normalizeFilters([
             'business_id' => $this->business_id,

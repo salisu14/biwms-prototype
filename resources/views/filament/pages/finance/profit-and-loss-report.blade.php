@@ -10,8 +10,10 @@
                         color="info"
                         icon="heroicon-o-printer"
                         :href="route('reports.profit-and-loss.print', [
+                            'business_id' => $this->businessId,
                             'startDate' => $this->formData['startDate'] ?? null,
                             'endDate' => $this->formData['endDate'] ?? null,
+                            'scheduleId' => $this->formData['scheduleId'] ?? null,
                             'compareStartDate' => $this->formData['compareStartDate'] ?? null,
                             'compareEndDate' => $this->formData['compareEndDate'] ?? null,
                             'dimension1' => $this->formData['dimension1'] ?? null,

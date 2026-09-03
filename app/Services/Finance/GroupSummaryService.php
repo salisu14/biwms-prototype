@@ -38,20 +38,31 @@ class GroupSummaryService
         'INDIRECT_EXPENSES', 'PROFIT_LOSS', 'FOREX_GAIN_LOSS', 'OPENING_BALANCE_DIFF',
     ];
 
-    public function generate(Carbon $startDate, Carbon $endDate, ?string $filterCategory = null, bool $includeSubLedgers = true): array
+    public function __construct(
+        private readonly GeneralLedgerService $generalLedgerService,
+    ) {}
+
+    public function generate(Carbon $startDate, Carbon $endDate, ?string $filterCategory = null, bool $includeSubLedgers = true, ?int $businessId = null): array
     {
         $categoriesToProcess = $filterCategory ? [$filterCategory] : self::DISPLAY_ORDER;
 
         $groups = [];
-        $grandDebit = 0.0;
-        $grandCredit = 0.0;
+        $assignedAccountIds = [];
+        $selectedAccountIds = [];
 
         foreach ($categoriesToProcess as $category) {
             if (! isset(self::CATEGORIES[$category])) {
                 continue;
             }
 
-            $groupData = $this->calculateGroup($category, $startDate, $endDate, $includeSubLedgers);
+            $groupData = $this->calculateGroup(
+                $category,
+                $startDate,
+                $endDate,
+                $includeSubLedgers,
+                $businessId,
+                $filterCategory ? [] : $assignedAccountIds,
+            );
 
             if (! $groupData['has_activity'] && $filterCategory) {
                 $groupData['has_activity'] = true;
@@ -64,42 +75,62 @@ class GroupSummaryService
                     $groupData
                 );
 
-                $grandDebit += (float) $groupData['debit'];
-                $grandCredit += (float) $groupData['credit'];
+                if (! $filterCategory) {
+                    $assignedAccountIds = array_values(array_unique([
+                        ...$assignedAccountIds,
+                        ...$groupData['account_ids'],
+                    ]));
+                } else {
+                    $selectedAccountIds = $groupData['account_ids'];
+                }
             }
         }
+
+        $rawTotals = $this->generalLedgerService->trialBalanceTotals(
+            $startDate,
+            $endDate,
+            array_filter([
+                'business_id' => $businessId,
+                'account_ids' => $filterCategory ? $selectedAccountIds : null,
+            ], static fn (mixed $value): bool => $value !== null),
+        );
 
         return [
             'report_type' => $filterCategory ? 'GROUP_SUMMARY' : 'TRIAL_BALANCE',
             'filter_category' => $filterCategory,
             'groups' => $groups,
-            'grand_total' => [
-                'debit' => $grandDebit,
-                'credit' => $grandCredit,
-                'difference' => abs($grandDebit - $grandCredit),
+            // Grand Total is an accounting total, not the sum of presentation
+            // subtotals. Account-normalized display amounts remain on each row.
+            'grand_total' => $rawTotals,
+            'raw_gl_totals' => $rawTotals,
+            'display_totals' => [
+                'debit' => round((float) collect($groups)->sum('debit'), 2),
+                'credit' => round((float) collect($groups)->sum('credit'), 2),
             ],
             'period' => [
                 'start' => $startDate->format('d-M-Y'),
                 'end' => $endDate->format('d-M-Y'),
             ],
-            'is_balanced' => abs($grandDebit - $grandCredit) < 0.01,
+            'is_balanced' => $rawTotals['is_balanced'],
             'company_name' => config('app.company_name', config('app.name', 'BIWMS')),
-            'active_categories' => $this->getActiveCategories($startDate, $endDate),
+            'active_categories' => $this->getActiveCategories($startDate, $endDate, $businessId),
         ];
     }
 
     /** @return array{debit:float,credit:float,net_balance:float,ledgers:array<int,array<string,mixed>>,ledger_count:int,has_activity:bool} */
-    private function calculateGroup(string $category, Carbon $startDate, Carbon $endDate, bool $includeLedgers): array
+    private function calculateGroup(string $category, Carbon $startDate, Carbon $endDate, bool $includeLedgers, ?int $businessId = null, array $excludedAccountIds = []): array
     {
-        $accounts = $this->resolveAccountsForCategory($category);
+        $accounts = $this->resolveAccountsForCategory($category, $excludedAccountIds);
 
         $groupDebit = 0.0;
         $groupCredit = 0.0;
         $ledgers = [];
+        $accountIds = [];
         $hasActivity = false;
 
         foreach ($accounts as $account) {
-            $balance = $this->getAccountBalance($account->id, $startDate, $endDate);
+            $accountIds[] = $account->id;
+            $balance = $this->getAccountBalance($account->id, $startDate, $endDate, $businessId);
             $display = $this->formatForDisplay($balance['closing_balance'], (string) (self::CATEGORIES[$category]['normal'] ?? 'MIXED'));
 
             $groupDebit += $display['debit'];
@@ -131,17 +162,19 @@ class GroupSummaryService
             'net_balance' => $groupDebit - $groupCredit,
             'ledgers' => $ledgers,
             'ledger_count' => count($ledgers),
+            'account_ids' => $accountIds,
             'has_activity' => $hasActivity,
         ];
     }
 
-    private function resolveAccountsForCategory(string $category)
+    private function resolveAccountsForCategory(string $category, array $excludedAccountIds = [])
     {
         $definition = self::CATEGORIES[$category] ?? null;
 
         $query = ChartOfAccount::query()
             ->where('blocked', false)
             ->where('structural_type', 'posting')
+            ->when($excludedAccountIds !== [], fn ($query) => $query->whereNotIn('id', $excludedAccountIds))
             ->orderBy('account_number');
 
         $categories = $definition['account_categories'] ?? [];
@@ -205,17 +238,19 @@ class GroupSummaryService
     }
 
     /** @return array{opening_balance:float,debit:float,credit:float,net_change:float,closing_balance:float} */
-    private function getAccountBalance(int $accountId, Carbon $startDate, Carbon $endDate): array
+    private function getAccountBalance(int $accountId, Carbon $startDate, Carbon $endDate, ?int $businessId = null): array
     {
         $openingBalance = (float) GlEntry::query()
             ->where('chart_of_account_id', $accountId)
             ->whereDate('posting_date', '<', $startDate)
-            ->sum(DB::raw('debit_amount - credit_amount'));
+            ->when($businessId !== null, fn ($query) => $query->where('business_id', $businessId))
+            ->sum(DB::raw('COALESCE(debit_amount_lcy, debit_amount) - COALESCE(credit_amount_lcy, credit_amount)'));
 
         $periodTotals = GlEntry::query()
             ->where('chart_of_account_id', $accountId)
             ->whereBetween('posting_date', [$startDate, $endDate])
-            ->selectRaw('COALESCE(SUM(debit_amount), 0) as debit_total, COALESCE(SUM(credit_amount), 0) as credit_total')
+            ->selectRaw('COALESCE(SUM(COALESCE(debit_amount_lcy, debit_amount)), 0) as debit_total, COALESCE(SUM(COALESCE(credit_amount_lcy, credit_amount)), 0) as credit_total')
+            ->when($businessId !== null, fn ($query) => $query->where('business_id', $businessId))
             ->first();
 
         $debit = (float) ($periodTotals->debit_total ?? 0.0);
@@ -268,12 +303,12 @@ class GroupSummaryService
     }
 
     /** @return array<string, string> */
-    public function getActiveCategories(Carbon $startDate, Carbon $endDate): array
+    public function getActiveCategories(Carbon $startDate, Carbon $endDate, ?int $businessId = null): array
     {
         $active = [];
 
         foreach (self::DISPLAY_ORDER as $category) {
-            $groupData = $this->calculateGroup($category, $startDate, $endDate, false);
+            $groupData = $this->calculateGroup($category, $startDate, $endDate, false, $businessId);
             if ($groupData['has_activity']) {
                 $active[$category] = self::CATEGORIES[$category]['label'];
             }

@@ -5,10 +5,13 @@ namespace App\Models;
 use App\Enums\AccountCategory;
 use App\Enums\AccountStructuralType;
 use App\Enums\IncomeBalanceType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ChartOfAccount extends Model
 {
@@ -151,6 +154,64 @@ class ChartOfAccount extends Model
     public function allowsDirectPosting(): bool
     {
         return $this->isPostingAccount() && $this->direct_posting && ! $this->blocked;
+    }
+
+    /**
+     * Accounts owned by a subledger or system posting process.
+     */
+    public function isSystemControlled(): bool
+    {
+        $accountId = $this->getKey();
+
+        $has = static function (string $table, string $column) use ($accountId): bool {
+            return Schema::hasTable($table)
+                && Schema::hasColumn($table, $column)
+                && DB::table($table)->where($column, $accountId)->exists();
+        };
+
+        return $has('customer_posting_groups', 'receivables_account_id')
+            || $has('vendor_posting_groups', 'payables_account_id')
+            || $has('bank_accounts', 'gl_account_id')
+            || $has('inventory_posting_setups', 'inventory_account_id')
+            || $has('inventory_posting_setups', 'wip_account_id')
+            || $has('inventory_posting_setups', 'inventory_in_transit_account_id')
+            || $has('vat_posting_setups', 'sales_vat_account_id')
+            || $has('vat_posting_setups', 'purchase_vat_account_id')
+            || $has('vat_posting_setups', 'reverse_charge_vat_account_id')
+            || $has('referral_commission_settings', 'commission_expense_account_id')
+            || $has('referral_commission_settings', 'commission_payable_account_id')
+            || $has('referral_commission_settings', 'commission_rounding_account_id')
+            || $has('referral_commission_settings', 'commission_payment_clearing_account_id');
+    }
+
+    /**
+     * Accounts that may receive the year-end income statement close.
+     */
+    public function scopeRetainedEarningsEligible(Builder $query): Builder
+    {
+        return $query
+            ->where('structural_type', AccountStructuralType::POSTING->value)
+            ->where('account_category', AccountCategory::EQUITY->value)
+            ->where('direct_posting', true)
+            ->where('blocked', false);
+    }
+
+    /**
+     * Accounts suitable as the generic credit offset for an expense.
+     * Equity and income-statement accounts are deliberately excluded.
+     */
+    public function scopeExpenseOffsetEligible(Builder $query): Builder
+    {
+        return $query
+            ->where('structural_type', AccountStructuralType::POSTING->value)
+            ->whereIn('account_category', [
+                AccountCategory::ASSET->value,
+                AccountCategory::LIQUID_ASSET->value,
+                AccountCategory::LIABILITY->value,
+                AccountCategory::PAYABLE->value,
+            ])
+            ->where('direct_posting', true)
+            ->where('blocked', false);
     }
 
     protected static function booted(): void

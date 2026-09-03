@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\AccountScheduleAmountType;
 use App\Enums\AccountScheduleRowType;
 use App\Enums\AccountScheduleTotalingType;
+use App\Services\Finance\AccountScheduleFormulaEvaluator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -42,5 +43,16 @@ class AccountScheduleLine extends Model
     public function schedule(): BelongsTo
     {
         return $this->belongsTo(AccountSchedule::class, 'schedule_id');
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $line): void {
+            if ($line->totaling_type !== AccountScheduleTotalingType::FORMULA) {
+                return;
+            }
+
+            app(AccountScheduleFormulaEvaluator::class)->validateSyntax((string) $line->totaling);
+        });
     }
 }

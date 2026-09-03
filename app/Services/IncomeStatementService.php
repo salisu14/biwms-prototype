@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\AccountScheduleAmountType;
 use App\Enums\AccountScheduleTotalingType;
 use App\Enums\AccountType;
 use App\Enums\IncomeBalanceType;
 use App\Models\AccountSchedule;
+use App\Models\AccountScheduleLine;
 use App\Models\ChartOfAccount;
 use App\Models\ExpenseBudget;
 use App\Models\GlEntry;
@@ -33,7 +35,8 @@ class IncomeStatementService
         ?Carbon $compareFrom = null,       // Comparative period
         ?Carbon $compareTo = null,
         bool $showBudget = false,
-        int $fiscalYear = 0
+        int $fiscalYear = 0,
+        ?int $businessId = null
     ): IncomeStatementReport {
         // Get all income statement accounts ordered by G/L Account No.
         $accounts = $this->getIncomeStatementAccounts();
@@ -46,11 +49,12 @@ class IncomeStatementService
                 $fromDate,
                 $toDate,
                 $globalDimension1,
-                $globalDimension2
+                $globalDimension2,
+                $businessId
             );
 
             $compareAmount = ($compareFrom && $compareTo)
-                ? $this->calculateNetChange($account, $compareFrom, $compareTo, $globalDimension1, $globalDimension2)
+                ? $this->calculateNetChange($account, $compareFrom, $compareTo, $globalDimension1, $globalDimension2, $businessId)
                 : null;
 
             $budgetAmount = $showBudget
@@ -94,18 +98,73 @@ class IncomeStatementService
         Carbon $fromDate,
         Carbon $toDate,
         ?string $dim1 = null,
-        ?string $dim2 = null
+        ?string $dim2 = null,
+        ?int $businessId = null
     ): Collection {
         $schedule = AccountSchedule::with('lines')->findOrFail($scheduleId);
         $results = collect();
+        $linesByRow = $schedule->lines
+            ->filter(fn (AccountScheduleLine $line): bool => filled($line->row_no))
+            ->keyBy(fn (AccountScheduleLine $line): string => (string) $line->row_no);
+        $resolving = [];
+
+        $resolveLine = function (AccountScheduleLine $line) use (&$resolveLine, &$resolving, $linesByRow, $fromDate, $toDate, $dim1, $dim2, $businessId): float {
+            $rowNo = filled($line->row_no) ? (string) $line->row_no : null;
+            if ($rowNo !== null && isset($resolving[$rowNo])) {
+                throw new \InvalidArgumentException("Circular account schedule reference [{$rowNo}].");
+            }
+
+            if ($rowNo !== null) {
+                $resolving[$rowNo] = true;
+            }
+
+            try {
+                $amount = match ($line->totaling_type) {
+                    AccountScheduleTotalingType::POSTING_ACCOUNTS,
+                    AccountScheduleTotalingType::TOTAL_ACCOUNTS => $this->sumAccounts(
+                        (string) $line->totaling,
+                        $fromDate,
+                        $toDate,
+                        $dim1,
+                        $dim2,
+                        $businessId,
+                        $line->amount_type ?? AccountScheduleAmountType::NET_AMOUNT,
+                    ),
+                    AccountScheduleTotalingType::FORMULA => app(AccountScheduleFormulaEvaluator::class)->evaluate(
+                        (string) $line->totaling,
+                        function (string $reference) use (&$resolveLine, $linesByRow): float {
+                            $referencedLine = $linesByRow->get($reference);
+                            if (! $referencedLine instanceof AccountScheduleLine) {
+                                throw new \InvalidArgumentException("Unknown account schedule row reference [{$reference}].");
+                            }
+
+                            return $resolveLine($referencedLine);
+                        },
+                        $linesByRow->keys()->map(fn ($key): string => (string) $key)->all(),
+                    ),
+                    default => 0.0,
+                };
+
+                return $line->show_opposite_sign ? $amount * -1 : $amount;
+            } finally {
+                if ($rowNo !== null) {
+                    unset($resolving[$rowNo]);
+                }
+            }
+        };
 
         foreach ($schedule->lines as $line) {
-            $amount = match ($line->totaling_type) {
-                AccountScheduleTotalingType::POSTING_ACCOUNTS,
-                AccountScheduleTotalingType::TOTAL_ACCOUNTS => $this->sumAccounts($line->totaling, $fromDate, $toDate, $dim1, $dim2),
-                AccountScheduleTotalingType::FORMULA => $this->calculateFormula($line->totaling, $results),
-                default => 0,
-            };
+            try {
+                $amount = $resolveLine($line);
+            } catch (\InvalidArgumentException $exception) {
+                logger()->warning('Invalid account schedule formula.', [
+                    'schedule_id' => $schedule->id,
+                    'line_id' => $line->id,
+                    'formula' => $line->totaling,
+                    'error' => $exception->getMessage(),
+                ]);
+                $amount = 0.0;
+            }
 
             $result = [
                 'row_no' => $line->row_no,
@@ -115,7 +174,7 @@ class IncomeStatementService
                 'underline' => $line->underline,
                 'indentation' => $line->indentation,
                 'new_page' => $line->new_page,
-                'amount' => $line->show_opposite_sign ? $amount * -1 : $amount,
+                'amount' => $amount,
             ];
 
             $results->push($result);
@@ -154,11 +213,12 @@ class IncomeStatementService
         Carbon $from,
         Carbon $to,
         ?string $dim1,
-        ?string $dim2
+        ?string $dim2,
+        ?int $businessId = null
     ): float {
         // Total accounts calculate from totaling range
         if ($account->isTotalAccount()) {
-            return $this->calculateTotalAccount($account, $from, $to, $dim1, $dim2);
+            return $this->calculateTotalAccount($account, $from, $to, $dim1, $dim2, $businessId);
         }
 
         $query = GlEntry::where('chart_of_account_id', $account->id)
@@ -170,9 +230,12 @@ class IncomeStatementService
         if ($dim2) {
             $query->where('shortcut_dimension_2_code', $dim2);
         }
+        if ($businessId !== null) {
+            $query->where('business_id', $businessId);
+        }
 
         // Net Change = Sum(Debit) - Sum(Credit)
-        return (float) $query->sum(DB::raw('debit_amount - credit_amount'));
+        return (float) $query->sum(DB::raw('COALESCE(debit_amount_lcy, debit_amount) - COALESCE(credit_amount_lcy, credit_amount)'));
     }
 
     private function calculateTotalAccount(
@@ -180,7 +243,8 @@ class IncomeStatementService
         Carbon $from,
         Carbon $to,
         ?string $dim1,
-        ?string $dim2
+        ?string $dim2,
+        ?int $businessId = null
     ): float {
         if (empty($account->totaling)) {
             return 0;
@@ -199,8 +263,11 @@ class IncomeStatementService
         if ($dim2) {
             $query->where('shortcut_dimension_2_code', $dim2);
         }
+        if ($businessId !== null) {
+            $query->where('business_id', $businessId);
+        }
 
-        return (float) $query->sum(DB::raw('debit_amount - credit_amount'));
+        return (float) $query->sum(DB::raw('COALESCE(debit_amount_lcy, debit_amount) - COALESCE(credit_amount_lcy, credit_amount)'));
     }
 
     private function parseTotaling(?string $totaling): array
@@ -230,7 +297,7 @@ class IncomeStatementService
         return $codes;
     }
 
-    private function sumAccounts(string $totaling, Carbon $from, Carbon $to, ?string $dim1, ?string $dim2): float
+    private function sumAccounts(string $totaling, Carbon $from, Carbon $to, ?string $dim1, ?string $dim2, ?int $businessId = null, AccountScheduleAmountType|string|null $amountType = null): float
     {
         $accountCodes = $this->parseTotaling($totaling);
 
@@ -244,31 +311,19 @@ class IncomeStatementService
         if ($dim2) {
             $query->where('shortcut_dimension_2_code', $dim2);
         }
-
-        return (float) $query->sum(DB::raw('debit_amount - credit_amount'));
-    }
-
-    private function calculateFormula(string $formula, Collection $previousResults): float
-    {
-        // Simple formula parser for ROW NOs like "10 + 20"
-        // Replace ROWIDs with their values
-        $expression = $formula;
-        foreach ($previousResults as $res) {
-            if ($res['row_no']) {
-                $expression = str_replace($res['row_no'], (string) $res['amount'], $expression);
-            }
+        if ($businessId !== null) {
+            $query->where('business_id', $businessId);
         }
 
-        // Security check: only allow numbers and basic operators
-        if (preg_match('/[^0-9\+\-\*\/\(\)\. ]/', $expression)) {
-            return 0;
-        }
+        $resolvedAmountType = $amountType instanceof AccountScheduleAmountType
+            ? $amountType
+            : AccountScheduleAmountType::tryFrom((string) $amountType) ?? AccountScheduleAmountType::NET_AMOUNT;
 
-        try {
-            return (float) eval("return {$expression};");
-        } catch (\Throwable $e) {
-            return 0;
-        }
+        return (float) $query->sum(DB::raw(match ($resolvedAmountType) {
+            AccountScheduleAmountType::DEBIT_AMOUNT => 'COALESCE(debit_amount_lcy, debit_amount)',
+            AccountScheduleAmountType::CREDIT_AMOUNT => 'COALESCE(credit_amount_lcy, credit_amount)',
+            default => 'COALESCE(debit_amount_lcy, debit_amount) - COALESCE(credit_amount_lcy, credit_amount)',
+        }));
     }
 
     private function calculateVariancePercent(float $actual, ?float $budget, ChartOfAccount $account): ?float

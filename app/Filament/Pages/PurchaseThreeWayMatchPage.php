@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Filament\AdminPages\PurchaseThreeWayMatch as AdminPurchaseThreeWayMatch;
 use App\Filament\Pages\Finance\PurchaseThreeWayMatch as FinancePurchaseThreeWayMatch;
 use App\Models\Vendor;
+use App\Services\Company\CompanyInformationService;
 use App\Services\Purchase\PurchaseThreeWayMatchService;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -49,7 +50,7 @@ abstract class PurchaseThreeWayMatchPage extends Page implements HasForms
 
     public function mount(): void
     {
-        $this->business_id = request()->integer('business_id') ?: (filled(session('active_business_id')) ? (int) session('active_business_id') : null);
+        $this->business_id = app(CompanyInformationService::class)->resolveBusinessId(request()->integer('business_id') ?: null);
         $this->vendor_id = request()->integer('vendor_id') ?: null;
         $this->purchase_order_id = request()->integer('purchase_order_id') ?: null;
         $this->match_status = request()->filled('match_status') ? (string) request()->query('match_status') : null;
@@ -139,7 +140,7 @@ abstract class PurchaseThreeWayMatchPage extends Page implements HasForms
 
     public function resetFilters(): void
     {
-        $this->business_id = filled(session('active_business_id')) ? (int) session('active_business_id') : null;
+        $this->business_id = app(CompanyInformationService::class)->resolveBusinessId();
         $this->vendor_id = null;
         $this->purchase_order_id = null;
         $this->match_status = null;
@@ -171,20 +172,6 @@ abstract class PurchaseThreeWayMatchPage extends Page implements HasForms
                 ->label('Refresh')
                 ->icon('heroicon-o-arrow-path')
                 ->action('refreshReport'),
-            Action::make('csv')
-                ->label('CSV')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->url(fn (): string => route('reports.purchase-three-way-match.export', [
-                    ...$this->filters(),
-                    'format' => 'csv',
-                ])),
-            Action::make('pdf')
-                ->label('PDF')
-                ->icon('heroicon-o-document-arrow-down')
-                ->url(fn (): string => route('reports.purchase-three-way-match.export', [
-                    ...$this->filters(),
-                    'format' => 'pdf',
-                ])),
         ];
     }
 

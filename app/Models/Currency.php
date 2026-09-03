@@ -174,7 +174,7 @@ class Currency extends Model
      */
     public function roundAmount(float $amount): float
     {
-        return $this->rounding_method->round($amount, $this->amount_rounding_precision);
+        return $this->rounding_method->round($amount, (float) ($this->amount_rounding_precision ?? 0.01));
     }
 
     /**
@@ -182,7 +182,7 @@ class Currency extends Model
      */
     public function roundUnitAmount(float $amount): float
     {
-        return $this->rounding_method->round($amount, $this->unit_amount_rounding_precision);
+        return $this->rounding_method->round($amount, (float) ($this->unit_amount_rounding_precision ?? 0.00001));
     }
 
     /**
@@ -199,7 +199,7 @@ class Currency extends Model
     public function getExchangeRate(?\DateTime $date = null, ?CurrencyExchangeRateType $type = null): float
     {
         if ($this->is_lcy) {
-            return 1;
+            return 1.0;
         }
 
         $date = $date ?? now();
@@ -213,21 +213,30 @@ class Currency extends Model
             })
             ->where('rate_type', $type)
             ->orderByDesc('starting_date')
+            ->orderByDesc('id')
             ->first();
 
-        return $rate?->exchange_rate_amount ?? $this->exchange_rate ?? 1;
+        if ($rate?->exchange_rate_amount !== null) {
+            return (float) $rate->exchange_rate_amount;
+        }
+
+        if ($this->exchange_rate !== null) {
+            return (float) $this->exchange_rate;
+        }
+
+        return 1.0;
     }
 
     /**
      * Convert from LCY to this currency (BC: LCY to FCY)
      */
-    public function fromLCY(float $amountLCY, ?float $exchangeRate = null): float
+    public function fromLCY(float $amountLCY, ?float $exchangeRate = null, ?\DateTime $date = null): float
     {
         if ($this->is_lcy) {
             return $amountLCY;
         }
 
-        $rate = $exchangeRate ?? $this->getExchangeRate();
+        $rate = $exchangeRate ?? $this->getExchangeRate($date);
 
         if ($rate == 0) {
             throw new \InvalidArgumentException("Exchange rate cannot be zero for {$this->code}");
@@ -239,13 +248,13 @@ class Currency extends Model
     /**
      * Convert to LCY from this currency (BC: FCY to LCY)
      */
-    public function toLCY(float $amountFCY, ?float $exchangeRate = null): float
+    public function toLCY(float $amountFCY, ?float $exchangeRate = null, ?\DateTime $date = null): float
     {
         if ($this->is_lcy) {
             return $amountFCY;
         }
 
-        $rate = $exchangeRate ?? $this->getExchangeRate();
+        $rate = $exchangeRate ?? $this->getExchangeRate($date);
 
         return $this->roundAmount($amountFCY * $rate);
     }
@@ -275,14 +284,14 @@ class Currency extends Model
 
         // Percentage tolerance
         if ($this->payment_tolerance_percent > 0) {
-            $percentTolerance = $expected * ($this->payment_tolerance_percent / 100);
+            $percentTolerance = $expected * ((float) $this->payment_tolerance_percent / 100);
             if ($diff <= $percentTolerance) {
                 return true;
             }
         }
 
         // Fixed amount tolerance
-        if ($this->max_payment_tolerance_amount && $diff <= $this->max_payment_tolerance_amount) {
+        if ($this->max_payment_tolerance_amount && $diff <= (float) $this->max_payment_tolerance_amount) {
             return true;
         }
 
@@ -298,7 +307,7 @@ class Currency extends Model
             return ['rounded' => $amount, 'difference' => 0];
         }
 
-        $rounded = $this->rounding_method->round($amount, $this->invoice_rounding_precision);
+        $rounded = $this->rounding_method->round($amount, (float) $this->invoice_rounding_precision);
 
         return [
             'rounded' => $rounded,

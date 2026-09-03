@@ -39,7 +39,7 @@
         </x-slot>
 
         <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <table class="min-w-full border-collapse text-sm">
+            <table class="min-w-[1200px] w-full table-fixed border-collapse text-sm">
                 <thead>
                     <tr class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                         <th class="border border-gray-200 px-4 py-3 dark:border-gray-700">Date</th>

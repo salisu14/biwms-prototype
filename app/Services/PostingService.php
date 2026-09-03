@@ -48,6 +48,8 @@ class PostingService
     {
         $data['posting_date'] = $data['posting_date'] ?? now();
         $data['document_date'] = $data['document_date'] ?? $data['posting_date'];
+        $data['source_type'] ??= SourceType::GENERAL_JOURNAL->value;
+        $data['source_module'] ??= 'legacy_posting';
 
         $this->validateLegacyGlEntry($data);
 
@@ -88,8 +90,6 @@ class PostingService
             $data['amount_lcy'] = $data['amount'];
         }
 
-        $data['source_type'] ??= SourceType::GENERAL_JOURNAL->value;
-        $data['source_module'] ??= 'legacy_posting';
         $data['user_id'] = $data['user_id'] ?? auth()->id();
 
         return GlEntry::create($data);
@@ -118,6 +118,12 @@ class PostingService
         if (! $account->allowsDirectPosting()) {
             throw ValidationException::withMessages([
                 'chart_of_account_id' => "G/L account {$account->account_number} does not allow direct posting.",
+            ]);
+        }
+
+        if ($account->isSystemControlled() && (($data['source_type'] ?? null) === SourceType::GENERAL_JOURNAL->value)) {
+            throw ValidationException::withMessages([
+                'chart_of_account_id' => "G/L account {$account->account_number} is system controlled and cannot be posted through a manual journal.",
             ]);
         }
 
@@ -512,38 +518,50 @@ class PostingService
                     $gainAccount = $currency->realizedGainsAccount;
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $adjustAccount->id,
+                        'source_type' => SourceType::CUSTOMER->value,
                         'debit_amount' => $gainLossAmount, // Debit AR (decrease cumulative credit)
                         'credit_amount' => 0,
                         'document_type' => 'PAYMENT',
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Gain on {$application->document_number}",
+                        'payment_application_id' => $application->id,
+                        'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|ar|debit'),
                     ]);
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $gainAccount->id,
+                        'source_type' => SourceType::CUSTOMER->value,
                         'debit_amount' => 0,
                         'credit_amount' => $gainLossAmount, // Credit Gain
                         'document_type' => 'PAYMENT',
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Gain on {$application->document_number}",
+                        'payment_application_id' => $application->id,
+                        'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|gain|credit'),
                     ]);
                 } else {
                     // LOSS (for Disbursement)
                     $lossAccount = $currency->realizedLossesAccount;
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $lossAccount->id,
+                        'source_type' => SourceType::VENDOR->value,
                         'debit_amount' => $gainLossAmount, // Debit Loss
                         'credit_amount' => 0,
                         'document_type' => 'PAYMENT',
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Loss on {$application->document_number}",
+                        'payment_application_id' => $application->id,
+                        'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|loss|debit'),
                     ]);
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $adjustAccount->id,
+                        'source_type' => SourceType::VENDOR->value,
                         'debit_amount' => 0,
                         'credit_amount' => $gainLossAmount, // Credit AP
                         'document_type' => 'PAYMENT',
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Loss on {$application->document_number}",
+                        'payment_application_id' => $application->id,
+                        'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|ap|credit'),
                     ]);
                 }
             } else {
@@ -554,38 +572,50 @@ class PostingService
                     $lossAccount = $currency->realizedLossesAccount;
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $lossAccount->id,
+                        'source_type' => SourceType::CUSTOMER->value,
                         'debit_amount' => $absAmount,
                         'credit_amount' => 0,
                         'document_type' => 'PAYMENT',
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Loss on {$application->document_number}",
+                        'payment_application_id' => $application->id,
+                        'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|loss|debit'),
                     ]);
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $adjustAccount->id,
+                        'source_type' => SourceType::CUSTOMER->value,
                         'debit_amount' => 0,
                         'credit_amount' => $absAmount,
                         'document_type' => 'PAYMENT',
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Loss on {$application->document_number}",
+                        'payment_application_id' => $application->id,
+                        'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|ar|credit'),
                     ]);
                 } else {
                     // GAIN (Disbursement)
                     $gainAccount = $currency->realizedGainsAccount;
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $adjustAccount->id,
+                        'source_type' => SourceType::VENDOR->value,
                         'debit_amount' => $absAmount,
                         'credit_amount' => 0,
                         'document_type' => 'PAYMENT',
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Gain on {$application->document_number}",
+                        'payment_application_id' => $application->id,
+                        'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|ap|debit'),
                     ]);
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $gainAccount->id,
+                        'source_type' => SourceType::VENDOR->value,
                         'debit_amount' => 0,
                         'credit_amount' => $absAmount,
                         'document_type' => 'PAYMENT',
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Gain on {$application->document_number}",
+                        'payment_application_id' => $application->id,
+                        'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|gain|credit'),
                     ]);
                 }
             }
@@ -599,12 +629,9 @@ class PostingService
      */
     public function reverseRealizedGainLoss(PaymentApplication $application): void
     {
-        // Simple implementation: Reverse the G/L entries associated with this application
-        // In a full BC implementation, we'd look for specific G/L entries by document and source.
-        // For now, let's assume we can find them by payment number and description.
-        $payment = $application->payment;
-        $entries = GlEntry::where('document_number', $payment->payment_number)
-            ->where('description', 'like', "%{$application->document_number}%")
+        $entries = GlEntry::query()
+            ->where('payment_application_id', $application->id)
+            ->whereNull('reversal_of_gl_entry_id')
             ->get();
 
         foreach ($entries as $entry) {
@@ -617,6 +644,9 @@ class PostingService
                 'description' => "Reversal: {$entry->description}",
                 'source_type' => $entry->source_type,
                 'source_number' => $entry->source_number,
+                'payment_application_id' => $application->id,
+                'reversal_of_gl_entry_id' => $entry->id,
+                'idempotency_key' => hash('sha256', 'fx-reversal|'.$application->id.'|'.$entry->id),
             ]);
         }
     }
@@ -921,6 +951,7 @@ class PostingService
                 // 1. Accounts Receivable (Debit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $receivablesAccount->id,
+                    'source_type' => SourceType::CUSTOMER->value,
                     'general_business_posting_group_id' => $customerGroupId,
                     'debit_amount' => $lineTotalWithVat,
                     'credit_amount' => 0,
@@ -934,6 +965,7 @@ class PostingService
                 // 2. Revenue (Credit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $salesAccount->id,
+                    'source_type' => SourceType::ITEM->value,
                     'general_business_posting_group_id' => $customerGroupId,
                     'debit_amount' => 0,
                     'credit_amount' => $lineRevenue,
@@ -948,6 +980,7 @@ class PostingService
                 if ($lineVat > 0 && $vatSetup && $vatSetup->sales_vat_account_id) {
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $vatSetup->sales_vat_account_id,
+                        'source_type' => SourceType::ITEM->value,
                         'general_business_posting_group_id' => $customerGroupId,
                         'debit_amount' => 0,
                         'credit_amount' => $lineVat,
@@ -998,6 +1031,7 @@ class PostingService
                 // 1. A/P Reduction (Debit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $payablesAccount->id,
+                    'source_type' => SourceType::VENDOR->value,
                     'debit_amount' => $lineAmountIncludingTax,
                     'credit_amount' => 0,
                     'document_type' => 'PURCHASE_CREDIT_MEMO',
@@ -1015,6 +1049,7 @@ class PostingService
                     // 2. Inventory Reduction (Credit)
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $inventoryAccount->id,
+                        'source_type' => SourceType::ITEM->value,
                         'debit_amount' => 0,
                         'credit_amount' => $lineAmount,
                         'document_type' => 'PURCHASE_CREDIT_MEMO',
@@ -1031,6 +1066,7 @@ class PostingService
                     // 2. Expense/Purchase Reversal (Credit)
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $purchaseAccount->id,
+                        'source_type' => SourceType::ITEM->value,
                         'debit_amount' => 0,
                         'credit_amount' => $lineAmount,
                         'document_type' => 'PURCHASE_CREDIT_MEMO',
@@ -1047,6 +1083,7 @@ class PostingService
                     if ($vatSetup?->purchase_vat_account_id) {
                         $entries[] = $this->createGlEntry([
                             'chart_of_account_id' => $vatSetup->purchase_vat_account_id,
+                            'source_type' => SourceType::ITEM->value,
                             'debit_amount' => 0,
                             'credit_amount' => $taxAmount,
                             'document_type' => 'PURCHASE_CREDIT_MEMO',
@@ -1104,6 +1141,7 @@ class PostingService
                 // 1. Revenue Reversal (Debit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $salesAccount->id,
+                    'source_type' => SourceType::ITEM->value,
                     'debit_amount' => $lineAmount,
                     'credit_amount' => 0,
                     'document_type' => 'SALES_CREDIT_MEMO',
@@ -1115,6 +1153,7 @@ class PostingService
                 // 2. A/R Reduction (Credit)
                 $entries[] = $this->createGlEntry([
                     'chart_of_account_id' => $receivablesAccount->id,
+                    'source_type' => SourceType::CUSTOMER->value,
                     'debit_amount' => 0,
                     'credit_amount' => $lineAmountIncludingVat,
                     'document_type' => 'SALES_CREDIT_MEMO',
@@ -1130,6 +1169,7 @@ class PostingService
                     if ($vatSetup?->sales_vat_account_id) {
                         $entries[] = $this->createGlEntry([
                             'chart_of_account_id' => $vatSetup->sales_vat_account_id,
+                            'source_type' => SourceType::ITEM->value,
                             'debit_amount' => $vatAmount,
                             'credit_amount' => 0,
                             'document_type' => 'SALES_CREDIT_MEMO',
@@ -1151,6 +1191,7 @@ class PostingService
                     // 3. Inventory Increase (Debit)
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $inventoryAccount->id,
+                        'source_type' => SourceType::ITEM->value,
                         'debit_amount' => $lineCost,
                         'credit_amount' => 0,
                         'document_type' => 'SALES_CREDIT_MEMO',
@@ -1162,6 +1203,7 @@ class PostingService
                     // 4. Reverse COGS (Credit)
                     $entries[] = $this->createGlEntry([
                         'chart_of_account_id' => $cogsAccount->id,
+                        'source_type' => SourceType::ITEM->value,
                         'debit_amount' => 0,
                         'credit_amount' => $lineCost,
                         'document_type' => 'SALES_CREDIT_MEMO',

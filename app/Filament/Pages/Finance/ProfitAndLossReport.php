@@ -4,6 +4,7 @@ namespace App\Filament\Pages\Finance;
 
 use App\Models\AccountSchedule;
 use App\Models\DimensionValue;
+use App\Services\Company\CompanyInformationService;
 use App\Services\IncomeStatementService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -33,6 +34,8 @@ class ProfitAndLossReport extends Page implements HasForms
 
     public ?array $reportData = null;
 
+    public ?int $businessId = null;
+
     public static function canAccess(): bool
     {
         return auth()->check() && (auth()->user()?->can('finance.report.view') ?? false);
@@ -40,6 +43,10 @@ class ProfitAndLossReport extends Page implements HasForms
 
     public function mount(): void
     {
+        $this->businessId = app(CompanyInformationService::class)->resolveBusinessId(
+            request()->integer('business_id') ?: null,
+        );
+
         $this->form->fill([
             'startDate' => now()->startOfYear()->toDateString(),
             'endDate' => now()->toDateString(),
@@ -112,14 +119,14 @@ class ProfitAndLossReport extends Page implements HasForms
 
         $compareStart = ! empty($this->formData['compareStartDate']) ? Carbon::parse($this->formData['compareStartDate']) : null;
         $compareEnd = ! empty($this->formData['compareEndDate']) ? Carbon::parse($this->formData['compareEndDate']) : null;
-
         if (! empty($this->formData['scheduleId'])) {
             $rows = $service->generateFromSchedule(
                 (int) $this->formData['scheduleId'],
                 $start,
                 $end,
                 $this->formData['dimension1'] ?? null,
-                $this->formData['dimension2'] ?? null
+                $this->formData['dimension2'] ?? null,
+                $this->businessId,
             );
 
             $this->reportData = [
@@ -165,7 +172,8 @@ class ProfitAndLossReport extends Page implements HasForms
                 globalDimension2: $this->formData['dimension2'] ?? null,
                 compareFrom: $compareStart,
                 compareTo: $compareEnd,
-                showBudget: $this->formData['showBudget'] ?? false
+                showBudget: $this->formData['showBudget'] ?? false,
+                businessId: $this->businessId,
             );
 
             $this->reportData = $report->toBcFormat();

@@ -8,6 +8,7 @@ use App\Models\DepreciationBook;
 use App\Models\FAClass;
 use App\Models\FAPostingGroup;
 use App\Models\Location;
+use App\Services\Business\BusinessContextService;
 use App\Services\FixedAsset\DepreciationBookReportService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -30,8 +31,11 @@ class DepreciationBookReport extends Page implements HasForms
 
     public ?array $formData = [];
 
+    public ?int $businessId = null;
+
     public function mount(): void
     {
+        $this->businessId = app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null);
         $this->form->fill([
             'as_of_date' => now()->toDateString(),
             'fa_class_id' => null,

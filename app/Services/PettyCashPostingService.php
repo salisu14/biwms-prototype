@@ -80,7 +80,7 @@ class PettyCashPostingService
 
             $this->generalLedgerService->post($glLines, [
                 'source_module' => 'petty_cash',
-                'source_type' => SourceType::GENERAL_JOURNAL->value,
+                'source_type' => SourceType::PETTY_CASH->value,
                 'source_id' => $voucher->id,
                 'source_number' => $voucher->voucher_number,
                 'document_type' => 'PETTY_CASH_VOUCHER',

@@ -13,7 +13,7 @@ class ProcurementStatsOverview extends BaseWidget
         $summary = app(PurchaseDashboardService::class)->summary();
 
         return [
-            Stat::make('Posted Purchases', number_format((float) collect($summary['purchases_by_vendor'])->sum('amount'), 2))
+            Stat::make('Posted Purchases (LCY)', number_format((float) collect($summary['purchases_by_vendor'])->sum('amount'), 2))
                 ->description(count($summary['purchases_by_vendor']).' vendors in period')
                 ->color('info'),
             Stat::make('Outstanding Payables', number_format((float) $summary['outstanding_payables'], 2))
@@ -23,7 +23,7 @@ class ProcurementStatsOverview extends BaseWidget
                 ->description(number_format((float) $summary['receipts_not_invoiced']['amount'], 2).' expected value')
                 ->color('danger'),
             Stat::make('Invoices Not Paid', number_format((float) $summary['invoices_not_paid']['amount'], 2))
-                ->description($summary['invoices_not_paid']['count'].' open posted invoices')
+                ->description($summary['invoices_not_paid']['count'].' open vendor ledger invoices')
                 ->color('success'),
         ];
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages\Finance;
 
 use App\Models\Manufacturing\ProductionOrder;
+use App\Services\Business\BusinessContextService;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Pages\Page;
@@ -22,8 +23,8 @@ use UnitEnum;
 /**
  * WIP Valuation Report — BC "Inventory Valuation – WIP" report equivalent.
  *
- * Shows the value of production orders that are partially complete
- * (status = Released | In Progress) at a point in time, broken down into:
+ * Shows active production WIP and finished orders with residual unresolved
+ * WIP at a point in time, broken down into:
  *
  *   Expected Cost:  costs posted as "expected" (material issued, but order not finished)
  *   Actual Cost:    costs posted as "actual"   (output posted)
@@ -50,11 +51,34 @@ class WipValuationReport extends Page implements HasTable
 
     public function table(Table $table): Table
     {
+        $businessId = app(BusinessContextService::class)->resolveId();
+
         return $table
             ->query(
                 ProductionOrder::query()
+                    ->when($businessId !== null, fn ($query) => $query->where('production_orders.business_id', $businessId))
                     ->with(['item', 'lines'])
-                    ->whereIn('status', ['PLANNED', 'FIRM_PLANNED', 'RELEASED', 'FINISHED'])
+                    ->where(function (Builder $query): void {
+                        $query
+                            ->whereIn('status', ['PLANNED', 'FIRM_PLANNED', 'RELEASED'])
+                            ->orWhere(function (Builder $finished): void {
+                                $finished
+                                    ->where('status', 'FINISHED')
+                                    ->where(function (Builder $residual): void {
+                                        $residual
+                                            ->where(function (Builder $valueEntries): void {
+                                                $valueEntries
+                                                    ->whereExists(fn ($query) => $query->selectRaw('1')->from('value_entries as ve')->whereColumn('ve.production_order_no', 'production_orders.document_number'))
+                                                    ->whereRaw('(SELECT COALESCE(SUM(ve.cost_amount_expected - ve.cost_amount_actual), 0) FROM value_entries ve WHERE ve.production_order_no = production_orders.document_number) <> 0');
+                                            })
+                                            ->orWhere(function (Builder $itemLedger): void {
+                                                $itemLedger
+                                                    ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('value_entries as ve')->whereColumn('ve.production_order_no', 'production_orders.document_number'))
+                                                    ->whereRaw('(SELECT COALESCE(SUM(ile.cost_amount_expected - ile.cost_amount_actual), 0) FROM item_ledger_entries ile WHERE ile.source_type = ? AND ile.source_id = production_orders.id) <> 0', [ProductionOrder::class]);
+                                            });
+                                    });
+                            });
+                    })
                     ->select('production_orders.*')
                     ->selectRaw('coalesce(production_orders.starting_date_time, production_orders.ending_date_time, production_orders.finished_at, production_orders.created_at) as production_date_ref')
                     ->selectRaw(
@@ -76,13 +100,14 @@ class WipValuationReport extends Page implements HasTable
                                 ELSE (
                                     SELECT COALESCE(SUM(ile_expected.cost_amount_expected), 0)
                                     FROM item_ledger_entries ile_expected
-                                    WHERE ile_expected.source_type = \'App\\\\Models\\\\Manufacturing\\\\ProductionOrder\'
+                                    WHERE ile_expected.source_type = ?
                                       AND ile_expected.source_id = production_orders.id
                                 )
                             END
                           FROM value_entries ve
                           WHERE ve.production_order_no = production_orders.document_number
-                         ) as expected_cost_total'
+                         ) as expected_cost_total',
+                        [ProductionOrder::class]
                     )
                     ->selectRaw(
                         '(SELECT
@@ -96,13 +121,14 @@ class WipValuationReport extends Page implements HasTable
                                 ELSE (
                                     SELECT COALESCE(SUM(ile_actual.cost_amount_actual), 0)
                                     FROM item_ledger_entries ile_actual
-                                    WHERE ile_actual.source_type = \'App\\\\Models\\\\Manufacturing\\\\ProductionOrder\'
+                                    WHERE ile_actual.source_type = ?
                                       AND ile_actual.source_id = production_orders.id
                                 )
                             END
                           FROM value_entries ve
                           WHERE ve.production_order_no = production_orders.document_number
-                         ) as actual_cost_total'
+                         ) as actual_cost_total',
+                        [ProductionOrder::class]
                     )
                     ->selectRaw(
                         '(SELECT
@@ -117,19 +143,20 @@ class WipValuationReport extends Page implements HasTable
                                     (
                                         SELECT COALESCE(SUM(ile_actual.cost_amount_actual), 0)
                                         FROM item_ledger_entries ile_actual
-                                        WHERE ile_actual.source_type = \'App\\\\Models\\\\Manufacturing\\\\ProductionOrder\'
+                                        WHERE ile_actual.source_type = ?
                                           AND ile_actual.source_id = production_orders.id
                                     ) - (
                                         SELECT COALESCE(SUM(ile_expected.cost_amount_expected), 0)
                                         FROM item_ledger_entries ile_expected
-                                        WHERE ile_expected.source_type = \'App\\\\Models\\\\Manufacturing\\\\ProductionOrder\'
+                                        WHERE ile_expected.source_type = ?
                                           AND ile_expected.source_id = production_orders.id
                                     )
                                 )
                             END
                           FROM value_entries ve
                           WHERE ve.production_order_no = production_orders.document_number
-                         ) as total_variance'
+                         ) as total_variance',
+                        [ProductionOrder::class, ProductionOrder::class]
                     )
             )
             ->columns([

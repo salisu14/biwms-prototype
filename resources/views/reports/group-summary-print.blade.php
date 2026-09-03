@@ -34,7 +34,12 @@
             <h1>{{ $report['report_type'] === 'GROUP_SUMMARY' ? 'Group Summary' : 'Trial Balance' }}</h1>
             <p>Closing balance ({{ $report['period']['start'] }} - {{ $report['period']['end'] }})</p>
         </div>
-        <div style="font-size: 12px;">{{ $report['is_balanced'] ? 'Balanced' : 'Unbalanced' }}</div>
+        <div style="font-size: 12px; text-align: right;">
+            <strong>Trial Balance Status:</strong> {{ $report['is_balanced'] ? 'Balanced' : 'Unbalanced' }}<br>
+            Raw G/L Debit: NGN {{ number_format((float) $report['raw_gl_totals']['debit'], 2) }}<br>
+            Raw G/L Credit: NGN {{ number_format((float) $report['raw_gl_totals']['credit'], 2) }}<br>
+            Raw Difference: NGN {{ number_format((float) $report['raw_gl_totals']['difference'], 2) }}
+        </div>
     </div>
 
     <table>
@@ -65,7 +70,7 @@
         <tfoot>
             <tr class="spacer"><td colspan="3"></td></tr>
             <tr class="grand">
-                <td>Grand Total</td>
+                <td>Raw G/L Grand Total</td>
                 <td class="num">NGN {{ number_format((float) $report['grand_total']['debit'], 2) }}</td>
                 <td class="num">NGN {{ number_format((float) $report['grand_total']['credit'], 2) }}</td>
             </tr>

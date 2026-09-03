@@ -10,7 +10,9 @@
                         color="info"
                         icon="heroicon-o-printer"
                         :href="route('reports.balance-sheet.print', [
+                            'business_id' => $this->businessId,
                             'asOfDate' => $this->formData['asOfDate'] ?? null,
+                            'scheduleId' => $this->formData['scheduleId'] ?? null,
                         ])"
                         target="_blank"
                     >

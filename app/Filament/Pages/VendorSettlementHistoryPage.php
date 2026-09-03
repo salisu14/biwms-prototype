@@ -13,6 +13,7 @@ use App\Filament\Resources\Vendors\VendorResource;
 use App\Models\Business;
 use App\Models\Currency;
 use App\Models\Vendor;
+use App\Services\Business\BusinessContextService;
 use App\Services\Finance\VendorSettlementHistoryService;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -68,7 +69,7 @@ abstract class VendorSettlementHistoryPage extends Page implements HasForms
         $this->date_from = request()->filled('date_from') ? (string) request()->query('date_from') : null;
         $this->date_to = request()->filled('date_to') ? (string) request()->query('date_to') : null;
         $this->currency_code = request()->filled('currency_code') ? (string) request()->query('currency_code') : null;
-        $this->business_id = request()->integer('business_id') ?: (filled(session('active_business_id')) ? (int) session('active_business_id') : null);
+        $this->business_id = app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null);
     }
 
     public static function getNavigationGroup(): ?string
@@ -177,7 +178,7 @@ abstract class VendorSettlementHistoryPage extends Page implements HasForms
         $this->date_from = null;
         $this->date_to = null;
         $this->currency_code = null;
-        $this->business_id = filled(session('active_business_id')) ? (int) session('active_business_id') : null;
+        $this->business_id = app(BusinessContextService::class)->resolveId();
     }
 
     public function getViewData(): array
@@ -202,20 +203,6 @@ abstract class VendorSettlementHistoryPage extends Page implements HasForms
                 ->label('Refresh')
                 ->icon('heroicon-o-arrow-path')
                 ->action('refreshReport'),
-            Action::make('csv')
-                ->label('CSV')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->url(fn (): string => route('reports.vendor-settlement-history.export', [
-                    ...$this->filters(),
-                    'format' => 'csv',
-                ])),
-            Action::make('pdf')
-                ->label('PDF')
-                ->icon('heroicon-o-document-arrow-down')
-                ->url(fn (): string => route('reports.vendor-settlement-history.export', [
-                    ...$this->filters(),
-                    'format' => 'pdf',
-                ])),
         ];
     }
 

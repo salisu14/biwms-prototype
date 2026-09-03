@@ -3,16 +3,15 @@
 namespace App\Filament\Pages;
 
 use App\Models\Currency;
-use App\Models\Item;
 use App\Models\Location;
-use App\Services\InventoryReportService;
+use App\Services\Business\BusinessContextService;
+use App\Services\Inventory\InventoryValuationReportService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\ColumnGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -32,12 +31,15 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
 
     public ?array $formData = [];
 
+    public ?int $businessId = null;
+
     public function mount(): void
     {
         $this->form->fill([
             'startDate' => now()->startOfMonth()->toDateString(),
             'endDate' => now()->toDateString(),
         ]);
+        $this->businessId = app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null);
     }
 
     public function form(Schema $schema): Schema
@@ -70,154 +72,60 @@ class InventoryValuationReport extends Page implements HasForms, HasTable
             $currency = Currency::query()->where('is_lcy', true)->value('code') ?? $currency;
         }
 
-        $service = app(InventoryReportService::class);
+        $service = app(InventoryValuationReportService::class);
         $state = $this->form->getState();
         $start = Carbon::parse($state['startDate'] ?? $this->formData['startDate'] ?? now()->startOfMonth()->toDateString());
         $end = Carbon::parse($state['endDate'] ?? $this->formData['endDate'] ?? now()->toDateString());
         $locationId = $state['locationId'] ?? $this->formData['locationId'] ?? null;
 
         return $table
-            ->query($service->getMovementSummary($start, $end, $locationId))
+            ->records(fn (): array => $service->generate($start, $end, [
+                'location_id' => $locationId,
+                'business_id' => $this->businessId,
+            ])->all())
             ->columns([
                 TextColumn::make('item_code')
                     ->label('Item No.')
                     ->searchable()
                     ->sortable()
-                    ->description(fn (Item $record): string => $record->description),
+                    ->description(fn (array $record): string => (string) ($record['description'] ?? '')),
 
                 TextColumn::make('base_unit_of_measure')
                     ->label('UoM'),
 
-                // Opening
-                ColumnGroup::make('Opening Balance')
-                    ->columns([
-                        TextColumn::make('opening_qty')
-                            ->label('Qty')
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('opening_value')
-                            ->label('Value')
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
-
-                // Purchase In
-                ColumnGroup::make('Purchase In')
-                    ->columns([
-                        TextColumn::make('purchase_in_qty')
-                            ->label('Qty')
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('purchase_in_value')
-                            ->label('Value')
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
-
-                // Positive Adjustment
-                ColumnGroup::make('Pos. Adj.')
-                    ->columns([
-                        TextColumn::make('pos_adj_qty')
-                            ->label('Qty')
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('pos_adj_value')
-                            ->label('Value')
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
-
-                ColumnGroup::make('Production Output')
-                    ->columns([
-                        TextColumn::make('production_output_qty')
-                            ->label('Qty')
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('production_output_value')
-                            ->label('Value')
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
-
-                ColumnGroup::make('Consumption')
-                    ->columns([
-                        TextColumn::make('production_consumption_qty')
-                            ->label('Qty')
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('production_consumption_value')
-                            ->label('Value')
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
-
-                ColumnGroup::make('Assembly Output')
-                    ->columns([
-                        TextColumn::make('assembly_output_qty')
-                            ->label('Qty')
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('assembly_output_value')
-                            ->label('Value')
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
-
-                ColumnGroup::make('Assembly Cons.')
-                    ->columns([
-                        TextColumn::make('assembly_consumption_qty')
-                            ->label('Qty')
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('assembly_consumption_value')
-                            ->label('Value')
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
-
-                // Sales
-                ColumnGroup::make('Sales')
-                    ->columns([
-                        TextColumn::make('sale_out_qty')
-                            ->label('Qty')
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('sale_out_value')
-                            ->label('Value')
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
-
-                // Closing
-                ColumnGroup::make('Closing Balance')
-                    ->columns([
-                        TextColumn::make('closing_qty')
-                            ->label('Qty')
-                            ->getStateUsing(fn ($record) => $record->opening_qty
-                                + $record->purchase_in_qty + $record->purchase_out_qty
-                                + $record->pos_adj_qty + $record->neg_adj_qty
-                                + $record->production_output_qty + $record->production_consumption_qty
-                                + $record->assembly_output_qty + $record->assembly_consumption_qty
-                                + $record->sale_out_qty + $record->sale_in_qty
-                                + $record->transfer_qty
-                            )
-                            ->numeric(2)
-                            ->alignRight(),
-                        TextColumn::make('closing_value')
-                            ->label('Value')
-                            ->getStateUsing(fn ($record) => $record->opening_value
-                                + $record->purchase_in_value + $record->purchase_out_value
-                                + $record->pos_adj_value + $record->neg_adj_value
-                                + $record->production_output_value + $record->production_consumption_value
-                                + $record->assembly_output_value + $record->assembly_consumption_value
-                                + $record->sale_out_value + $record->sale_in_value
-                                + $record->transfer_value
-                            )
-                            ->money($currency)
-                            ->alignRight(),
-                    ]),
+                TextColumn::make('location_id')
+                    ->label('Location'),
+                TextColumn::make('quantity_on_hand')
+                    ->label('Quantity')
+                    ->numeric(4)
+                    ->alignRight(),
+                TextColumn::make('remaining_quantity')
+                    ->label('Remaining')
+                    ->numeric(4)
+                    ->alignRight(),
+                TextColumn::make('expected_cost')
+                    ->label('Expected Cost')
+                    ->money($currency)
+                    ->alignRight(),
+                TextColumn::make('actual_cost')
+                    ->label('Actual Cost')
+                    ->money($currency)
+                    ->alignRight(),
+                TextColumn::make('adjustment_value')
+                    ->label('Adjustments')
+                    ->money($currency)
+                    ->alignRight(),
+                TextColumn::make('inventory_value')
+                    ->label('Inventory Value')
+                    ->money($currency)
+                    ->weight('bold')
+                    ->alignRight(),
+                TextColumn::make('unit_cost')
+                    ->label('Unit Cost')
+                    ->money($currency)
+                    ->alignRight(),
             ])
-            ->paginated([5, 10, 25, 50, 'all']);
+            ->paginated([10, 25, 50]);
     }
 
     public function generateReport(): void

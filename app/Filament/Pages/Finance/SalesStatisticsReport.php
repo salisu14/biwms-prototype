@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Finance;
 
 use App\Models\GeneralBusinessPostingGroup;
+use App\Services\Business\BusinessContextService;
 use App\Services\Finance\StatisticsReportService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -32,6 +33,8 @@ class SalesStatisticsReport extends Page implements HasForms
 
     public ?int $gen_bus_posting_group_id = null;
 
+    public ?int $businessId = null;
+
     public function mount(StatisticsReportService $statisticsReportService): void
     {
         $filters = $statisticsReportService->normalizeFilters();
@@ -39,6 +42,7 @@ class SalesStatisticsReport extends Page implements HasForms
         $this->date_from = $filters['date_from'];
         $this->date_to = $filters['date_to'];
         $this->gen_bus_posting_group_id = $filters['gen_bus_posting_group_id'];
+        $this->businessId = app(BusinessContextService::class)->resolveId(request()->integer('business_id') ?: null);
     }
 
     public function getBreadcrumb(): string
@@ -146,6 +150,7 @@ class SalesStatisticsReport extends Page implements HasForms
             'date_from' => $this->date_from,
             'date_to' => $this->date_to,
             'gen_bus_posting_group_id' => $this->gen_bus_posting_group_id,
+            'business_id' => $this->businessId,
         ];
     }
 }

@@ -13,6 +13,7 @@
                         color="gray"
                         icon="heroicon-o-arrow-down-tray"
                         :href="route('reports.cash-flow.export', [
+                            'business_id' => $this->businessId,
                             'format' => 'csv',
                             'startDate' => $this->formData['startDate'] ?? null,
                             'endDate' => $this->formData['endDate'] ?? null,
@@ -31,6 +32,7 @@
                         color="info"
                         icon="heroicon-o-printer"
                         :href="route('reports.cash-flow.print', [
+                            'business_id' => $this->businessId,
                             'startDate' => $this->formData['startDate'] ?? null,
                             'endDate' => $this->formData['endDate'] ?? null,
                             'compareStartDate' => $this->formData['compareStartDate'] ?? null,

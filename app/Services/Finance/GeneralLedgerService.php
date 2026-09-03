@@ -68,6 +68,8 @@ class GeneralLedgerService
      *     item_ledger_entry_id?: int|null,
      *     customer_ledger_entry_id?: int|null,
      *     vendor_ledger_entry_id?: int|null
+     *     reversal_of_transaction_id?: int|null,
+     *     reason?: string|null
      * }> $lines
      * @param  array<string, mixed>  $meta
      */
@@ -76,6 +78,10 @@ class GeneralLedgerService
         $documentNumber = (string) ($meta['document_number'] ?? $meta['source_number'] ?? 'JOURNAL');
         $documentType = (string) ($meta['document_type'] ?? 'JOURNAL');
         $sourceType = $this->normalizeSourceType($meta['source_type'] ?? SourceType::GENERAL_JOURNAL->value);
+        // gl_entries.source_number remains a varchar(20) contract. Keep
+        // that display/reference field bounded while retaining full source
+        // identifiers in posting transaction metadata and stable keys.
+        $sourceNumber = Str::limit((string) ($meta['source_number'] ?? $documentNumber), 20, '');
         $postingLines = collect($lines)
             ->map(fn (array $line): array => [
                 'account_id' => $line['account_id'],
@@ -84,7 +90,7 @@ class GeneralLedgerService
                 'description' => $line['description'] ?? $meta['description'] ?? 'G/L Entry',
                 'dimensions' => array_merge($meta['dimensions'] ?? [], $line['dimensions'] ?? []),
                 'source_type' => $this->normalizeSourceType($line['source_type'] ?? $sourceType),
-                'source_number' => $line['source_number'] ?? $meta['source_number'] ?? $documentNumber,
+                'source_number' => Str::limit((string) ($line['source_number'] ?? $sourceNumber), 20, ''),
                 'posting_group_source' => $line['posting_group_source'] ?? null,
                 'cost_component' => $line['cost_component'] ?? null,
                 'item_ledger_entry_id' => $line['item_ledger_entry_id'] ?? null,
@@ -113,6 +119,8 @@ class GeneralLedgerService
             'exchange_rate' => $meta['exchange_rate'] ?? '1',
             'dimensions' => $meta['dimensions'] ?? [],
             'actor_id' => $meta['actor_id'] ?? auth()->id(),
+            'reversal_of_transaction_id' => $meta['reversal_of_transaction_id'] ?? null,
+            'reason' => $meta['reason'] ?? null,
             'lines' => $postingLines,
         ]));
     }
@@ -131,6 +139,7 @@ class GeneralLedgerService
      *     account_id?: int,
      *     account_ids?: array<int, int>,
      *     account_number?: string,
+     *     business_id?: int,
      *     general_business_posting_group_id?: int,
      *     shortcut_dimension_1_code?: string,
      *     shortcut_dimension_2_code?: string,
@@ -143,10 +152,42 @@ class GeneralLedgerService
     }
 
     /**
+     * Return authoritative raw LCY debit and credit totals for a posting scope.
+     *
+     * This deliberately does not use account normal-balance presentation. It is
+     * used by reports that display balances hierarchically but still need a
+     * double-entry health indicator.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{debit: float, credit: float, difference: float, is_balanced: bool}
+     */
+    public function trialBalanceTotals(Carbon $startDate, Carbon $endDate, array $filters = []): array
+    {
+        $totals = GlEntry::query()
+            ->tap(fn (Builder $query): Builder => $this->applyGlEntryFilters($query, $startDate, $endDate, $filters))
+            ->selectRaw('COALESCE(SUM(COALESCE(debit_amount_lcy, debit_amount)), 0) as debit_total, COALESCE(SUM(COALESCE(credit_amount_lcy, credit_amount)), 0) as credit_total')
+            ->when($filters['account_id'] ?? null, fn (Builder $query, int $accountId): Builder => $query->where('chart_of_account_id', $accountId))
+            ->when($filters['account_ids'] ?? null, fn (Builder $query, array $accountIds): Builder => $query->whereIn('chart_of_account_id', $accountIds))
+            ->first();
+
+        $debit = round((float) ($totals->debit_total ?? 0), 2);
+        $credit = round((float) ($totals->credit_total ?? 0), 2);
+        $difference = round($debit - $credit, 2);
+
+        return [
+            'debit' => $debit,
+            'credit' => $credit,
+            'difference' => $difference,
+            'is_balanced' => abs($difference) < 0.01,
+        ];
+    }
+
+    /**
      * @param  array{
      *     account_id?: int,
      *     account_ids?: array<int, int>,
      *     account_number?: string,
+     *     business_id?: int,
      *     general_business_posting_group_id?: int,
      *     shortcut_dimension_1_code?: string,
      *     shortcut_dimension_2_code?: string,
@@ -168,7 +209,7 @@ class GeneralLedgerService
             $totals = GlEntry::query()
                 ->where('chart_of_account_id', $account->id)
                 ->tap(fn (Builder $query): Builder => $this->applyGlEntryFilters($query, $startDate, $endDate, $filters))
-                ->selectRaw('COALESCE(SUM(debit_amount), 0) as debit_total, COALESCE(SUM(credit_amount), 0) as credit_total')
+                ->selectRaw('COALESCE(SUM(COALESCE(debit_amount_lcy, debit_amount)), 0) as debit_total, COALESCE(SUM(COALESCE(credit_amount_lcy, credit_amount)), 0) as credit_total')
                 ->first();
 
             $debit = round((float) ($totals->debit_total ?? 0), 2);
@@ -251,7 +292,7 @@ class GeneralLedgerService
         $openingBalance = (float) GlEntry::query()
             ->where('chart_of_account_id', $account->id)
             ->tap(fn (Builder $query): Builder => $this->applyGlEntryFilters($query, null, $startDate->copy()->subDay(), $filters))
-            ->sum(DB::raw('debit_amount - credit_amount'));
+            ->sum(DB::raw('COALESCE(debit_amount_lcy, debit_amount) - COALESCE(credit_amount_lcy, credit_amount)'));
 
         $entries = GlEntry::query()
             ->where('chart_of_account_id', $account->id)
@@ -260,8 +301,8 @@ class GeneralLedgerService
             ->orderBy('entry_number')
             ->get();
 
-        $periodDebit = round((float) $entries->sum('debit_amount'), 2);
-        $periodCredit = round((float) $entries->sum('credit_amount'), 2);
+        $periodDebit = round((float) $entries->sum(fn (GlEntry $entry): float => (float) ($entry->debit_amount_lcy ?? $entry->debit_amount)), 2);
+        $periodCredit = round((float) $entries->sum(fn (GlEntry $entry): float => (float) ($entry->credit_amount_lcy ?? $entry->credit_amount)), 2);
         $closingBalance = round($openingBalance + $periodDebit - $periodCredit, 2);
 
         return [
@@ -282,9 +323,9 @@ class GeneralLedgerService
                 'sourceable_type' => $entry->sourceable_type,
                 'sourceable_id' => $entry->sourceable_id,
                 'description' => $entry->description,
-                'debit' => round((float) $entry->debit_amount, 2),
-                'credit' => round((float) $entry->credit_amount, 2),
-                'amount' => round((float) $entry->amount, 2),
+                'debit' => round((float) ($entry->debit_amount_lcy ?? $entry->debit_amount), 2),
+                'credit' => round((float) ($entry->credit_amount_lcy ?? $entry->credit_amount), 2),
+                'amount' => round((float) ($entry->amount_lcy ?? $entry->amount), 2),
                 'shortcut_dimension_1_code' => $entry->shortcut_dimension_1_code,
                 'shortcut_dimension_2_code' => $entry->shortcut_dimension_2_code,
                 'dimensions' => $entry->dimensions,
@@ -302,6 +343,10 @@ class GeneralLedgerService
 
         if ($generalBusinessPostingGroupId = $filters['general_business_posting_group_id'] ?? null) {
             $query->where('general_business_posting_group_id', $generalBusinessPostingGroupId);
+        }
+
+        if (($businessId = $filters['business_id'] ?? null) !== null) {
+            $query->where('business_id', (int) $businessId);
         }
 
         if ($dimension1 = $filters['shortcut_dimension_1_code'] ?? null) {

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Widgets\AdminBusinessPerformanceStats;
 use App\Filament\Widgets\AdminCashflowChart;
 use App\Filament\Widgets\AdminDocumentMixChart;
 use App\Filament\Widgets\AdminKpiStatsOverview;
@@ -33,6 +34,7 @@ class AdminDashboard extends BaseDashboard
     public function getWidgets(): array
     {
         return [
+            AdminBusinessPerformanceStats::class,
             AdminKpiStatsOverview::class,
             AdminOpsTrendChart::class,
             AdminDocumentMixChart::class,
