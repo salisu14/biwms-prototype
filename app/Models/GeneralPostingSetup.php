@@ -188,6 +188,29 @@ class GeneralPostingSetup extends Model
     }
 
     /**
+     * Get purchase clearing/interim account for inventory purchase actualization.
+     *
+     * Inventory purchases must never silently use the inventory asset account as
+     * their clearing account; doing so can create Dr Inventory / Cr Inventory
+     * value-entry postings and duplicate the invoice-side inventory debit.
+     */
+    public function getPurchaseClearingAccount(): ?ChartOfAccount
+    {
+        return $this->purchaseAccount;
+    }
+
+    /**
+     * Get expense/purchase account for non-inventory purchases.
+     *
+     * This intentionally preserves the legacy purchase-account fallback contract
+     * for callers that are not posting inventory valuation clearing.
+     */
+    public function getExpensePurchaseAccount(): ?ChartOfAccount
+    {
+        return $this->getPurchaseAccount();
+    }
+
+    /**
      * Get direct cost applied account (for manufacturing)
      */
     public function getDirectCostAppliedAccount(): ?ChartOfAccount

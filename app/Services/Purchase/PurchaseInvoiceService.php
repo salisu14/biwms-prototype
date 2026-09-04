@@ -8,6 +8,8 @@ use App\Enums\ApprovalStatus;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\PurchaseOrderStatus;
 use App\Exceptions\NumberSeriesException;
+use App\Exceptions\PostingSetupException;
+use App\Models\GeneralPostingSetup;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\PostedPurchaseInvoice;
@@ -15,7 +17,9 @@ use App\Models\PostedPurchaseInvoiceLine;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceLine;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderLine;
 use App\Models\ValueEntry;
+use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Services\Business\BusinessContextService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
@@ -185,6 +189,8 @@ class PurchaseInvoiceService
             if ($invoice->lines->isEmpty()) {
                 throw new \RuntimeException('No lines to post for this purchase invoice.');
             }
+
+            $this->assertPostingSetupComplete($invoice);
 
             foreach ($invoice->lines as $line) {
                 if (! $line->item) {
@@ -409,6 +415,105 @@ class PurchaseInvoiceService
         $item->increment('inventory', $quantityBase);
 
         return $entry;
+    }
+
+    public function assertPostingSetupComplete(PurchaseInvoice $invoice): void
+    {
+        $invoice->loadMissing(['lines.item', 'vendor']);
+
+        if (! $invoice->vendor) {
+            throw new PostingSetupException("Vendor is missing for purchase invoice {$invoice->document_number}.");
+        }
+
+        $this->assertVendorLinePostingSetupComplete(
+            vendor: $invoice->vendor,
+            lines: $invoice->lines,
+            lineContext: 'purchase invoice line',
+        );
+    }
+
+    public function assertPurchaseOrderPostingSetupComplete(PurchaseOrder $order): void
+    {
+        $order->loadMissing(['vendor', 'lines.item']);
+
+        if ($order->lines->isEmpty()) {
+            return;
+        }
+
+        if (! $order->vendor) {
+            throw new PostingSetupException("Vendor is missing for purchase order {$order->order_number}.");
+        }
+
+        $this->assertVendorLinePostingSetupComplete(
+            vendor: $order->vendor,
+            lines: $order->lines,
+            lineContext: 'purchase order line',
+        );
+    }
+
+    /**
+     * @param  iterable<int, PurchaseInvoiceLine|PurchaseOrderLine>  $lines
+     */
+    private function assertVendorLinePostingSetupComplete(Vendor $vendor, iterable $lines, string $lineContext): void
+    {
+        if (! $vendor->getPayablesAccount()) {
+            $vendorCode = $vendor->vendor_code ?: 'N/A';
+            $vendorName = $vendor->vendor_name ?: 'N/A';
+            $postingGroupId = $vendor->vendor_posting_group_id ?: 'N/A';
+
+            throw new PostingSetupException(
+                "No A/P account is configured for vendor '{$vendorName}' ({$vendorCode}). Set a Payables Account on Vendor Posting Group ID {$postingGroupId}."
+            );
+        }
+
+        foreach ($lines as $line) {
+            if (! $line->item) {
+                throw new PostingSetupException("Item is missing for {$lineContext} {$line->id}.");
+            }
+
+            $setup = $this->generalPostingSetupFor($vendor, $line->item);
+
+            if (! $setup) {
+                $vendorRef = $vendor->vendor_code ?: $vendor->vendor_name ?: (string) $vendor->id;
+
+                throw new PostingSetupException("Posting setup missing for vendor {$vendorRef} and item {$line->item->item_code}");
+            }
+
+            if ($line->item->isInventoryItem() && ! $setup->getPurchaseClearingAccount()) {
+                throw new PostingSetupException($this->purchaseClearingMissingMessage($setup));
+            }
+
+            if (! $line->item->isInventoryItem() && ! $setup->getExpensePurchaseAccount()) {
+                $vendorRef = $vendor->vendor_code ?: $vendor->vendor_name ?: (string) $vendor->id;
+
+                throw new PostingSetupException("Purchase account missing in posting setup for vendor {$vendorRef} and item {$line->item->item_code}");
+            }
+        }
+    }
+
+    private function generalPostingSetupFor(Vendor $vendor, Item $item): ?GeneralPostingSetup
+    {
+        $setup = $vendor->getPostingSetupFor($item);
+
+        if (! $setup && $vendor->general_business_posting_group_id && $item->general_product_posting_group_id) {
+            $setup = GeneralPostingSetup::query()
+                ->where('general_business_posting_group_id', $vendor->general_business_posting_group_id)
+                ->where('general_product_posting_group_id', $item->general_product_posting_group_id)
+                ->where('blocked', false)
+                ->first();
+        }
+
+        return $setup;
+    }
+
+    private function purchaseClearingMissingMessage(GeneralPostingSetup $setup): string
+    {
+        $setup->loadMissing(['generalBusinessPostingGroup', 'generalProductPostingGroup']);
+
+        $businessGroup = $setup->generalBusinessPostingGroup?->code ?? (string) $setup->general_business_posting_group_id;
+        $productGroup = $setup->generalProductPostingGroup?->code ?? (string) $setup->general_product_posting_group_id;
+
+        return "Purchase Clearing Account is not configured for General Business Posting Group {$businessGroup} and General Product Posting Group {$productGroup}.";
     }
 
     /**

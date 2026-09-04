@@ -7,6 +7,7 @@ namespace App\Services\Inventory;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ManufacturingCostComponent;
 use App\Enums\SourceType;
+use App\Exceptions\PostingSetupException;
 use App\Models\CapacityLedgerEntry as InventoryCapacityLedgerEntry;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralPostingSetup;
@@ -258,13 +259,33 @@ class ValueEntryAccountingOrchestrator
     private function purchaseOffsetAccount(ValueEntry $valueEntry, bool $creditMemo = false): ChartOfAccount
     {
         $setup = $this->generalPostingSetup($valueEntry);
-        $account = $creditMemo ? ($setup->purchaseCreditMemoAccount ?? $setup->purchaseAccount) : $setup->purchaseAccount;
+        $account = $creditMemo
+            ? ($setup->purchaseCreditMemoAccount ?? $setup->getPurchaseClearingAccount())
+            : $setup->getPurchaseClearingAccount();
 
         if (! $account) {
-            throw new RuntimeException("Purchase offset account missing for value entry {$valueEntry->entry_no}.");
+            throw new PostingSetupException(
+                $this->purchaseClearingMissingMessage($setup),
+                [
+                    'value_entry_id' => $valueEntry->id,
+                    'value_entry_no' => $valueEntry->entry_no,
+                    'general_business_posting_group_id' => $setup->general_business_posting_group_id,
+                    'general_product_posting_group_id' => $setup->general_product_posting_group_id,
+                ],
+            );
         }
 
         return $account;
+    }
+
+    private function purchaseClearingMissingMessage(GeneralPostingSetup $setup): string
+    {
+        $setup->loadMissing(['generalBusinessPostingGroup', 'generalProductPostingGroup']);
+
+        $businessGroup = $setup->generalBusinessPostingGroup?->code ?? (string) $setup->general_business_posting_group_id;
+        $productGroup = $setup->generalProductPostingGroup?->code ?? (string) $setup->general_product_posting_group_id;
+
+        return "Purchase Clearing Account is not configured for General Business Posting Group {$businessGroup} and General Product Posting Group {$productGroup}.";
     }
 
     private function directCostAppliedAccount(ValueEntry $valueEntry): ChartOfAccount

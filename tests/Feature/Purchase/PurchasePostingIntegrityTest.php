@@ -9,6 +9,7 @@ use App\Enums\ItemType;
 use App\Enums\PurchaseOrderStatus;
 use App\Exceptions\BusinessException;
 use App\Exceptions\NumberSeriesException;
+use App\Exceptions\PostingSetupException;
 use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
@@ -339,6 +340,10 @@ test('post and invoice on an already received purchase order invoices existing r
 
     $postedInvoice = app(PurchaseOrderService::class)->postAndInvoice($order->fresh());
 
+    $purchaseClearingAccount = $fixture['vendor']->getPostingSetupFor($fixture['item'])->getPurchaseClearingAccount();
+    $inventoryAccount = $fixture['item']->getInventoryAccount();
+    $payablesAccount = $fixture['vendor']->getPayablesAccount();
+
     expect($postedInvoice)->toBeInstanceOf(PostedPurchaseInvoice::class)
         ->and(ItemLedgerEntry::query()
             ->where('document_type', 'PURCHASE_RECEIPT')
@@ -351,6 +356,108 @@ test('post and invoice on an already received purchase order invoices existing r
         ->and((float) $fixture['item']->fresh()->inventory)->toBe(288.0)
         ->and((float) $order->fresh()->lines()->firstOrFail()->invoiced_quantity)->toBe(1.0)
         ->and($order->fresh()->status)->toBe(PurchaseOrderStatus::CLOSED);
+
+    expect((float) GlEntry::query()
+        ->where('document_number', $postedInvoice->document_number)
+        ->where('chart_of_account_id', $inventoryAccount->id)
+        ->sum('debit_amount'))->toBe(1000.0)
+        ->and((float) GlEntry::query()
+            ->where('document_number', $postedInvoice->document_number)
+            ->where('chart_of_account_id', $purchaseClearingAccount->id)
+            ->sum('credit_amount'))->toBe(1000.0)
+        ->and((float) GlEntry::query()
+            ->where('document_number', $postedInvoice->document_number)
+            ->where('chart_of_account_id', $purchaseClearingAccount->id)
+            ->sum('debit_amount'))->toBe(1000.0)
+        ->and((float) GlEntry::query()
+            ->where('document_number', $postedInvoice->document_number)
+            ->where('chart_of_account_id', $payablesAccount->id)
+            ->sum('credit_amount'))->toBe(1000.0)
+        ->and((float) GlEntry::query()
+            ->where('document_number', $postedInvoice->document_number)
+            ->where('chart_of_account_id', $inventoryAccount->id)
+            ->sum('credit_amount'))->toBe(0.0);
+});
+
+test('received inventory purchase order with missing purchase clearing fails before invoice side effects', function () {
+    $fixture = purchasePostingFixture();
+    ensurePurchaseInvoiceNumberSeries();
+    $this->actingAs($fixture['user']);
+
+    $fixture['vendor']->getPostingSetupFor($fixture['item'])->forceFill([
+        'purchase_account_id' => null,
+    ])->save();
+
+    $order = PurchaseOrder::query()->create([
+        'order_number' => 'PO-NO-CLEAR-001',
+        'status' => PurchaseOrderStatus::APPROVED,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'order_date' => now()->toDateString(),
+        'posting_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'payment_terms' => 30,
+        'currency_code' => 'NGN',
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'total_amount' => 1000,
+        'total_vat' => 0,
+        'grand_total' => 1000,
+        'created_by' => $fixture['user']->id,
+    ]);
+
+    $line = $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'received_quantity' => 0,
+        'unit_of_measure' => 'CT',
+        'unit_cost' => 1000,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+    ]);
+
+    app(PurchaseOrderService::class)->postReceipt($order);
+
+    $receiptEntriesBefore = ItemLedgerEntry::query()
+        ->where('document_type', 'PURCHASE_RECEIPT')
+        ->where('document_number', 'PO-NO-CLEAR-001')
+        ->count();
+    $expectedValueEntry = ValueEntry::query()
+        ->where('document_no', 'PO-NO-CLEAR-001')
+        ->where('value_entry_state', 'expected')
+        ->firstOrFail();
+
+    expect(fn () => app(PurchaseOrderService::class)->postAndInvoice($order->fresh()))
+        ->toThrow(PostingSetupException::class, 'Purchase Clearing Account is not configured for General Business Posting Group DOMESTIC and General Product Posting Group FINISHED');
+
+    $expectedValueEntry->refresh();
+
+    expect(PurchaseInvoice::query()->where('order_id', $order->id)->exists())->toBeFalse()
+        ->and(ItemLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_RECEIPT')
+            ->where('document_number', 'PO-NO-CLEAR-001')
+            ->count())->toBe($receiptEntriesBefore)
+        ->and(ItemLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_INVOICE')
+            ->where('document_number', 'PO-NO-CLEAR-001')
+            ->exists())->toBeFalse()
+        ->and((float) $expectedValueEntry->remaining_quantity)->toBe(288.0)
+        ->and($expectedValueEntry->completely_invoiced)->toBeFalse()
+        ->and(ValueEntry::query()
+            ->where('document_type', 'PURCHASE_INVOICE')
+            ->where('value_entry_state', 'actual')
+            ->exists())->toBeFalse()
+        ->and(GlEntry::query()
+            ->where('document_number', 'PO-NO-CLEAR-001')
+            ->where('document_type', 'PURCHASE_INVOICE')
+            ->exists())->toBeFalse()
+        ->and(VendorLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_INVOICE')
+            ->exists())->toBeFalse()
+        ->and((float) $line->fresh()->invoiced_quantity)->toBe(0.0)
+        ->and($order->fresh()->status)->toBe(PurchaseOrderStatus::RECEIVED);
 });
 
 test('purchase order lines remain editable through approval but become immutable after receipt starts', function () {
@@ -645,7 +752,7 @@ test('purchase invoice posting rejects missing exact posting setup and rolls bac
     ]);
 
     expect(fn () => app(PurchaseInvoiceService::class)->post($invoice))
-        ->toThrow(Exception::class, 'General posting setup missing');
+        ->toThrow(PostingSetupException::class, 'Posting setup missing');
 
     expect($invoice->fresh()->status)->toBe(ApprovalStatus::APPROVED)
         ->and(ItemLedgerEntry::query()->where('document_number', 'PI-MISSING-SETUP')->exists())->toBeFalse()

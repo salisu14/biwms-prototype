@@ -554,6 +554,8 @@ class PurchaseOrderService
                 throw new Exception('Purchase Order cannot be posted and invoiced in its current state.');
             }
 
+            $this->purchaseInvoiceService->assertPurchaseOrderPostingSetupComplete($order);
+
             if ($this->hasReceiptQuantitiesToPost($order)) {
                 $this->postReceipt($order);
                 $order->refresh()->load('lines.item');

@@ -682,11 +682,10 @@ class PostingService
 
         // Inventory item
         if ($item->isInventoryItem()) {
-            $purchaseAccount = $setup->getPurchaseAccount();
+            $purchaseAccount = $setup->getPurchaseClearingAccount();
 
             if (! $purchaseAccount) {
-                $vendorRef = $vendor->vendor_code ?: $vendor->vendor_name ?: (string) $vendor->id;
-                throw new \Exception("Purchase clearing account missing in posting setup for vendor {$vendorRef} and item {$item->item_code}");
+                throw new PostingSetupException($this->purchaseClearingMissingMessage($setup));
             }
 
             $entries[] = $this->createGlEntry([
@@ -702,7 +701,7 @@ class PostingService
                 'description' => "Purchase clearing: {$description}",
             ]);
         } else {
-            $purchaseAccount = $setup->getPurchaseAccount();
+            $purchaseAccount = $setup->getExpensePurchaseAccount();
             if (! $purchaseAccount) {
                 $vendorRef = $vendor->vendor_code ?: $vendor->vendor_name ?: (string) $vendor->id;
                 throw new \Exception("Purchase account missing in posting setup for vendor {$vendorRef} and item {$item->item_code}");
@@ -746,6 +745,16 @@ class PostingService
         }
 
         return $entries;
+    }
+
+    private function purchaseClearingMissingMessage(GeneralPostingSetup $setup): string
+    {
+        $setup->loadMissing(['generalBusinessPostingGroup', 'generalProductPostingGroup']);
+
+        $businessGroup = $setup->generalBusinessPostingGroup?->code ?? (string) $setup->general_business_posting_group_id;
+        $productGroup = $setup->generalProductPostingGroup?->code ?? (string) $setup->general_product_posting_group_id;
+
+        return "Purchase Clearing Account is not configured for General Business Posting Group {$businessGroup} and General Product Posting Group {$productGroup}.";
     }
 
     public function postFixedAssetPurchase(
