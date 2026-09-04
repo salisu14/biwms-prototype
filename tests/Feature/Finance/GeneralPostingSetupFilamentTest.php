@@ -61,6 +61,65 @@ it('allows editing an existing general posting setup while keeping its own combi
         ->and($fixture['setup']->fresh()->general_product_posting_group_id)->toBe($fixture['rawMaterialGroup']->id);
 });
 
+it('edits purchase clearing without requiring unrelated sales cogs or inventory accounts', function (): void {
+    $fixture = generalPostingSetupFilamentFixture();
+
+    $fixture['setup']->forceFill([
+        'sales_account_id' => null,
+        'cogs_account_id' => null,
+        'inventory_account_id' => null,
+        'inventory_adj_account_id' => null,
+        'purchase_account_id' => null,
+    ])->save();
+
+    Livewire::actingAs($fixture['user'])
+        ->test(EditGeneralPostingSetup::class, ['record' => $fixture['setup']->getRouteKey()])
+        ->fillForm([
+            'purchase_account_id' => $fixture['accounts']['purchase']->id,
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    $fixture['setup']->refresh();
+
+    expect($fixture['setup']->purchase_account_id)->toBe($fixture['accounts']['purchase']->id)
+        ->and($fixture['setup']->sales_account_id)->toBeNull()
+        ->and($fixture['setup']->cogs_account_id)->toBeNull()
+        ->and($fixture['setup']->inventory_account_id)->toBeNull()
+        ->and($fixture['setup']->inventory_adj_account_id)->toBeNull();
+});
+
+it('creates a posting setup with nullable transaction specific accounts', function (): void {
+    $fixture = generalPostingSetupFilamentFixture();
+
+    $serviceGroup = GeneralProductPostingGroup::query()->create([
+        'code' => 'SERVICE',
+        'description' => 'Service Items',
+        'blocked' => false,
+    ]);
+
+    Livewire::actingAs($fixture['user'])
+        ->test(CreateGeneralPostingSetup::class)
+        ->fillForm([
+            'general_business_posting_group_id' => $fixture['foreignGroup']->id,
+            'general_product_posting_group_id' => $serviceGroup->id,
+            'blocked' => false,
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $created = GeneralPostingSetup::query()
+        ->where('general_business_posting_group_id', $fixture['foreignGroup']->id)
+        ->where('general_product_posting_group_id', $serviceGroup->id)
+        ->firstOrFail();
+
+    expect($created->sales_account_id)->toBeNull()
+        ->and($created->cogs_account_id)->toBeNull()
+        ->and($created->inventory_account_id)->toBeNull()
+        ->and($created->inventory_adj_account_id)->toBeNull()
+        ->and($created->purchase_account_id)->toBeNull();
+});
+
 it('rejects duplicate general posting setup combinations on create and edit', function (): void {
     $fixture = generalPostingSetupFilamentFixture();
 

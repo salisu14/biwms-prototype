@@ -49,9 +49,9 @@ class GeneralPostingSetupForm
                             ->inline(false),
                     ]),
 
-                // UPDATED: Changed from Grid::make(2) to Grid::make(3) to fit Purchase Accounts
                 Grid::make(3)->schema([
                     Section::make('Sales Accounts')
+                        ->description('Required only for sales posting flows that use this posting-group combination.')
                         ->columnSpan(1)
                         ->compact()
                         ->schema([
@@ -59,8 +59,7 @@ class GeneralPostingSetupForm
                                 ->label('Sales Account')
                                 ->relationship('salesAccount', 'name')
                                 ->searchable()
-                                ->preload()
-                                ->required(),
+                                ->preload(),
                             Select::make('sales_credit_memo_account_id')
                                 ->label('Sales Credit Memo Account')
                                 ->relationship('salesCreditMemoAccount', 'name')
@@ -74,6 +73,7 @@ class GeneralPostingSetupForm
                         ]),
 
                     Section::make('COGS Accounts')
+                        ->description('Required only when COGS is posted for inventory sales or returns.')
                         ->columnSpan(1)
                         ->compact()
                         ->schema([
@@ -81,8 +81,7 @@ class GeneralPostingSetupForm
                                 ->label('COGS Account')
                                 ->relationship('cogsAccount', 'name')
                                 ->searchable()
-                                ->preload()
-                                ->required(),
+                                ->preload(),
                             Select::make('cogs_credit_memo_account_id')
                                 ->label('COGS Credit Memo Account')
                                 ->relationship('cogsCreditMemoAccount', 'name')
@@ -95,8 +94,8 @@ class GeneralPostingSetupForm
                                 ->preload(),
                         ]),
 
-                    // ADDED: Purchase Accounts Section
                     Section::make('Purchase Accounts')
+                        ->description('Inventory purchase posting requires an explicit Purchase Clearing / GRNI account at posting time.')
                         ->columnSpan(1)
                         ->compact()
                         ->schema([
@@ -105,7 +104,7 @@ class GeneralPostingSetupForm
                                 ->relationship('purchaseAccount', 'name')
                                 ->searchable()
                                 ->preload()
-                                ->required(), // Marked required to prevent error you are seeing
+                                ->helperText('Required for inventory purchase clearing when this combination is posted.'),
                             Select::make('purchase_credit_memo_account_id')
                                 ->label('Purch. Credit Memo Account')
                                 ->relationship('purchaseCreditMemoAccount', 'name')
@@ -115,19 +114,18 @@ class GeneralPostingSetupForm
                 ]),
 
                 Section::make('Inventory & Manufacturing Accounts')
+                    ->description('These accounts are required only by the inventory, adjustment, and manufacturing flows that consume them.')
                     ->columns(2)
                     ->collapsed()
                     ->schema([
                         Select::make('inventory_account_id')
                             ->relationship('inventoryAccount', 'name')
                             ->searchable()
-                            ->preload()
-                            ->required(), // Often required for complete validation
+                            ->preload(),
                         Select::make('inventory_adj_account_id')
                             ->relationship('inventoryAdjAccount', 'name')
                             ->searchable()
-                            ->preload()
-                            ->required(),
+                            ->preload(),
                         Select::make('direct_cost_applied_account_id')
                             ->relationship('directCostAppliedAccount', 'name')
                             ->searchable(),
@@ -137,7 +135,6 @@ class GeneralPostingSetupForm
                         Select::make('purchase_variance_account_id')
                             ->relationship('purchaseVarianceAccount', 'name')
                             ->searchable(),
-                        // Added => missing variance fields from your model
                         Select::make('material_variance_account_id')
                             ->relationship('materialVarianceAccount', 'name')
                             ->searchable(),
