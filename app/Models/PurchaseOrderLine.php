@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PurchaseLineType;
+use App\Exceptions\BusinessException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -64,6 +65,10 @@ class PurchaseOrderLine extends Model
          * Filament RelationManager hooks to ensure UI/UX consistency.
          */
         static::saving(function ($line) {
+            if ($line->exists && $line->hasLockedPurchaseOrderContentChange()) {
+                throw new BusinessException('Purchase order lines cannot be changed after receipt or invoice processing has started.');
+            }
+
             $line->line_total = (float) $line->quantity * (float) $line->unit_cost;
             $line->vat_amount = (float) $line->line_total * ((float) $line->vat_percentage / 100);
             $line->total_amount = (float) $line->line_total + (float) $line->vat_amount;
@@ -71,12 +76,26 @@ class PurchaseOrderLine extends Model
 
         // Auto-set posting group from item if not already set
         static::creating(function ($line) {
+            if ($line->purchaseOrder && ! $line->purchaseOrder->can_edit) {
+                throw new BusinessException('Purchase order lines cannot be added after receipt or invoice processing has started.');
+            }
+
             if ($line->item_id && ! $line->general_product_posting_group_id) {
                 $item = Item::find($line->item_id);
                 if ($item) {
                     $line->general_product_posting_group_id = $item->general_product_posting_group_id;
                     $line->item_code = $item->item_code;
                 }
+            }
+        });
+
+        static::deleting(function ($line): void {
+            if ($line->purchaseOrder && ! $line->purchaseOrder->can_edit) {
+                throw new BusinessException('Purchase order lines cannot be deleted after receipt or invoice processing has started.');
+            }
+
+            if ((float) $line->received_quantity > 0 || (float) $line->invoiced_quantity > 0) {
+                throw new BusinessException('Purchase order lines with receipt or invoice quantities cannot be deleted.');
             }
         });
     }
@@ -164,5 +183,36 @@ class PurchaseOrderLine extends Model
             'general_business_posting_group_id' => $businessGroupId,
             'general_product_posting_group_id' => $productGroupId,
         ])->first();
+    }
+
+    private function hasLockedPurchaseOrderContentChange(): bool
+    {
+        $order = $this->purchaseOrder;
+
+        if (! $order || $order->can_edit) {
+            return false;
+        }
+
+        return array_intersect(array_keys($this->getDirty()), [
+            'line_number',
+            'item_id',
+            'item_code',
+            'description',
+            'variant_code',
+            'quantity',
+            'unit_of_measure',
+            'unit_cost',
+            'vat_code',
+            'vat_percentage',
+            'vat_amount',
+            'line_total',
+            'total_amount',
+            'expected_delivery_date',
+            'comment',
+            'general_product_posting_group_id',
+            'type',
+            'asset_id',
+            'fa_posting_type',
+        ]) !== [];
     }
 }

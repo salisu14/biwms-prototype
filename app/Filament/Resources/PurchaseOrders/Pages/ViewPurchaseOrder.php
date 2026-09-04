@@ -10,10 +10,12 @@ use App\Models\PurchaseOrder;
 use App\Services\Print\PostedPurchaseInvoicePrintService;
 use App\Services\Purchase\PurchaseInvoiceService;
 use App\Services\Purchase\PurchaseOrderService;
+use App\Support\Filament\PostingFailureNotifier;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Throwable;
 
 class ViewPurchaseOrder extends ViewRecord
 {
@@ -55,8 +57,15 @@ class ViewPurchaseOrder extends ViewRecord
                 ->visible(fn (PurchaseOrder $record): bool => in_array($record->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true))
                 ->requiresConfirmation()
                 ->action(function (PurchaseOrder $record, PurchaseOrderService $purchaseOrderService): void {
-                    $purchaseOrderService->postReceipt($record);
-                    Notification::make()->title('Receipt posted')->success()->send();
+                    try {
+                        $purchaseOrderService->postReceipt($record);
+                        Notification::make()->title('Receipt posted')->success()->send();
+                    } catch (Throwable $exception) {
+                        PostingFailureNotifier::notify($exception, 'Purchase receipt was not posted', [
+                            'purchase_order_id' => $record->id,
+                            'order_number' => $record->order_number,
+                        ]);
+                    }
                 }),
             Action::make('create_purchase_invoice')
                 ->label('Create Purchase Invoice')
@@ -70,8 +79,11 @@ class ViewPurchaseOrder extends ViewRecord
                         Notification::make()->title('Purchase Invoice Created')->success()->send();
 
                         return redirect(PurchaseInvoiceResource::getUrl('edit', ['record' => $invoice]));
-                    } catch (\RuntimeException $exception) {
-                        Notification::make()->title($exception->getMessage())->warning()->send();
+                    } catch (Throwable $exception) {
+                        PostingFailureNotifier::notify($exception, 'Purchase Invoice was not created', [
+                            'purchase_order_id' => $record->id,
+                            'order_number' => $record->order_number,
+                        ]);
 
                         return null;
                     }
@@ -82,20 +94,19 @@ class ViewPurchaseOrder extends ViewRecord
                 ->color('primary')
                 ->visible(fn (PurchaseOrder $record): bool => in_array($record->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED, PurchaseOrderStatus::RECEIVED], true))
                 ->requiresConfirmation()
-                ->action(function (PurchaseOrder $record, PurchaseInvoiceService $purchaseInvoiceService) {
-                    app(PurchaseOrderService::class)->postReceipt($record);
-                    $record->refresh();
-
+                ->action(function (PurchaseOrder $record) {
                     try {
-                        $invoice = $purchaseInvoiceService->createFromOrder($record);
-                        $postedInvoice = $purchaseInvoiceService->post($invoice);
+                        app(PurchaseOrderService::class)->postAndInvoice($record);
                         Notification::make()->title('Receipt and Invoice Posted')->success()->send();
 
                         return redirect(PurchaseOrderResource::getUrl('archived', [
                             'tableSearch' => $record->order_number,
                         ]));
-                    } catch (\RuntimeException $exception) {
-                        Notification::make()->title($exception->getMessage())->warning()->send();
+                    } catch (Throwable $exception) {
+                        PostingFailureNotifier::notify($exception, 'Purchase Order was not posted and invoiced', [
+                            'purchase_order_id' => $record->id,
+                            'order_number' => $record->order_number,
+                        ]);
 
                         return null;
                     }

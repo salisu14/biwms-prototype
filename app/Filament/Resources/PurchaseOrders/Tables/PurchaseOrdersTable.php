@@ -14,6 +14,7 @@ use App\Services\Print\PostedPurchaseInvoicePrintService;
 use App\Services\Print\ProformaInvoiceService;
 use App\Services\Purchase\PurchaseInvoiceService;
 use App\Services\Purchase\PurchaseOrderService;
+use App\Support\Filament\PostingFailureNotifier;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -27,6 +28,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Throwable;
 
 class PurchaseOrdersTable
 {
@@ -128,12 +130,20 @@ class PurchaseOrdersTable
                             if (! $record instanceof PurchaseOrder) {
                                 return;
                             }
-                            $service->approve(new ApprovePurchaseOrderData(
-                                purchaseOrderId: $record->id,
-                                approvedBy: auth()->id()
-                            ));
 
-                            Notification::make()->title('Order Approved')->success()->send();
+                            try {
+                                $service->approve(new ApprovePurchaseOrderData(
+                                    purchaseOrderId: $record->id,
+                                    approvedBy: auth()->id()
+                                ));
+
+                                Notification::make()->title('Order Approved')->success()->send();
+                            } catch (Throwable $exception) {
+                                PostingFailureNotifier::notify($exception, 'Purchase Order was not approved', [
+                                    'purchase_order_id' => $record->id,
+                                    'order_number' => $record->order_number,
+                                ]);
+                            }
                         }),
 
                     // CANCEL ACTION
@@ -234,8 +244,15 @@ class PurchaseOrdersTable
                                 return;
                             }
 
-                            $purchaseOrderService->postReceipt($record);
-                            Notification::make()->title('Receipt posted')->success()->send();
+                            try {
+                                $purchaseOrderService->postReceipt($record);
+                                Notification::make()->title('Receipt posted')->success()->send();
+                            } catch (Throwable $exception) {
+                                PostingFailureNotifier::notify($exception, 'Purchase receipt was not posted', [
+                                    'purchase_order_id' => $record->id,
+                                    'order_number' => $record->order_number,
+                                ]);
+                            }
                         }),
 
                     Action::make('create_purchase_invoice')
@@ -244,7 +261,7 @@ class PurchaseOrdersTable
                         ->color('primary')
                         ->requiresConfirmation()
                         ->visible(fn ($record) => $record instanceof PurchaseOrder && in_array($record->status, [PurchaseOrderStatus::RECEIVED, PurchaseOrderStatus::PARTIALLY_RECEIVED], true))
-                        ->action(function ($record, PurchaseInvoiceService $purchaseInvoiceService) {
+                        ->action(function ($record) {
                             if (! $record instanceof PurchaseOrder) {
                                 return;
                             }
@@ -254,8 +271,11 @@ class PurchaseOrdersTable
                                 Notification::make()->title('Purchase Invoice Created')->success()->send();
 
                                 return redirect(PurchaseInvoiceResource::getUrl('edit', ['record' => $invoice]));
-                            } catch (\RuntimeException $exception) {
-                                Notification::make()->title($exception->getMessage())->warning()->send();
+                            } catch (Throwable $exception) {
+                                PostingFailureNotifier::notify($exception, 'Purchase Invoice was not created', [
+                                    'purchase_order_id' => $record->id,
+                                    'order_number' => $record->order_number,
+                                ]);
 
                                 return null;
                             }
@@ -272,19 +292,18 @@ class PurchaseOrdersTable
                                 return;
                             }
 
-                            app(PurchaseOrderService::class)->postReceipt($record);
-                            $record->refresh();
-
                             try {
-                                $invoice = $purchaseInvoiceService->createFromOrder($record);
-                                $postedInvoice = $purchaseInvoiceService->post($invoice);
+                                app(PurchaseOrderService::class)->postAndInvoice($record);
                                 Notification::make()->title('Receipt and Invoice Posted')->success()->send();
 
                                 return redirect(PurchaseOrderResource::getUrl('archived', [
                                     'tableSearch' => $record->order_number,
                                 ]));
-                            } catch (\RuntimeException $exception) {
-                                Notification::make()->title($exception->getMessage())->warning()->send();
+                            } catch (Throwable $exception) {
+                                PostingFailureNotifier::notify($exception, 'Purchase Order was not posted and invoiced', [
+                                    'purchase_order_id' => $record->id,
+                                    'order_number' => $record->order_number,
+                                ]);
 
                                 return null;
                             }

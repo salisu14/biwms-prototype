@@ -17,8 +17,10 @@ use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
+use App\Models\PostedPurchaseInvoice;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderLine;
 use App\Models\Vendor;
 use App\Models\WarehouseReceipt;
 use App\Services\Business\BusinessContextService;
@@ -174,11 +176,15 @@ class PurchaseOrderService
      */
     public function approve(ApprovePurchaseOrderData $data): PurchaseOrder
     {
-        $order = PurchaseOrder::findOrFail($data->purchaseOrderId);
+        $order = PurchaseOrder::query()
+            ->with('lines')
+            ->findOrFail($data->purchaseOrderId);
 
         if ($order->status !== PurchaseOrderStatus::PENDING) {
             throw new Exception('Only Pending orders can be approved.');
         }
+
+        $this->assertHasTransactionalLines($order, 'approved');
 
         $order->approved_by = $data->approvedBy;
         $order->status = PurchaseOrderStatus::APPROVED;
@@ -314,6 +320,8 @@ class PurchaseOrderService
                 throw new Exception('Purchase Order cannot be received in its current state.');
             }
 
+            $this->assertHasTransactionalLines($order, 'received');
+
             $orderedLines = $order->lines->sortBy('line_number')->values();
             $receivedAny = false;
             $validationErrors = [];
@@ -391,6 +399,8 @@ class PurchaseOrderService
             if ($order->status === PurchaseOrderStatus::CANCELLED) {
                 throw new Exception('Cancelled purchase orders cannot be received.');
             }
+
+            $this->assertHasTransactionalLines($order, 'received');
 
             $receivedAny = false;
 
@@ -530,6 +540,31 @@ class PurchaseOrderService
         return $invoice->fresh();
     }
 
+    public function postAndInvoice(PurchaseOrder $order): PostedPurchaseInvoice
+    {
+        return DB::transaction(function () use ($order): PostedPurchaseInvoice {
+            $order = PurchaseOrder::query()
+                ->with('lines.item')
+                ->lockForUpdate()
+                ->findOrFail($order->id);
+
+            $this->assertHasTransactionalLines($order, 'posted and invoiced');
+
+            if (! in_array($order->status, [PurchaseOrderStatus::APPROVED, PurchaseOrderStatus::PARTIALLY_RECEIVED, PurchaseOrderStatus::RECEIVED], true)) {
+                throw new Exception('Purchase Order cannot be posted and invoiced in its current state.');
+            }
+
+            if ($this->hasReceiptQuantitiesToPost($order)) {
+                $this->postReceipt($order);
+                $order->refresh()->load('lines.item');
+            }
+
+            $invoice = $this->purchaseInvoiceService->createFromOrder($order);
+
+            return $this->purchaseInvoiceService->post($invoice);
+        });
+    }
+
     /**
      * Public utility to recalculate totals manually via Service
      */
@@ -551,6 +586,45 @@ class PurchaseOrderService
             $order->update(['status' => PurchaseOrderStatus::CLOSED]);
         } else {
             $order->update(['status' => PurchaseOrderStatus::INVOICED]);
+        }
+    }
+
+    public function hasReceiptQuantitiesToPost(PurchaseOrder $order): bool
+    {
+        $order->loadMissing('lines.item');
+
+        if ($order->lines->isEmpty()) {
+            return false;
+        }
+
+        return $order->lines->contains(function (PurchaseOrderLine $line) use ($order): bool {
+            $targetQuantity = (float) $line->received_quantity > 0
+                ? (float) $line->received_quantity
+                : (float) $line->quantity;
+
+            if ($targetQuantity <= 0) {
+                return false;
+            }
+
+            $postedQuantityBase = (float) ItemLedgerEntry::query()
+                ->where('entry_type', ItemLedgerEntryType::PURCHASE)
+                ->where('document_type', 'PURCHASE_RECEIPT')
+                ->where('document_number', $order->order_number)
+                ->where('document_line_number', $line->line_number)
+                ->where('item_id', $line->item_id)
+                ->sum('quantity');
+            $postedQuantity = $this->purchaseLineQuantityFromBase($line, $postedQuantityBase);
+
+            return max(0.0, $targetQuantity - $postedQuantity) > 0.0001;
+        });
+    }
+
+    private function assertHasTransactionalLines(PurchaseOrder $order, string $action): void
+    {
+        $order->loadMissing('lines');
+
+        if ($order->lines->isEmpty()) {
+            throw new Exception("Purchase Order {$order->order_number} must have at least one line before it can be {$action}.");
         }
     }
 

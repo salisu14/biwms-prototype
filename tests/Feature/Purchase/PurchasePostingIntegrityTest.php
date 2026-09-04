@@ -1,11 +1,14 @@
 <?php
 
+use App\Data\Purchase\ApprovePurchaseOrderData;
 use App\Data\Purchases\PurchaseCreditMemoData;
 use App\Enums\ApprovalStatus;
 use App\Enums\IncomeBalanceType;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Enums\PurchaseOrderStatus;
+use App\Exceptions\BusinessException;
+use App\Exceptions\NumberSeriesException;
 use App\Models\AccountingPeriod;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
@@ -244,6 +247,216 @@ test('purchase receipt increases inventory and purchase invoice from receipt doe
         ->where('document_number', $invoice->document_number)
         ->where('vendor_id', $fixture['vendor']->id)
         ->exists())->toBeTrue();
+});
+
+test('zero-line purchase order cannot be approved received or invoiced', function () {
+    $fixture = purchasePostingFixture();
+    ensurePurchaseInvoiceNumberSeries();
+    $this->actingAs($fixture['user']);
+
+    $order = PurchaseOrder::query()->create([
+        'order_number' => 'PO-EMPTY-001',
+        'status' => PurchaseOrderStatus::PENDING,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'order_date' => now()->toDateString(),
+        'posting_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'payment_terms' => 30,
+        'currency_code' => 'NGN',
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'total_amount' => 0,
+        'total_vat' => 0,
+        'grand_total' => 0,
+        'created_by' => $fixture['user']->id,
+    ]);
+
+    expect(fn () => app(PurchaseOrderService::class)->approve(new ApprovePurchaseOrderData(
+        purchaseOrderId: $order->id,
+        approvedBy: $fixture['user']->id,
+    )))->toThrow(Exception::class, 'must have at least one line')
+        ->and($order->fresh()->status)->toBe(PurchaseOrderStatus::PENDING);
+
+    $order->forceFill(['status' => PurchaseOrderStatus::APPROVED])->save();
+
+    expect(fn () => app(PurchaseOrderService::class)->postReceipt($order->fresh()))
+        ->toThrow(Exception::class, 'must have at least one line')
+        ->and(fn () => app(PurchaseInvoiceService::class)->createFromOrder($order->fresh()))
+        ->toThrow(RuntimeException::class, 'must have at least one line')
+        ->and(fn () => app(PurchaseOrderService::class)->postAndInvoice($order->fresh()))
+        ->toThrow(Exception::class, 'must have at least one line')
+        ->and(ItemLedgerEntry::query()->where('document_number', 'PO-EMPTY-001')->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', 'PO-EMPTY-001')->exists())->toBeFalse()
+        ->and(PurchaseInvoice::query()->where('order_id', $order->id)->exists())->toBeFalse()
+        ->and(VendorLedgerEntry::query()->where('document_number', 'PO-EMPTY-001')->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', 'PO-EMPTY-001')->exists())->toBeFalse();
+});
+
+test('post and invoice on an already received purchase order invoices existing receipts without duplicating inventory', function () {
+    $fixture = purchasePostingFixture();
+    ensurePurchaseInvoiceNumberSeries();
+    $this->actingAs($fixture['user']);
+
+    $order = PurchaseOrder::query()->create([
+        'order_number' => 'PO-RECEIVED-PI-001',
+        'status' => PurchaseOrderStatus::APPROVED,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'order_date' => now()->toDateString(),
+        'posting_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'payment_terms' => 30,
+        'currency_code' => 'NGN',
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'total_amount' => 1000,
+        'total_vat' => 0,
+        'grand_total' => 1000,
+        'created_by' => $fixture['user']->id,
+    ]);
+
+    $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'received_quantity' => 0,
+        'unit_of_measure' => 'CT',
+        'unit_cost' => 1000,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+    ]);
+
+    app(PurchaseOrderService::class)->postReceipt($order);
+
+    expect($order->fresh()->status)->toBe(PurchaseOrderStatus::RECEIVED)
+        ->and(ItemLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_RECEIPT')
+            ->where('document_number', 'PO-RECEIVED-PI-001')
+            ->count())->toBe(1)
+        ->and((float) $fixture['item']->fresh()->inventory)->toBe(288.0);
+
+    $postedInvoice = app(PurchaseOrderService::class)->postAndInvoice($order->fresh());
+
+    expect($postedInvoice)->toBeInstanceOf(PostedPurchaseInvoice::class)
+        ->and(ItemLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_RECEIPT')
+            ->where('document_number', 'PO-RECEIVED-PI-001')
+            ->count())->toBe(1)
+        ->and(ItemLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_INVOICE')
+            ->where('document_number', $postedInvoice->document_number)
+            ->exists())->toBeFalse()
+        ->and((float) $fixture['item']->fresh()->inventory)->toBe(288.0)
+        ->and((float) $order->fresh()->lines()->firstOrFail()->invoiced_quantity)->toBe(1.0)
+        ->and($order->fresh()->status)->toBe(PurchaseOrderStatus::CLOSED);
+});
+
+test('purchase order lines remain editable through approval but become immutable after receipt starts', function () {
+    $fixture = purchasePostingFixture();
+    $this->actingAs($fixture['user']);
+
+    $order = PurchaseOrder::query()->create([
+        'order_number' => 'PO-LINE-LIFE-001',
+        'status' => PurchaseOrderStatus::APPROVED,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'order_date' => now()->toDateString(),
+        'posting_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'payment_terms' => 30,
+        'currency_code' => 'NGN',
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'created_by' => $fixture['user']->id,
+    ]);
+
+    $line = $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'received_quantity' => 0,
+        'unit_of_measure' => 'CT',
+        'unit_cost' => 1000,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+    ]);
+
+    $line->update(['description' => 'Approved PO description edit']);
+    expect($line->fresh()->description)->toBe('Approved PO description edit');
+
+    app(PurchaseOrderService::class)->postReceipt($order);
+
+    expect(fn () => $line->fresh()->update(['description' => 'Late change']))
+        ->toThrow(BusinessException::class, 'cannot be changed after receipt')
+        ->and(fn () => $order->fresh()->lines()->create([
+            'line_number' => 20000,
+            'item_id' => $fixture['item']->id,
+            'item_code' => $fixture['item']->item_code,
+            'description' => $fixture['item']->description,
+            'quantity' => 1,
+            'unit_of_measure' => 'CT',
+            'unit_cost' => 1000,
+            'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        ]))->toThrow(BusinessException::class, 'cannot be added after receipt')
+        ->and(fn () => $line->fresh()->delete())->toThrow(BusinessException::class, 'cannot be deleted after receipt');
+});
+
+test('purchase invoice number series header without active line fails before partial posting side effects', function () {
+    $fixture = purchasePostingFixture();
+    $this->actingAs($fixture['user']);
+
+    NumberSeries::query()->updateOrCreate(
+        ['code' => 'P-INV'],
+        [
+            'description' => 'Purchase Invoice test series without lines',
+            'prefix' => 'PINV-',
+            'starting_number' => 1,
+            'ending_number' => null,
+            'current_number' => 0,
+            'year' => 2026,
+            'is_active' => true,
+            'allow_manual' => false,
+            'module' => 'purchase',
+        ]
+    );
+
+    $order = PurchaseOrder::query()->create([
+        'order_number' => 'PO-NO-PI-LINE-001',
+        'status' => PurchaseOrderStatus::APPROVED,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'order_date' => now()->toDateString(),
+        'posting_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'payment_terms' => 30,
+        'currency_code' => 'NGN',
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'created_by' => $fixture['user']->id,
+    ]);
+
+    $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'received_quantity' => 1,
+        'unit_of_measure' => 'CT',
+        'unit_cost' => 1000,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+    ]);
+
+    expect(fn () => app(PurchaseInvoiceService::class)->createFromOrder($order))
+        ->toThrow(NumberSeriesException::class, 'Purchase Invoice number series has no active line for the posting date')
+        ->and(PurchaseInvoice::query()->where('order_id', $order->id)->exists())->toBeFalse()
+        ->and(ItemLedgerEntry::query()->where('document_number', 'PO-NO-PI-LINE-001')->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', 'PO-NO-PI-LINE-001')->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', 'PO-NO-PI-LINE-001')->exists())->toBeFalse()
+        ->and(VendorLedgerEntry::query()->where('document_number', 'PO-NO-PI-LINE-001')->exists())->toBeFalse();
 });
 
 test('purchase receipt rolls back when its value entry cannot be created', function () {

@@ -7,6 +7,7 @@ namespace App\Services\Purchase;
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\PurchaseOrderStatus;
+use App\Exceptions\NumberSeriesException;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\PostedPurchaseInvoice;
@@ -36,6 +37,10 @@ class PurchaseInvoiceService
                 ->with(['vendor', 'lines.item'])
                 ->lockForUpdate()
                 ->findOrFail($order->id);
+
+            if ($order->lines->isEmpty()) {
+                throw new \RuntimeException("Purchase Order {$order->order_number} must have at least one line before it can be invoiced.");
+            }
 
             $linesToInvoice = $order->lines
                 ->map(function ($line): array {
@@ -257,7 +262,7 @@ class PurchaseInvoiceService
             $posted = PostedPurchaseInvoice::query()->firstOrCreate(
                 ['document_number' => $invoice->document_number],
                 [
-                    'business_id' => $invoice->business_id ?? $order->business_id ?? app(BusinessContextService::class)->resolveId(),
+                    'business_id' => $invoice->business_id ?? $invoice->purchaseOrder?->business_id ?? app(BusinessContextService::class)->resolveId(),
                     'external_document_number' => $invoice->external_document_number,
                     'order_id' => $invoice->order_id,
                     'order_number' => $invoice->order_number,
@@ -477,10 +482,24 @@ class PurchaseInvoiceService
 
     private function generateNumber(): string
     {
-        return $this->numberSeriesService->getNextNoFromSeries(
-            ['P-INV', 'PURCHASE_INVOICE', 'PI'],
-            null,
-            'Purchase Invoice'
-        );
+        try {
+            return $this->numberSeriesService->getNextNoFromSeries(
+                ['P-INV', 'PURCHASE_INVOICE', 'PI'],
+                null,
+                'Purchase Invoice'
+            );
+        } catch (NumberSeriesException $exception) {
+            if ($exception->codeIdentifier() === 'number_series_line_missing'
+                || str_contains($exception->getMessage(), 'No open Number Series Line exists')) {
+                throw new NumberSeriesException(
+                    'Purchase Invoice number series has no active line for the posting date. Configure a Number Series Line before posting.',
+                    $exception->seriesCodes,
+                    codeIdentifier: 'purchase_invoice_number_series_line_missing',
+                    previous: $exception,
+                );
+            }
+
+            throw $exception;
+        }
     }
 }
