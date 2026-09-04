@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\GeneralPostingSetups\Schemas;
 
-use App\Models\GeneralProductPostingGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
@@ -28,26 +27,22 @@ class GeneralPostingSetupForm
                             ->required(),
 
                         Select::make('general_product_posting_group_id')
-                            ->options(function ($get) {
-                                return GeneralProductPostingGroup::whereDoesntHave('generalPostingSetups', function ($q) use ($get) {
-                                    $q->where('general_business_posting_group_id', $get('general_business_posting_group_id'));
-                                })->pluck('code', 'id');
-                            }),
-
-//                        Select::make('general_product_posting_group_id')
-//                            ->label('Prod. Posting Group') // Added Label
-//                            // FIX: Added relationship so Filament knows what to load
-//                            ->relationship('generalProductPostingGroup', 'code')
-//                            ->searchable()
-//                            ->preload()
-//                            ->required()
-//                            ->rules([
-//                                fn ($get, $record) => Rule::unique('general_posting_setups')
-//                                    ->where(fn ($query) =>
-//                                    $query->where('general_business_posting_group_id', $get('general_business_posting_group_id'))
-//                                    )
-//                                    ->ignore($record?->id),
-//                            ]),
+                            ->label('Prod. Posting Group')
+                            ->relationship('generalProductPostingGroup', 'code')
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->rules([
+                                fn ($get, $record) => Rule::unique('general_posting_setups', 'general_product_posting_group_id')
+                                    ->where(fn ($query) => $query->where(
+                                        'general_business_posting_group_id',
+                                        $get('general_business_posting_group_id'),
+                                    ))
+                                    ->ignore($record?->id),
+                            ])
+                            ->validationMessages([
+                                'unique' => 'This posting setup already exists for the selected combination.',
+                            ]),
 
                         Toggle::make('blocked')
                             ->label('Blocked')
