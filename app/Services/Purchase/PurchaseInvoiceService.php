@@ -21,6 +21,7 @@ use App\Models\PurchaseOrderLine;
 use App\Models\ValueEntry;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
+use App\Services\Accounting\ControlAccountAssignmentService;
 use App\Services\Business\BusinessContextService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
@@ -29,6 +30,7 @@ use App\Services\PostingService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PurchaseInvoiceService
 {
@@ -456,15 +458,7 @@ class PurchaseInvoiceService
      */
     private function assertVendorLinePostingSetupComplete(Vendor $vendor, iterable $lines, string $lineContext): void
     {
-        if (! $vendor->getPayablesAccount()) {
-            $vendorCode = $vendor->vendor_code ?: 'N/A';
-            $vendorName = $vendor->vendor_name ?: 'N/A';
-            $postingGroupId = $vendor->vendor_posting_group_id ?: 'N/A';
-
-            throw new PostingSetupException(
-                "No A/P account is configured for vendor '{$vendorName}' ({$vendorCode}). Set a Payables Account on Vendor Posting Group ID {$postingGroupId}."
-            );
-        }
+        $this->assertVendorPayablesAccountPostable($vendor);
 
         foreach ($lines as $line) {
             if (! $line->item) {
@@ -488,6 +482,39 @@ class PurchaseInvoiceService
 
                 throw new PostingSetupException("Purchase account missing in posting setup for vendor {$vendorRef} and item {$line->item->item_code}");
             }
+        }
+    }
+
+    private function assertVendorPayablesAccountPostable(Vendor $vendor): void
+    {
+        $payablesAccount = $vendor->getPayablesAccount();
+
+        if (! $payablesAccount) {
+            $vendorCode = $vendor->vendor_code ?: 'N/A';
+            $vendorName = $vendor->vendor_name ?: 'N/A';
+            $postingGroupId = $vendor->vendor_posting_group_id ?: 'N/A';
+
+            throw new PostingSetupException(
+                "No A/P account is configured for vendor '{$vendorName}' ({$vendorCode}). Set a Payables Account on Vendor Posting Group ID {$postingGroupId}."
+            );
+        }
+
+        try {
+            app(ControlAccountAssignmentService::class)->validateVendorPayables((int) $payablesAccount->id);
+        } catch (ValidationException $exception) {
+            $message = collect($exception->errors())->flatten()->first()
+                ?: 'The selected Payables Account must be a Balance Sheet liability/payables account and cannot be an Income Statement revenue or expense account.';
+
+            throw new PostingSetupException(
+                (string) $message,
+                [
+                    'vendor_id' => $vendor->id,
+                    'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
+                    'payables_account_id' => $payablesAccount->id,
+                    'payables_account_number' => $payablesAccount->account_number,
+                ],
+                $exception,
+            );
         }
     }
 

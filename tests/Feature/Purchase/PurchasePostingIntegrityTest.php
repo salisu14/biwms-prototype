@@ -460,6 +460,94 @@ test('received inventory purchase order with missing purchase clearing fails bef
         ->and($order->fresh()->status)->toBe(PurchaseOrderStatus::RECEIVED);
 });
 
+test('purchase preflight validates vendor payables account semantics', function (string $scenario, array $accountOverrides, ?string $expectedMessage): void {
+    $fixture = purchasePostingFixture();
+    $order = purchasePostingTestOrder($fixture, 'PO-AP-PREFLIGHT-'.$scenario);
+
+    if ($accountOverrides === []) {
+        purchasePostingVendorGroup($fixture)->forceFill([
+            'payables_account_id' => null,
+        ])->saveQuietly();
+    } else {
+        $account = purchasePostingTestAccount(
+            '21'.str_pad((string) random_int(1, 999999), 6, '0', STR_PAD_LEFT),
+            'Test Payables '.$scenario,
+            $accountOverrides['account_category'] ?? 'payable',
+            $accountOverrides['income_balance'] ?? IncomeBalanceType::BALANCE_SHEET,
+        );
+
+        $account->forceFill($accountOverrides)->saveQuietly();
+        purchasePostingVendorGroup($fixture)->forceFill([
+            'payables_account_id' => $account->id,
+        ])->saveQuietly();
+    }
+
+    $assertion = expect(fn () => app(PurchaseInvoiceService::class)->assertPurchaseOrderPostingSetupComplete($order->fresh()));
+
+    if ($expectedMessage === null) {
+        $assertion->not->toThrow(PostingSetupException::class);
+
+        return;
+    }
+
+    $assertion->toThrow(PostingSetupException::class, $expectedMessage);
+})->with([
+    'missing account' => ['missing', [], 'No A/P account is configured'],
+    'heading account' => ['heading', ['structural_type' => 'heading'], 'Payables Account'],
+    'direct posting disabled' => ['not-direct', ['direct_posting' => false], 'Payables Account'],
+    'blocked account' => ['blocked', ['blocked' => true], 'Payables Account'],
+    'wrong category' => ['wrong-category', ['account_category' => 'asset'], 'Payables Account'],
+    'income statement account' => ['income-statement', ['account_category' => 'direct_expense', 'income_balance' => IncomeBalanceType::INCOME_STATEMENT], 'Payables Account'],
+    'valid payables account' => ['valid', ['account_category' => 'payable'], null],
+]);
+
+test('post and invoice rejects invalid vendor payables before number generation or side effects', function (): void {
+    $fixture = purchasePostingFixture();
+    $this->actingAs($fixture['user']);
+    $series = ensurePurchaseInvoiceNumberSeries();
+    $order = purchasePostingTestOrder($fixture, 'PO-AP-BLOCK-001');
+    $headingPayables = purchasePostingTestAccount('31200', 'Trade Payables', 'payable', IncomeBalanceType::BALANCE_SHEET);
+
+    $headingPayables->forceFill(['structural_type' => 'heading'])->saveQuietly();
+    purchasePostingVendorGroup($fixture)->forceFill([
+        'payables_account_id' => $headingPayables->id,
+    ])->saveQuietly();
+
+    expect(fn () => app(PurchaseOrderService::class)->postAndInvoice($order->fresh()))
+        ->toThrow(PostingSetupException::class, 'Payables Account');
+
+    expect(PurchaseInvoice::query()->where('order_id', $order->id)->exists())->toBeFalse()
+        ->and(ItemLedgerEntry::query()->where('document_number', 'PO-AP-BLOCK-001')->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', 'PO-AP-BLOCK-001')->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', 'PO-AP-BLOCK-001')->exists())->toBeFalse()
+        ->and(VendorLedgerEntry::query()->where('document_number', 'PO-AP-BLOCK-001')->exists())->toBeFalse()
+        ->and((int) $series->fresh()->lines()->firstOrFail()->last_no_used)->toBe(0)
+        ->and((float) $order->fresh()->lines()->firstOrFail()->received_quantity)->toBe(0.0)
+        ->and((float) $order->fresh()->lines()->firstOrFail()->invoiced_quantity)->toBe(0.0)
+        ->and($order->fresh()->status)->toBe(PurchaseOrderStatus::APPROVED);
+});
+
+test('direct purchase invoice rejects invalid vendor payables before inventory value or ledger side effects', function (): void {
+    $fixture = purchasePostingFixture();
+    $this->actingAs($fixture['user']);
+    $invoice = purchasePostingTestInvoice($fixture, 'PI-AP-BLOCK-001');
+    $notDirectPayables = purchasePostingTestAccount('31202', 'Trade Payables Foreign', 'payable', IncomeBalanceType::BALANCE_SHEET);
+
+    $notDirectPayables->forceFill(['direct_posting' => false])->saveQuietly();
+    purchasePostingVendorGroup($fixture)->forceFill([
+        'payables_account_id' => $notDirectPayables->id,
+    ])->saveQuietly();
+
+    expect(fn () => app(PurchaseInvoiceService::class)->post($invoice->fresh()))
+        ->toThrow(PostingSetupException::class, 'Payables Account');
+
+    expect($invoice->fresh()->status)->toBe(ApprovalStatus::APPROVED)
+        ->and(ItemLedgerEntry::query()->where('document_number', 'PI-AP-BLOCK-001')->exists())->toBeFalse()
+        ->and(ValueEntry::query()->where('document_no', 'PI-AP-BLOCK-001')->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', 'PI-AP-BLOCK-001')->exists())->toBeFalse()
+        ->and(VendorLedgerEntry::query()->where('document_number', 'PI-AP-BLOCK-001')->exists())->toBeFalse();
+});
+
 test('purchase order lines remain editable through approval but become immutable after receipt starts', function () {
     $fixture = purchasePostingFixture();
     $this->actingAs($fixture['user']);
@@ -1518,6 +1606,105 @@ function purchasePostingTestAccount(
     ]);
 }
 
+/**
+ * @param  array{user: User, vendor: Vendor, item: Item, location: Location}  $fixture
+ */
+function purchasePostingTestOrder(array $fixture, string $orderNumber): PurchaseOrder
+{
+    $order = PurchaseOrder::query()->create([
+        'order_number' => $orderNumber,
+        'status' => PurchaseOrderStatus::APPROVED,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'order_date' => now()->toDateString(),
+        'posting_date' => now()->toDateString(),
+        'location_id' => $fixture['location']->id,
+        'payment_terms' => 30,
+        'currency_code' => 'NGN',
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'total_amount' => 1000,
+        'total_vat' => 0,
+        'grand_total' => 1000,
+        'created_by' => $fixture['user']->id,
+    ]);
+
+    $order->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'description' => $fixture['item']->description,
+        'quantity' => 1,
+        'received_quantity' => 0,
+        'invoiced_quantity' => 0,
+        'unit_of_measure' => 'CT',
+        'unit_cost' => 1000,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+    ]);
+
+    return $order->fresh('lines.item');
+}
+
+/**
+ * @param  array{user: User, vendor: Vendor, item: Item, location: Location}  $fixture
+ */
+function purchasePostingTestInvoice(array $fixture, string $documentNumber): PurchaseInvoice
+{
+    $invoice = PurchaseInvoice::query()->create([
+        'document_number' => $documentNumber,
+        'vendor_id' => $fixture['vendor']->id,
+        'vendor_name' => $fixture['vendor']->vendor_name,
+        'general_business_posting_group_id' => $fixture['vendor']->general_business_posting_group_id,
+        'vendor_posting_group_id' => $fixture['vendor']->vendor_posting_group_id,
+        'location_id' => $fixture['location']->id,
+        'posting_date' => now()->toDateString(),
+        'document_date' => now()->toDateString(),
+        'due_date' => now()->addDays(7)->toDateString(),
+        'status' => ApprovalStatus::APPROVED,
+        'total_amount' => 1000,
+        'total_vat' => 0,
+        'grand_total' => 1000,
+        'remaining_amount' => 1000,
+        'currency_code' => 'NGN',
+        'currency_factor' => 1,
+        'approved_by' => $fixture['user']->id,
+        'approved_at' => now(),
+        'cancelled' => false,
+    ]);
+
+    $invoice->lines()->create([
+        'line_number' => 10000,
+        'item_id' => $fixture['item']->id,
+        'item_code' => $fixture['item']->item_code,
+        'item_description' => $fixture['item']->description,
+        'general_product_posting_group_id' => $fixture['item']->general_product_posting_group_id,
+        'inventory_posting_group_id' => $fixture['item']->inventory_posting_group_id,
+        'quantity' => 1,
+        'unit_of_measure_code' => 'CT',
+        'qty_per_unit_of_measure' => 288,
+        'quantity_base' => 288,
+        'unit_cost' => 1000,
+        'unit_cost_lcy' => 1000,
+        'line_total' => 1000,
+        'vat_percentage' => 0,
+        'vat_amount' => 0,
+        'vat_amount_lcy' => 0,
+        'amount_including_vat' => 1000,
+        'amount_including_vat_lcy' => 1000,
+        'posting_date' => $invoice->posting_date,
+    ]);
+
+    return $invoice->fresh('lines.item');
+}
+
+/**
+ * @param  array{vendor: Vendor}  $fixture
+ */
+function purchasePostingVendorGroup(array $fixture): VendorPostingGroup
+{
+    return VendorPostingGroup::query()->findOrFail($fixture['vendor']->vendor_posting_group_id);
+}
+
 function grantPurchaseCreditMemoPostPermission(User $user): void
 {
     Permission::query()->firstOrCreate([
@@ -1528,7 +1715,7 @@ function grantPurchaseCreditMemoPostPermission(User $user): void
     $user->givePermissionTo('purchase.credit_memo.post');
 }
 
-function ensurePurchaseInvoiceNumberSeries(): void
+function ensurePurchaseInvoiceNumberSeries(): NumberSeries
 {
     $series = NumberSeries::query()->updateOrCreate(
         ['code' => 'P-INV'],
@@ -1559,4 +1746,6 @@ function ensurePurchaseInvoiceNumberSeries(): void
         'suffix' => '',
         'blocked' => false,
     ]);
+
+    return $series->fresh('lines');
 }
