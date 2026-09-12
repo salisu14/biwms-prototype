@@ -174,8 +174,8 @@ it('creates a bank ledger entry and reduces bank balance for a vendor payment', 
         ->first();
 
     expect($ledgerEntry)->not->toBeNull()
-        ->and((float) $ledgerEntry->debit_amount)->toBe(0.0)
-        ->and((float) $ledgerEntry->credit_amount)->toBe(600.0)
+        ->and((float) $ledgerEntry->debit_amount)->toBe(600.0)
+        ->and((float) $ledgerEntry->credit_amount)->toBe(0.0)
         ->and((float) $ledgerEntry->amount)->toBe(-600.0)
         ->and((float) $ledgerEntry->remaining_amount)->toBe(600.0)
         ->and($ledgerEntry->open)->toBeTrue()
@@ -930,8 +930,8 @@ function vendorPaymentLedgerEntry(Payment $payment, Vendor $vendor, float $amoun
         'description' => "Payment {$payment->payment_number}",
         'posting_date' => $payment->posting_date,
         'document_date' => $payment->payment_date,
-        'debit_amount' => 0,
-        'credit_amount' => $amount,
+        'debit_amount' => $amount,
+        'credit_amount' => 0,
         'amount' => -$amount,
         'running_balance' => (float) VendorLedgerEntry::query()->where('vendor_id', $vendor->id)->sum('amount') - $amount,
         'remaining_amount' => $amount,
@@ -940,7 +940,7 @@ function vendorPaymentLedgerEntry(Payment $payment, Vendor $vendor, float $amoun
         'currency_id' => $payment->currency_id,
         'currency_code' => $payment->currency_code,
         'currency_factor' => $payment->currency_factor,
-        'original_credit_amount' => $amount,
+        'original_debit_amount' => $amount,
         'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
         'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
         'source_id' => $payment->id,

@@ -7,13 +7,16 @@ namespace App\Services\Purchase;
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\PurchaseOrderStatus;
+use App\Enums\SourceType;
 use App\Exceptions\NumberSeriesException;
 use App\Exceptions\PostingSetupException;
 use App\Models\GeneralPostingSetup;
+use App\Models\GlEntry;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedPurchaseInvoiceLine;
+use App\Models\PostingTransaction;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceLine;
 use App\Models\PurchaseOrder;
@@ -23,10 +26,11 @@ use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Services\Accounting\ControlAccountAssignmentService;
 use App\Services\Business\BusinessContextService;
+use App\Services\Finance\GeneralLedgerService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
-use App\Services\PostingService;
+use App\Services\VatService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -247,25 +251,7 @@ class PurchaseInvoiceService
                     app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
                 }
 
-                app(PostingService::class)->postPurchaseLine(
-                    vendor: $invoice->vendor,
-                    item: $line->item,
-                    quantity: (float) $line->quantity,
-                    unitCost: (float) $line->unit_cost,
-                    lineTotal: (float) $line->line_total,
-                    postingDate: $invoice->posting_date,
-                    documentNumber: $invoice->document_number,
-                    description: $line->item_description ?? $line->item?->description ?? 'Purchase Invoice Line',
-                    vatAmount: (float) $line->vat_amount
-                );
             }
-
-            app(PostingService::class)->postVendorPayable(
-                vendor: $invoice->vendor,
-                amount: (float) $invoice->grand_total,
-                postingDate: $invoice->posting_date,
-                documentNumber: $invoice->document_number
-            );
 
             $posted = PostedPurchaseInvoice::query()->firstOrCreate(
                 ['document_number' => $invoice->document_number],
@@ -343,6 +329,8 @@ class PurchaseInvoiceService
                 ]);
             }
 
+            $postingTransaction = $this->postInvoiceLiabilityTransaction($invoice, $posted);
+
             $invoice->update([
                 'status' => ApprovalStatus::POSTED,
                 'posted_at' => now(),
@@ -358,7 +346,14 @@ class PurchaseInvoiceService
                 ->exists();
 
             if (! $ledgerEntryExists) {
-                VendorLedgerEntry::createFromInvoice($posted);
+                $vendorLedgerEntry = VendorLedgerEntry::createFromInvoice($posted);
+
+                GlEntry::query()
+                    ->where('posting_transaction_id', $postingTransaction->id)
+                    ->where('chart_of_account_id', $invoice->vendor?->vendorPostingGroup?->payables_account_id)
+                    ->where('document_type', 'PURCHASE_INVOICE')
+                    ->where('document_number', $invoice->document_number)
+                    ->update(['vendor_ledger_entry_id' => $vendorLedgerEntry->id]);
             }
 
             if ($invoice->purchaseOrder) {
@@ -367,6 +362,118 @@ class PurchaseInvoiceService
 
             return $posted;
         });
+    }
+
+    private function postInvoiceLiabilityTransaction(PurchaseInvoice $invoice, PostedPurchaseInvoice $posted): PostingTransaction
+    {
+        $invoice->loadMissing(['lines.item', 'vendor.vendorPostingGroup.payablesAccount']);
+        $payablesAccount = $invoice->vendor?->getPayablesAccount();
+
+        if (! $invoice->vendor || ! $payablesAccount) {
+            throw new PostingSetupException("A/P account is missing for purchase invoice {$invoice->document_number}.");
+        }
+
+        $lines = [];
+
+        foreach ($invoice->lines as $line) {
+            if (! $line->item) {
+                throw new PostingSetupException("Item is missing for purchase invoice line {$line->id}.");
+            }
+
+            $setup = $this->generalPostingSetupFor($invoice->vendor, $line->item);
+
+            if (! $setup) {
+                $vendorRef = $invoice->vendor->vendor_code ?: $invoice->vendor->vendor_name ?: (string) $invoice->vendor->id;
+
+                throw new PostingSetupException("Posting setup missing for vendor {$vendorRef} and item {$line->item->item_code}");
+            }
+
+            $lineAmount = round((float) $line->line_total, 4);
+            if ($lineAmount > 0.0001) {
+                $purchaseAccount = $line->item->isInventoryItem()
+                    ? $setup->getPurchaseClearingAccount()
+                    : $setup->getExpensePurchaseAccount();
+
+                if (! $purchaseAccount) {
+                    throw new PostingSetupException($line->item->isInventoryItem()
+                        ? $this->purchaseClearingMissingMessage($setup)
+                        : "Purchase account missing in posting setup for item {$line->item->item_code}");
+                }
+
+                $lines[] = [
+                    'account_id' => $purchaseAccount->id,
+                    'debit_amount' => $lineAmount,
+                    'credit_amount' => 0,
+                    'description' => ($line->item->isInventoryItem() ? 'Purchase clearing: ' : 'Purchase expense: ')
+                        .($line->item_description ?? $line->item->description ?? 'Purchase Invoice Line'),
+                    'source_type' => SourceType::ITEM->value,
+                    'source_number' => $line->item->item_code,
+                    'posting_group_source' => 'general_posting_setup',
+                    'item_ledger_entry_id' => $line->item_ledger_entry_id,
+                    'dimensions' => $line->dimensions ?? [],
+                ];
+            }
+
+            $vatAmount = round((float) $line->vat_amount, 4);
+            if ($vatAmount > 0.0001) {
+                $vatSetup = app(VatService::class)->resolveSetup(
+                    $invoice->vendor->vat_business_posting_group_id ?? $invoice->vendor->vat_bus_posting_group,
+                    $line->item->vat_product_posting_group_id
+                );
+
+                if ($vatSetup?->purchase_vat_account_id) {
+                    $lines[] = [
+                        'account_id' => $vatSetup->purchase_vat_account_id,
+                        'debit_amount' => $vatAmount,
+                        'credit_amount' => 0,
+                        'description' => 'VAT Input: '.($line->item_description ?? $line->item->description ?? 'Purchase Invoice Line'),
+                        'source_type' => SourceType::ITEM->value,
+                        'source_number' => $line->item->item_code,
+                        'posting_group_source' => 'vat_posting_setup',
+                        'item_ledger_entry_id' => $line->item_ledger_entry_id,
+                        'dimensions' => $line->dimensions ?? [],
+                    ];
+                }
+            }
+        }
+
+        $grandTotal = round((float) $invoice->grand_total, 4);
+        $debitTotal = round(collect($lines)->sum(fn (array $line): float => (float) $line['debit_amount']), 4);
+
+        if (abs($grandTotal - $debitTotal) > 0.0001) {
+            throw new PostingSetupException("Purchase invoice {$invoice->document_number} posting lines do not match the invoice total.");
+        }
+
+        $lines[] = [
+            'account_id' => $payablesAccount->id,
+            'debit_amount' => 0,
+            'credit_amount' => $grandTotal,
+            'description' => "Payable to {$invoice->vendor->vendor_name}",
+            'source_type' => SourceType::VENDOR->value,
+            'source_number' => $invoice->vendor->vendor_code,
+            'posting_group_source' => 'vendor_posting_group',
+            'dimensions' => $invoice->dimensions ?? [],
+        ];
+
+        return app(GeneralLedgerService::class)->postTransaction($lines, [
+            'business_id' => $invoice->business_id ?? $posted->business_id,
+            'posting_date' => $invoice->posting_date,
+            'document_date' => $invoice->document_date ?? $invoice->posting_date,
+            'source_module' => 'purchases',
+            'source_type' => SourceType::VENDOR->value,
+            'source_id' => $posted->id,
+            'source_number' => $invoice->document_number,
+            'document_type' => 'PURCHASE_INVOICE',
+            'document_number' => $invoice->document_number,
+            'external_document_number' => $invoice->external_document_number,
+            'description' => "Purchase Invoice {$invoice->document_number}",
+            'currency_code' => $invoice->currency_code ?: 'NGN',
+            'exchange_rate' => $invoice->currency_factor ?: '1',
+            'dimensions' => $invoice->dimensions ?? [],
+            'actor_id' => Auth::id(),
+            'transaction_key' => "PURCHASE_INVOICE:{$invoice->document_number}:LIABILITY",
+            'idempotency_key' => hash('sha256', "purchase-invoice-liability|{$invoice->id}|{$invoice->document_number}"),
+        ]);
     }
 
     private function createItemLedgerEntryForLine(PurchaseInvoice $invoice, PurchaseInvoiceLine $line): ?ItemLedgerEntry

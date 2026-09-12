@@ -381,6 +381,7 @@ class ValueEntryService
             'purchase_order_line_no' => $line->po_line_number,
             'vendor_no' => (string) ($invoice->vendor?->vendor_number ?? $invoice->vendor_id),
             'expected_cost' => false,
+            'business_id' => $invoice->business_id ?? $receiptEntry->business_id,
             'original_entry_no' => $expectedEntry->id,
             'idempotency_key' => hash('sha256', implode('|', [
                 'purchase-actual-value-entry',
@@ -407,6 +408,17 @@ class ValueEntryService
                 'phase_1b_actualized_quantity_base' => (float) $expectedEntry->invoiced_quantity + $quantityBase,
                 'phase_1b_last_actualization_document_no' => $invoice->document_number,
             ]),
+        ])->save();
+
+        $actualCostDelta = DecimalMath::amount($lineCost);
+        $receiptEntry->forceFill([
+            'cost_amount_actual' => DecimalMath::amount(
+                DecimalMath::add($receiptEntry->cost_amount_actual ?? '0', $actualCostDelta, DecimalPrecision::AMOUNT_SCALE)
+            ),
+            'purchase_amount_actual' => DecimalMath::amount(
+                DecimalMath::add($receiptEntry->purchase_amount_actual ?? '0', $actualCostDelta, DecimalPrecision::AMOUNT_SCALE)
+            ),
+            'cost_amount_expected' => DecimalMath::amount(max(0.0, (float) $receiptEntry->cost_amount_expected - (float) $actualCostDelta)),
         ])->save();
 
         app(ExpectedCostClearingService::class)->clearForActualPurchaseInvoice(

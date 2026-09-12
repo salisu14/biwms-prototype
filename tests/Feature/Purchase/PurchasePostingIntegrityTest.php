@@ -29,6 +29,7 @@ use App\Models\Permission;
 use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedPurchaseInvoiceLine;
+use App\Models\PostingTransaction;
 use App\Models\PurchaseCreditMemo;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
@@ -125,6 +126,16 @@ test('purchase invoice posting creates traceable item, value, vendor, and balanc
         ->where('vendor_id', $fixture['vendor']->id)
         ->exists())->toBeTrue();
 
+    $vendorLedgerEntry = VendorLedgerEntry::query()
+        ->where('document_type', 'PURCHASE_INVOICE')
+        ->where('document_number', 'PI-TRACE-001')
+        ->where('vendor_id', $fixture['vendor']->id)
+        ->firstOrFail();
+
+    expect((float) $vendorLedgerEntry->debit_amount)->toBe(0.0)
+        ->and((float) $vendorLedgerEntry->credit_amount)->toBe(1000.0)
+        ->and((float) $vendorLedgerEntry->amount)->toBe(1000.0);
+
     $postedLine = $postedInvoice->lines()->firstOrFail();
     expect((float) $postedLine->quantity)->toBe(1.0)
         ->and((float) $postedLine->quantity_base)->toBe(288.0)
@@ -132,7 +143,12 @@ test('purchase invoice posting creates traceable item, value, vendor, and balanc
 
     $glEntries = GlEntry::query()->where('document_number', 'PI-TRACE-001')->get();
     expect(round((float) $glEntries->sum('debit_amount'), 2))
-        ->toBe(round((float) $glEntries->sum('credit_amount'), 2));
+        ->toBe(round((float) $glEntries->sum('credit_amount'), 2))
+        ->and($glEntries->whereNull('posting_transaction_id')->count())->toBe(0)
+        ->and($glEntries->firstWhere('chart_of_account_id', $fixture['vendor']->getPayablesAccount()->id)?->vendor_ledger_entry_id)
+        ->toBe($vendorLedgerEntry->id);
+
+    expectPurchaseInvoicePostingTransactionsBalanced('PI-TRACE-001');
 
     $this->expectExceptionMessage('Purchase invoice is already posted.');
     app(PurchaseInvoiceService::class)->post($invoice->fresh());
@@ -243,11 +259,22 @@ test('purchase receipt increases inventory and purchase invoice from receipt doe
         ->and($receiptEntryIds)->toContain($postedInvoice->fresh('lines')->lines->first()->item_ledger_entry_id)
         ->and((float) $line->fresh()->invoiced_quantity)->toBe(1.0);
 
+    expect((float) ItemLedgerEntry::query()
+        ->where('document_type', 'PURCHASE_RECEIPT')
+        ->where('document_number', 'PO-RECEIPT-001')
+        ->sum('cost_amount_actual'))->toBe(1000.0)
+        ->and((float) ItemLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_RECEIPT')
+            ->where('document_number', 'PO-RECEIPT-001')
+            ->sum('cost_amount_expected'))->toBe(0.0);
+
     expect(VendorLedgerEntry::query()
         ->where('document_type', 'PURCHASE_INVOICE')
         ->where('document_number', $invoice->document_number)
         ->where('vendor_id', $fixture['vendor']->id)
         ->exists())->toBeTrue();
+
+    expectPurchaseInvoicePostingTransactionsBalanced($invoice->document_number);
 });
 
 test('zero-line purchase order cannot be approved received or invoiced', function () {
@@ -377,6 +404,17 @@ test('post and invoice on an already received purchase order invoices existing r
             ->where('document_number', $postedInvoice->document_number)
             ->where('chart_of_account_id', $inventoryAccount->id)
             ->sum('credit_amount'))->toBe(0.0);
+
+    expect((float) ItemLedgerEntry::query()
+        ->where('document_type', 'PURCHASE_RECEIPT')
+        ->where('document_number', 'PO-RECEIVED-PI-001')
+        ->sum('cost_amount_actual'))->toBe(1000.0)
+        ->and((float) ItemLedgerEntry::query()
+            ->where('document_type', 'PURCHASE_RECEIPT')
+            ->where('document_number', 'PO-RECEIVED-PI-001')
+            ->sum('cost_amount_expected'))->toBe(0.0);
+
+    expectPurchaseInvoicePostingTransactionsBalanced($postedInvoice->document_number);
 });
 
 test('received inventory purchase order with missing purchase clearing fails before invoice side effects', function () {
@@ -1748,4 +1786,29 @@ function ensurePurchaseInvoiceNumberSeries(): NumberSeries
     ]);
 
     return $series->fresh('lines');
+}
+
+function expectPurchaseInvoicePostingTransactionsBalanced(string $documentNumber): void
+{
+    $glEntries = GlEntry::query()
+        ->where('document_type', 'PURCHASE_INVOICE')
+        ->where('document_number', $documentNumber)
+        ->get();
+
+    expect($glEntries)->not->toBeEmpty()
+        ->and($glEntries->whereNull('posting_transaction_id')->count())->toBe(0);
+
+    $glEntries
+        ->pluck('posting_transaction_id')
+        ->unique()
+        ->each(function (int $postingTransactionId) use ($documentNumber): void {
+            $transaction = PostingTransaction::query()->findOrFail($postingTransactionId);
+            $entries = GlEntry::query()
+                ->where('posting_transaction_id', $transaction->id)
+                ->where('document_number', $documentNumber)
+                ->get();
+
+            expect(round((float) $entries->sum('debit_amount'), 2))
+                ->toBe(round((float) $entries->sum('credit_amount'), 2));
+        });
 }

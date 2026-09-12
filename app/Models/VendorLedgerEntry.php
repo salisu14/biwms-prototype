@@ -263,11 +263,11 @@ class VendorLedgerEntry extends Model
             return 0.0;
         }
 
-        if ($this->is_debit_entry) {
+        if ($this->is_credit_entry) {
             return abs($remainingAmount);
         }
 
-        if ($this->is_credit_entry) {
+        if ($this->is_debit_entry) {
             return -abs($remainingAmount);
         }
 
@@ -342,8 +342,8 @@ class VendorLedgerEntry extends Model
      */
     private function applyToEntriesLocked(array $applications): float
     {
-        if (! $this->is_credit_entry) {
-            throw new \Exception('Only credit entries can be applied');
+        if (! in_array($this->document_type, ['PAYMENT', 'BANK_TRANSFER', 'PURCHASE_CREDIT_MEMO'], true)) {
+            throw new \Exception('Only vendor payment or credit memo entries can be applied');
         }
 
         $creditEntry = self::query()
@@ -368,8 +368,8 @@ class VendorLedgerEntry extends Model
             ->keyBy('id');
 
         $creditEntry = $lockedEntries->get($creditEntry->getKey()) ?? $creditEntry;
-        if (! $creditEntry->is_credit_entry) {
-            throw new \Exception('Only credit entries can be applied');
+        if (! in_array($creditEntry->document_type, ['PAYMENT', 'BANK_TRANSFER', 'PURCHASE_CREDIT_MEMO'], true)) {
+            throw new \Exception('Only vendor payment or credit memo entries can be applied');
         }
 
         $totalApplied = 0.0;
@@ -709,7 +709,8 @@ class VendorLedgerEntry extends Model
      */
     public static function createFromInvoice(PurchaseInvoice|PostedPurchaseInvoice $invoice): self
     {
-        $amount = $invoice->grand_total; // Debit (we owe vendor)
+        $amount = abs((float) $invoice->grand_total);
+        $signedAmount = $amount; // Positive vendor balance for credit-side payable exposure
 
         // Parse payment terms for discount
         $discountPercent = null;
@@ -735,15 +736,15 @@ class VendorLedgerEntry extends Model
             'posting_date' => $invoice->posting_date,
             'document_date' => $invoice->document_date,
             'due_date' => $invoice->due_date,
-            'debit_amount' => $amount,
-            'credit_amount' => 0,
-            'amount' => $amount,
-            'running_balance' => self::calculateNewBalance($invoice->vendor_id, $amount),
+            'debit_amount' => 0,
+            'credit_amount' => $amount,
+            'amount' => $signedAmount,
+            'running_balance' => self::calculateNewBalance($invoice->vendor_id, $signedAmount),
             'remaining_amount' => $amount,
             'open' => true,
             'currency_code' => $invoice->currency_code,
-            'original_debit_amount' => $amount / $invoice->currency_factor,
-            'original_credit_amount' => 0,
+            'original_debit_amount' => 0,
+            'original_credit_amount' => $amount / $invoice->currency_factor,
             'currency_factor' => $invoice->currency_factor,
             'general_business_posting_group_id' => $invoice->general_business_posting_group_id,
             'vendor_posting_group_id' => $invoice->vendor_posting_group_id,
@@ -767,7 +768,8 @@ class VendorLedgerEntry extends Model
      */
     public static function createFromCreditMemo(PostedPurchaseCreditMemo $creditMemo): self
     {
-        $amount = -abs((float) $creditMemo->grand_total); // Negative (reduces vendor payable)
+        $amount = abs((float) $creditMemo->grand_total);
+        $signedAmount = -$amount; // Negative balance impact reduces vendor payable
 
         return self::create([
             'entry_number' => self::getNextEntryNumber($creditMemo->vendor_id),
@@ -780,15 +782,15 @@ class VendorLedgerEntry extends Model
             'posting_date' => $creditMemo->posting_date,
             'document_date' => $creditMemo->document_date,
             'due_date' => null, // Credit memos don't have due dates
-            'debit_amount' => 0,
-            'credit_amount' => abs($amount),
-            'amount' => $amount, // Negative
-            'running_balance' => self::calculateNewBalance($creditMemo->vendor_id, $amount),
-            'remaining_amount' => abs($amount),
+            'debit_amount' => $amount,
+            'credit_amount' => 0,
+            'amount' => $signedAmount,
+            'running_balance' => self::calculateNewBalance($creditMemo->vendor_id, $signedAmount),
+            'remaining_amount' => $amount,
             'open' => true,
             'currency_code' => $creditMemo->currency_code,
-            'original_debit_amount' => 0,
-            'original_credit_amount' => abs($amount) / $creditMemo->currency_factor,
+            'original_debit_amount' => $amount / $creditMemo->currency_factor,
+            'original_credit_amount' => 0,
             'currency_factor' => $creditMemo->currency_factor,
             'general_business_posting_group_id' => $creditMemo->general_business_posting_group_id,
             'vendor_posting_group_id' => $creditMemo->vendor_posting_group_id,
@@ -821,15 +823,15 @@ class VendorLedgerEntry extends Model
             'posting_date' => $payment->posting_date,
             'document_date' => $payment->payment_date,
             'due_date' => null, // Payments don't have due dates
-            'debit_amount' => 0,
-            'credit_amount' => $payment->payment_amount,
+            'debit_amount' => $payment->payment_amount,
+            'credit_amount' => 0,
             'amount' => $amount,
             'running_balance' => self::calculateNewBalance($payment->party_id, $amount),
             'remaining_amount' => 0, // Payments are always closed
             'open' => false,
             'currency_code' => $payment->currency_code,
-            'original_debit_amount' => 0,
-            'original_credit_amount' => $payment->payment_amount / $payment->currency_factor,
+            'original_debit_amount' => $payment->payment_amount / $payment->currency_factor,
+            'original_credit_amount' => 0,
             'currency_factor' => $payment->currency_factor,
             'general_business_posting_group_id' => $payment->general_business_posting_group_id,
             'vendor_posting_group_id' => $payment->posting_group_id,
@@ -864,8 +866,8 @@ class VendorLedgerEntry extends Model
             'description' => "Payment - {$paymentMethod}",
             'posting_date' => $postingDate,
             'document_date' => $postingDate,
-            'debit_amount' => 0,
-            'credit_amount' => $amount,
+            'debit_amount' => $amount,
+            'credit_amount' => 0,
             'amount' => -$amount, // Negative (reduces balance)
             'running_balance' => self::calculateNewBalance($vendorId, -$amount),
             'remaining_amount' => 0, // Payments are closed immediately
