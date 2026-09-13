@@ -240,7 +240,39 @@ class LinesRelationManager extends RelationManager
                         })
                         ->extraAttributes(['class' => 'font-bold text-lg text-primary-600']),
                 ]),
+
+                Grid::make(3)->schema([
+                    Placeholder::make('reference_cost_display')
+                        ->label('Item Reference Cost (NGN)')
+                        ->content(function (callable $get): string {
+                            $itemId = $get('item_id');
+                            $item = $itemId ? Item::find($itemId) : null;
+
+                            return $item ? 'NGN '.number_format((float) $item->standard_cost, 2) : '—';
+                        }),
+
+                    Placeholder::make('lcy_unit_cost_display')
+                        ->label('LCY Unit Cost (NGN)')
+                        ->content(fn (callable $get): string => 'NGN '.number_format(
+                            (float) ($get('unit_cost') ?? 0) * $this->ownerCurrencyFactor(), 2
+                        )),
+
+                    Placeholder::make('lcy_line_total_display')
+                        ->label('LCY Line Total (NGN)')
+                        ->content(fn (callable $get): string => 'NGN '.number_format(
+                            (float) ($get('quantity') ?? 0) * (float) ($get('unit_cost') ?? 0) * $this->ownerCurrencyFactor(), 2
+                        )),
+                ]),
             ]);
+    }
+
+    private function ownerCurrencyFactor(): float
+    {
+        $order = $this->getOwnerRecord();
+
+        return $order instanceof PurchaseOrder && $order->hasResolvableCurrencyFactor()
+            ? (float) $order->resolvedCurrencyFactor()
+            : 1.0;
     }
 
     public function table(Table $table): Table

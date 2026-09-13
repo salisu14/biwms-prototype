@@ -28,7 +28,9 @@ class CreatePurchaseOrder extends CreateRecord
             paymentTerms: $data['payment_terms'] ?? null,
             comment: $data['comment'] ?? null,
             createdBy: auth()->id(),
-            lines: $data['lines'] ?? []
+            lines: $data['lines'] ?? [],
+            currencyCode: $data['currency_code'] ?? null,
+            currencyFactor: filled($data['currency_factor'] ?? null) ? (float) $data['currency_factor'] : null,
         );
 
         return app(PurchaseOrderService::class)->create($dto);

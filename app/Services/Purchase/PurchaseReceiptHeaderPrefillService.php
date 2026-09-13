@@ -47,6 +47,7 @@ class PurchaseReceiptHeaderPrefillService
             'requested_receipt_date' => optional($purchaseOrder->delivery_date)->toDateString(),
             'promised_receipt_date' => optional($purchaseOrder->delivery_date)->toDateString(),
             'currency_code' => $purchaseOrder->currency_code,
+            'exchange_rate' => $purchaseOrder->resolvedCurrencyFactor(),
             'prices_including_vat' => $purchaseOrder->is_price_inclusive,
             'comment' => $purchaseOrder->comment,
             'buyer_id' => $purchaseOrder->created_by,

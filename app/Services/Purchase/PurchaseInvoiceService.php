@@ -31,6 +31,7 @@ use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
 use App\Services\VatService;
+use App\Support\PurchasingCurrency;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -84,6 +85,11 @@ class PurchaseInvoiceService
                 throw new \RuntimeException('Nothing to invoice. All received quantities are already invoiced.');
             }
 
+            // The authorized PO/document rate is authoritative for the invoice.
+            // Foreign-currency orders without a valid rate fail closed.
+            $currencyCode = $order->currency_code ?: PurchasingCurrency::LCY_CODE;
+            $currencyFactor = $order->resolvedCurrencyFactor();
+
             $invoice = PurchaseInvoice::create([
                 'business_id' => $order->business_id ?? app(BusinessContextService::class)->resolveId(),
                 'document_number' => $this->generateNumber(),
@@ -100,8 +106,8 @@ class PurchaseInvoiceService
                 'posting_date' => now()->toDateString(),
                 'document_date' => now()->toDateString(),
                 'due_date' => now()->addDays((int) ($order->payment_terms ?: 30))->toDateString(),
-                'currency_code' => $order->currency_code ?: 'USD',
-                'currency_factor' => 1,
+                'currency_code' => $currencyCode,
+                'currency_factor' => $currencyFactor,
                 'amount_paid' => 0,
                 'remaining_amount' => 0,
                 'paid_in_full' => false,
@@ -125,8 +131,10 @@ class PurchaseInvoiceService
                 }
                 $conversionFactor = $conversionFactor > 0 ? $conversionFactor : 1.0;
                 $quantityBase = $quantity * $conversionFactor;
-                $lineTotal = $quantity * (float) $line->unit_cost;
+                $unitCost = (float) $line->unit_cost;
+                $lineTotal = $quantity * $unitCost;
                 $vatAmount = $lineTotal * ((float) $line->vat_percentage / 100);
+                $amountIncludingVat = $lineTotal + $vatAmount;
 
                 $invoice->lines()->create([
                     'line_number' => $lineNo,
@@ -142,17 +150,18 @@ class PurchaseInvoiceService
                     'unit_of_measure_code' => $line->unit_of_measure,
                     'qty_per_unit_of_measure' => $conversionFactor,
                     'quantity_base' => $quantityBase,
-                    'unit_cost' => $line->unit_cost,
-                    'unit_cost_lcy' => $line->unit_cost,
+                    'unit_cost' => $unitCost,
+                    'unit_cost_lcy' => PurchasingCurrency::lcyFromFcy($unitCost, $currencyFactor),
                     'line_total' => $lineTotal,
+                    'line_total_lcy' => PurchasingCurrency::lcyFromFcy($lineTotal, $currencyFactor),
                     'line_discount_amount' => 0,
                     'line_discount_percent' => 0,
                     'vat_code' => $line->vat_code,
                     'vat_percentage' => $line->vat_percentage,
                     'vat_amount' => $vatAmount,
-                    'vat_amount_lcy' => $vatAmount,
-                    'amount_including_vat' => $lineTotal + $vatAmount,
-                    'amount_including_vat_lcy' => $lineTotal + $vatAmount,
+                    'vat_amount_lcy' => PurchasingCurrency::lcyFromFcy($vatAmount, $currencyFactor),
+                    'amount_including_vat' => $amountIncludingVat,
+                    'amount_including_vat_lcy' => PurchasingCurrency::lcyFromFcy($amountIncludingVat, $currencyFactor),
                     'posting_date' => $invoice->posting_date,
                 ]);
 
@@ -161,11 +170,17 @@ class PurchaseInvoiceService
                 $totalVat += $vatAmount;
             }
 
+            $grandTotal = $totalAmount + $totalVat;
+
             $invoice->update([
                 'total_amount' => $totalAmount,
                 'total_vat' => $totalVat,
-                'grand_total' => $totalAmount + $totalVat,
-                'remaining_amount' => $totalAmount + $totalVat,
+                'grand_total' => $grandTotal,
+                'remaining_amount' => $grandTotal,
+                'total_amount_lcy' => PurchasingCurrency::lcyFromFcy($totalAmount, $currencyFactor),
+                'total_vat_lcy' => PurchasingCurrency::lcyFromFcy($totalVat, $currencyFactor),
+                'grand_total_lcy' => PurchasingCurrency::lcyFromFcy($grandTotal, $currencyFactor),
+                'remaining_amount_lcy' => PurchasingCurrency::lcyFromFcy($grandTotal, $currencyFactor),
             ]);
 
             $order->refresh();
@@ -274,10 +289,14 @@ class PurchaseInvoiceService
                     'total_amount' => $invoice->total_amount,
                     'total_vat' => $invoice->total_vat,
                     'grand_total' => $invoice->grand_total,
+                    'total_amount_lcy' => $invoice->total_amount_lcy,
+                    'total_vat_lcy' => $invoice->total_vat_lcy,
+                    'grand_total_lcy' => $invoice->grand_total_lcy,
                     'currency_code' => $invoice->currency_code,
                     'currency_factor' => $invoice->currency_factor,
                     'amount_paid' => $invoice->amount_paid ?? 0,
                     'remaining_amount' => $invoice->remaining_amount,
+                    'remaining_amount_lcy' => $invoice->remaining_amount_lcy,
                     'paid_in_full' => $invoice->paid_in_full ?? false,
                     'paid_in_full_date' => $invoice->paid_in_full_date,
                     'posted_by' => Auth::id(),
@@ -310,6 +329,7 @@ class PurchaseInvoiceService
                     'unit_cost' => $line->unit_cost,
                     'unit_cost_lcy' => $line->unit_cost_lcy,
                     'line_total' => $line->line_total,
+                    'line_total_lcy' => $line->line_total_lcy,
                     'line_discount_amount' => $line->line_discount_amount,
                     'line_discount_percent' => $line->line_discount_percent,
                     'vat_code' => $line->vat_code,

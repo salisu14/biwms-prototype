@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\PurchaseOrderStatus;
 use App\Enums\SalesOrderStatus;
 use App\Services\NumberSeriesService;
+use App\Support\PurchasingCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -288,10 +290,42 @@ class BlanketOrder extends Model
         }
 
         return DB::transaction(function () {
+            // Approved currency precedence: explicit blanket currency ->
+            // configured vendor currency -> LCY (NGN). The blanket currency is
+            // nullable, so the purchase order must never rely on a database
+            // default to become a foreign-currency document.
+            $vendor = $this->vendor;
+            $vendorCurrency = strtoupper(trim((string) $vendor?->currency));
+            $explicitCurrency = strtoupper(trim((string) $this->currency_code));
+            $currencyCode = $explicitCurrency !== ''
+                ? $explicitCurrency
+                : ($vendorCurrency !== '' ? $vendorCurrency : PurchasingCurrency::LCY_CODE);
+
+            // LCY documents resolve factor 1. A foreign document inherits the
+            // blanket's own explicit rate only when the blanket authoritatively
+            // declares both that currency and a valid positive rate (the same
+            // LCY-per-FCY convention as purchase_receipts.exchange_rate).
+            // Otherwise no factor is fabricated and FCY stays fail-closed until
+            // an explicit valid rate is supplied.
+            $explicitRate = $this->exchange_rate;
+            $hasAuthoritativeRate = $explicitCurrency !== ''
+                && $currencyCode === $explicitCurrency
+                && is_numeric($explicitRate)
+                && (float) $explicitRate > 0;
+
+            $currencyFactor = $currencyCode === PurchasingCurrency::LCY_CODE
+                ? 1
+                : ($hasAuthoritativeRate ? (string) $explicitRate : null);
+
             $purchaseOrder = PurchaseOrder::create([
                 'blanket_order_id' => $this->id,
                 'vendor_id' => $this->vendor_id,
-                'currency_code' => $this->currency_code,
+                'vendor_name' => $vendor?->vendor_name,
+                'order_date' => $this->order_date ?? now(),
+                'location_id' => Location::where('code', $this->location_code)->first()?->id,
+                'created_by' => $this->created_by,
+                'currency_code' => $currencyCode,
+                'currency_factor' => $currencyFactor,
                 'payment_terms_code' => $this->payment_terms_code,
                 'payment_method_code' => $this->payment_method_code,
                 'shortcut_dimension_1_code' => $this->shortcut_dimension_1_code,
@@ -306,7 +340,10 @@ class BlanketOrder extends Model
                 'ship_to_name' => $this->ship_to_name,
                 'ship_to_address' => $this->ship_to_address,
                 'location_code' => $this->location_code,
-                'status' => 'OPEN',
+                // Converted purchase orders start in the same initial state as
+                // PurchaseOrderService::create()/CreatePurchaseOrderAction —
+                // PurchaseOrderStatus has no OPEN case; 'OPEN' was invalid.
+                'status' => PurchaseOrderStatus::PENDING,
             ]);
 
             // Copy lines from blanket order

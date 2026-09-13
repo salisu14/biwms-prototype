@@ -6,10 +6,12 @@ use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
 use App\Services\Business\BusinessContextService;
 use App\Services\Purchase\PurchaseOrderService;
+use App\Support\PurchasingCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use InvalidArgumentException;
 
 class PurchaseOrder extends Model
 {
@@ -30,11 +32,15 @@ class PurchaseOrder extends Model
         'delivery_date',
         'payment_terms',
         'currency_code',
+        'currency_factor',
         'status',
         'comment',
         'total_amount',
         'total_vat',
         'grand_total',
+        'total_amount_lcy',
+        'total_vat_lcy',
+        'grand_total_lcy',
         'created_by',
         'approved_by',
         'approved_at',
@@ -55,6 +61,10 @@ class PurchaseOrder extends Model
         'total_amount' => 'decimal:4',
         'total_vat' => 'decimal:4',
         'grand_total' => 'decimal:4',
+        'currency_factor' => 'decimal:6',
+        'total_amount_lcy' => 'decimal:4',
+        'total_vat_lcy' => 'decimal:4',
+        'grand_total_lcy' => 'decimal:4',
         'is_price_inclusive' => 'boolean',
         'approved_at' => 'datetime',
     ];
@@ -62,7 +72,9 @@ class PurchaseOrder extends Model
     protected $attributes = [
         'status' => PurchaseOrderStatus::PENDING,
         'order_type' => PurchaseOrderType::PURCHASE_ORDER,
-        'currency_code' => 'USD',
+        // Local currency (LCY) is the safe default: NGN documents resolve factor 1.
+        // A foreign-currency document must set its currency explicitly and carry a rate.
+        'currency_code' => PurchasingCurrency::LCY_CODE,
         'is_price_inclusive' => false,
     ];
 
@@ -94,6 +106,15 @@ class PurchaseOrder extends Model
                     $order->vat_bus_posting_group = $vendor->vat_bus_posting_group;
                     $order->is_price_inclusive = $vendor->is_price_inclusive;
                 }
+            }
+
+            // Changing the document currency or its rate must re-derive the LCY
+            // values from the (authoritative) FCY values.
+            if ($order->exists
+                && $order->isDirty(['currency_factor', 'currency_code'])
+                && $order->hasResolvableCurrencyFactor()) {
+                $order->syncLineCurrencyValues();
+                $order->applyLcyTotalsFromLines();
             }
         });
     }
@@ -175,8 +196,64 @@ class PurchaseOrder extends Model
             $this->total_amount = $this->lines()->sum('line_total');
             $this->total_vat = $this->lines()->sum('vat_amount');
             $this->grand_total = (float) $this->total_amount + (float) $this->total_vat;
+
+            // Fail closed if a foreign-currency document has no valid rate: the
+            // LCY totals are part of the document contract and cannot be guessed.
+            $factor = $this->resolvedCurrencyFactor();
+            $this->total_amount_lcy = PurchasingCurrency::lcyFromFcy($this->total_amount, $factor);
+            $this->total_vat_lcy = PurchasingCurrency::lcyFromFcy($this->total_vat, $factor);
+            $this->grand_total_lcy = PurchasingCurrency::lcyFromFcy($this->grand_total, $factor);
+
             $this->save();
         });
+    }
+
+    /**
+     * Resolve the document's LCY-per-FCY factor. NGN documents resolve 1;
+     * foreign-currency documents require an explicit positive factor.
+     *
+     * @throws InvalidArgumentException when a foreign-currency document has no valid rate
+     */
+    public function resolvedCurrencyFactor(): string
+    {
+        return PurchasingCurrency::factorFor($this->currency_code, $this->currency_factor);
+    }
+
+    public function hasResolvableCurrencyFactor(): bool
+    {
+        try {
+            $this->resolvedCurrencyFactor();
+
+            return true;
+        } catch (InvalidArgumentException) {
+            return false;
+        }
+    }
+
+    /**
+     * Re-derive each line's LCY values from its FCY values at the current rate.
+     */
+    public function syncLineCurrencyValues(): void
+    {
+        $factor = $this->resolvedCurrencyFactor();
+
+        foreach ($this->lines()->get() as $line) {
+            $line->forceFill([
+                'unit_cost_lcy' => PurchasingCurrency::lcyFromFcy($line->unit_cost, $factor),
+                'line_total_lcy' => PurchasingCurrency::lcyFromFcy($line->line_total, $factor),
+            ])->saveQuietly();
+        }
+    }
+
+    private function applyLcyTotalsFromLines(): void
+    {
+        $factor = $this->resolvedCurrencyFactor();
+        $totalAmount = (float) $this->lines()->sum('line_total');
+        $totalVat = (float) $this->lines()->sum('vat_amount');
+
+        $this->total_amount_lcy = PurchasingCurrency::lcyFromFcy($totalAmount, $factor);
+        $this->total_vat_lcy = PurchasingCurrency::lcyFromFcy($totalVat, $factor);
+        $this->grand_total_lcy = PurchasingCurrency::lcyFromFcy($totalAmount + $totalVat, $factor);
     }
 
     public function getCanEditAttribute(): bool

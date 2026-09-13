@@ -22,6 +22,7 @@ class PurchasePrice extends Model
         'ending_date',
         'minimum_quantity',
         'direct_unit_cost',
+        'currency_code',
         'line_discount_percent',
         'unit_of_measure_code',
         'vendor_item_no',
@@ -77,5 +78,26 @@ class PurchasePrice extends Model
     public function scopeForQuantity(Builder $query, float $quantity): Builder
     {
         return $query->where('minimum_quantity', '<=', $quantity);
+    }
+
+    /**
+     * Whether the source currency of this negotiated price is known.
+     *
+     * A NULL currency is ambiguous (historical rows) and must never be assumed
+     * to be the requesting document's currency.
+     */
+    public function hasKnownCurrency(): bool
+    {
+        return filled($this->currency_code);
+    }
+
+    /**
+     * Uppercased ISO currency code, or null when provenance is unknown.
+     */
+    public function normalizedCurrencyCode(): ?string
+    {
+        return $this->hasKnownCurrency()
+            ? strtoupper(trim((string) $this->currency_code))
+            : null;
     }
 }

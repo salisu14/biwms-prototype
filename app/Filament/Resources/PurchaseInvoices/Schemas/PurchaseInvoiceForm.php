@@ -11,6 +11,7 @@ use App\Services\Business\BusinessContextService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -165,6 +166,21 @@ class PurchaseInvoiceForm
                                         ->default(now()),
                                     DatePicker::make('due_date')
                                         ->required(),
+
+                                    TextInput::make('currency_code')
+                                        ->label('Document Currency')
+                                        ->disabled(),
+
+                                    TextInput::make('currency_factor')
+                                        ->label(fn (Get $get): string => 'Exchange Rate (NGN per 1 '.($get('currency_code') ?: 'NGN').')')
+                                        ->disabled()
+                                        ->helperText('LCY (NGN) = document amount × rate.'),
+
+                                    Placeholder::make('grand_total_lcy_display')
+                                        ->label(fn (Get $get): string => 'Grand Total (LCY / NGN)')
+                                        ->content(fn (Get $get): string => 'NGN '.number_format(
+                                            (float) ($get('grand_total_lcy') ?? 0), 2
+                                        )),
                                 ]),
                             ]),
 

@@ -29,6 +29,7 @@ use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use App\Services\Warehouse\PutAwayWorksheetService;
+use App\Support\PurchasingCurrency;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
@@ -53,6 +54,18 @@ class PurchaseOrderService
             // Resolve Vendor for default posting groups if not provided in Data object
             $vendor = Vendor::findOrFail($data->vendorId);
 
+            // Currency precedence: explicit choice > configured vendor currency > LCY.
+            $explicitCurrency = strtoupper(trim((string) $data->currencyCode));
+            $vendorCurrency = strtoupper(trim((string) $vendor->currency));
+            $currencyCode = $explicitCurrency !== ''
+                ? $explicitCurrency
+                : ($vendorCurrency !== '' ? $vendorCurrency : PurchasingCurrency::LCY_CODE);
+            $currencyFactor = $data->currencyFactor;
+
+            if ($currencyCode === PurchasingCurrency::LCY_CODE) {
+                $currencyFactor = 1;
+            }
+
             $order = PurchaseOrder::create([
                 'business_id' => app(BusinessContextService::class)->resolveId($data->businessId),
                 'order_number' => $orderNumber,
@@ -65,6 +78,8 @@ class PurchaseOrderService
                 'due_date' => $data->dueDate,
                 'delivery_date' => $data->deliveryDate,
                 'payment_terms' => $data->paymentTerms ?? $vendor->payment_terms,
+                'currency_code' => $currencyCode,
+                'currency_factor' => $currencyFactor,
                 'comment' => $data->comment,
                 'created_by' => $data->createdBy,
                 'status' => PurchaseOrderStatus::PENDING,
@@ -133,7 +148,11 @@ class PurchaseOrderService
                     $vendor,
                     $item,
                     (float) ($line['quantity'] ?? 1),
-                    $line['unit_of_measure'] ?? $item->base_unit_of_measure
+                    $line['unit_of_measure'] ?? $item->base_unit_of_measure,
+                    null,
+                    null,
+                    $order->currency_code,
+                    $order->currency_factor
                 );
 
                 $unitCost = (float) ($priceInfo['direct_unit_cost'] ?? 0);
@@ -157,8 +176,13 @@ class PurchaseOrderService
             ];
 
             if ($lineId && in_array($lineId, $existingLineIds)) {
-                $order->lines()->where('id', $lineId)->update($attributes);
-                $receivedIds[] = $lineId;
+                $existingLine = $order->lines()->find($lineId);
+
+                if ($existingLine) {
+                    $existingLine->fill($attributes);
+                    $existingLine->save();
+                    $receivedIds[] = $lineId;
+                }
             } else {
                 $newLine = $order->lines()->create($attributes);
                 $receivedIds[] = $newLine->id;

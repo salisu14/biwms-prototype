@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PurchasingCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +13,29 @@ class PurchaseReceiptLine extends Model
     use HasFactory;
 
     protected $table = 'purchase_receipt_lines';
+
+    protected static function booted(): void
+    {
+        static::saving(function (PurchaseReceiptLine $line): void {
+            $receipt = $line->purchaseReceipt;
+
+            if (! $receipt || ! $receipt->hasResolvableExchangeRate()) {
+                return;
+            }
+
+            $factor = $receipt->resolvedExchangeRate();
+
+            // Derive the LCY side from the authoritative FCY values. At factor 1
+            // (LCY receipts) this leaves the values unchanged.
+            if ($line->direct_unit_cost !== null) {
+                $line->unit_cost_lcy = PurchasingCurrency::lcyFromFcy($line->direct_unit_cost, $factor);
+            }
+
+            if ($line->line_amount !== null) {
+                $line->line_amount_lcy = PurchasingCurrency::lcyFromFcy($line->line_amount, $factor);
+            }
+        });
+    }
 
     protected $fillable = [
         'purchase_receipt_id',
@@ -27,6 +51,7 @@ class PurchaseReceiptLine extends Model
         'direct_unit_cost',
         'unit_cost_lcy',
         'line_amount',
+        'line_amount_lcy',
         'line_discount_percent',
         'line_discount_amount',
         'inv_discount_amount',
@@ -105,6 +130,7 @@ class PurchaseReceiptLine extends Model
         'direct_unit_cost' => 'decimal:4',
         'unit_cost_lcy' => 'decimal:4',
         'line_amount' => 'decimal:4',
+        'line_amount_lcy' => 'decimal:4',
         'line_discount_percent' => 'decimal:2',
         'line_discount_amount' => 'decimal:4',
         'inv_discount_amount' => 'decimal:4',

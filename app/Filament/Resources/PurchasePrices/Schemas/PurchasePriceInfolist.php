@@ -44,9 +44,17 @@ class PurchasePriceInfolist
                 Section::make('Pricing')
                     ->columns(3)
                     ->schema([
+                        TextEntry::make('currency_code')
+                            ->label('Price Currency')
+                            ->badge()
+                            ->color(fn (PurchasePrice $record): string => $record->hasKnownCurrency() ? 'success' : 'danger')
+                            ->state(fn (PurchasePrice $record): string => $record->normalizedCurrencyCode() ?? 'Unknown (ambiguous)'),
                         TextEntry::make('direct_unit_cost')
                             ->label('Direct Unit Cost')
-                            ->state(fn (PurchasePrice $record): string => Number::currency((float) $record->direct_unit_cost, config('app.default_currency', 'USD'))),
+                            ->state(fn (PurchasePrice $record): string => Number::currency(
+                                (float) $record->direct_unit_cost,
+                                $record->normalizedCurrencyCode() ?? config('app.base_currency', 'NGN')
+                            )),
                         TextEntry::make('line_discount_percent')
                             ->label('Line Discount %')
                             ->badge()

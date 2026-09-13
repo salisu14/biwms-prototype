@@ -9,6 +9,8 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class PurchasePriceForm
@@ -28,7 +30,31 @@ class PurchasePriceForm
                                     ->searchable()
                                     ->preload()
                                     ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function (Set $set, $state): void {
+                                        if (! $state) {
+                                            return;
+                                        }
+
+                                        $vendor = Vendor::find($state);
+
+                                        if ($vendor && filled($vendor->currency)) {
+                                            $set('currency_code', strtoupper((string) $vendor->currency));
+                                        }
+                                    })
                                     ->getOptionLabelFromRecordUsing(fn (Vendor $record): string => "{$record->vendor_code} - {$record->vendor_name}"),
+
+                                Select::make('currency_code')
+                                    ->label('Price Currency')
+                                    ->options([
+                                        'USD' => 'USD - US Dollar',
+                                        'EUR' => 'EUR - Euro',
+                                        'GBP' => 'GBP - British Pound',
+                                        'NGN' => 'NGN - Nigerian Naira',
+                                    ])
+                                    ->searchable()
+                                    ->required()
+                                    ->helperText('Currency this vendor price is quoted in. Prices without a currency cannot be used automatically.'),
 
                                 Select::make('item_id')
                                     ->label('Item')
@@ -56,7 +82,7 @@ class PurchasePriceForm
                                     ->label('Direct Unit Cost')
                                     ->numeric()
                                     ->required()
-                                    ->prefix(fn (): string => config('app.default_currency', 'USD'))
+                                    ->prefix(fn (Get $get): ?string => $get('currency_code'))
                                     ->step(0.0001),
 
                                 TextInput::make('line_discount_percent')

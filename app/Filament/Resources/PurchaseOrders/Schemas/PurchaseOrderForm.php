@@ -10,11 +10,13 @@ use App\Services\Business\BusinessContextService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class PurchaseOrderForm
@@ -69,25 +71,37 @@ class PurchaseOrderForm
                                         $vendor = Vendor::find($state);
                                         $set('vendor_name', $vendor?->vendor_name ?? '');
                                         $set('payment_terms', $vendor?->payment_terms ?? '');
-                                        $set('currency_code', $vendor?->currency ?? 'USD');
+                                        $set('currency_code', $vendor?->currency ?? 'NGN');
                                     } else {
                                         $set('vendor_name', '');
                                         $set('payment_terms', '');
-                                        $set('currency_code', 'USD');
+                                        $set('currency_code', 'NGN');
                                     }
                                 }),
 
                             Select::make('currency_code')
-                                ->label('Currency')
+                                ->label('Document Currency')
                                 ->options([
                                     'USD' => 'USD - US Dollar',
                                     'EUR' => 'EUR - Euro',
                                     'GBP' => 'GBP - British Pound',
-                                    'NGN' => 'NGN - Nigerian Naira',
+                                    'NGN' => 'NGN - Nigerian Naira (LCY)',
                                 ])
-                                ->default('USD')
+                                ->default('NGN')
                                 ->searchable()
+                                ->live()
                                 ->required(),
+
+                            TextInput::make('currency_factor')
+                                ->label(fn (Get $get): string => 'Exchange Rate (NGN per 1 '.($get('currency_code') ?: 'NGN').')')
+                                ->numeric()
+                                ->minValue(0)
+                                ->step(0.000001)
+                                ->default(1)
+                                ->required(fn (Get $get): bool => ($get('currency_code') ?: 'NGN') !== 'NGN')
+                                ->visible(fn (Get $get): bool => ($get('currency_code') ?: 'NGN') !== 'NGN')
+                                ->live(onBlur: true)
+                                ->helperText('LCY (NGN) = document amount × rate. NGN documents use 1.'),
 
                             Select::make('location_id')
                                 ->label('Ship To Location')
@@ -190,6 +204,30 @@ class PurchaseOrderForm
                                 return number_format($total, 4);
                             })
                             ->reactive(),
+
+                        Grid::make([
+                            'default' => 1,
+                            'md' => 3,
+                        ])->schema([
+                            Placeholder::make('total_amount_lcy_preview')
+                                ->label('Total Excl. VAT (LCY / NGN)')
+                                ->content(fn (Get $get): string => 'NGN '.number_format(
+                                    (float) ($get('total_amount') ?? 0) * (float) ($get('currency_factor') ?? 1), 2
+                                )),
+
+                            Placeholder::make('total_vat_lcy_preview')
+                                ->label('Total VAT (LCY / NGN)')
+                                ->content(fn (Get $get): string => 'NGN '.number_format(
+                                    (float) ($get('total_vat') ?? 0) * (float) ($get('currency_factor') ?? 1), 2
+                                )),
+
+                            Placeholder::make('grand_total_lcy_preview')
+                                ->label('Grand Total (LCY / NGN)')
+                                ->content(fn (Get $get): string => 'NGN '.number_format(
+                                    ((float) ($get('total_amount') ?? 0) + (float) ($get('total_vat') ?? 0)) * (float) ($get('currency_factor') ?? 1), 2
+                                ))
+                                ->extraAttributes(['class' => 'font-bold']),
+                        ]),
                     ]),
 
                 Section::make('Approval Information')

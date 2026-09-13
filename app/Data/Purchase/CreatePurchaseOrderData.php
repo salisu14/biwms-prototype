@@ -50,5 +50,16 @@ class CreatePurchaseOrderData extends Data
 
         /** @var PurchaseOrderLineData[] */
         public array $lines,
+
+        /**
+         * Explicitly chosen document currency. When null the vendor's configured
+         * currency is used, falling back to LCY (NGN).
+         */
+        #[Nullable]
+        public ?string $currencyCode = null,
+
+        /** LCY-per-FCY rate. Required (non-null) for foreign-currency documents. */
+        #[Nullable]
+        public ?float $currencyFactor = null,
     ) {}
 }

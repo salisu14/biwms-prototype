@@ -80,6 +80,19 @@ class PurchaseReceiptForm
                                         ->visible(fn (Get $get): bool => filled($get('purchase_order_id')))
                                         ->columnSpanFull(),
 
+                                    Hidden::make('currency_code')
+                                        ->dehydrated(),
+
+                                    TextInput::make('exchange_rate')
+                                        ->label(fn (Get $get): string => 'Exchange Rate (NGN per 1 '.($get('currency_code') ?: 'NGN').')')
+                                        ->numeric()
+                                        ->minValue(0)
+                                        ->step(0.000001)
+                                        ->default(1)
+                                        ->helperText('LCY (NGN) = document amount × rate. NGN receipts use 1.')
+                                        ->disabled(fn (Get $get): bool => filled($get('purchase_order_id')) && ! $get('allow_header_override'))
+                                        ->dehydrated(),
+
                                     TextInput::make('status')
                                         ->disabled()
                                         ->placeholder('Draft'),

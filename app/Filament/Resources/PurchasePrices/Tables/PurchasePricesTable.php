@@ -26,9 +26,15 @@ class PurchasePricesTable
                     ->searchable()
                     ->sortable()
                     ->description(fn ($record) => $record->item?->description ?? ''),
+                TextColumn::make('currency_code')
+                    ->label('Currency')
+                    ->badge()
+                    ->placeholder('Unknown')
+                    ->color(fn ($state): string => filled($state) ? 'success' : 'danger')
+                    ->sortable(),
                 TextColumn::make('direct_unit_cost')
                     ->label('Direct Unit Cost')
-                    ->money(config('app.default_currency', 'USD'))
+                    ->money(fn ($record): string => $record->currency_code ?: config('app.base_currency', 'NGN'))
                     ->sortable(),
                 TextColumn::make('line_discount_percent')
                     ->label('Line Disc. %')

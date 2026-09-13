@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PurchaseLineType;
 use App\Exceptions\BusinessException;
+use App\Support\PurchasingCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,7 +26,9 @@ class PurchaseOrderLine extends Model
         'quantity',
         'unit_of_measure',
         'unit_cost',
+        'unit_cost_lcy',
         'line_total',
+        'line_total_lcy',
         'vat_code',
         'vat_percentage',
         'vat_amount',
@@ -45,7 +48,9 @@ class PurchaseOrderLine extends Model
         'type' => PurchaseLineType::class,
         'quantity' => 'decimal:4',
         'unit_cost' => 'decimal:4',
+        'unit_cost_lcy' => 'decimal:4',
         'line_total' => 'decimal:4',
+        'line_total_lcy' => 'decimal:4',
         'vat_percentage' => 'decimal:2',
         'vat_amount' => 'decimal:4',
         'total_amount' => 'decimal:4',
@@ -72,6 +77,16 @@ class PurchaseOrderLine extends Model
             $line->line_total = (float) $line->quantity * (float) $line->unit_cost;
             $line->vat_amount = (float) $line->line_total * ((float) $line->vat_percentage / 100);
             $line->total_amount = (float) $line->line_total + (float) $line->vat_amount;
+
+            // Derive the LCY equivalents from the authoritative FCY values when
+            // the owning document has a resolvable rate. A foreign document with
+            // no valid rate leaves LCY unset and fails closed at document level.
+            $order = $line->purchaseOrder;
+            if ($order && $order->hasResolvableCurrencyFactor()) {
+                $factor = $order->resolvedCurrencyFactor();
+                $line->unit_cost_lcy = PurchasingCurrency::lcyFromFcy($line->unit_cost, $factor);
+                $line->line_total_lcy = PurchasingCurrency::lcyFromFcy($line->line_total, $factor);
+            }
         });
 
         // Auto-set posting group from item if not already set

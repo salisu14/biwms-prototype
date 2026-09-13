@@ -4,6 +4,8 @@ namespace App\Actions\Purchase;
 
 use App\Data\Purchase\CreatePurchaseOrderData;
 use App\Models\PurchaseOrder;
+use App\Models\Vendor;
+use App\Support\PurchasingCurrency;
 use Illuminate\Support\Facades\DB;
 
 class CreatePurchaseOrderAction
@@ -12,16 +14,28 @@ class CreatePurchaseOrderAction
     {
         return DB::transaction(function () use ($data) {
 
+            $vendor = Vendor::findOrFail($data->vendorId);
+
+            // Currency precedence: explicit choice > configured vendor currency > LCY.
+            $explicitCurrency = strtoupper(trim((string) $data->currencyCode));
+            $vendorCurrency = strtoupper(trim((string) $vendor->currency));
+            $currencyCode = $explicitCurrency !== ''
+                ? $explicitCurrency
+                : ($vendorCurrency !== '' ? $vendorCurrency : PurchasingCurrency::LCY_CODE);
+            $currencyFactor = $currencyCode === PurchasingCurrency::LCY_CODE ? 1 : $data->currencyFactor;
+
             $order = PurchaseOrder::create([
                 'order_type' => $data->orderType,
                 'vendor_id' => $data->vendorId,
-                'vendor_name' => $data->vendorName,
+                'vendor_name' => $vendor->vendor_name,
                 'order_date' => $data->orderDate,
                 'location_id' => $data->locationId,
                 'posting_date' => $data->postingDate,
                 'due_date' => $data->dueDate,
                 'delivery_date' => $data->deliveryDate,
                 'payment_terms' => $data->paymentTerms,
+                'currency_code' => $currencyCode,
+                'currency_factor' => $currencyFactor,
                 'comment' => $data->comment,
                 'created_by' => $data->createdBy,
             ]);

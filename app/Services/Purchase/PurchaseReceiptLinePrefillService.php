@@ -5,6 +5,7 @@ namespace App\Services\Purchase;
 use App\Enums\PurchaseLineType;
 use App\Models\PurchaseOrderLine;
 use App\Models\PurchaseReceipt;
+use App\Support\PurchasingCurrency;
 
 class PurchaseReceiptLinePrefillService
 {
@@ -26,6 +27,10 @@ class PurchaseReceiptLinePrefillService
         if ($purchaseOrder === null) {
             return 0;
         }
+
+        // The receipt inherits the PO's authorized rate; foreign POs without a
+        // valid rate fail closed here rather than copying FCY as if it were LCY.
+        $currencyFactor = $purchaseOrder->resolvedCurrencyFactor();
 
         $created = 0;
         $locationCode = $purchaseOrder->location?->code ?? $purchaseReceipt->location_code;
@@ -74,8 +79,9 @@ class PurchaseReceiptLinePrefillService
                 'qty_assigned' => 0,
                 'qty_per_unit_of_measure' => $qtyPerUnitOfMeasure,
                 'direct_unit_cost' => $directUnitCost,
-                'unit_cost_lcy' => $directUnitCost,
+                'unit_cost_lcy' => PurchasingCurrency::lcyFromFcy($directUnitCost, $currencyFactor),
                 'line_amount' => $lineAmount,
+                'line_amount_lcy' => PurchasingCurrency::lcyFromFcy($lineAmount, $currencyFactor),
                 'line_discount_percent' => 0,
                 'line_discount_amount' => 0,
                 'inv_discount_amount' => 0,

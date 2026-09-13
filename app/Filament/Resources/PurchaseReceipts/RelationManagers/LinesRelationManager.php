@@ -7,6 +7,7 @@ use App\Models\Bin;
 use App\Models\GlAccount;
 use App\Models\Item;
 use App\Models\ItemCharge;
+use App\Models\PurchaseReceipt;
 use App\Models\PurchaseReceiptLine;
 use App\Models\VatPostingSetup;
 use Filament\Actions\Action;
@@ -340,12 +341,18 @@ class LinesRelationManager extends RelationManager
                                                     ),
 
                                                 TextInput::make('unit_cost_lcy')
-                                                    ->label('Unit Cost (LCY)')
+                                                    ->label('Unit Cost (LCY / NGN)')
                                                     ->numeric()
-                                                    ->prefix('$')
+                                                    ->prefix('₦')
                                                     ->disabled()
                                                     ->dehydrated()
-                                                    ->helperText('Auto-calculated from currency'),
+                                                    ->helperText('Derived from the receipt rate on save: LCY = document cost × rate.'),
+
+                                                Placeholder::make('line_amount_lcy_display')
+                                                    ->label('Line Amount (LCY / NGN)')
+                                                    ->content(fn (Get $get): string => 'NGN '.number_format(
+                                                        self::computeLineAmount($get) * $this->ownerExchangeRate(), 2
+                                                    )),
 
                                                 Placeholder::make('line_amount_display')
                                                     ->label('Line Amount')
@@ -956,5 +963,14 @@ class LinesRelationManager extends RelationManager
             ->emptyStateHeading('No receipt lines')
             ->emptyStateDescription('Create the first line for this purchase receipt.')
             ->emptyStateIcon('heroicon-o-document-plus');
+    }
+
+    private function ownerExchangeRate(): float
+    {
+        $receipt = $this->getOwnerRecord();
+
+        return $receipt instanceof PurchaseReceipt && $receipt->hasResolvableExchangeRate()
+            ? (float) $receipt->resolvedExchangeRate()
+            : 1.0;
     }
 }

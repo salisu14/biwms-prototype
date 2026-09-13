@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
+use App\Support\PurchasingCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -239,5 +240,25 @@ class PurchaseReceipt extends Model
     public function getTotalQuantityReceived(): float
     {
         return $this->lines->sum('quantity_received');
+    }
+
+    /**
+     * Resolve the receipt's LCY-per-FCY rate. LCY/null currency resolves 1;
+     * a foreign-currency receipt requires an explicit positive rate.
+     */
+    public function resolvedExchangeRate(): string
+    {
+        return PurchasingCurrency::factorFor($this->currency_code, $this->exchange_rate);
+    }
+
+    public function hasResolvableExchangeRate(): bool
+    {
+        try {
+            $this->resolvedExchangeRate();
+
+            return true;
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
     }
 }
