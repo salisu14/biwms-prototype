@@ -18,7 +18,9 @@ use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Builder;
 
 class PaymentForm
 {
@@ -242,7 +244,29 @@ class PaymentForm
                                 Grid::make(2)->schema([
                                     Select::make('bank_account_id')
                                         ->label('Internal Bank Account')
-                                        ->relationship('bankAccount', 'account_name')
+                                        ->relationship(
+                                            name: 'bankAccount',
+                                            titleAttribute: 'account_name',
+                                            modifyQueryUsing: function (Builder $query, Get $get): Builder {
+                                                $currencyId = $get('currency_id');
+                                                $currentBankAccountId = $get('bank_account_id');
+
+                                                if (! $currencyId) {
+                                                    return $query;
+                                                }
+
+                                                return $query->where(function (Builder $query) use ($currencyId, $currentBankAccountId): void {
+                                                    $query->where('currency_id', $currencyId);
+
+                                                    // Keep the currently selected account visible so existing
+                                                    // records remain viewable even if it is incompatible.
+                                                    if ($currentBankAccountId) {
+                                                        $query->orWhere($query->getModel()->getQualifiedKeyName(), (int) $currentBankAccountId);
+                                                    }
+                                                });
+                                            },
+                                        )
+                                        ->helperText('Only bank accounts in the payment currency are listed.')
                                         ->required(),
                                     Select::make('general_business_posting_group_id')
                                         ->label('Bus. Posting Group')

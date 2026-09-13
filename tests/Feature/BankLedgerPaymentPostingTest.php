@@ -4,12 +4,15 @@ use App\Enums\AccountCategory;
 use App\Enums\IncomeBalanceType;
 use App\Events\PaymentApplied;
 use App\Events\PaymentUnapplied;
+use App\Exceptions\BusinessException;
 use App\Exceptions\PostingSetupException;
 use App\Models\AccountingPeriod;
+use App\Models\AuditTrail;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\CashReceiptLine;
 use App\Models\ChartOfAccount;
+use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\CustomerPostingGroup;
@@ -35,6 +38,7 @@ use App\Services\Finance\PaymentService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 
 uses(RefreshDatabase::class);
 
@@ -734,6 +738,192 @@ it('routes legacy payment journal line posting through payment service and bank 
         ->and($line->fresh()->payment_processed)->toBeTrue()
         ->and($journalLine->fresh()->status)->toBe('Posted');
 });
+
+it('rejects a vendor payment when the payment currency differs from the bank account currency without side effects', function () {
+    $user = User::factory()->create();
+    Gate::before(fn (): bool => true);
+
+    $vendor = vendorWithPayablesPostingSetup();
+    $usd = usdCurrency();
+
+    $bankAccount = BankAccount::factory()->paymentOnly()->create([
+        'current_balance' => 101800,
+        'available_balance' => 101800,
+    ]);
+
+    $payment = Payment::factory()->create([
+        'party_type' => 'VENDOR',
+        'party_id' => $vendor->id,
+        'party_name' => $vendor->vendor_name,
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 175.24,
+        'payment_amount_lcy' => 262860,
+        'currency_id' => $usd->id,
+        'currency_code' => 'USD',
+        'currency_factor' => 1500,
+        'applied_amount' => 0,
+        'unapplied_amount' => 175.24,
+        'status' => 'APPROVED',
+        'payment_direction' => 'DISBURSEMENT',
+        'created_by' => $user->id,
+    ]);
+
+    expect(fn () => app(PaymentService::class)->post($payment, $user->id))
+        ->toThrow(BusinessException::class, 'must match the selected bank account currency');
+
+    expect($payment->fresh()->status)->toBe('APPROVED')
+        ->and($payment->fresh()->posted_at)->toBeNull()
+        ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse()
+        ->and(VendorLedgerEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeFalse()
+        ->and(AuditTrail::query()->where('document_no', $payment->payment_number)->where('action', 'vendor_payment_posted')->exists())->toBeFalse()
+        ->and((float) $bankAccount->fresh()->current_balance)->toBe(101800.0);
+});
+
+it('rejects a customer receipt when the payment currency differs from the bank account currency without side effects', function () {
+    $user = User::factory()->create();
+    Gate::before(fn (): bool => true);
+
+    $customer = customerWithReceivablesPostingSetup();
+    $usd = usdCurrency();
+
+    $bankAccount = BankAccount::factory()->receiptOnly()->create([
+        'current_balance' => 5000,
+        'available_balance' => 5000,
+    ]);
+
+    $payment = Payment::factory()->customerReceipt()->create([
+        'party_id' => $customer->id,
+        'party_name' => $customer->name,
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 100,
+        'payment_amount_lcy' => 150000,
+        'currency_id' => $usd->id,
+        'currency_code' => 'USD',
+        'currency_factor' => 1500,
+        'applied_amount' => 0,
+        'unapplied_amount' => 100,
+        'status' => 'APPROVED',
+        'created_by' => $user->id,
+    ]);
+
+    expect(fn () => app(PaymentService::class)->post($payment, $user->id))
+        ->toThrow(BusinessException::class, 'must match the selected bank account currency');
+
+    expect($payment->fresh()->status)->toBe('APPROVED')
+        ->and($payment->fresh()->posted_at)->toBeNull()
+        ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse()
+        ->and(CustomerLedgerEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeFalse()
+        ->and(GlEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeFalse()
+        ->and(AuditTrail::query()->where('document_no', $payment->payment_number)->where('action', 'customer_receipt_posted')->exists())->toBeFalse();
+});
+
+it('posts a foreign-currency payment when the bank account is in the same currency', function () {
+    $user = User::factory()->create();
+    Gate::before(fn (): bool => true);
+
+    $vendor = vendorWithPayablesPostingSetup();
+    $usd = usdCurrency();
+
+    $bankAccount = BankAccount::factory()->paymentOnly()->create([
+        'currency_id' => $usd->id,
+        'current_balance' => 1000,
+        'available_balance' => 1000,
+    ]);
+
+    $payment = Payment::factory()->create([
+        'party_type' => 'VENDOR',
+        'party_id' => $vendor->id,
+        'party_name' => $vendor->vendor_name,
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 175.24,
+        'payment_amount_lcy' => 262860,
+        'currency_id' => $usd->id,
+        'currency_code' => 'USD',
+        'currency_factor' => 1500,
+        'applied_amount' => 0,
+        'unapplied_amount' => 175.24,
+        'status' => 'APPROVED',
+        'payment_direction' => 'DISBURSEMENT',
+        'created_by' => $user->id,
+    ]);
+
+    app(PaymentService::class)->post($payment, $user->id);
+
+    expect($payment->fresh()->status)->toBe('POSTED')
+        ->and($payment->fresh()->posted_at)->not->toBeNull()
+        ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeTrue()
+        ->and(VendorLedgerEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeTrue()
+        ->and(GlEntry::query()->where('document_number', $payment->payment_number)->exists())->toBeTrue();
+});
+
+it('fails closed when the selected bank account currency cannot be resolved', function () {
+    $user = User::factory()->create();
+    Gate::before(fn (): bool => true);
+
+    $vendor = vendorWithPayablesPostingSetup();
+    $usd = usdCurrency();
+
+    $bankAccount = BankAccount::factory()->paymentOnly()->create([
+        'currency_id' => null,
+        'current_balance' => 101800,
+        'available_balance' => 101800,
+    ]);
+
+    $payment = Payment::factory()->create([
+        'party_type' => 'VENDOR',
+        'party_id' => $vendor->id,
+        'party_name' => $vendor->vendor_name,
+        'bank_account_id' => $bankAccount->id,
+        'payment_amount' => 50,
+        'payment_amount_lcy' => 75000,
+        'currency_id' => $usd->id,
+        'currency_code' => 'USD',
+        'currency_factor' => 1500,
+        'applied_amount' => 0,
+        'unapplied_amount' => 50,
+        'status' => 'APPROVED',
+        'payment_direction' => 'DISBURSEMENT',
+        'created_by' => $user->id,
+    ]);
+
+    expect(fn () => app(PaymentService::class)->post($payment, $user->id))
+        ->toThrow(BusinessException::class, 'bank account currency could not be resolved');
+
+    expect($payment->fresh()->status)->toBe('APPROVED')
+        ->and($payment->fresh()->posted_at)->toBeNull()
+        ->and(BankAccountLedgerEntry::query()->where('document_no', $payment->payment_number)->exists())->toBeFalse();
+});
+
+function vendorWithPayablesPostingSetup(): Vendor
+{
+    $payablesAccount = ChartOfAccount::factory()->create([
+        'account_category' => AccountCategory::LIABILITY,
+        'income_balance' => IncomeBalanceType::BALANCE_SHEET,
+    ]);
+    $vendorPostingGroup = VendorPostingGroup::factory()->create([
+        'payables_account_id' => $payablesAccount->id,
+    ]);
+
+    return Vendor::factory()->create([
+        'vendor_posting_group_id' => $vendorPostingGroup->id,
+    ]);
+}
+
+function usdCurrency(): Currency
+{
+    return Currency::query()->firstOrCreate(
+        ['code' => 'USD'],
+        [
+            'description' => 'US Dollar',
+            'symbol' => '$',
+            'decimal_places' => 2,
+            'is_active' => true,
+            'is_lcy' => false,
+            'exchange_rate' => 1500.0,
+        ],
+    );
+}
 
 function grantPaymentPostingPermission(User $user): void
 {

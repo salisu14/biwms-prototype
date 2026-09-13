@@ -5,6 +5,34 @@ use Tests\TestCase;
 
 /*
 |--------------------------------------------------------------------------
+| Deterministic test environment
+|--------------------------------------------------------------------------
+|
+| The host shell may export application env vars (e.g. APP_ENV=local,
+| CACHE_STORE=database, SESSION_DRIVER=database, QUEUE_CONNECTION=database).
+| Laravel's immutable env repository reads $_SERVER/$_ENV before getenv, and
+| PHPUnit's <env> only sets getenv unless force is used, so ambient values can
+| leak into tests and defeat the phpunit.xml isolation settings. Force the
+| test-only values into all three sources before any application boots.
+|
+*/
+
+foreach ([
+    'APP_ENV' => 'testing',
+    'APP_MAINTENANCE_DRIVER' => 'file',
+    'BROADCAST_CONNECTION' => 'null',
+    'CACHE_STORE' => 'array',
+    'MAIL_MAILER' => 'array',
+    'QUEUE_CONNECTION' => 'sync',
+    'SESSION_DRIVER' => 'array',
+] as $key => $value) {
+    putenv("{$key}={$value}");
+    $_ENV[$key] = $value;
+    $_SERVER[$key] = $value;
+}
+
+/*
+|--------------------------------------------------------------------------
 | Test Case
 |--------------------------------------------------------------------------
 |

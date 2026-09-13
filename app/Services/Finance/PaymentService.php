@@ -84,6 +84,8 @@ class PaymentService
                 throw new BusinessException('The selected bank account is not enabled for payments.', title: 'Payment was not posted');
             }
 
+            $this->assertBankAccountCurrencyMatches($payment);
+
             // 1. Create Ledger Entries
             $partyLedgerEntry = null;
             if ($payment->payment_direction === 'RECEIPT') {
@@ -433,6 +435,71 @@ class PaymentService
         });
 
         PaymentUnapplied::dispatch($application->fresh());
+    }
+
+    /**
+     * Fail closed unless the payment currency matches the selected bank
+     * account's currency.
+     *
+     * The bank ledger (amount / balance) is maintained in the bank account's
+     * own currency, while this service passes the payment currency amount into
+     * it. Posting a cross-currency payment would therefore mix units and
+     * bypass overdraft protection, so it is rejected before any accounting
+     * side effect is created.
+     */
+    private function assertBankAccountCurrencyMatches(Payment $payment): void
+    {
+        $bankAccount = $payment->bankAccount;
+
+        if (! $bankAccount) {
+            throw new BusinessException('A bank account is required before posting this payment.', title: 'Payment was not posted');
+        }
+
+        $paymentCurrencyId = $payment->currency_id !== null ? (int) $payment->currency_id : null;
+        $paymentCurrencyCode = $this->normalizeCurrencyCode($payment->currency_code)
+            ?? $this->normalizeCurrencyCode($payment->currency?->code);
+
+        $bankCurrencyId = $bankAccount->currency_id !== null ? (int) $bankAccount->currency_id : null;
+        $bankCurrencyCode = $this->normalizeCurrencyCode($bankAccount->currency?->code);
+
+        if ($paymentCurrencyId === null && $paymentCurrencyCode === null) {
+            throw new BusinessException('The payment currency could not be resolved; posting was blocked.', title: 'Payment was not posted');
+        }
+
+        if ($bankCurrencyId === null && $bankCurrencyCode === null) {
+            throw new BusinessException('The selected bank account currency could not be resolved; posting was blocked.', title: 'Payment was not posted');
+        }
+
+        $idsComparable = $paymentCurrencyId !== null && $bankCurrencyId !== null;
+        $codesComparable = $paymentCurrencyCode !== null && $bankCurrencyCode !== null;
+
+        $idsMatch = $idsComparable && $paymentCurrencyId === $bankCurrencyId;
+        $codesMatch = $codesComparable && $paymentCurrencyCode === $bankCurrencyCode;
+
+        // When both identities are known they must agree; otherwise fall back
+        // to whichever identity is available.
+        $matches = ($idsComparable && $codesComparable)
+            ? ($idsMatch && $codesMatch)
+            : ($idsMatch || $codesMatch);
+
+        if ($matches) {
+            return;
+        }
+
+        $paymentLabel = $paymentCurrencyCode ?? ('#'.$paymentCurrencyId);
+        $bankLabel = $bankCurrencyCode ?? ('#'.$bankCurrencyId);
+
+        throw new BusinessException(
+            "The payment currency ({$paymentLabel}) must match the selected bank account currency ({$bankLabel}). Select a {$paymentLabel} bank account or change the payment configuration before posting.",
+            title: 'Payment was not posted',
+        );
+    }
+
+    private function normalizeCurrencyCode(?string $code): ?string
+    {
+        $code = strtoupper(trim((string) $code));
+
+        return $code === '' ? null : $code;
     }
 
     private function resolvePrecision(?Currency $currency, ?string $currencyCode): int

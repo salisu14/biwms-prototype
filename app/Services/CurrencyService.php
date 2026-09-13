@@ -45,7 +45,9 @@ class CurrencyService
     public function getByCode(string $code): ?Currency
     {
         return Cache::remember("currency.{$code}", self::CACHE_TTL, function () use ($code) {
-            return Currency::with('currentExchangeRate')->where('code', $code)->first();
+            // `currentExchangeRate` is a computed method on Currency, not an
+            // Eloquent relationship; eager loading it is invalid and crashes.
+            return Currency::query()->where('code', $code)->first();
         });
     }
 
@@ -177,7 +179,6 @@ class CurrencyService
     public function getActiveCurrencies(): Collection
     {
         return Currency::active()
-            ->with('currentExchangeRate')
             ->get()
             ->map(function ($currency) {
                 return [
