@@ -125,6 +125,26 @@ class GeneralLedgerService
         ]));
     }
 
+    /**
+     * Append the accounting-layer-derived mirror of a verified pre-kernel
+     * legacy one-sided G/L row so its historical transaction group balances.
+     *
+     * The accounting layer derives the account, amounts, business, source and
+     * transaction identity from the persisted original row. Callers cannot
+     * supply arbitrary debit/credit/account/business/source data. The optional
+     * incident currency is only a validated fallback for legacy rows that carry
+     * no currency of their own.
+     */
+    public function appendLegacyNeutralizer(
+        GlEntry $originalEntry,
+        ?int $actorId = null,
+        ?string $incidentIdentifier = null,
+        ?string $reason = null,
+        ?string $incidentCurrencyCode = null,
+    ): GlEntry {
+        return $this->postingKernel->appendLegacyNeutralizer($originalEntry, $actorId, $incidentIdentifier, $reason, $incidentCurrencyCode);
+    }
+
     private function normalizeSourceType(mixed $sourceType): string
     {
         $value = $sourceType instanceof SourceType ? $sourceType->value : (string) $sourceType;
