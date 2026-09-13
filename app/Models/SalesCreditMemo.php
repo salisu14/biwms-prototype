@@ -37,7 +37,9 @@ class SalesCreditMemo extends Model implements Approvable
 
         // Financials
         'total_amount',
+        'total_amount_lcy',
         'currency_code',
+        'currency_factor',
 
         // Status lifecycle
         'status', // draft, pending, rejected, archived, approved, posted, cancelled
@@ -74,6 +76,8 @@ class SalesCreditMemo extends Model implements Approvable
         'posted_at' => 'datetime',
         'approved_at' => 'datetime',
         'total_amount' => 'decimal:2',
+        'total_amount_lcy' => 'decimal:2',
+        'currency_factor' => 'decimal:6',
         'business_id' => 'integer',
     ];
 

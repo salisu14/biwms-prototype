@@ -20,6 +20,10 @@ class SalesInvoiceLine extends Model
         'vat_percent',
         'vat_amount',
         'line_total',
+        'unit_price_lcy',
+        'line_total_lcy',
+        'discount_amount_lcy',
+        'vat_amount_lcy',
         'location_id',
     ];
 
@@ -31,6 +35,10 @@ class SalesInvoiceLine extends Model
         'vat_percent' => 'decimal:2',
         'vat_amount' => 'decimal:2',
         'line_total' => 'decimal:2',
+        'unit_price_lcy' => 'decimal:2',
+        'line_total_lcy' => 'decimal:2',
+        'discount_amount_lcy' => 'decimal:2',
+        'vat_amount_lcy' => 'decimal:2',
     ];
 
     protected static function booted()

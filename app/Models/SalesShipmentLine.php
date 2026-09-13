@@ -17,7 +17,7 @@ class SalesShipmentLine extends Model
     protected $fillable = [
         'sales_shipment_header_id', 'document_no', 'line_no', 'type', 'no',
         'description', 'quantity', 'quantity_base', 'unit_of_measure',
-        'unit_price', 'line_discount_pct', 'qty_shipped_not_invoiced',
+        'unit_price', 'unit_price_lcy', 'line_amount_lcy', 'line_discount_pct', 'qty_shipped_not_invoiced',
         'quantity_invoiced', 'order_no', 'order_line_no', 'drop_shipment',
         'location_code', 'bin_code', 'dimension_set_id', 'serial_no', 'lot_no',
     ];
@@ -26,6 +26,8 @@ class SalesShipmentLine extends Model
         'type' => SalesLineType::class,
         'quantity' => 'decimal:4',
         'unit_price' => 'decimal:4',
+        'unit_price_lcy' => 'decimal:4',
+        'line_amount_lcy' => 'decimal:4',
         'line_discount_pct' => 'decimal:2',
         'drop_shipment' => 'boolean',
         'correction' => 'boolean',

@@ -25,6 +25,11 @@ class SalesCreditMemoLine extends Model
         'vat_amount',
         'amount', // Net
         'amount_including_vat', // Gross
+        'unit_price_lcy',
+        'line_discount_amount_lcy',
+        'vat_amount_lcy',
+        'amount_lcy',
+        'amount_including_vat_lcy',
         'sales_invoice_line_id',
         'posted_sales_invoice_line_id',
     ];
@@ -39,6 +44,11 @@ class SalesCreditMemoLine extends Model
         'vat_amount' => 'decimal:2',
         'amount' => 'decimal:2',
         'amount_including_vat' => 'decimal:2',
+        'unit_price_lcy' => 'decimal:5',
+        'line_discount_amount_lcy' => 'decimal:2',
+        'vat_amount_lcy' => 'decimal:2',
+        'amount_lcy' => 'decimal:2',
+        'amount_including_vat_lcy' => 'decimal:2',
     ];
 
     protected static function booted(): void

@@ -16,7 +16,10 @@ class SalesInvoice extends Model
         'customer_id',
         'sales_order_id',
         'total_amount',
+        'total_amount_lcy',
         'currency_code',
+        'currency_factor',
+        'currency_id',
         'status',
         'posted_at',
         'posted_by',
@@ -34,6 +37,9 @@ class SalesInvoice extends Model
         'due_date' => 'date',
         'posted_at' => 'datetime',
         'total_amount' => 'decimal:2',
+        'total_amount_lcy' => 'decimal:2',
+        'currency_factor' => 'decimal:6',
+        'currency_id' => 'integer',
         'business_id' => 'integer',
     ];
 
