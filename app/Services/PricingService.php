@@ -23,7 +23,8 @@ class PricingService
         ?string $variantCode = null,
         ?string $uom = null,
         ?Location $location = null,
-        ?\DateTime $date = null
+        ?\DateTime $date = null,
+        ?string $documentCurrency = null
     ): array {
         return $this->resolver->resolve(
             item: $item,
@@ -32,7 +33,8 @@ class PricingService
             uom: $uom,
             quantity: $quantity,
             location: $location,
-            date: $date
+            date: $date,
+            documentCurrency: $documentCurrency
         );
     }
 

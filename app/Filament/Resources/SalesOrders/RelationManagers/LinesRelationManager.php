@@ -3,13 +3,16 @@
 namespace App\Filament\Resources\SalesOrders\RelationManagers;
 
 use App\Enums\ItemType;
+use App\Enums\SalesLinePricingStatus;
 use App\Filament\Resources\SalesOrders\SalesOrderResource;
 use App\Models\Item;
 use App\Models\SalesOrder;
+use App\Services\Sales\SalesPricingResolver;
 use App\Services\VatService;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -52,12 +55,18 @@ class LinesRelationManager extends RelationManager
                                         ->preload()
                                         ->required()
                                         ->live()
-                                        ->afterStateUpdated(function ($state, Set $set) {
+                                        ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                             if (! $state) {
                                                 return;
                                             }
 
                                             $item = Item::find($state);
+                                            if (! $item) {
+                                                return;
+                                            }
+
+                                            /** @var SalesOrder $order */
+                                            $order = $this->getOwnerRecord();
 
                                             $defaultSalesUom = $item->uoms()
                                                 ->wherePivot('uom_type', 'SALES')
@@ -66,14 +75,25 @@ class LinesRelationManager extends RelationManager
                                             $defaultUomCode = $defaultSalesUom?->uom_code ?? $item->base_unit_of_measure;
                                             $conversionFactor = $item->getConversionFactorForUom($defaultUomCode);
 
+                                            // Commercial price comes from the canonical explicit-currency
+                                            // resolver, never from the item-card reference value.
+                                            $pricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
+                                                item: $item,
+                                                customer: $order->customer,
+                                                quantity: (float) ($get('quantity') ?? 1),
+                                                variantCode: null,
+                                                uom: $defaultUomCode,
+                                                location: $order->location,
+                                                documentCurrency: $order->currency_code,
+                                            );
+
                                             $set('item_code', $item->item_code);
                                             $set('description', $item->description);
-                                            $set('unit_price', (float) $item->unit_price * $conversionFactor);
                                             $set('unit_cost', $item->unit_cost);
-                                            $set('vat_product_posting_group_id', $item->vat_product_posting_group_id);
+                                            $set('vat_code', $item->vatProductPostingGroup?->code);
 
                                             // Resolve VAT percentage
-                                            $vatBusGroup = $this->getOwnerRecord()->vat_business_posting_group_id;
+                                            $vatBusGroup = $order->vat_business_posting_group_id;
                                             $vatProdGroup = $item->vat_product_posting_group_id;
 
                                             if ($vatBusGroup && $vatProdGroup) {
@@ -87,6 +107,9 @@ class LinesRelationManager extends RelationManager
                                             // Set UOM from item's default sales UOM if available
                                             $set('unit_of_measure_code', $defaultUomCode);
                                             $set('qty_per_unit_of_measure', $conversionFactor);
+
+                                            self::applyResolvedPricing($set, $pricing);
+                                            self::calculateLine($set, $get);
                                         }),
 
                                     TextInput::make('description')
@@ -135,17 +158,38 @@ class LinesRelationManager extends RelationManager
                                             }
 
                                             $item = Item::find($itemId);
-                                            $conversionFactor = $item?->getConversionFactorForUom($state) ?? 1;
-                                            $currentQtyPerUom = (float) ($get('qty_per_unit_of_measure') ?? 1);
-                                            $currentUnitPrice = (float) ($get('unit_price') ?? 0);
-                                            $baseUnitPrice = (float) ($item?->unit_price ?? 0);
-                                            $expectedCurrentAutoPrice = $baseUnitPrice * $currentQtyPerUom;
-                                            $isManualUnitPrice = abs($currentUnitPrice - $expectedCurrentAutoPrice) > 0.0001;
-
-                                            $set('qty_per_unit_of_measure', $conversionFactor);
-                                            if (! $isManualUnitPrice) {
-                                                $set('unit_price', $baseUnitPrice * $conversionFactor);
+                                            if (! $item) {
+                                                return;
                                             }
+
+                                            $conversionFactor = $item->getConversionFactorForUom($state);
+                                            $set('qty_per_unit_of_measure', $conversionFactor);
+
+                                            // A deliberately manual price is never silently reverted to an
+                                            // automatic price by a UOM change.
+                                            if ($get('pricing_status') === SalesLinePricingStatus::MANUAL->value) {
+                                                self::calculateLine($set, $get);
+
+                                                return;
+                                            }
+
+                                            /** @var SalesOrder $order */
+                                            $order = $this->getOwnerRecord();
+
+                                            // Re-resolve through the same canonical resolver; never derive the
+                                            // commercial price directly from the item-card reference value.
+                                            $pricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
+                                                item: $item,
+                                                customer: $order->customer,
+                                                quantity: (float) ($get('quantity') ?? 1),
+                                                variantCode: null,
+                                                uom: $state,
+                                                location: $order->location,
+                                                documentCurrency: $order->currency_code,
+                                            );
+
+                                            self::applyResolvedPricing($set, $pricing);
+                                            self::calculateLine($set, $get);
                                         }),
 
                                     TextInput::make('qty_per_unit_of_measure')
@@ -156,10 +200,20 @@ class LinesRelationManager extends RelationManager
 
                                     TextInput::make('unit_price')
                                         ->numeric()
-                                        ->prefix('₦')
+                                        ->prefix(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                                         ->required()
                                         ->live(onBlur: true)
-                                        ->afterStateUpdated(fn ($state, Set $set, Get $get) => self::calculateLine($set, $get)),
+                                        ->afterStateUpdated(function (Set $set, Get $get): void {
+                                            // A user-entered price is an explicit manual commercial
+                                            // price; any automatic provenance is dropped so it is
+                                            // never falsely attributed to a SalesPrice/price list.
+                                            $set('pricing_status', SalesLinePricingStatus::MANUAL->value);
+                                            $set('price_source', null);
+                                            $set('pricing_master_id', null);
+                                            $set('price_record_id', null);
+
+                                            self::calculateLine($set, $get);
+                                        }),
 
                                     TextInput::make('line_discount_percent')
                                         ->label('Disc %')
@@ -177,19 +231,19 @@ class LinesRelationManager extends RelationManager
                                         ->label('Net Amount')
                                         ->readOnly()
                                         ->numeric()
-                                        ->prefix('₦'),
+                                        ->prefix(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN')),
 
                                     TextInput::make('vat_amount')
                                         ->label('VAT')
                                         ->readOnly()
                                         ->numeric()
-                                        ->prefix('₦'),
+                                        ->prefix(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN')),
 
                                     TextInput::make('amount_including_vat')
                                         ->label('Total Incl. VAT')
                                         ->readOnly()
                                         ->numeric()
-                                        ->prefix('₦')
+                                        ->prefix(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                                         ->extraInputAttributes(['class' => 'font-bold text-primary-600']),
                                 ]),
 
@@ -205,10 +259,13 @@ class LinesRelationManager extends RelationManager
 
                 Section::make('Technical Details')
                     ->schema([
+                        Hidden::make('price_source')->dehydrated(),
+                        Hidden::make('pricing_master_id')->dehydrated(),
+                        Hidden::make('price_record_id')->dehydrated(),
+                        Hidden::make('pricing_status')->dehydrated(),
                         TextInput::make('item_code')->readOnly(),
-                        Select::make('vat_product_posting_group_id')
+                        TextInput::make('vat_code')
                             ->label('VAT Prod. Posting Group')
-                            ->relationship('vatProductPostingGroup', 'code')
                             ->disabled()
                             ->dehydrated(),
                         Select::make('general_product_posting_group_id')
@@ -232,7 +289,7 @@ class LinesRelationManager extends RelationManager
                     ->alignment('right'),
                 TextColumn::make('unit_of_measure_code')->label('UOM'),
                 TextColumn::make('unit_price')
-                    ->money('NGN')
+                    ->money(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                     ->alignment('right'),
                 TextColumn::make('line_discount_percent')
                     ->label('Disc %')
@@ -240,9 +297,13 @@ class LinesRelationManager extends RelationManager
                     ->color('danger'),
                 TextColumn::make('amount_including_vat')
                     ->label('Total')
-                    ->money('NGN')
+                    ->money(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                     ->alignment('right')
                     ->weight('bold'),
+                TextColumn::make('pricing_status')
+                    ->label('Pricing')
+                    ->badge()
+                    ->toggleable(),
                 TextColumn::make('line_status')
                     ->badge()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -259,6 +320,31 @@ class LinesRelationManager extends RelationManager
                         $qtyPerUom = (float) ($data['qty_per_unit_of_measure'] ?? 1);
                         $data['quantity_base'] = $qty * ($qtyPerUom > 0 ? $qtyPerUom : 1);
 
+                        // Guarantee the canonical resolver prices the line even when this
+                        // create is driven programmatically and the interactive item/UOM
+                        // hooks did not run. A positive price (manual or legacy) is never
+                        // overwritten; a zero price always needs a trusted resolution.
+                        $item = Item::query()->find($data['item_id'] ?? null);
+                        $hasPositivePrice = (float) ($data['unit_price'] ?? 0) > 0;
+
+                        if ($item && ! $hasPositivePrice) {
+                            $pricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
+                                item: $item,
+                                customer: $order->customer,
+                                quantity: (float) ($data['quantity'] ?? 1),
+                                variantCode: null,
+                                uom: $data['unit_of_measure_code'] ?? $item->base_unit_of_measure,
+                                location: $order->location,
+                                documentCurrency: $order->currency_code,
+                            );
+
+                            $data['unit_price'] = $pricing['unit_price'];
+                            $data['price_source'] = $pricing['price_source'];
+                            $data['pricing_master_id'] = $pricing['pricing_master_id'];
+                            $data['price_record_id'] = $pricing['price_record_id'];
+                            $data['pricing_status'] = $pricing['pricing_status'];
+                        }
+
                         return $data;
                     }),
             ])
@@ -266,6 +352,20 @@ class LinesRelationManager extends RelationManager
                 EditAction::make(),
                 DeleteAction::make(),
             ]);
+    }
+
+    /**
+     * Persist the canonical resolver's price and provenance onto the line state.
+     *
+     * @param  array<string, mixed>  $pricing
+     */
+    protected static function applyResolvedPricing(Set $set, array $pricing): void
+    {
+        $set('unit_price', $pricing['unit_price']);
+        $set('price_source', $pricing['price_source']);
+        $set('pricing_master_id', $pricing['pricing_master_id']);
+        $set('price_record_id', $pricing['price_record_id']);
+        $set('pricing_status', $pricing['pricing_status']);
     }
 
     /**

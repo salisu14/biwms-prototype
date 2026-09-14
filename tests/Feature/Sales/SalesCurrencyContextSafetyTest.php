@@ -541,6 +541,7 @@ it('labels item-card sales prices with the configured company currency, not USD'
         item: $item,
         customer: $customer,
         quantity: 1,
+        documentCurrency: 'NGN',
     );
 
     expect($pricing['currency'])->toBe('NGN')

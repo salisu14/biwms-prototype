@@ -97,6 +97,11 @@ class SalesCreditMemoService
         $amount = max(0, $lineTotal - $discountAmount);
         $vatAmount = round($amount * ($vatPercent / 100), 2);
 
+        // A line inherited from a posted invoice preserves the original posted
+        // economics; its price is not re-resolved and no new resolver provenance
+        // is fabricated. Direct/unlinked lines carry the resolver's own state.
+        $isLinkedToPostedInvoice = $postedInvoiceLine !== null;
+
         return [
             'item_id' => $item->id,
             'quantity' => $quantity,
@@ -111,6 +116,10 @@ class SalesCreditMemoService
             'amount_including_vat' => $amount + $vatAmount,
             'sales_invoice_line_id' => $line->sales_invoice_line_id,
             'posted_sales_invoice_line_id' => $postedInvoiceLine?->id,
+            'price_source' => $isLinkedToPostedInvoice ? null : $line->price_source,
+            'pricing_master_id' => $isLinkedToPostedInvoice ? null : $line->pricing_master_id,
+            'price_record_id' => $isLinkedToPostedInvoice ? null : $line->price_record_id,
+            'pricing_status' => $isLinkedToPostedInvoice ? null : $line->pricing_status,
         ];
     }
 
@@ -203,6 +212,11 @@ class SalesCreditMemoService
             // not be reinterpreted, and a foreign memo without a valid factor
             // fails closed rather than silently posting as factor 1.
             $currencyContext = $this->currencyService->resolveForExistingDocument($creditMemo->currency_code, $creditMemo->currency_factor);
+
+            // Unresolved direct/unlinked pricing must not reach any financial or
+            // accounting side effect. Linked lines are exempt (original invoice
+            // economics are preserved).
+            app(SalesCreditMemoPricingGuard::class)->assertCanPost($creditMemo);
 
             $correctedPostedInvoice = $this->resolveCorrectedPostedInvoice($creditMemo);
 

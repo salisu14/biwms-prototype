@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Support\DocumentCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -301,7 +302,10 @@ class PricingMaster extends Model
         ?Location $location = null,
         ?\DateTime $date = null
     ): ?self {
-        $currency = $currency ?? config('app.default_currency', 'USD');
+        // Currency is part of price identity. A price list row is eligible only
+        // when its explicit currency equals the requested document currency: a
+        // blind USD fallback would silently select and relabel a foreign price.
+        $currency = strtoupper(trim((string) ($currency ?: DocumentCurrency::LCY_CODE)));
         $date = $date ?? now();
 
         // Build query with priority order
@@ -316,10 +320,7 @@ class PricingMaster extends Model
                 $q->whereNull('unit_of_measure_code')
                     ->orWhere('unit_of_measure_code', $uom);
             })
-            ->where(function ($q) use ($currency) {
-                $q->where('currency_code', $currency)
-                    ->orWhere('currency_code', 'USD'); // Fallback
-            })
+            ->where('currency_code', $currency)
             ->where('start_date', '<=', $date)
             ->where(function ($q) use ($date) {
                 $q->whereNull('end_date')

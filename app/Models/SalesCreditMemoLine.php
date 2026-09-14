@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\SalesLinePricingStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -32,6 +33,10 @@ class SalesCreditMemoLine extends Model
         'amount_including_vat_lcy',
         'sales_invoice_line_id',
         'posted_sales_invoice_line_id',
+        'price_source',
+        'pricing_master_id',
+        'price_record_id',
+        'pricing_status',
     ];
 
     protected $casts = [
@@ -49,6 +54,7 @@ class SalesCreditMemoLine extends Model
         'vat_amount_lcy' => 'decimal:2',
         'amount_lcy' => 'decimal:2',
         'amount_including_vat_lcy' => 'decimal:2',
+        'pricing_status' => SalesLinePricingStatus::class,
     ];
 
     protected static function booted(): void

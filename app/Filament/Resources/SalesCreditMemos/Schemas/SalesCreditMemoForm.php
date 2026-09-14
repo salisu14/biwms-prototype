@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\SalesCreditMemos\Schemas;
 
+use App\Enums\SalesLinePricingStatus;
 use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Customer;
 use App\Models\Item;
@@ -13,6 +14,7 @@ use App\Models\PostedSalesInvoice;
 use App\Models\PostedSalesInvoiceLine;
 use App\Services\Sales\SalesPricingResolver;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -161,6 +163,10 @@ class SalesCreditMemoForm
             self::makeAmountIncludingVatField(),
             self::makeUomSelect(),
             self::makeQtyPerUomField(),
+            Hidden::make('price_source')->dehydrated(),
+            Hidden::make('pricing_master_id')->dehydrated(),
+            Hidden::make('price_record_id')->dehydrated(),
+            Hidden::make('pricing_status')->dehydrated(),
         ];
     }
 
@@ -229,6 +235,8 @@ class SalesCreditMemoForm
         $set('line_discount_percent', $pricing['discount_percent']);
         $set('price_source', $pricing['price_source']);
         $set('pricing_master_id', $pricing['pricing_master_id']);
+        $set('price_record_id', $pricing['price_record_id']);
+        $set('pricing_status', $pricing['pricing_status']);
         $set('unit_of_measure_code', $defaultUom);
         $set('qty_per_unit_of_measure', $conversionFactor);
     }
@@ -249,6 +257,7 @@ class SalesCreditMemoForm
             'customer' => Customer::find((int) $get('../../customer_id')),
             'location' => Location::find((int) $get('../../location_id')),
             'quantity' => (float) ($get('quantity') ?? 1),
+            'currency_code' => $get('../../currency_code'),
         ];
     }
 
@@ -257,13 +266,14 @@ class SalesCreditMemoForm
         array $context,
         string $uom
     ): array {
-        return app(SalesPricingResolver::class)->resolve(
+        return app(SalesPricingResolver::class)->resolveOrUnresolved(
             item: $item,
             customer: $context['customer'],
             quantity: $context['quantity'],
             variantCode: null,
             uom: $uom,
-            location: $context['location']
+            location: $context['location'],
+            documentCurrency: $context['currency_code'] ?? null
         );
     }
 
@@ -305,7 +315,21 @@ class SalesCreditMemoForm
             ->step(0.01)
             ->live(onBlur: true)
             ->readOnly(fn (Get $get): bool => filled($get('posted_sales_invoice_line_id')))
-            ->columnSpan(3);
+            ->columnSpan(3)
+            ->afterStateUpdated(function (Set $set, Get $get): void {
+                // A line inherited from a posted invoice keeps its original
+                // economics and must not be reclassified as manual.
+                if (filled($get('posted_sales_invoice_line_id'))) {
+                    return;
+                }
+
+                // A user-entered price is an explicit manual commercial price;
+                // automatic provenance is cleared so it is never misattributed.
+                $set('pricing_status', SalesLinePricingStatus::MANUAL->value);
+                $set('price_source', null);
+                $set('pricing_master_id', null);
+                $set('price_record_id', null);
+            });
     }
 
     private static function makeVatPercentField(): TextInput
@@ -400,13 +424,21 @@ class SalesCreditMemoForm
         $context = self::resolvePricingContext($get);
         $conversionFactor = $item->getConversionFactorForUom($newUom) ?? 1;
 
+        $set('qty_per_unit_of_measure', $conversionFactor);
+
+        // A deliberately manual price is never silently reverted to an automatic one.
+        if ($get('pricing_status') === SalesLinePricingStatus::MANUAL->value) {
+            return;
+        }
+
         $newPricing = self::resolvePricing($item, $context, $newUom);
 
-        $set('qty_per_unit_of_measure', $conversionFactor);
         $set('unit_price', $newPricing['unit_price']);
         $set('line_discount_percent', $newPricing['discount_percent']);
         $set('price_source', $newPricing['price_source']);
         $set('pricing_master_id', $newPricing['pricing_master_id']);
+        $set('price_record_id', $newPricing['price_record_id']);
+        $set('pricing_status', $newPricing['pricing_status']);
     }
 
     private static function updatePricingForCurrentUom(Set $set, Get $get): void

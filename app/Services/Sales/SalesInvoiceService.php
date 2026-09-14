@@ -87,6 +87,11 @@ class SalesInvoiceService
                     'vat_percent' => $line['vat_percent'] ?? 0,
                     'vat_amount' => $vatAmount,
                     'line_total' => $lineTotal,
+                    // Durable resolver provenance/state supplied by the line path.
+                    'price_source' => $line['price_source'] ?? null,
+                    'pricing_master_id' => $line['pricing_master_id'] ?? null,
+                    'price_record_id' => $line['price_record_id'] ?? null,
+                    'pricing_status' => $line['pricing_status'] ?? null,
                 ]);
 
                 $total += $lineTotal;
@@ -122,6 +127,10 @@ class SalesInvoiceService
             if ($invoice->lines->isEmpty()) {
                 throw new BusinessException('No lines to post', field: 'lines');
             }
+
+            // Unresolved pricing must not reach any inventory or accounting
+            // side effect. Runs before item ledger entries and G/L posting.
+            app(SalesInvoicePricingGuard::class)->assertCanPost($invoice);
 
             // Validate the draft's currency context before any posting side
             // effects. A legacy invoice with a missing/ambiguous currency must
@@ -387,6 +396,13 @@ class SalesInvoiceService
                     'discount_percent' => (float) $line->line_discount_percent,
                     'discount_amount' => (float) $line->line_discount_amount,
                     'vat_percent' => (float) $line->vat_percentage,
+                    // Carry the source Sales Order line's pricing state so an
+                    // unresolved order line cannot become an invoice line that
+                    // silently looks resolved.
+                    'price_source' => $line->price_source,
+                    'pricing_master_id' => $line->pricing_master_id,
+                    'price_record_id' => $line->price_record_id,
+                    'pricing_status' => $line->pricing_status?->value,
                 ];
             })
             ->filter(fn (array $line): bool => (float) $line['quantity'] > 0)

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\SalesOrders\Schemas;
 
+use App\Enums\SalesLinePricingStatus;
 use App\Enums\SalesOrderStatus;
 use App\Enums\SalesOrderType;
 use App\Enums\ShippingMethod;
@@ -117,13 +118,14 @@ class SalesOrderForm
                                                                             $customer = Customer::find((int) $get('../../customer_id'));
                                                                             $location = Location::find((int) $get('../../location_id'));
                                                                             $quantity = (float) ($get('quantity') ?? 1);
-                                                                            $pricing = app(SalesPricingResolver::class)->resolve(
+                                                                            $pricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
                                                                                 item: $item,
                                                                                 customer: $customer,
                                                                                 quantity: $quantity,
                                                                                 variantCode: null,
                                                                                 uom: $defaultUomCode,
-                                                                                location: $location
+                                                                                location: $location,
+                                                                                documentCurrency: $get('../../currency_code')
                                                                             );
                                                                             $conversionFactor = $item?->getConversionFactorForUom($defaultUomCode) ?? 1;
 
@@ -133,6 +135,8 @@ class SalesOrderForm
                                                                             $set('line_discount_percent', $pricing['discount_percent']);
                                                                             $set('price_source', $pricing['price_source']);
                                                                             $set('pricing_master_id', $pricing['pricing_master_id']);
+                                                                            $set('price_record_id', $pricing['price_record_id']);
+                                                                            $set('pricing_status', $pricing['pricing_status']);
                                                                             $set('unit_of_measure_code', $defaultUomCode);
                                                                             $set('qty_per_unit_of_measure', $conversionFactor);
                                                                         }
@@ -159,7 +163,18 @@ class SalesOrderForm
                                                                     ->minValue(0)
                                                                     ->columnSpan(2)
                                                                     ->live(onBlur: true)
-                                                                    ->prefix(fn ($get) => $get('../../currency_code') ?? 'NGN'),
+                                                                    ->prefix(fn ($get) => $get('../../currency_code') ?? 'NGN')
+                                                                    ->helperText(fn (Get $get): ?string => $get('price_source') === SalesPricingResolver::SOURCE_ITEM_CARD
+                                                                        ? 'Reference-derived (NGN) — not a negotiated price'
+                                                                        : null)
+                                                                    ->afterStateUpdated(function (Set $set): void {
+                                                                        // A user-entered price is an explicit manual commercial price;
+                                                                        // drop any automatic provenance so it is never misattributed.
+                                                                        $set('pricing_status', SalesLinePricingStatus::MANUAL->value);
+                                                                        $set('price_source', null);
+                                                                        $set('pricing_master_id', null);
+                                                                        $set('price_record_id', null);
+                                                                    }),
 
                                                                 TextInput::make('line_discount_percent')
                                                                     ->label('Disc. %')
@@ -178,10 +193,20 @@ class SalesOrderForm
                                                                     ->columnSpan(2),
 
                                                                 TextInput::make('price_source')
+                                                                    ->label('Price Source')
+                                                                    ->disabled()
+                                                                    ->dehydrated()
+                                                                    ->columnSpan(2),
+
+                                                                TextInput::make('pricing_master_id')
                                                                     ->hidden()
                                                                     ->dehydrated(),
 
-                                                                TextInput::make('pricing_master_id')
+                                                                TextInput::make('price_record_id')
+                                                                    ->hidden()
+                                                                    ->dehydrated(),
+
+                                                                TextInput::make('pricing_status')
                                                                     ->hidden()
                                                                     ->dehydrated(),
 
@@ -224,20 +249,29 @@ class SalesOrderForm
                                                                         $location = Location::find((int) $get('../../location_id'));
                                                                         $currentQuantity = (float) ($get('quantity') ?? 1);
                                                                         $conversionFactor = $item?->getConversionFactorForUom($state) ?? 1;
-                                                                        $newPricing = app(SalesPricingResolver::class)->resolve(
+                                                                        $set('qty_per_unit_of_measure', $conversionFactor);
+
+                                                                        // A deliberately manual price is never silently reverted by a UOM change.
+                                                                        if ($get('pricing_status') === SalesLinePricingStatus::MANUAL->value) {
+                                                                            return;
+                                                                        }
+
+                                                                        $newPricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
                                                                             item: $item,
                                                                             customer: $customer,
                                                                             quantity: $currentQuantity,
                                                                             variantCode: null,
                                                                             uom: $state,
-                                                                            location: $location
+                                                                            location: $location,
+                                                                            documentCurrency: $get('../../currency_code')
                                                                         );
 
-                                                                        $set('qty_per_unit_of_measure', $conversionFactor);
                                                                         $set('unit_price', $newPricing['unit_price']);
                                                                         $set('line_discount_percent', $newPricing['discount_percent']);
                                                                         $set('price_source', $newPricing['price_source']);
                                                                         $set('pricing_master_id', $newPricing['pricing_master_id']);
+                                                                        $set('price_record_id', $newPricing['price_record_id']);
+                                                                        $set('pricing_status', $newPricing['pricing_status']);
                                                                     })
                                                                     ->columnSpan(2),
 

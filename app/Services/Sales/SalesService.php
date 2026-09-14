@@ -9,8 +9,10 @@ class SalesService
 {
     public function sell($item, $qty, $customer)
     {
+        // Legacy LCY-only helper: it has no document currency context, so it
+        // states NGN explicitly instead of relying on a resolver default.
         $pricing = app(PricingService::class)
-            ->getSalesPrice($item, $customer, (float) $qty);
+            ->getSalesPrice($item, $customer, (float) $qty, documentCurrency: 'NGN');
 
         $revenue = ((float) $pricing['unit_price'] * $qty) - (float) $pricing['discount_amount'];
 

@@ -75,7 +75,8 @@ class SalesOrderService
             variantCode: $variantCode,
             uom: $uom ?? $item->base_unit_of_measure,
             location: $order->location,
-            date: $order->order_date
+            date: $order->order_date,
+            documentCurrency: $order->currency_code
         );
 
         $selectedUomCode = $uom ?? $item->base_unit_of_measure;
@@ -98,8 +99,12 @@ class SalesOrderService
             'line_discount_percent' => $priceData['discount_percent'],
             'requested_delivery_date' => $requestedDeliveryDate,
             'location_id' => $order->location_id,
+            // Complete durable provenance for a resolved SalesPrice line, kept
+            // consistent with the Filament line paths.
             'price_source' => $priceData['price_source'],
             'pricing_master_id' => $priceData['pricing_master_id'],
+            'price_record_id' => $priceData['price_record_id'] ?? null,
+            'pricing_status' => $priceData['pricing_status'] ?? null,
         ]);
 
         $order->recalculateTotals(); // model handles totals automatically

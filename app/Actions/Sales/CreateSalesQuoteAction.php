@@ -22,10 +22,14 @@ class CreateSalesQuoteAction
 
             foreach ($data['items'] as $item) {
                 $itemModel = Item::query()->findOrFail($item['item_id']);
+                // Sales quotes have no currency context yet; this workflow is
+                // intentionally LCY-only and says so explicitly rather than
+                // relying on a hidden resolver default.
                 $pricing = app(SalesPricingResolver::class)->resolve(
                     item: $itemModel,
                     customer: $quote->customer,
                     quantity: (float) $item['qty'],
+                    documentCurrency: 'NGN',
                 );
                 $unitPrice = app(CampaignService::class)->apply($itemModel, $pricing['unit_price']);
 

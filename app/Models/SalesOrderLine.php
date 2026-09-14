@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\SalesLinePricingStatus;
 use App\Services\DimensionManagementService;
+use App\Support\DocumentCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -63,6 +65,8 @@ class SalesOrderLine extends Model
         'comment',
         'price_source',
         'pricing_master_id',
+        'pricing_status',
+        'price_record_id',
     ];
 
     protected $casts = [
@@ -93,6 +97,7 @@ class SalesOrderLine extends Model
         'promised_delivery_date' => 'date',
         'expiration_date' => 'date',
         'dimensions' => 'array',
+        'pricing_status' => SalesLinePricingStatus::class,
     ];
 
     protected static function boot(): void
@@ -132,6 +137,8 @@ class SalesOrderLine extends Model
             }
 
             $line->syncDimensionsWithDefaults();
+
+            $line->markUnresolvedIfForeignZeroPrice();
         });
 
         static::updating(function ($line) {
@@ -195,7 +202,7 @@ class SalesOrderLine extends Model
 
     protected function syncUnitPriceForSelectedUomOnCreate(): void
     {
-        if (! $this->item_id) {
+        if (! $this->item_id || ! $this->mayDerivePriceFromItemReference()) {
             return;
         }
 
@@ -228,6 +235,10 @@ class SalesOrderLine extends Model
             return;
         }
 
+        if (! $this->mayDerivePriceFromItemReference()) {
+            return;
+        }
+
         $item = Item::find($this->item_id);
         if (! $item) {
             return;
@@ -246,6 +257,55 @@ class SalesOrderLine extends Model
         $newFactor = (float) ($this->qty_per_unit_of_measure ?: $item->getConversionFactorForUom($this->unit_of_measure_code));
         $newFactor = $newFactor > 0 ? $newFactor : 1.0;
         $this->unit_price = $baseUnitPrice * $newFactor;
+    }
+
+    /**
+     * Whether the item-card price may be used to auto-populate this line.
+     *
+     * The item-card price is an LCY (NGN) reference value. Deriving a document
+     * price from it is safe for an LCY document (and for historical rows whose
+     * currency is unknown), but must never happen for a foreign-currency sales
+     * document: that would silently relabel an NGN reference value as FCY.
+     */
+    protected function mayDerivePriceFromItemReference(): bool
+    {
+        $order = $this->relationLoaded('salesOrder') ? $this->salesOrder : $this->salesOrder()->first();
+        $currencyCode = $order?->currency_code;
+
+        return $currencyCode === null
+            || trim((string) $currencyCode) === ''
+            || DocumentCurrency::isLocalCurrency($currencyCode);
+    }
+
+    /**
+     * Fail closed for a foreign-currency line that arrives with no price and no
+     * explicit provenance: a zero document price is not a valid resolved price
+     * and must not become an implicit free sale. Only applies when the caller
+     * did not state a pricing status; LCY and legacy/unknown contexts are left
+     * untouched.
+     */
+    protected function markUnresolvedIfForeignZeroPrice(): void
+    {
+        if ($this->pricing_status instanceof SalesLinePricingStatus) {
+            return;
+        }
+
+        $order = $this->relationLoaded('salesOrder') ? $this->salesOrder : $this->salesOrder()->first();
+        $currencyCode = $order?->currency_code;
+
+        if ($currencyCode === null || trim((string) $currencyCode) === '') {
+            return;
+        }
+
+        if (DocumentCurrency::isLocalCurrency($currencyCode)) {
+            return;
+        }
+
+        if ((float) ($this->unit_price ?? 0) > 0) {
+            return;
+        }
+
+        $this->pricing_status = SalesLinePricingStatus::UNRESOLVED;
     }
 
     // ==================== RELATIONSHIPS ====================

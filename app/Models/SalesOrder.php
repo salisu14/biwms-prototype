@@ -17,6 +17,7 @@ use App\Services\NumberSeriesService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
 use App\Services\Sales\SalesDocumentCurrencyService;
+use App\Services\Sales\SalesOrderPricingGuard;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -513,6 +514,10 @@ class SalesOrder extends Model implements Approvable
 
     public function markAsReleased(): void
     {
+        // Approval/release is the first gate: an unresolved line price must not
+        // advance into fulfilment or invoicing.
+        app(SalesOrderPricingGuard::class)->assertCanProgress($this);
+
         $this->update([
             'status' => SalesOrderStatus::APPROVED,
             'approved_by' => auth()->id(),
@@ -527,6 +532,10 @@ class SalesOrder extends Model implements Approvable
      */
     public function postShipment(): void
     {
+        // Price-safety gate runs before any other validation or posting work so
+        // an unresolved line price is blocked deterministically.
+        app(SalesOrderPricingGuard::class)->assertCanProgress($this);
+
         app(PostingDateValidator::class)->validate($this->posting_date ?? now());
         $this->loadMissing('lines');
 
@@ -754,6 +763,10 @@ class SalesOrder extends Model implements Approvable
      */
     public function postInvoice(): PostedSalesInvoice
     {
+        // Price-safety gate runs before any other validation or posting work so
+        // an unresolved line price is blocked deterministically.
+        app(SalesOrderPricingGuard::class)->assertCanProgress($this);
+
         app(PostingDateValidator::class)->validate($this->posting_date ?? now());
         $this->loadMissing('lines');
 

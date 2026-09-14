@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SalesInvoices\Schemas;
 
 use App\Enums\ApprovalStatus;
+use App\Enums\SalesLinePricingStatus;
 use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Customer;
 use App\Models\Item;
@@ -10,6 +11,7 @@ use App\Models\SalesInvoice;
 use App\Models\SalesOrder;
 use App\Services\Sales\SalesPricingResolver;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -144,18 +146,23 @@ class SalesInvoiceForm
                                                 ->first();
                                             $defaultUomCode = $defaultSalesUom?->uom_code ?? $item->base_unit_of_measure;
                                             $customer = Customer::find((int) $get('../../customer_id'));
-                                            $pricing = app(SalesPricingResolver::class)->resolve(
+                                            $pricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
                                                 item: $item,
                                                 customer: $customer,
                                                 quantity: (float) ($get('quantity') ?? 1),
                                                 variantCode: null,
-                                                uom: $defaultUomCode
+                                                uom: $defaultUomCode,
+                                                documentCurrency: $get('../../currency_code')
                                             );
                                             $set('description', $item->description);
                                             $set('unit_price', $pricing['unit_price']);
                                             $set('unit_of_measure', $defaultUomCode);
                                             $set('discount_percent', $pricing['discount_percent']);
                                             $set('discount_amount', $pricing['discount_amount']);
+                                            $set('price_source', $pricing['price_source']);
+                                            $set('pricing_master_id', $pricing['pricing_master_id']);
+                                            $set('price_record_id', $pricing['price_record_id']);
+                                            $set('pricing_status', $pricing['pricing_status']);
                                             SalesInvoiceForm::updateLineTotal($set, $get);
                                         }
                                     })
@@ -207,18 +214,30 @@ class SalesInvoiceForm
                                             return;
                                         }
 
+                                        // A deliberately manual price is never silently reverted.
+                                        if ($get('pricing_status') === SalesLinePricingStatus::MANUAL->value) {
+                                            SalesInvoiceForm::updateLineTotal($set, $get);
+
+                                            return;
+                                        }
+
                                         $customer = Customer::find((int) $get('../../customer_id'));
-                                        $pricing = app(SalesPricingResolver::class)->resolve(
+                                        $pricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
                                             item: $item,
                                             customer: $customer,
                                             quantity: (float) ($get('quantity') ?? 1),
                                             variantCode: null,
-                                            uom: $state
+                                            uom: $state,
+                                            documentCurrency: $get('../../currency_code')
                                         );
 
                                         $set('unit_price', $pricing['unit_price']);
                                         $set('discount_percent', $pricing['discount_percent']);
                                         $set('discount_amount', $pricing['discount_amount']);
+                                        $set('price_source', $pricing['price_source']);
+                                        $set('pricing_master_id', $pricing['pricing_master_id']);
+                                        $set('price_record_id', $pricing['price_record_id']);
+                                        $set('pricing_status', $pricing['pricing_status']);
                                         SalesInvoiceForm::updateLineTotal($set, $get);
                                     }),
 
@@ -227,7 +246,16 @@ class SalesInvoiceForm
                                     ->prefix('$')
                                     ->required()
                                     ->live(onBlur: true)
-                                    ->afterStateUpdated(fn (Set $set, Get $get) => SalesInvoiceForm::updateLineTotal($set, $get)),
+                                    ->afterStateUpdated(function (Set $set, Get $get): void {
+                                        // A user-entered price is an explicit manual commercial
+                                        // price; automatic provenance is cleared so it is never
+                                        // misattributed to a SalesPrice/price list.
+                                        $set('pricing_status', SalesLinePricingStatus::MANUAL->value);
+                                        $set('price_source', null);
+                                        $set('pricing_master_id', null);
+                                        $set('price_record_id', null);
+                                        SalesInvoiceForm::updateLineTotal($set, $get);
+                                    }),
 
                                 TextInput::make('discount_percent')
                                     ->label('Disc. %')
@@ -257,6 +285,11 @@ class SalesInvoiceForm
                                     ->readonly()
                                     ->dehydrated()
                                     ->prefix('$'),
+
+                                Hidden::make('price_source')->dehydrated(),
+                                Hidden::make('pricing_master_id')->dehydrated(),
+                                Hidden::make('price_record_id')->dehydrated(),
+                                Hidden::make('pricing_status')->dehydrated(),
                             ])
                             ->columns(5)
                             ->itemLabel(fn (array $state): ?string => $state['description'] ?? 'New Line')
@@ -346,6 +379,11 @@ class SalesInvoiceForm
                     'discount_amount' => 0,
                     'vat_percent' => (float) $line->vat_percentage,
                     'line_total' => number_format($lineAmount + $lineVat, 2, '.', ''),
+                    // Preserve the source Sales Order line's pricing state.
+                    'price_source' => $line->price_source,
+                    'pricing_master_id' => $line->pricing_master_id,
+                    'price_record_id' => $line->price_record_id,
+                    'pricing_status' => $line->pricing_status?->value,
                 ];
             })
             ->filter(fn (array $line): bool => (float) $line['quantity'] > 0)

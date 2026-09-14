@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\SalesCreditMemos\RelationManagers;
 
+use App\Enums\SalesLinePricingStatus;
 use App\Filament\Resources\SalesCreditMemos\SalesCreditMemoResource;
 use App\Models\Item;
+use App\Models\SalesCreditMemo;
 use App\Models\SalesCreditMemoLine;
+use App\Services\Sales\SalesPricingResolver;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -42,7 +45,40 @@ class ItemsRelationManager extends RelationManager
                     ->preload()
                     ->required()
                     ->reactive()
-                    ->afterStateUpdated(fn (Set $set, $state) => $set('unit_price', Item::find($state)?->unit_price ?? 0))
+                    ->afterStateUpdated(function ($state, Set $set, Get $get): void {
+                        if (! $state) {
+                            return;
+                        }
+
+                        $item = Item::find($state);
+                        if (! $item) {
+                            return;
+                        }
+
+                        /** @var SalesCreditMemo $memo */
+                        $memo = $this->getOwnerRecord();
+
+                        $defaultSalesUom = $item->uoms()
+                            ->wherePivot('uom_type', 'SALES')
+                            ->wherePivot('is_default', true)
+                            ->first();
+                        $defaultUomCode = $defaultSalesUom?->uom_code ?? $item->base_unit_of_measure;
+
+                        // Commercial price comes from the canonical explicit-currency
+                        // resolver, never from the item-card reference value.
+                        $pricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
+                            item: $item,
+                            customer: $memo->customer,
+                            quantity: (float) ($get('quantity') ?? 1),
+                            variantCode: null,
+                            uom: $defaultUomCode,
+                            documentCurrency: $memo->currency_code,
+                        );
+
+                        $set('unit_of_measure_code', $defaultUomCode);
+                        self::applyResolvedPricing($set, $pricing);
+                        self::calculateTotals($get, $set);
+                    })
                     ->columnSpan(2),
 
                 TextInput::make('quantity')
@@ -54,10 +90,19 @@ class ItemsRelationManager extends RelationManager
 
                 TextInput::make('unit_price')
                     ->numeric()
-                    ->prefix('₦')
+                    ->prefix(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                     ->required()
                     ->live()
-                    ->afterStateUpdated(fn (Get $get, Set $set) => self::calculateTotals($get, $set)),
+                    ->afterStateUpdated(function (Get $get, Set $set): void {
+                        // A user-entered price is an explicit manual commercial price;
+                        // automatic provenance is cleared so it is never misattributed.
+                        $set('pricing_status', SalesLinePricingStatus::MANUAL->value);
+                        $set('price_source', null);
+                        $set('pricing_master_id', null);
+                        $set('price_record_id', null);
+
+                        self::calculateTotals($get, $set);
+                    }),
 
                 Grid::make(3)
                     ->schema([
@@ -103,6 +148,12 @@ class ItemsRelationManager extends RelationManager
                 Hidden::make('vat_amount'),
                 Hidden::make('amount_including_vat'),
                 Hidden::make('line_discount_amount'),
+
+                // Durable pricing provenance/state
+                Hidden::make('price_source')->dehydrated(),
+                Hidden::make('pricing_master_id')->dehydrated(),
+                Hidden::make('price_record_id')->dehydrated(),
+                Hidden::make('pricing_status')->dehydrated(),
             ]);
     }
 
@@ -120,24 +171,24 @@ class ItemsRelationManager extends RelationManager
                     ->numeric(decimalPlaces: 2),
 
                 TextColumn::make('unit_price')
-                    ->money('NGN'),
+                    ->money(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN')),
 
                 TextColumn::make('line_discount_amount')
                     ->label('Discount')
-                    ->money('NGN')
+                    ->money(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('amount')
                     ->label('Net')
-                    ->money('NGN'),
+                    ->money(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN')),
 
                 TextColumn::make('vat_amount')
                     ->label('VAT')
-                    ->money('NGN'),
+                    ->money(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN')),
 
                 TextColumn::make('amount_including_vat')
                     ->label('Gross')
-                    ->money('NGN')
+                    ->money(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                     ->weight('bold'),
             ])
             ->filters([])
@@ -146,6 +197,32 @@ class ItemsRelationManager extends RelationManager
                     ->visible(fn (): bool => ! $this->getOwnerRecord()->isPosted())
                     ->mutateDataUsing(function (array $data): array {
                         $data['line_no'] = self::getNextLineNo();
+
+                        // Guarantee the canonical resolver prices the line even when
+                        // this create is driven programmatically and the interactive
+                        // item hook did not run. A positive price is never overwritten;
+                        // a zero price always needs a trusted resolution.
+                        /** @var SalesCreditMemo $memo */
+                        $memo = $this->getOwnerRecord();
+                        $item = Item::query()->find($data['item_id'] ?? null);
+                        $hasPositivePrice = (float) ($data['unit_price'] ?? 0) > 0;
+
+                        if ($item && ! $hasPositivePrice) {
+                            $pricing = app(SalesPricingResolver::class)->resolveOrUnresolved(
+                                item: $item,
+                                customer: $memo->customer,
+                                quantity: (float) ($data['quantity'] ?? 1),
+                                variantCode: null,
+                                uom: $data['unit_of_measure_code'] ?? $item->base_unit_of_measure,
+                                documentCurrency: $memo->currency_code,
+                            );
+
+                            $data['unit_price'] = $pricing['unit_price'];
+                            $data['price_source'] = $pricing['price_source'];
+                            $data['pricing_master_id'] = $pricing['pricing_master_id'];
+                            $data['price_record_id'] = $pricing['price_record_id'];
+                            $data['pricing_status'] = $pricing['pricing_status'];
+                        }
 
                         return $data;
                     }),
@@ -181,6 +258,20 @@ class ItemsRelationManager extends RelationManager
             $item->item_code,
             $item->description,
         ], fn (?string $value): bool => filled($value)))) ?: '—';
+    }
+
+    /**
+     * Persist the canonical resolver's price and provenance onto the line state.
+     *
+     * @param  array<string, mixed>  $pricing
+     */
+    protected static function applyResolvedPricing(Set $set, array $pricing): void
+    {
+        $set('unit_price', $pricing['unit_price']);
+        $set('price_source', $pricing['price_source']);
+        $set('pricing_master_id', $pricing['pricing_master_id']);
+        $set('price_record_id', $pricing['price_record_id']);
+        $set('pricing_status', $pricing['pricing_status']);
     }
 
     /**

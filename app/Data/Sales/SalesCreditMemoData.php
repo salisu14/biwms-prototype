@@ -20,6 +20,10 @@ class SalesCreditMemoLineData extends Data
         public float $line_discount_amount = 0,
         public ?int $sales_invoice_line_id = null,
         public ?int $posted_sales_invoice_line_id = null,
+        public ?string $price_source = null,
+        public ?int $pricing_master_id = null,
+        public ?int $price_record_id = null,
+        public ?string $pricing_status = null,
     ) {}
 }
 

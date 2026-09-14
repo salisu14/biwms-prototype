@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SalesLinePricingStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -25,6 +26,10 @@ class SalesInvoiceLine extends Model
         'discount_amount_lcy',
         'vat_amount_lcy',
         'location_id',
+        'price_source',
+        'pricing_master_id',
+        'price_record_id',
+        'pricing_status',
     ];
 
     protected $casts = [
@@ -39,6 +44,7 @@ class SalesInvoiceLine extends Model
         'line_total_lcy' => 'decimal:2',
         'discount_amount_lcy' => 'decimal:2',
         'vat_amount_lcy' => 'decimal:2',
+        'pricing_status' => SalesLinePricingStatus::class,
     ];
 
     protected static function booted()
