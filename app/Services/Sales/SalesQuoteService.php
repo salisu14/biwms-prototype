@@ -82,8 +82,17 @@ class SalesQuoteService
 
             $customer = $quote->customer()->firstOrFail();
 
+            // Preserve an explicitly-known quote/customer currency only when the
+            // schema actually provides one; otherwise fall back to NGN. A quote
+            // conversion must never silently become a USD document, and a
+            // foreign source requires an explicit valid factor or fails closed.
+            $currencyContext = app(SalesDocumentCurrencyService::class)->resolveForNewDocument(
+                $quote->currency_code ?? $customer->currency_code ?? null,
+                $quote->currency_factor ?? null,
+            );
+
             $order = SalesOrder::query()->create([
-                'order_number' => NumberSeriesService::getNextNo('S-ORD'),
+                'order_number' => app(NumberSeriesService::class)->getNextNo('S-ORD'),
                 'external_document_number' => $quote->quote_no,
                 'order_type' => SalesOrderType::SalesOrder,
                 'customer_id' => $quote->customer_id,
@@ -95,7 +104,8 @@ class SalesQuoteService
                 'requested_delivery_date' => $quote->valid_until?->toDateString() ?? now()->addDays(7)->toDateString(),
                 'payment_terms_code' => $customer->payment_terms_code,
                 'status' => SalesOrderStatus::DRAFT,
-                'currency_code' => $customer->currency_code ?? 'USD',
+                'currency_code' => $currencyContext['currency_code'],
+                'currency_factor' => $currencyContext['currency_factor'],
                 'is_price_inclusive' => (bool) ($quote->is_price_inclusive ?? false),
             ]);
 

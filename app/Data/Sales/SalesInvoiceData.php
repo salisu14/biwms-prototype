@@ -13,7 +13,8 @@ class SalesInvoiceData
         public string $invoice_date,
         public ?string $due_date,
         public ?string $currency_code,
-        public array $lines
+        public array $lines,
+        public ?string $currency_factor = null,
     ) {}
 
     /**
@@ -28,7 +29,8 @@ class SalesInvoiceData
             due_date: $data['due_date'] ?? null,
             currency_code: $data['currency_code'] ?? null,
             // Ensure lines are passed as an array, defaulting to empty if missing
-            lines: $data['lines'] ?? []
+            lines: $data['lines'] ?? [],
+            currency_factor: $data['currency_factor'] ?? null,
         );
     }
 }

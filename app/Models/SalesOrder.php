@@ -16,6 +16,7 @@ use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
+use App\Services\Sales\SalesDocumentCurrencyService;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -123,9 +124,8 @@ class SalesOrder extends Model implements Approvable
     ];
 
     protected $attributes = [
-        'order_type' => SalesOrderType::class,
+        'order_type' => SalesOrderType::SalesOrder,
         'status' => SalesOrderStatus::DRAFT,
-        'currency_factor' => 1,
         'subtotal' => 0,
         'grand_total' => 0,
         'is_price_inclusive' => false,
@@ -148,7 +148,39 @@ class SalesOrder extends Model implements Approvable
             // Ensure totals are set
             $order->subtotal ??= 0;
             $order->grand_total ??= 0;
-            $order->currency_factor ??= 1;
+
+            // Prospective currency context: a brand-new order with no currency
+            // safely defaults to NGN, never USD; a foreign order requires an
+            // explicit valid factor and fails closed instead of silently
+            // becoming 1.
+            $currencyContext = app(SalesDocumentCurrencyService::class)
+                ->resolveForNewDocument($order->currency_code, $order->currency_factor);
+            $order->currency_code = $currencyContext['currency_code'];
+            $order->currency_factor = $currencyContext['currency_factor'];
+        });
+
+        static::updating(function (SalesOrder $order) {
+            // Never silently reinterpret an untouched historical currency
+            // context. An unrelated field edit on a legacy order must not
+            // rewrite NULL/blank historical currency to NGN nor block editing.
+            if (! $order->isDirty('currency_code') && ! $order->isDirty('currency_factor')) {
+                return;
+            }
+
+            $service = app(SalesDocumentCurrencyService::class);
+
+            // Reclassifying an existing order: a foreign target requires the
+            // factor to be supplied in the same change. Carrying a previous LCY
+            // factor of 1 onto a foreign currency would fabricate parity.
+            $factorIsDirty = $order->isDirty('currency_factor');
+
+            $currencyContext = $service->resolveForExistingDocument(
+                $order->currency_code,
+                $factorIsDirty ? $order->currency_factor : null,
+            );
+
+            $order->currency_code = $currencyContext['currency_code'];
+            $order->currency_factor = $currencyContext['currency_factor'];
         });
 
         static::saving(function (SalesOrder $order) {
@@ -750,6 +782,13 @@ class SalesOrder extends Model implements Approvable
                 'Posted Sales Invoice'
             );
 
+            // Copy the order's currency context only after validating it against
+            // existing-document semantics. A legacy order with a missing or
+            // ambiguous currency must not post, and a foreign order without a
+            // valid factor must not silently post as 1.
+            $currencyContext = app(SalesDocumentCurrencyService::class)
+                ->resolveForExistingDocument($this->currency_code, $this->currency_factor);
+
             $postedInvoice = PostedSalesInvoice::query()->create([
                 'document_number' => $invoiceNo,
                 'external_document_number' => $this->external_document_number,
@@ -769,8 +808,8 @@ class SalesOrder extends Model implements Approvable
                 'document_date' => now()->toDateString(),
                 'due_date' => now()->toDateString(),
                 'shipment_date' => $this->shipment_date,
-                'currency_code' => $this->currency_code,
-                'currency_factor' => $this->currency_factor,
+                'currency_code' => $currencyContext['currency_code'],
+                'currency_factor' => $currencyContext['currency_factor'],
                 'posted_by' => auth()->id(),
                 'posted_at' => now(),
                 'salesperson_id' => $this->salesperson_id,

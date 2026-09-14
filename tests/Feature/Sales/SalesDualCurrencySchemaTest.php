@@ -84,11 +84,12 @@ test('unsafe sales factor defaults were removed where every creation path suppli
 });
 
 test('retained sales defaults are the documented exceptions', function (): void {
-    // sales_orders.currency_code keeps its legacy default because
-    // ConvertQuoteToOrderAction creates an order without supplying a currency.
+    // sales_orders.currency_code is NOT NULL but carries no unsafe USD default:
+    // the dead ConvertQuoteToOrderAction that once justified it is unreferenced,
+    // and every live creation path supplies a validated currency context.
     $orderCurrency = salesColumn('sales_orders', 'currency_code');
     expect($orderCurrency['nullable'])->toBeFalse()
-        ->and((string) $orderCurrency['default'])->toContain('USD');
+        ->and($orderCurrency['default'])->toBeNull();
 
     // posted_sales_credit_memos.currency_factor keeps its default because
     // PostedSalesCreditMemo::correct() creates a memo without supplying one.
@@ -223,6 +224,23 @@ test('sales_prices FK deletes preserve pricing scope', function (): void {
         expect(strtoupper((string) $rule))
             ->toBe($expected, "Expected {$constraint} in schema {$schema} to have delete rule {$expected}.");
     }
+});
+
+test('the currency_code default-removal rollback restores only the legacy default', function (): void {
+    /** @var Migration $migration */
+    $migration = require database_path('migrations/2026_09_13_180000_remove_unsafe_sales_order_currency_code_default.php');
+
+    $migration->down();
+
+    $column = salesColumn('sales_orders', 'currency_code');
+    expect($column['nullable'])->toBeFalse()
+        ->and((string) $column['default'])->toContain('USD');
+
+    $migration->up();
+
+    $column = salesColumn('sales_orders', 'currency_code');
+    expect($column['nullable'])->toBeFalse()
+        ->and($column['default'])->toBeNull();
 });
 
 test('the factor-relaxation migration rollback is safe and keeps the columns nullable', function (): void {

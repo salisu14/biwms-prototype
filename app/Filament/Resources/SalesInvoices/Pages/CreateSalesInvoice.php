@@ -41,6 +41,7 @@ class CreateSalesInvoice extends CreateRecord
             'sales_order_id' => $salesOrder->id,
             'customer_id' => $salesOrder->customer_id,
             'currency_code' => $salesOrder->currency_code ?: 'NGN',
+            'currency_factor' => $salesOrder->currency_factor ?: '1',
             'invoice_date' => now()->toDateString(),
             'due_date' => now()->addDays(30)->toDateString(),
             'lines' => $lines = SalesInvoiceForm::buildLinesFromSalesOrder($salesOrder),

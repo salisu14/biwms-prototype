@@ -8,6 +8,7 @@ use App\Models\DiscountRule;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\PricingMaster;
+use App\Support\DocumentCurrency;
 use DateTimeInterface;
 
 class SalesPricingResolver
@@ -33,7 +34,10 @@ class SalesPricingResolver
         ?DateTimeInterface $date = null
     ): array {
         $date ??= now();
-        $currency = config('app.default_currency', 'USD');
+        // Item-card and price-list base prices are expressed in the configured
+        // company currency. `app.default_currency` never existed, so the old
+        // literal 'USD' fallback mislabelled every item-card price as foreign.
+        $currency = strtoupper(trim((string) config('app.currency', DocumentCurrency::LCY_CODE)));
         $conversionFactor = 1.0;
 
         if ($uom) {

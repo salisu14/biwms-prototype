@@ -70,6 +70,7 @@ class SalesInvoiceForm
                                 $lines = self::buildLinesFromSalesOrder($salesOrder);
                                 $set('customer_id', $salesOrder->customer_id);
                                 $set('currency_code', $salesOrder->currency_code ?: 'NGN');
+                                $set('currency_factor', $salesOrder->currency_factor ?: '1');
                                 $set('lines', $lines);
                                 $set('total_amount', number_format(collect($lines)->sum(fn (array $line): float => (float) ($line['line_total'] ?? 0)), 2, '.', ''));
                             }),
@@ -90,14 +91,31 @@ class SalesInvoiceForm
 
                         Select::make('currency_code')
                             ->options([
-                                'NGN' => 'NGN - Naira',
+                                'NGN' => 'NGN - Naira (local)',
                                 'CYN' => 'CYN - Yuan',
                                 'USD' => 'USD - US Dollar',
                                 'EUR' => 'EUR - Euro',
                                 'GBP' => 'GBP - British Pound',
                             ])
-                            ->default('USD')
-                            ->required(),
+                            ->default('NGN')
+                            ->required()
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set): void {
+                                // Local currency resolves factor 1; a foreign
+                                // currency clears any fabricated factor so the
+                                // document cannot be saved without an explicit rate.
+                                $set('currency_factor', strtoupper((string) $state) === 'NGN' ? '1' : null);
+                            }),
+
+                        TextInput::make('currency_factor')
+                            ->label('Exchange Rate')
+                            ->helperText('1 FCY = X NGN')
+                            ->numeric()
+                            ->default(1)
+                            ->minValue(0.000001)
+                            ->required(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+                            ->visible(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+                            ->dehydrated(),
                     ]),
 
                 Section::make('Invoice Lines')

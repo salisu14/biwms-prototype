@@ -453,6 +453,7 @@ class SalesCreditMemoForm
             ->schema([
                 self::makeTotalAmountField(),
                 self::makeCurrencySelect(),
+                self::makeCurrencyFactorField(),
             ]);
     }
 
@@ -485,11 +486,32 @@ class SalesCreditMemoForm
     {
         return Select::make('currency_code')
             ->options([
-                'NGN' => 'Naira',
-                'USD' => 'USD',
-                'EUR' => 'EUR',
+                'NGN' => 'NGN - Naira (local)',
+                'USD' => 'USD - US Dollar',
+                'EUR' => 'EUR - Euro',
+                'GBP' => 'GBP - British Pound',
             ])
-            ->default('NGN');
+            ->default('NGN')
+            ->live()
+            ->afterStateUpdated(function ($state, Set $set): void {
+                // Local currency resolves factor 1; a foreign currency clears
+                // any fabricated factor so the memo cannot be saved without an
+                // explicit rate.
+                $set('currency_factor', strtoupper((string) $state) === 'NGN' ? '1' : null);
+            });
+    }
+
+    private static function makeCurrencyFactorField(): TextInput
+    {
+        return TextInput::make('currency_factor')
+            ->label('Exchange Rate')
+            ->helperText('1 FCY = X NGN')
+            ->numeric()
+            ->default(1)
+            ->minValue(0.000001)
+            ->required(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+            ->visible(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+            ->dehydrated();
     }
 
     /**

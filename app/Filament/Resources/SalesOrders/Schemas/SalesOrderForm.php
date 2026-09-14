@@ -69,7 +69,10 @@ class SalesOrderForm
                                                             $set('customer_address', $customer->address);
                                                             $set('ship_to_name', $customer->name);
                                                             $set('ship_to_address', $customer->address);
-                                                            $set('currency_code', $customer->currency_code ?? 'NGN');
+                                                            // No trustworthy customer currency configuration exists
+                                                            // yet, so fall back to NGN rather than fabricating USD.
+                                                            $set('currency_code', 'NGN');
+                                                            $set('currency_factor', '1');
                                                             $set('payment_terms_code', $customer->payment_terms_code);
                                                             $set('general_business_posting_group_id', $customer->general_business_posting_group_id);
                                                         }
@@ -324,9 +327,34 @@ class SalesOrderForm
 
                         Section::make('Financial Totals')
                             ->schema([
-                                TextInput::make('currency_code')
+                                Select::make('currency_code')
+                                    ->options([
+                                        'NGN' => 'NGN - Naira (local)',
+                                        'USD' => 'USD - US Dollar',
+                                        'EUR' => 'EUR - Euro',
+                                        'GBP' => 'GBP - British Pound',
+                                        'CYN' => 'CYN - Yuan',
+                                    ])
                                     ->default('NGN')
-                                    ->required(),
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, Set $set): void {
+                                        // Local currency resolves factor 1; a foreign
+                                        // currency clears any fabricated factor so the
+                                        // document cannot be saved without an explicit rate.
+                                        $set('currency_factor', strtoupper((string) $state) === 'NGN' ? '1' : null);
+                                    }),
+
+                                TextInput::make('currency_factor')
+                                    ->label('Exchange Rate')
+                                    ->helperText('1 FCY = X NGN')
+                                    ->numeric()
+                                    ->default(1)
+                                    ->minValue(0.000001)
+                                    ->required(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+                                    ->visible(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+                                    ->dehydrated(),
+
                                 TextInput::make('grand_total')
                                     ->label('Order Grand Total')
                                     ->numeric()

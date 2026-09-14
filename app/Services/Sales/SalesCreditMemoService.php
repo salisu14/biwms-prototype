@@ -36,7 +36,8 @@ use Illuminate\Validation\ValidationException;
 class SalesCreditMemoService
 {
     public function __construct(
-        protected PostingService $postingService
+        protected PostingService $postingService,
+        protected SalesDocumentCurrencyService $currencyService,
     ) {}
 
     /**
@@ -47,6 +48,8 @@ class SalesCreditMemoService
         $this->validateCreditMemoData($data);
 
         return DB::transaction(function () use ($data) {
+            $currencyContext = $this->currencyService->resolveForNewDocument($data->currency_code, $data->currency_factor);
+
             $creditMemo = SalesCreditMemo::create([
                 'customer_id' => $data->customer_id,
                 'sales_invoice_id' => $data->sales_invoice_id,
@@ -55,7 +58,8 @@ class SalesCreditMemoService
                 'status' => ApprovalStatus::DRAFT,
                 'reason' => $data->reason,
                 'effective_date' => $data->effective_date ?? now(),
-                'currency_code' => $data->currency_code,
+                'currency_code' => $currencyContext['currency_code'],
+                'currency_factor' => $currencyContext['currency_factor'],
                 'total_amount' => 0,
             ]);
 
@@ -122,13 +126,18 @@ class SalesCreditMemoService
         $this->validateCreditMemoData($data);
 
         return DB::transaction(function () use ($creditMemo, $data) {
+            // Editing an existing draft: reclassifying it must not silently
+            // reinterpret a missing/ambiguous currency as local.
+            $currencyContext = $this->currencyService->resolveForExistingDocument($data->currency_code, $data->currency_factor);
+
             $creditMemo->update([
                 'customer_id' => $data->customer_id,
                 'sales_invoice_id' => $data->sales_invoice_id,
                 'posted_sales_invoice_id' => $data->posted_sales_invoice_id,
                 'reason' => $data->reason,
                 'effective_date' => $data->effective_date ?? now(),
-                'currency_code' => $data->currency_code,
+                'currency_code' => $currencyContext['currency_code'],
+                'currency_factor' => $currencyContext['currency_factor'],
             ]);
 
             $creditMemo->items()->delete();
@@ -189,6 +198,12 @@ class SalesCreditMemoService
                 throw new BusinessException('No lines to post for this sales credit memo.', field: 'items');
             }
 
+            // Validate the credit memo's currency context before any posting
+            // side effects. A legacy memo with a missing/ambiguous currency must
+            // not be reinterpreted, and a foreign memo without a valid factor
+            // fails closed rather than silently posting as factor 1.
+            $currencyContext = $this->currencyService->resolveForExistingDocument($creditMemo->currency_code, $creditMemo->currency_factor);
+
             $correctedPostedInvoice = $this->resolveCorrectedPostedInvoice($creditMemo);
 
             if ($correctedPostedInvoice) {
@@ -207,8 +222,8 @@ class SalesCreditMemoService
                 'general_business_posting_group_id' => $customer->general_business_posting_group_id,
                 'posting_date' => $creditMemo->effective_date ?? now(),
                 'document_date' => $creditMemo->effective_date ?? now(),
-                'currency_code' => $creditMemo->currency_code ?? 'NGN',
-                'currency_factor' => 1,
+                'currency_code' => $currencyContext['currency_code'],
+                'currency_factor' => $currencyContext['currency_factor'],
                 'total_amount' => $creditMemo->total_amount,
                 'grand_total' => $creditMemo->total_amount,
                 'remaining_amount' => abs((float) $creditMemo->total_amount),

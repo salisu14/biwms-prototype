@@ -31,7 +31,8 @@ use Illuminate\Support\Facades\DB;
 class SalesInvoiceService
 {
     public function __construct(
-        private readonly NumberSeriesService $numberSeriesService
+        private readonly NumberSeriesService $numberSeriesService,
+        private readonly SalesDocumentCurrencyService $currencyService,
     ) {}
 
     /**
@@ -50,6 +51,8 @@ class SalesInvoiceService
             $lines = $this->invoiceLinesFromData($data);
             $this->assertInvoiceLinesAreValid($lines, $data->sales_order_id);
 
+            $currencyContext = $this->currencyService->resolveForNewDocument($data->currency_code, $data->currency_factor);
+
             $invoice = SalesInvoice::create([
                 'customer_id' => $data->customer_id,
                 'sales_order_id' => $data->sales_order_id,
@@ -57,7 +60,8 @@ class SalesInvoiceService
                 'status' => ApprovalStatus::DRAFT,
                 'invoice_date' => $data->invoice_date,
                 'due_date' => $data->due_date,
-                'currency_code' => $data->currency_code ?? 'NGN',
+                'currency_code' => $currencyContext['currency_code'],
+                'currency_factor' => $currencyContext['currency_factor'],
             ]);
 
             $total = 0;
@@ -119,6 +123,12 @@ class SalesInvoiceService
                 throw new BusinessException('No lines to post', field: 'lines');
             }
 
+            // Validate the draft's currency context before any posting side
+            // effects. A legacy invoice with a missing/ambiguous currency must
+            // not be reinterpreted, and a foreign invoice without a valid factor
+            // fails closed rather than silently posting as factor 1.
+            $currencyContext = $this->currencyService->resolveForExistingDocument($invoice->currency_code, $invoice->currency_factor);
+
             $itemLedgerEntryIds = [];
 
             foreach ($invoice->lines as $line) {
@@ -159,8 +169,8 @@ class SalesInvoiceService
                     'total_amount' => 0,
                     'total_vat' => 0,
                     'grand_total' => 0,
-                    'currency_code' => $invoice->currency_code ?? 'NGN',
-                    'currency_factor' => 1,
+                    'currency_code' => $currencyContext['currency_code'],
+                    'currency_factor' => $currencyContext['currency_factor'],
                     'amount_paid' => 0,
                     'remaining_amount' => 0,
                     'paid_in_full' => false,

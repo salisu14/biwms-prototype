@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\SalesOrderStatus;
 use App\Services\NumberSeriesService;
+use App\Services\Sales\SalesDocumentCurrencyService;
+use App\Support\DocumentCurrency;
 use App\Support\PurchasingCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -384,10 +386,31 @@ class BlanketOrder extends Model
         }
 
         return DB::transaction(function () {
+            // Approved currency precedence: explicit blanket currency -> LCY
+            // (NGN). The blanket currency is nullable, so the sales order must
+            // never rely on a database default or fabricate factor 1. A foreign
+            // blanket inherits its own explicit rate (LCY per FCY) only when it
+            // authoritatively declares both that currency and a valid positive
+            // rate; otherwise FCY stays fail-closed until an explicit valid
+            // rate is supplied.
+            $explicitCurrency = strtoupper(trim((string) $this->currency_code));
+            $explicitRate = $this->exchange_rate;
+            $isLocalOrUnset = $explicitCurrency === '' || $explicitCurrency === DocumentCurrency::LCY_CODE;
+            $hasAuthoritativeRate = ! $isLocalOrUnset
+                && is_numeric($explicitRate)
+                && (float) $explicitRate > 0;
+
+            $currencyContext = app(SalesDocumentCurrencyService::class)->resolveForNewDocument(
+                $explicitCurrency !== '' ? $explicitCurrency : null,
+                $isLocalOrUnset ? 1 : ($hasAuthoritativeRate ? (string) $explicitRate : null),
+            );
+
             $salesOrder = SalesOrder::create([
                 'blanket_order_id' => $this->id,
                 'customer_id' => $this->customer_id,
-                'currency_code' => $this->currency_code,
+                'order_date' => $this->order_date ?? now(),
+                'currency_code' => $currencyContext['currency_code'],
+                'currency_factor' => $currencyContext['currency_factor'],
                 'payment_terms_code' => $this->payment_terms_code,
                 'payment_method_code' => $this->payment_method_code,
                 'shortcut_dimension_1_code' => $this->shortcut_dimension_1_code,

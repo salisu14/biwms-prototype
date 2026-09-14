@@ -35,5 +35,6 @@ class SalesCreditMemoData extends Data
         public ?string $reason,
         /** @var DataCollection<SalesCreditMemoLineData> */
         public DataCollection $items,
+        public ?string $currency_factor = null,
     ) {}
 }
