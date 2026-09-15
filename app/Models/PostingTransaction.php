@@ -25,6 +25,7 @@ class PostingTransaction extends Model
         'document_date',
         'currency_code',
         'exchange_rate',
+        'economic_fingerprint',
         'dimensions',
         'status',
         'actor_id',

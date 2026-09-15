@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Accounting;
 
+use App\Enums\PostingIntentMode;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Support\Collection;
+use InvalidArgumentException;
 
 final readonly class PostingIntent
 {
@@ -37,6 +39,7 @@ final readonly class PostingIntent
         public ?string $registerNumber = null,
         public ?int $reversalOfTransactionId = null,
         public ?string $reason = null,
+        public PostingIntentMode $mode = PostingIntentMode::LCY_ONLY,
     ) {}
 
     /**
@@ -62,7 +65,8 @@ final readonly class PostingIntent
      *     journal_batch_name?: string|null,
      *     register_number?: string|null,
      *     reversal_of_transaction_id?: int|null,
-     *     reason?: string|null
+     *     reason?: string|null,
+     *     mode?: PostingIntentMode|string|null
      * }  $data
      */
     public static function fromArray(array $data): self
@@ -95,6 +99,26 @@ final readonly class PostingIntent
             registerNumber: $data['register_number'] ?? null,
             reversalOfTransactionId: isset($data['reversal_of_transaction_id']) ? (int) $data['reversal_of_transaction_id'] : null,
             reason: $data['reason'] ?? null,
+            mode: self::resolveMode($data['mode'] ?? null),
         );
+    }
+
+    private static function resolveMode(mixed $mode): PostingIntentMode
+    {
+        if ($mode === null || $mode === '') {
+            return PostingIntentMode::LCY_ONLY;
+        }
+
+        if ($mode instanceof PostingIntentMode) {
+            return $mode;
+        }
+
+        $resolved = PostingIntentMode::tryFrom(strtoupper(trim((string) $mode)));
+
+        if (! $resolved) {
+            throw new InvalidArgumentException('Unsupported posting intent mode; expected LCY_ONLY or CURRENCY_AWARE.');
+        }
+
+        return $resolved;
     }
 }

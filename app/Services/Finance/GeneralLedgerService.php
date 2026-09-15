@@ -83,7 +83,7 @@ class GeneralLedgerService
         // identifiers in posting transaction metadata and stable keys.
         $sourceNumber = Str::limit((string) ($meta['source_number'] ?? $documentNumber), 20, '');
         $postingLines = collect($lines)
-            ->map(fn (array $line): array => [
+            ->map(fn (array $line): array => array_merge([
                 'account_id' => $line['account_id'],
                 'debit_amount' => (string) ($line['debit_amount'] ?? $line['debit'] ?? '0'),
                 'credit_amount' => (string) ($line['credit_amount'] ?? $line['credit'] ?? '0'),
@@ -96,7 +96,14 @@ class GeneralLedgerService
                 'item_ledger_entry_id' => $line['item_ledger_entry_id'] ?? null,
                 'customer_ledger_entry_id' => $line['customer_ledger_entry_id'] ?? null,
                 'vendor_ledger_entry_id' => $line['vendor_ledger_entry_id'] ?? null,
-            ])
+            ], array_filter([
+                // Only present for explicit currency-aware callers; omitting
+                // them keeps the legacy default transaction-key hash stable.
+                'line_type' => $line['line_type'] ?? null,
+                'document_debit_amount' => $line['document_debit_amount'] ?? null,
+                'document_credit_amount' => $line['document_credit_amount'] ?? null,
+                'lcy_only_reason' => $line['lcy_only_reason'] ?? null,
+            ], fn (mixed $value): bool => $value !== null)))
             ->all();
 
         $transactionKey = (string) ($meta['transaction_key'] ?? "{$documentType}:{$documentNumber}:".hash('sha256', json_encode($postingLines, JSON_THROW_ON_ERROR)));
@@ -117,6 +124,7 @@ class GeneralLedgerService
             'description' => $meta['description'] ?? $documentType.' '.$documentNumber,
             'currency_code' => $meta['currency_code'] ?? 'NGN',
             'exchange_rate' => $meta['exchange_rate'] ?? '1',
+            'mode' => $meta['mode'] ?? null,
             'dimensions' => $meta['dimensions'] ?? [],
             'actor_id' => $meta['actor_id'] ?? auth()->id(),
             'reversal_of_transaction_id' => $meta['reversal_of_transaction_id'] ?? null,

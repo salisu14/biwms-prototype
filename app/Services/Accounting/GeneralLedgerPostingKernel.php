@@ -6,6 +6,8 @@ namespace App\Services\Accounting;
 
 use App\Accounting\PostingIntent;
 use App\Accounting\PostingIntentLine;
+use App\Enums\PostingIntentLineType;
+use App\Enums\PostingLcyOnlyReason;
 use App\Enums\SourceType;
 use App\Exceptions\BusinessException;
 use App\Models\ChartOfAccount;
@@ -16,6 +18,7 @@ use App\Services\AuditTrailService;
 use App\Services\PostingDateValidator;
 use App\Support\DecimalMath;
 use App\Support\DecimalPrecision;
+use App\Support\DocumentCurrency;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -37,10 +40,14 @@ final class GeneralLedgerPostingKernel
                 ->first();
 
             if ($existing) {
+                $this->assertIdempotentReplayMatches($intent, $existing);
+
                 return $existing->load('glEntries');
             }
 
             $this->validateIntent($intent);
+
+            $currencyContext = $this->currencyAwareContext($intent);
 
             $transactionNumber = $this->sequenceAllocator->nextGlTransactionNumber();
             $postingTransaction = PostingTransaction::query()->create([
@@ -57,8 +64,11 @@ final class GeneralLedgerPostingKernel
                 'transaction_number' => $transactionNumber,
                 'posting_date' => $intent->postingDate,
                 'document_date' => $intent->documentDate,
-                'currency_code' => $intent->currencyCode,
-                'exchange_rate' => $intent->exchangeRate,
+                'currency_code' => $currencyContext['code'] ?? $intent->currencyCode,
+                'exchange_rate' => $currencyContext['factor'] ?? $intent->exchangeRate,
+                'economic_fingerprint' => $currencyContext !== null
+                    ? $this->economicFingerprint($intent, $currencyContext)
+                    : null,
                 'dimensions' => $intent->dimensions,
                 'status' => 'completed',
                 'actor_id' => $intent->actorId,
@@ -68,7 +78,7 @@ final class GeneralLedgerPostingKernel
             ]);
 
             foreach ($intent->lines as $line) {
-                $this->createGlEntry($intent, $line, $postingTransaction, $transactionNumber);
+                $this->createGlEntry($intent, $line, $postingTransaction, $transactionNumber, $currencyContext);
             }
 
             $this->auditTrailService->recordGeneric(
@@ -88,6 +98,30 @@ final class GeneralLedgerPostingKernel
 
             return $postingTransaction->load('glEntries');
         });
+    }
+
+    /**
+     * Side-effect-free preflight for callers that want to fail before they
+     * create any of their own surrounding accounting rows.
+     *
+     * Applies exactly the same pre-write decision as post() without locking or
+     * writing: an existing idempotency transaction is checked with the shared
+     * replay compatibility rules, otherwise the intent is validated as a new
+     * posting. It deliberately does not duplicate the replay rule set.
+     */
+    public function preflight(PostingIntent $intent): void
+    {
+        $existing = PostingTransaction::query()
+            ->where('idempotency_key', $intent->idempotencyKey)
+            ->first();
+
+        if ($existing) {
+            $this->assertIdempotentReplayMatches($intent, $existing);
+
+            return;
+        }
+
+        $this->validateIntent($intent);
     }
 
     /**
@@ -439,6 +473,7 @@ final class GeneralLedgerPostingKernel
 
         $this->postingDateValidator->validate($intent->postingDate);
         $this->validateLinesBalance($intent);
+        $this->validateCurrencyContract($intent);
         $this->validateAccounts($intent);
     }
 
@@ -508,15 +543,29 @@ final class GeneralLedgerPostingKernel
         }
     }
 
+    /**
+     * @param  array{code: string, factor: string}|null  $currencyContext
+     */
     private function createGlEntry(
         PostingIntent $intent,
         PostingIntentLine $line,
         PostingTransaction $postingTransaction,
         int $transactionNumber,
+        ?array $currencyContext = null,
     ): GlEntry {
         $debitAmount = DecimalMath::currency($line->debitAmount);
         $creditAmount = DecimalMath::currency($line->creditAmount);
         $amount = DecimalMath::currency(DecimalMath::sub($debitAmount, $creditAmount, DecimalPrecision::CURRENCY_SCALE));
+
+        $documentDebitAmount = $currencyContext !== null && $line->documentDebitAmount !== null
+            ? DecimalMath::amount($line->documentDebitAmount)
+            : null;
+        $documentCreditAmount = $currencyContext !== null && $line->documentCreditAmount !== null
+            ? DecimalMath::amount($line->documentCreditAmount)
+            : null;
+        $documentAmount = ($documentDebitAmount !== null || $documentCreditAmount !== null)
+            ? DecimalMath::sub($documentDebitAmount ?? '0', $documentCreditAmount ?? '0', DecimalPrecision::AMOUNT_SCALE)
+            : null;
 
         return GlEntry::query()->create([
             'entry_number' => $this->sequenceAllocator->nextGlEntryNumber(),
@@ -530,7 +579,17 @@ final class GeneralLedgerPostingKernel
             'credit_amount_lcy' => $creditAmount,
             'amount' => $amount,
             'amount_lcy' => $amount,
-            'exchange_rate' => $intent->exchangeRate,
+            // For CURRENCY_AWARE the normalized factor drives the G/L exchange
+            // rate as well as currency_factor, so header, line rate and line
+            // factor can never diverge (e.g. a blank NGN rate).
+            'exchange_rate' => $currencyContext['factor'] ?? $intent->exchangeRate,
+            'document_currency_code' => $currencyContext['code'] ?? null,
+            'document_debit_amount' => $documentDebitAmount,
+            'document_credit_amount' => $documentCreditAmount,
+            'document_amount' => $documentAmount,
+            'currency_factor' => $currencyContext['factor'] ?? null,
+            'posting_line_type' => $currencyContext !== null ? $line->lineType?->value : null,
+            'lcy_only_reason' => $currencyContext !== null ? $line->lcyOnlyReason?->value : null,
             'source_module' => $intent->sourceModule,
             'source_type' => $line->sourceType ?? $intent->sourceType,
             'source_id' => $intent->sourceId,
@@ -554,5 +613,268 @@ final class GeneralLedgerPostingKernel
             'shortcut_dimension_1_code' => $line->dimensions['shortcut_dimension_1_code'] ?? $intent->dimensions['shortcut_dimension_1_code'] ?? null,
             'shortcut_dimension_2_code' => $line->dimensions['shortcut_dimension_2_code'] ?? $intent->dimensions['shortcut_dimension_2_code'] ?? null,
         ]);
+    }
+
+    /**
+     * Resolve the explicit currency-aware context, or null for LCY_ONLY.
+     *
+     * LCY_ONLY intents never reach this: the kernel performs no conversion and
+     * no currency interpretation for them.
+     *
+     * @return array{code: string, factor: string}|null
+     */
+    private function currencyAwareContext(PostingIntent $intent): ?array
+    {
+        if (! $intent->mode->isCurrencyAware()) {
+            return null;
+        }
+
+        try {
+            $code = DocumentCurrency::normalizeCurrencyCode($intent->currencyCode);
+
+            // NGN is well-defined and may resolve to 1 when omitted, but an
+            // explicit non-1 NGN factor is rejected below. Foreign currencies
+            // always require an explicit factor (never silently 1).
+            $factor = $code === DocumentCurrency::LCY_CODE && trim((string) $intent->exchangeRate) === ''
+                ? DecimalMath::toScale('1', 6)
+                : DocumentCurrency::normalizeFactor($intent->exchangeRate);
+        } catch (\Throwable $exception) {
+            throw ValidationException::withMessages([
+                'currency_code' => 'A currency-aware posting requires a valid currency code and an explicit, finite, positive currency factor. '.$exception->getMessage(),
+            ]);
+        }
+
+        if ($code === DocumentCurrency::LCY_CODE && DecimalMath::compare($factor, '1') !== 0) {
+            throw ValidationException::withMessages([
+                'exchange_rate' => 'The local currency (NGN) must use a currency factor of 1 in a currency-aware posting.',
+            ]);
+        }
+
+        return ['code' => $code, 'factor' => $factor];
+    }
+
+    private function validateCurrencyContract(PostingIntent $intent): void
+    {
+        $context = $this->currencyAwareContext($intent);
+
+        if ($context === null) {
+            return;
+        }
+
+        foreach ($intent->lines as $index => $line) {
+            $this->validateCurrencyAwareLine($intent, $line, $context, (int) $index);
+        }
+    }
+
+    /**
+     * @param  array{code: string, factor: string}  $context
+     */
+    private function validateCurrencyAwareLine(PostingIntent $intent, PostingIntentLine $line, array $context, int $index): void
+    {
+        if ($line->lineType === null) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware line #{$index} must declare a line type ("
+                    .PostingIntentLineType::DOCUMENT_MONETARY->value.' or '.PostingIntentLineType::LCY_ONLY->value.').',
+            ]);
+        }
+
+        if ($line->lineType === PostingIntentLineType::DOCUMENT_MONETARY) {
+            $this->validateDocumentMonetaryLine($line, $context, $index);
+
+            return;
+        }
+
+        // LCY_ONLY: restricted escape hatch. Explicit allowlisted reason, and
+        // never any document-currency amounts.
+        if ($line->documentDebitAmount !== null || $line->documentCreditAmount !== null) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware line #{$index} is marked LCY_ONLY but carries document-currency amounts.",
+            ]);
+        }
+
+        if ($line->lcyOnlyReason === null) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware LCY-only line #{$index} must declare an approved reason ("
+                    .PostingLcyOnlyReason::ROUNDING->value.' or '.PostingLcyOnlyReason::VALUATION_ONLY->value.').',
+            ]);
+        }
+    }
+
+    /**
+     * @param  array{code: string, factor: string}  $context
+     */
+    private function validateDocumentMonetaryLine(PostingIntentLine $line, array $context, int $index): void
+    {
+        if ($line->lcyOnlyReason !== null) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware document-monetary line #{$index} must not carry an LCY-only reason.",
+            ]);
+        }
+
+        if ($line->documentDebitAmount === null || $line->documentCreditAmount === null) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware document-monetary line #{$index} must supply both a document debit and a document credit amount (use 0 for the unused side).",
+            ]);
+        }
+
+        try {
+            $documentDebit = DecimalMath::amount($line->documentDebitAmount);
+            $documentCredit = DecimalMath::amount($line->documentCreditAmount);
+        } catch (\Throwable) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware line #{$index} has a malformed document-currency amount.",
+            ]);
+        }
+
+        if (DecimalMath::isPositive($documentDebit) && DecimalMath::isPositive($documentCredit)) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware line #{$index} cannot contain both a document debit and a document credit.",
+            ]);
+        }
+
+        if (! DecimalMath::isPositive($documentDebit) && ! DecimalMath::isPositive($documentCredit)) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware document-monetary line #{$index} must contain a positive document debit or credit.",
+            ]);
+        }
+
+        $documentNet = DecimalMath::sub($documentDebit, $documentCredit, DecimalPrecision::AMOUNT_SCALE);
+
+        // Exact equality at persisted G/L scale (2 dp, HALF_UP). No tolerance:
+        // a real rounding difference must be supplied by the caller as an
+        // explicit ROUNDING line, never absorbed implicitly.
+        $expectedLcy = DecimalMath::mul($documentNet, $context['factor'], DecimalPrecision::CURRENCY_SCALE);
+        $actualLcy = DecimalMath::sub(
+            DecimalMath::currency($line->debitAmount),
+            DecimalMath::currency($line->creditAmount),
+            DecimalPrecision::CURRENCY_SCALE,
+        );
+
+        if (DecimalMath::compare($actualLcy, $expectedLcy) !== 0) {
+            throw ValidationException::withMessages([
+                'lines' => "Currency-aware line #{$index} LCY economics ({$actualLcy}) do not reconcile with its document amount ({$documentNet} {$context['code']}) x factor {$context['factor']} = {$expectedLcy} at G/L scale; supply an explicit ROUNDING line for any rounding difference.",
+            ]);
+        }
+    }
+
+    /**
+     * Deterministic fingerprint of currency-aware posting economics and
+     * ownership.
+     *
+     * Covers the transaction identity that determines where a replay would
+     * post (business, posting date, reversal) and, per line, every economic and
+     * ownership field the DTO actually carries: account, classification and
+     * LCY-only reason, LCY and document economics, canonicalised dimensions,
+     * posting group / cost component, item/location/work-center ownership,
+     * subledger (customer/vendor) and item-ledger ownership, and source trace.
+     *
+     * Presentation-only text (descriptions) is intentionally excluded. Line
+     * order is canonicalised by sorting so a harmless reorder does not create a
+     * false conflict, while duplicate-line multiplicity is preserved.
+     *
+     * @param  array{code: string, factor: string}  $context
+     */
+    private function economicFingerprint(PostingIntent $intent, array $context): string
+    {
+        $lines = [];
+
+        foreach ($intent->lines as $line) {
+            $lines[] = json_encode([
+                'account_id' => $line->accountId,
+                'line_type' => $line->lineType?->value,
+                'lcy_only_reason' => $line->lcyOnlyReason?->value,
+                'lcy_debit' => DecimalMath::currency($line->debitAmount),
+                'lcy_credit' => DecimalMath::currency($line->creditAmount),
+                'document_debit' => $line->documentDebitAmount !== null ? DecimalMath::amount($line->documentDebitAmount) : null,
+                'document_credit' => $line->documentCreditAmount !== null ? DecimalMath::amount($line->documentCreditAmount) : null,
+                'dimensions' => self::canonicalizeDimensions($line->dimensions),
+                'posting_group_source' => $line->postingGroupSource,
+                'cost_component' => $line->costComponent,
+                'item_id' => $line->itemId,
+                'location_id' => $line->locationId,
+                'work_center_id' => $line->workCenterId,
+                'machine_center_id' => $line->machineCenterId,
+                'item_ledger_entry_id' => $line->itemLedgerEntryId,
+                'customer_ledger_entry_id' => $line->customerLedgerEntryId,
+                'vendor_ledger_entry_id' => $line->vendorLedgerEntryId,
+                'source_type' => $line->sourceType,
+                'source_number' => $line->sourceNumber,
+            ], JSON_THROW_ON_ERROR);
+        }
+
+        sort($lines, SORT_STRING);
+
+        return hash('sha256', json_encode([
+            'business_id' => $intent->businessId,
+            'posting_date' => $intent->postingDate->toDateString(),
+            'mode' => $intent->mode->value,
+            'currency_code' => $context['code'],
+            'currency_factor' => $context['factor'],
+            'reversal_of_transaction_id' => $intent->reversalOfTransactionId,
+            'lines' => $lines,
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * Canonicalise a dimensions map so key ordering never affects the
+     * fingerprint while distinct values always do. Nested maps are handled
+     * recursively.
+     *
+     * @param  array<array-key, mixed>  $dimensions
+     * @return array<string, mixed>
+     */
+    private static function canonicalizeDimensions(array $dimensions): array
+    {
+        $canonical = [];
+
+        foreach ($dimensions as $key => $value) {
+            $canonical[(string) $key] = is_array($value)
+                ? self::canonicalizeDimensions($value)
+                : $value;
+        }
+
+        ksort($canonical);
+
+        return $canonical;
+    }
+
+    /**
+     * Fail closed when an idempotency key is replayed with different economics.
+     *
+     * LCY_ONLY replays preserve the historical contract (return the existing
+     * transaction). Currency-aware replays must match the stored fingerprint
+     * exactly; a currency-aware posting can never be silently reused as an
+     * LCY_ONLY intent, and vice versa.
+     */
+    private function assertIdempotentReplayMatches(PostingIntent $intent, PostingTransaction $existing): void
+    {
+        $existingFingerprint = $existing->economic_fingerprint;
+
+        if ($intent->mode->isCurrencyAware()) {
+            try {
+                $context = $this->currencyAwareContext($intent);
+                $incomingFingerprint = $this->economicFingerprint($intent, $context);
+            } catch (ValidationException $exception) {
+                throw $exception;
+            } catch (\Throwable $exception) {
+                throw ValidationException::withMessages([
+                    'idempotency_key' => 'Idempotency key '.$intent->idempotencyKey.' could not be compared against its existing posting: '.$exception->getMessage(),
+                ]);
+            }
+
+            if ($existingFingerprint === null || ! hash_equals($existingFingerprint, $incomingFingerprint)) {
+                throw ValidationException::withMessages([
+                    'idempotency_key' => 'Idempotency key '.$intent->idempotencyKey.' already belongs to a posting with different currency-aware economics; refusing to reuse it.',
+                ]);
+            }
+
+            return;
+        }
+
+        if ($existingFingerprint !== null) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => 'Idempotency key '.$intent->idempotencyKey.' already belongs to a currency-aware posting; refusing to reuse it for an LCY-only intent.',
+            ]);
+        }
     }
 }

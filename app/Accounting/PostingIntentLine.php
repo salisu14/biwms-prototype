@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Accounting;
 
+use App\Enums\PostingIntentLineType;
+use App\Enums\PostingLcyOnlyReason;
+use InvalidArgumentException;
+
 final readonly class PostingIntentLine
 {
     /**
@@ -26,6 +30,10 @@ final readonly class PostingIntentLine
         public ?int $vendorLedgerEntryId = null,
         public ?string $sourceType = null,
         public ?string $sourceNumber = null,
+        public ?PostingIntentLineType $lineType = null,
+        public ?string $documentDebitAmount = null,
+        public ?string $documentCreditAmount = null,
+        public ?PostingLcyOnlyReason $lcyOnlyReason = null,
     ) {}
 
     /**
@@ -50,6 +58,48 @@ final readonly class PostingIntentLine
             vendorLedgerEntryId: isset($data['vendor_ledger_entry_id']) ? (int) $data['vendor_ledger_entry_id'] : null,
             sourceType: $data['source_type'] ?? null,
             sourceNumber: $data['source_number'] ?? null,
+            lineType: self::resolveLineType($data['line_type'] ?? null),
+            documentDebitAmount: isset($data['document_debit_amount']) ? (string) $data['document_debit_amount'] : null,
+            documentCreditAmount: isset($data['document_credit_amount']) ? (string) $data['document_credit_amount'] : null,
+            lcyOnlyReason: self::resolveLcyOnlyReason($data['lcy_only_reason'] ?? null),
         );
+    }
+
+    private static function resolveLineType(mixed $lineType): ?PostingIntentLineType
+    {
+        if ($lineType === null || $lineType === '') {
+            return null;
+        }
+
+        if ($lineType instanceof PostingIntentLineType) {
+            return $lineType;
+        }
+
+        $resolved = PostingIntentLineType::tryFrom(strtoupper(trim((string) $lineType)));
+
+        if (! $resolved) {
+            throw new InvalidArgumentException('Unsupported currency-aware line type; expected DOCUMENT_MONETARY or LCY_ONLY.');
+        }
+
+        return $resolved;
+    }
+
+    private static function resolveLcyOnlyReason(mixed $reason): ?PostingLcyOnlyReason
+    {
+        if ($reason === null || $reason === '') {
+            return null;
+        }
+
+        if ($reason instanceof PostingLcyOnlyReason) {
+            return $reason;
+        }
+
+        $resolved = PostingLcyOnlyReason::tryFrom(strtoupper(trim((string) $reason)));
+
+        if (! $resolved) {
+            throw new InvalidArgumentException('Unsupported LCY-only reason; expected ROUNDING or VALUATION_ONLY.');
+        }
+
+        return $resolved;
     }
 }
