@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\SalesOrder;
 use App\Services\Sales\SalesPricingResolver;
 use App\Services\VatService;
+use App\Support\DocumentCurrency;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -245,6 +246,21 @@ class LinesRelationManager extends RelationManager
                                         ->numeric()
                                         ->prefix(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                                         ->extraInputAttributes(['class' => 'font-bold text-primary-600']),
+
+                                    TextInput::make('line_amount_lcy')
+                                        ->label('Net Amount (LCY)')
+                                        ->readOnly()
+                                        ->numeric()
+                                        ->prefix('NGN')
+                                        ->visible(fn (): bool => ! DocumentCurrency::isLocalCurrency($this->getOwnerRecord()->currency_code)),
+
+                                    TextInput::make('amount_including_vat_lcy')
+                                        ->label('Total Incl. VAT (LCY)')
+                                        ->readOnly()
+                                        ->numeric()
+                                        ->prefix('NGN')
+                                        ->extraInputAttributes(['class' => 'font-bold text-primary-600'])
+                                        ->visible(fn (): bool => ! DocumentCurrency::isLocalCurrency($this->getOwnerRecord()->currency_code)),
                                 ]),
 
                             Section::make('Inventory')
@@ -300,6 +316,11 @@ class LinesRelationManager extends RelationManager
                     ->money(fn (): string => (string) ($this->getOwnerRecord()->currency_code ?: 'NGN'))
                     ->alignment('right')
                     ->weight('bold'),
+                TextColumn::make('amount_including_vat_lcy')
+                    ->label('Total (LCY)')
+                    ->money('NGN')
+                    ->alignment('right')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('pricing_status')
                     ->label('Pricing')
                     ->badge()

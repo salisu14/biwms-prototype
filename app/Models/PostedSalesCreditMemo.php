@@ -7,6 +7,9 @@ namespace App\Models;
 use App\Exceptions\BusinessException;
 use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
+use App\Services\Sales\SalesDocumentMonetaryCalculator;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -676,6 +679,7 @@ class PostedSalesCreditMemo extends Model
 
             $totalAmount = 0;
             $totalVat = 0;
+            $lineLcyValues = [];
 
             foreach ($returnOrder->lines as $soLine) {
                 $returnQty = $returnQuantities[$soLine->id] ?? 0;
@@ -702,6 +706,19 @@ class PostedSalesCreditMemo extends Model
 
                 // COGS reversal (positive - putting back)
                 $costAmount = $invLine->unit_cost * $returnQty;
+
+                $lineLcy = app(SalesDocumentMonetaryCalculator::class)->deriveComponents(
+                    $cm->currency_code,
+                    $cm->currency_factor,
+                    [
+                        'unit_price_lcy' => $invLine->unit_price,
+                        'line_discount_amount_lcy' => $lineDiscount,
+                        'line_total_lcy' => $lineTotal,
+                        'line_amount_lcy' => $lineAmount,
+                        'vat_amount_lcy' => $vatAmount,
+                        'amount_including_vat_lcy' => $lineAmount + $vatAmount,
+                    ],
+                );
 
                 $cm->lines()->create([
                     'so_line_id' => $soLine->id,
@@ -730,6 +747,12 @@ class PostedSalesCreditMemo extends Model
                     'vat_percentage' => $invLine->vat_percentage,
                     'vat_amount' => $vatAmount,
                     'amount_including_vat' => $lineAmount + $vatAmount,
+                    'unit_price_lcy' => $lineLcy['unit_price_lcy'],
+                    'line_total_lcy' => $lineLcy['line_total_lcy'],
+                    'line_amount_lcy' => $lineLcy['line_amount_lcy'],
+                    'line_discount_amount_lcy' => $lineLcy['line_discount_amount_lcy'],
+                    'vat_amount_lcy' => $lineLcy['vat_amount_lcy'],
+                    'amount_including_vat_lcy' => $lineLcy['amount_including_vat_lcy'],
                     'cost_amount_reversed' => $costAmount,
                     'inventory_amount_reversed' => $costAmount,
                     'return_type' => 'FULL',
@@ -738,7 +761,15 @@ class PostedSalesCreditMemo extends Model
 
                 $totalAmount += $lineAmount;
                 $totalVat += $vatAmount;
+                $lineLcyValues[] = $lineLcy;
             }
+
+            $calculator = app(SalesDocumentMonetaryCalculator::class);
+            $subtotalLcy = $calculator->total(array_column($lineLcyValues, 'line_amount_lcy'));
+            $totalVatLcy = $calculator->total(array_column($lineLcyValues, 'vat_amount_lcy'));
+            $grandTotalLcy = $subtotalLcy === null
+                ? null
+                : DecimalMath::add($subtotalLcy, $totalVatLcy ?? '0', DecimalPrecision::AMOUNT_SCALE);
 
             $cm->update([
                 'subtotal' => $totalAmount,
@@ -746,6 +777,11 @@ class PostedSalesCreditMemo extends Model
                 'total_vat' => $totalVat,
                 'grand_total' => $totalAmount + $totalVat,
                 'remaining_amount' => abs($totalAmount + $totalVat),
+                'subtotal_lcy' => $subtotalLcy,
+                'total_amount_lcy' => $subtotalLcy,
+                'total_vat_lcy' => $totalVatLcy,
+                'grand_total_lcy' => $grandTotalLcy,
+                'remaining_amount_lcy' => $grandTotalLcy === null ? null : DecimalMath::abs($grandTotalLcy, DecimalPrecision::AMOUNT_SCALE),
             ]);
 
             return $cm;

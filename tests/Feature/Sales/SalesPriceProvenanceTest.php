@@ -321,10 +321,12 @@ it('uses an explicit matching-currency price on a USD order with an explicit fac
 
     expect((float) $line->unit_price)->toBe(220.0)
         ->and($line->price_source)->toBe(SalesPricingResolver::SOURCE_SALES_PRICE_CUSTOMER)
-        // This phase deliberately does not populate Sales LCY monetary fields.
-        ->and($line->unit_price_lcy)->toBeNull()
-        ->and($line->line_total_lcy)->toBeNull()
-        ->and($line->line_amount_lcy)->toBeNull();
+        // Phase 3B2-B derives the LCY equivalents. This order carries a parity
+        // factor of 1, so the LCY values mirror the document (FCY) amounts
+        // without the commercial price being re-resolved.
+        ->and((float) $line->unit_price_lcy)->toBe(220.0)
+        ->and((float) $line->line_total_lcy)->toBe(220.0)
+        ->and((float) $line->line_amount_lcy)->toBe(220.0);
 });
 
 it('never auto-derives a foreign sales line price from the LCY item reference', function (): void {

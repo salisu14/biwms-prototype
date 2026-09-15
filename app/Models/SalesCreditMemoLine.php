@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\SalesLinePricingStatus;
+use App\Services\Sales\SalesDocumentMonetaryCalculator;
+use App\Support\DecimalPrecision;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +14,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SalesCreditMemoLine extends Model
 {
     use HasFactory;
+
+    /**
+     * `unit_price_lcy` mirrors its 5-decimal document-currency column; the other
+     * LCY components mirror their 2-decimal document columns.
+     */
+    private const UNIT_PRICE_LCY_SCALE = 5;
 
     protected $fillable = [
         'sales_credit_memo_id',
@@ -76,6 +84,8 @@ class SalesCreditMemoLine extends Model
 
             // 5. BC "Amount Including VAT"
             $line->amount_including_vat = $line->amount + $line->vat_amount;
+
+            $line->deriveLcyAmounts();
         });
 
         static::saved(function ($line) {
@@ -89,6 +99,52 @@ class SalesCreditMemoLine extends Model
                 $line->creditMemo->refreshTotal();
             }
         });
+    }
+
+    /**
+     * Derive the LCY equivalents of this credit memo line's document-currency
+     * amounts. The commercial (FCY) amounts remain authoritative and are never
+     * modified here.
+     *
+     * A linked memo line's unit price was inherited from the posted invoice
+     * line, so its LCY value is derived from that same inherited document price
+     * using the memo's own currency context. An unresolved currency/factor
+     * leaves existing LCY values untouched rather than fabricating them.
+     */
+    public function deriveLcyAmounts(): void
+    {
+        $memo = $this->relationLoaded('creditMemo') ? $this->creditMemo : $this->creditMemo()->first();
+
+        if (! $memo instanceof SalesCreditMemo) {
+            return;
+        }
+
+        $calculator = app(SalesDocumentMonetaryCalculator::class);
+
+        $derived = $calculator->deriveComponents(
+            $memo->currency_code,
+            $memo->currency_factor,
+            [
+                'line_discount_amount_lcy' => $this->line_discount_amount,
+                'vat_amount_lcy' => $this->vat_amount,
+                'amount_lcy' => $this->amount,
+                'amount_including_vat_lcy' => $this->amount_including_vat,
+            ],
+            DecimalPrecision::CURRENCY_SCALE,
+        );
+
+        $derived['unit_price_lcy'] = $calculator->deriveLcy(
+            $memo->currency_code,
+            $memo->currency_factor,
+            $this->unit_price,
+            self::UNIT_PRICE_LCY_SCALE,
+        );
+
+        foreach ($derived as $column => $value) {
+            if ($value !== null) {
+                $this->{$column} = $value;
+            }
+        }
     }
 
     /*

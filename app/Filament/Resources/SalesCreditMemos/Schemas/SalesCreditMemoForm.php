@@ -110,6 +110,11 @@ class SalesCreditMemoForm
                 $set('sales_invoice_id', null);
 
                 if (! $state) {
+                    // Unlinking restores the prospective direct-memo workflow.
+                    // No commercial line economics survive (the items are
+                    // cleared), so nothing is relabelled.
+                    $set('currency_code', 'NGN');
+                    $set('currency_factor', '1');
                     $set('items', []);
 
                     return;
@@ -121,6 +126,14 @@ class SalesCreditMemoForm
 
                 if ($invoice?->customer_id) {
                     $set('customer_id', $invoice->customer_id);
+                }
+
+                // A linked memo reverses the posted invoice, so the source
+                // currency economics are authoritative and are synchronised
+                // here; the currency fields are locked while the link exists.
+                if ($invoice) {
+                    $set('currency_code', $invoice->currency_code);
+                    $set('currency_factor', $invoice->currency_factor);
                 }
 
                 $set('items', self::postedInvoiceLineDefaults($invoice));
@@ -484,6 +497,7 @@ class SalesCreditMemoForm
         return Section::make('Financial Totals')
             ->schema([
                 self::makeTotalAmountField(),
+                self::makeTotalLcyField(),
                 self::makeCurrencySelect(),
                 self::makeCurrencyFactorField(),
             ]);
@@ -494,10 +508,31 @@ class SalesCreditMemoForm
         return TextInput::make('total_amount')
             ->label('Total (Incl. VAT)')
             ->numeric()
-            ->prefix('₦')
+            ->prefix(fn (Get $get): string => (string) ($get('currency_code') ?: 'NGN'))
             ->readOnly()
             ->dehydrated(false)
             ->placeholder(fn (Get $get) => self::calculateGrandTotal($get));
+    }
+
+    /**
+     * Read-only LCY recognition equivalent of the credit memo total. Displayed
+     * only for a foreign-currency memo; the stored value is derived by the
+     * document monetary layer, never by this form.
+     */
+    private static function makeTotalLcyField(): TextInput
+    {
+        return TextInput::make('total_amount_lcy')
+            ->label('Total (LCY)')
+            ->numeric()
+            ->prefix('NGN')
+            ->readOnly()
+            ->dehydrated(false)
+            ->visible(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+            ->placeholder(function (Get $get): string {
+                $factor = (float) ($get('currency_factor') ?? 1);
+
+                return number_format(((float) self::calculateGrandTotal($get)) * $factor, 2);
+            });
     }
 
     private static function calculateGrandTotal(Get $get): string
@@ -525,6 +560,8 @@ class SalesCreditMemoForm
             ])
             ->default('NGN')
             ->live()
+            ->disabled(fn (Get $get): bool => filled($get('posted_sales_invoice_id')))
+            ->dehydrated()
             ->afterStateUpdated(function ($state, Set $set): void {
                 // Local currency resolves factor 1; a foreign currency clears
                 // any fabricated factor so the memo cannot be saved without an
@@ -536,13 +573,21 @@ class SalesCreditMemoForm
     private static function makeCurrencyFactorField(): TextInput
     {
         return TextInput::make('currency_factor')
-            ->label('Exchange Rate')
-            ->helperText('1 FCY = X NGN')
+            ->label('Exchange Rate (NGN per 1 FCY)')
+            ->helperText(function (Get $get): string {
+                $code = strtoupper((string) ($get('currency_code') ?: 'NGN'));
+                $factor = $get('currency_factor');
+
+                return $factor === null || $factor === ''
+                    ? "Rate direction: 1 {$code} = NGN <rate>"
+                    : 'Rate direction: 1 '.$code.' = NGN '.number_format((float) $factor, 2);
+            })
             ->numeric()
             ->default(1)
             ->minValue(0.000001)
             ->required(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
             ->visible(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+            ->disabled(fn (Get $get): bool => filled($get('posted_sales_invoice_id')))
             ->dehydrated();
     }
 

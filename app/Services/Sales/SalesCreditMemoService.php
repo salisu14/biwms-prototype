@@ -27,6 +27,8 @@ use App\Services\Approval\ApprovalService;
 use App\Services\Inventory\ReturnCostApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +50,8 @@ class SalesCreditMemoService
         $this->validateCreditMemoData($data);
 
         return DB::transaction(function () use ($data) {
-            $currencyContext = $this->currencyService->resolveForNewDocument($data->currency_code, $data->currency_factor);
+            $sourcePostedInvoice = $this->linkedPostedInvoice($data->posted_sales_invoice_id);
+            $currencyContext = $this->resolveCurrencyContext($data, $sourcePostedInvoice, forExistingDocument: false);
 
             $creditMemo = SalesCreditMemo::create([
                 'customer_id' => $data->customer_id,
@@ -66,6 +69,8 @@ class SalesCreditMemoService
             foreach ($data->items as $line) {
                 $postedInvoiceLine = $this->postedInvoiceLineForData($data, $line);
                 $item = Item::query()->findOrFail($postedInvoiceLine?->item_id ?? $line->item_id);
+
+                $this->assertInheritedLineContext($postedInvoiceLine, $sourcePostedInvoice);
 
                 $creditMemo->items()->create($this->linePayload($line, $item, $postedInvoiceLine));
             }
@@ -123,6 +128,150 @@ class SalesCreditMemoService
         ];
     }
 
+    private function linkedPostedInvoice(?int $postedSalesInvoiceId): ?PostedSalesInvoice
+    {
+        if (! $postedSalesInvoiceId) {
+            return null;
+        }
+
+        return PostedSalesInvoice::query()->find($postedSalesInvoiceId);
+    }
+
+    /**
+     * Resolve the currency context for a create/update.
+     *
+     * A credit memo linked to a posted Sales Invoice reverses that historical
+     * commercial transaction, so the source posted invoice's currency economics
+     * are authoritative: the memo inherits the source currency/factor, and a
+     * conflicting caller currency or factor is rejected instead of relabelling
+     * the inherited historical unit economics under another currency.
+     *
+     * An unlinked memo keeps the established prospective (new document) or
+     * historical (existing document) semantics.
+     *
+     * @return array{currency_code: string, currency_factor: string}
+     */
+    private function resolveCurrencyContext(
+        SalesCreditMemoData $data,
+        ?PostedSalesInvoice $sourcePostedInvoice,
+        bool $forExistingDocument,
+    ): array {
+        if (! $sourcePostedInvoice instanceof PostedSalesInvoice) {
+            return $forExistingDocument
+                ? $this->currencyService->resolveForExistingDocument($data->currency_code, $data->currency_factor)
+                : $this->currencyService->resolveForNewDocument($data->currency_code, $data->currency_factor);
+        }
+
+        $source = $this->currencyService->resolveForExistingDocument(
+            $sourcePostedInvoice->currency_code,
+            $sourcePostedInvoice->currency_factor,
+        );
+
+        $currencySupplied = $data->currency_code !== null && trim((string) $data->currency_code) !== '';
+        $factorSupplied = $data->currency_factor !== null && trim((string) $data->currency_factor) !== '';
+
+        if (! $currencySupplied && ! $factorSupplied) {
+            return $source;
+        }
+
+        // A caller factor is interpreted against the supplied currency, or
+        // against the source currency when the caller states none, so an
+        // unreviewed rate can never be attached to a foreign reversal.
+        $caller = $this->currencyService->resolveForNewDocument(
+            $currencySupplied ? $data->currency_code : $source['currency_code'],
+            $factorSupplied ? $data->currency_factor : $source['currency_factor'],
+        );
+
+        if ($caller['currency_code'] !== $source['currency_code']) {
+            throw new BusinessException(
+                'A credit memo linked to a posted invoice must use the source invoice currency.',
+                title: 'Currency conflict',
+                field: 'currency_code',
+                codeIdentifier: 'sales_credit_memo_currency_conflict',
+                metadata: [
+                    'source_currency_code' => $source['currency_code'],
+                    'supplied_currency_code' => $caller['currency_code'],
+                ],
+            );
+        }
+
+        if (DecimalMath::compare($caller['currency_factor'], $source['currency_factor']) !== 0) {
+            throw new BusinessException(
+                'A credit memo linked to a posted invoice must use the source invoice exchange-rate factor.',
+                title: 'Exchange-rate conflict',
+                field: 'currency_factor',
+                codeIdentifier: 'sales_credit_memo_currency_factor_conflict',
+                metadata: [
+                    'source_currency_factor' => $source['currency_factor'],
+                    'supplied_currency_factor' => $caller['currency_factor'],
+                ],
+            );
+        }
+
+        return $source;
+    }
+
+    /**
+     * A line may only inherit historical unit economics from the posted invoice
+     * it is actually linked to. Combined with the linked currency context, this
+     * keeps an inherited FCY price labelled with its own currency.
+     */
+    private function assertInheritedLineContext(
+        ?PostedSalesInvoiceLine $postedInvoiceLine,
+        ?PostedSalesInvoice $sourcePostedInvoice,
+    ): void {
+        if (! $postedInvoiceLine instanceof PostedSalesInvoiceLine) {
+            return;
+        }
+
+        if (! $sourcePostedInvoice instanceof PostedSalesInvoice
+            || (int) $postedInvoiceLine->posted_sales_invoice_id !== (int) $sourcePostedInvoice->id) {
+            throw new BusinessException(
+                'A credit memo line can only inherit unit economics from the linked posted invoice.',
+                title: 'Invalid linked invoice line',
+                field: 'items',
+                codeIdentifier: 'sales_credit_memo_line_source_mismatch',
+            );
+        }
+    }
+
+    /**
+     * Final fail-closed guard before posting side effects: a correction must
+     * never reverse historical posted economics under a different currency or
+     * factor. The persisted draft is not repaired here.
+     *
+     * @param  array{currency_code: string, currency_factor: string}  $currencyContext
+     */
+    private function assertLinkedMemoContextMatchesSource(
+        ?PostedSalesInvoice $correctedPostedInvoice,
+        array $currencyContext,
+    ): void {
+        if (! $correctedPostedInvoice instanceof PostedSalesInvoice) {
+            return;
+        }
+
+        $source = $this->currencyService->resolveForExistingDocument(
+            $correctedPostedInvoice->currency_code,
+            $correctedPostedInvoice->currency_factor,
+        );
+
+        if ($source['currency_code'] === $currencyContext['currency_code']
+            && DecimalMath::compare($source['currency_factor'], $currencyContext['currency_factor']) === 0) {
+            return;
+        }
+
+        throw new BusinessException(
+            'This credit memo currency context does not match the posted invoice it corrects; posting would reinterpret historical economics.',
+            title: 'Linked currency conflict',
+            field: 'currency_code',
+            codeIdentifier: 'sales_credit_memo_currency_conflict',
+            metadata: [
+                'source_currency_code' => $source['currency_code'],
+                'memo_currency_code' => $currencyContext['currency_code'],
+            ],
+        );
+    }
+
     /**
      * @throws \Throwable
      */
@@ -135,9 +284,8 @@ class SalesCreditMemoService
         $this->validateCreditMemoData($data);
 
         return DB::transaction(function () use ($creditMemo, $data) {
-            // Editing an existing draft: reclassifying it must not silently
-            // reinterpret a missing/ambiguous currency as local.
-            $currencyContext = $this->currencyService->resolveForExistingDocument($data->currency_code, $data->currency_factor);
+            $sourcePostedInvoice = $this->linkedPostedInvoice($data->posted_sales_invoice_id);
+            $currencyContext = $this->resolveCurrencyContext($data, $sourcePostedInvoice, forExistingDocument: true);
 
             $creditMemo->update([
                 'customer_id' => $data->customer_id,
@@ -154,6 +302,8 @@ class SalesCreditMemoService
             foreach ($data->items as $line) {
                 $postedInvoiceLine = $this->postedInvoiceLineForData($data, $line);
                 $item = Item::query()->findOrFail($postedInvoiceLine?->item_id ?? $line->item_id);
+
+                $this->assertInheritedLineContext($postedInvoiceLine, $sourcePostedInvoice);
 
                 $creditMemo->items()->create($this->linePayload($line, $item, $postedInvoiceLine));
             }
@@ -220,6 +370,11 @@ class SalesCreditMemoService
 
             $correctedPostedInvoice = $this->resolveCorrectedPostedInvoice($creditMemo);
 
+            // Final fail-closed guard: a correction must never reverse historical
+            // posted economics under a different currency or factor. Runs before
+            // any snapshot, ledger or inventory side effect.
+            $this->assertLinkedMemoContextMatchesSource($correctedPostedInvoice, $currencyContext);
+
             if ($correctedPostedInvoice) {
                 $this->validateCreditQuantitiesAgainstPostedInvoice($correctedPostedInvoice, $creditMemo);
             }
@@ -251,6 +406,7 @@ class SalesCreditMemoService
             $lineNumber = 0;
             $subtotal = 0.0;
             $totalVat = 0.0;
+            $lineLcyValues = [];
 
             foreach ($creditMemo->items as $line) {
                 $lineNumber += 10000;
@@ -263,6 +419,28 @@ class SalesCreditMemoService
                 $amountIncludingVat = (float) ($line->amount_including_vat ?? ($lineAmount + $vatAmount));
                 $unitCost = (float) ($item?->unit_cost ?? 0);
                 $costAmount = $quantityBase * $unitCost;
+
+                // Posted credit memo amounts mirror the document sign convention
+                // (negative credits). Derive their LCY equivalents from those
+                // same signed document values.
+                $lineTotalFcy = -($quantity * (float) $line->unit_price);
+                $lineAmountFcy = -$lineAmount;
+                $vatAmountFcy = -$vatAmount;
+                $amountIncludingVatFcy = -$amountIncludingVat;
+
+                $lineLcy = app(SalesDocumentMonetaryCalculator::class)->deriveComponents(
+                    $currencyContext['currency_code'],
+                    $currencyContext['currency_factor'],
+                    [
+                        'unit_price_lcy' => $line->unit_price,
+                        'line_discount_amount_lcy' => $line->line_discount_amount,
+                        'line_total_lcy' => $lineTotalFcy,
+                        'line_amount_lcy' => $lineAmountFcy,
+                        'vat_amount_lcy' => $vatAmountFcy,
+                        'amount_including_vat_lcy' => $amountIncludingVatFcy,
+                    ],
+                );
+
                 $itemLedgerEntry = $this->createItemLedgerEntryForLine($postedMemo, $line);
 
                 PostedSalesCreditMemoLine::create([
@@ -284,11 +462,17 @@ class SalesCreditMemoService
                     'unit_cost_lcy' => $unitCost,
                     'line_discount_percent' => (float) $line->line_discount_percent,
                     'line_discount_amount' => (float) $line->line_discount_amount,
-                    'line_total' => -($quantity * (float) $line->unit_price),
-                    'line_amount' => -$lineAmount,
+                    'line_total' => $lineTotalFcy,
+                    'line_amount' => $lineAmountFcy,
                     'vat_percentage' => (float) $line->vat_percent,
-                    'vat_amount' => -$vatAmount,
-                    'amount_including_vat' => -$amountIncludingVat,
+                    'vat_amount' => $vatAmountFcy,
+                    'amount_including_vat' => $amountIncludingVatFcy,
+                    'unit_price_lcy' => $lineLcy['unit_price_lcy'],
+                    'line_total_lcy' => $lineLcy['line_total_lcy'],
+                    'line_amount_lcy' => $lineLcy['line_amount_lcy'],
+                    'line_discount_amount_lcy' => $lineLcy['line_discount_amount_lcy'],
+                    'vat_amount_lcy' => $lineLcy['vat_amount_lcy'],
+                    'amount_including_vat_lcy' => $lineLcy['amount_including_vat_lcy'],
                     'cost_amount_reversed' => $costAmount,
                     'inventory_amount_reversed' => $costAmount,
                     'return_type' => 'FULL',
@@ -297,9 +481,17 @@ class SalesCreditMemoService
 
                 $subtotal += $lineAmount;
                 $totalVat += $vatAmount;
+                $lineLcyValues[] = $lineLcy;
             }
 
             $this->postingService->postSalesCreditMemo($creditMemo);
+
+            $calculator = app(SalesDocumentMonetaryCalculator::class);
+            $subtotalLcy = $calculator->total(array_column($lineLcyValues, 'line_amount_lcy'));
+            $totalVatLcy = $calculator->total(array_column($lineLcyValues, 'vat_amount_lcy'));
+            $grandTotalLcy = $subtotalLcy === null
+                ? null
+                : DecimalMath::add($subtotalLcy, $totalVatLcy ?? '0', DecimalPrecision::AMOUNT_SCALE);
 
             $postedMemo->update([
                 'subtotal' => -$subtotal,
@@ -307,6 +499,11 @@ class SalesCreditMemoService
                 'total_vat' => -$totalVat,
                 'grand_total' => -($subtotal + $totalVat),
                 'remaining_amount' => $subtotal + $totalVat,
+                'subtotal_lcy' => $subtotalLcy,
+                'total_amount_lcy' => $subtotalLcy,
+                'total_vat_lcy' => $totalVatLcy,
+                'grand_total_lcy' => $grandTotalLcy,
+                'remaining_amount_lcy' => $grandTotalLcy === null ? null : DecimalMath::abs($grandTotalLcy, DecimalPrecision::AMOUNT_SCALE),
             ]);
 
             $ledgerEntryExists = CustomerLedgerEntry::query()

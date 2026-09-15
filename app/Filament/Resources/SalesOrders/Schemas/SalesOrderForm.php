@@ -380,14 +380,34 @@ class SalesOrderForm
                                     }),
 
                                 TextInput::make('currency_factor')
-                                    ->label('Exchange Rate')
-                                    ->helperText('1 FCY = X NGN')
+                                    ->label('Exchange Rate (NGN per 1 FCY)')
+                                    ->helperText(function (Get $get): string {
+                                        $code = strtoupper((string) ($get('currency_code') ?: 'NGN'));
+                                        $factor = $get('currency_factor');
+
+                                        return $factor === null || $factor === ''
+                                            ? "Rate direction: 1 {$code} = NGN <rate>"
+                                            : 'Rate direction: 1 '.$code.' = NGN '.number_format((float) $factor, 2);
+                                    })
                                     ->numeric()
                                     ->default(1)
                                     ->minValue(0.000001)
                                     ->required(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
                                     ->visible(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
                                     ->dehydrated(),
+
+                                TextInput::make('grand_total_lcy')
+                                    ->label('Grand Total (LCY)')
+                                    ->numeric()
+                                    ->prefix('NGN')
+                                    ->readOnly()
+                                    ->dehydrated(false)
+                                    ->visible(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
+                                    ->placeholder(function (Get $get): string {
+                                        $factor = (float) ($get('currency_factor') ?? 1);
+
+                                        return number_format((float) ($get('grand_total') ?? 0) * $factor, 2);
+                                    }),
 
                                 TextInput::make('grand_total')
                                     ->label('Order Grand Total')

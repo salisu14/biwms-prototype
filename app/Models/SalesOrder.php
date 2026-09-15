@@ -17,7 +17,10 @@ use App\Services\NumberSeriesService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
 use App\Services\Sales\SalesDocumentCurrencyService;
+use App\Services\Sales\SalesDocumentMonetaryCalculator;
 use App\Services\Sales\SalesOrderPricingGuard;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -202,6 +205,14 @@ class SalesOrder extends Model implements Approvable
                 $order->recalculateTotals();
             }
         });
+
+        // A currency/rate change must not reprice the negotiated FCY commercial
+        // values; it may only refresh their LCY recognition equivalents.
+        static::updated(function (SalesOrder $order): void {
+            if ($order->wasChanged('currency_code') || $order->wasChanged('currency_factor')) {
+                $order->resyncLcyForCurrencyChange();
+            }
+        });
     }
 
     public function isPosted(): bool
@@ -249,6 +260,75 @@ class SalesOrder extends Model implements Approvable
 
         $this->invoice_discount_amount = $this->total_amount * ($this->invoice_discount_percent / 100);
         $this->grand_total = ($this->total_amount - $this->invoice_discount_amount) + $this->total_vat;
+
+        $this->recalculateLcyTotals();
+    }
+
+    /**
+     * Recompute the LCY header totals as the sum of the persisted rounded line
+     * LCY values, using the same structure as the document-currency totals.
+     *
+     * A document whose lines carry no authorised LCY value keeps NULL LCY
+     * totals instead of a fabricated zero.
+     */
+    public function recalculateLcyTotals(): void
+    {
+        $calculator = app(SalesDocumentMonetaryCalculator::class);
+
+        $this->subtotal_lcy = $calculator->total($this->lines->pluck('line_total_lcy'));
+        $this->line_discount_total_lcy = $calculator->total($this->lines->pluck('line_discount_amount_lcy'));
+        $this->total_amount_lcy = $calculator->total($this->lines->pluck('line_amount_lcy'));
+        $this->total_vat_lcy = $calculator->total($this->lines->pluck('vat_amount_lcy'));
+
+        if ($this->total_amount_lcy === null) {
+            $this->invoice_discount_amount_lcy = null;
+            $this->grand_total_lcy = null;
+
+            return;
+        }
+
+        $discountPercent = DecimalMath::div(
+            DecimalMath::toScale($this->invoice_discount_percent ?? 0, DecimalPrecision::AMOUNT_SCALE),
+            '100',
+            DecimalPrecision::AMOUNT_SCALE,
+        );
+
+        $this->invoice_discount_amount_lcy = DecimalMath::mul(
+            $this->total_amount_lcy,
+            $discountPercent,
+            DecimalPrecision::AMOUNT_SCALE,
+        );
+
+        $this->grand_total_lcy = DecimalMath::add(
+            DecimalMath::sub($this->total_amount_lcy, $this->invoice_discount_amount_lcy, DecimalPrecision::AMOUNT_SCALE),
+            $this->total_vat_lcy ?? '0',
+            DecimalPrecision::AMOUNT_SCALE,
+        );
+    }
+
+    /**
+     * Refresh the LCY equivalents of persisted lines and header totals after a
+     * document currency/rate change. Commercial FCY values are untouched: only
+     * the LCY derivation is recomputed, so a rate change never reprices the
+     * negotiated unit price.
+     */
+    public function resyncLcyForCurrencyChange(): void
+    {
+        $lines = $this->lines()->get();
+
+        if ($lines->isEmpty()) {
+            return;
+        }
+
+        foreach ($lines as $line) {
+            $line->setRelation('salesOrder', $this);
+            $line->deriveLcyAmounts();
+            $line->saveQuietly();
+        }
+
+        $this->setRelation('lines', $lines);
+        $this->recalculateTotals();
+        $this->saveQuietly();
     }
 
     public function recalculateTotalsFromPersistedLines(): void
@@ -833,6 +913,7 @@ class SalesOrder extends Model implements Approvable
             $lineDiscountTotal = 0.0;
             $totalAmount = 0.0;
             $totalVat = 0.0;
+            $lineLcyValues = [];
 
             foreach ($linesToInvoice as $line) {
                 $lineDimensions = app(DimensionManagementService::class)->normalizeDimensionMap((array) ($line->dimensions ?? []));
@@ -848,6 +929,22 @@ class SalesOrder extends Model implements Approvable
                 $lineAmount = $lineTotal - $lineDiscountAmount;
                 $vatAmount = $lineAmount * ((float) $line->vat_percentage / 100);
                 $costAmount = $quantityToInvoice * (float) ($line->unit_cost ?? 0);
+
+                // LCY recognition equivalents of the document-currency line
+                // economics. The commercial FCY values above remain authoritative.
+                $lineLcy = app(SalesDocumentMonetaryCalculator::class)->deriveComponents(
+                    $currencyContext['currency_code'],
+                    $currencyContext['currency_factor'],
+                    [
+                        'unit_price_lcy' => $line->unit_price,
+                        'line_total_lcy' => $lineTotal,
+                        'line_amount_lcy' => $lineAmount,
+                        'line_discount_amount_lcy' => $lineDiscountAmount,
+                        'vat_amount_lcy' => $vatAmount,
+                        'amount_including_vat_lcy' => $lineAmount + $vatAmount,
+                    ],
+                );
+
                 $itemLedgerEntryId = ItemLedgerEntry::query()
                     ->where('document_number', $this->getShipmentDocumentNumber())
                     ->where('entry_type', ItemLedgerEntryType::SALE)
@@ -882,6 +979,12 @@ class SalesOrder extends Model implements Approvable
                     'vat_percentage' => $line->vat_percentage,
                     'vat_amount' => $vatAmount,
                     'amount_including_vat' => $lineAmount + $vatAmount,
+                    'unit_price_lcy' => $lineLcy['unit_price_lcy'],
+                    'line_total_lcy' => $lineLcy['line_total_lcy'],
+                    'line_amount_lcy' => $lineLcy['line_amount_lcy'],
+                    'line_discount_amount_lcy' => $lineLcy['line_discount_amount_lcy'],
+                    'vat_amount_lcy' => $lineLcy['vat_amount_lcy'],
+                    'amount_including_vat_lcy' => $lineLcy['amount_including_vat_lcy'],
                     'cost_amount' => $costAmount,
                     'profit_amount' => $lineAmount - $costAmount,
                     'lot_number' => $line->lot_number,
@@ -901,10 +1004,38 @@ class SalesOrder extends Model implements Approvable
                 $lineDiscountTotal += $lineDiscountAmount;
                 $totalAmount += $lineAmount;
                 $totalVat += $vatAmount;
+                $lineLcyValues[] = $lineLcy;
             }
 
             $invoiceDiscountAmount = $totalAmount * ((float) ($this->invoice_discount_percent ?? 0) / 100);
             $grandTotal = ($totalAmount - $invoiceDiscountAmount) + $totalVat;
+
+            $calculator = app(SalesDocumentMonetaryCalculator::class);
+            $subtotalLcy = $calculator->total(array_column($lineLcyValues, 'line_total_lcy'));
+            $lineDiscountTotalLcy = $calculator->total(array_column($lineLcyValues, 'line_discount_amount_lcy'));
+            $totalAmountLcy = $calculator->total(array_column($lineLcyValues, 'line_amount_lcy'));
+            $totalVatLcy = $calculator->total(array_column($lineLcyValues, 'vat_amount_lcy'));
+
+            $invoiceDiscountAmountLcy = null;
+            $grandTotalLcy = null;
+
+            if ($totalAmountLcy !== null) {
+                $invoiceDiscountAmountLcy = DecimalMath::mul(
+                    $totalAmountLcy,
+                    DecimalMath::div(
+                        DecimalMath::toScale($this->invoice_discount_percent ?? 0, DecimalPrecision::AMOUNT_SCALE),
+                        '100',
+                        DecimalPrecision::AMOUNT_SCALE,
+                    ),
+                    DecimalPrecision::AMOUNT_SCALE,
+                );
+
+                $grandTotalLcy = DecimalMath::add(
+                    DecimalMath::sub($totalAmountLcy, $invoiceDiscountAmountLcy, DecimalPrecision::AMOUNT_SCALE),
+                    $totalVatLcy ?? '0',
+                    DecimalPrecision::AMOUNT_SCALE,
+                );
+            }
 
             $postedInvoice->update([
                 'subtotal' => $subtotal,
@@ -914,6 +1045,13 @@ class SalesOrder extends Model implements Approvable
                 'total_vat' => $totalVat,
                 'grand_total' => $grandTotal,
                 'remaining_amount' => $grandTotal,
+                'subtotal_lcy' => $subtotalLcy,
+                'line_discount_total_lcy' => $lineDiscountTotalLcy,
+                'invoice_discount_amount_lcy' => $invoiceDiscountAmountLcy,
+                'total_amount_lcy' => $totalAmountLcy,
+                'total_vat_lcy' => $totalVatLcy,
+                'grand_total_lcy' => $grandTotalLcy,
+                'remaining_amount_lcy' => $grandTotalLcy,
             ]);
 
             $this->postGlEntriesForPostedInvoice($postedInvoice);

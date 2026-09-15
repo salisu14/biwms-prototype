@@ -9,6 +9,9 @@ use App\Enums\ApprovalStatus;
 use App\Exceptions\DocumentStateException;
 use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
+use App\Services\Sales\SalesDocumentCurrencyService;
+use App\Services\Sales\SalesDocumentMonetaryCalculator;
+use App\Support\DecimalPrecision;
 use App\Traits\Approvable as ApprovableTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +30,34 @@ class SalesCreditMemo extends Model implements Approvable
             $memo->business_id ??= $memo->posted_sales_invoice_id
                 ? PostedSalesInvoice::query()->whereKey($memo->posted_sales_invoice_id)->value('business_id')
                 : app(BusinessContextService::class)->resolveId();
+        });
+
+        // An explicit currency/rate change must resolve through the shared
+        // Sales currency contract and fail closed before persistence, so a valid
+        // foreign draft cannot transition to a malformed context while keeping
+        // stale LCY. An unrelated edit to a historical row is left untouched.
+        static::updating(function (SalesCreditMemo $memo): void {
+            if (! $memo->isDirty('currency_code') && ! $memo->isDirty('currency_factor')) {
+                return;
+            }
+
+            $factorIsDirty = $memo->isDirty('currency_factor');
+
+            $currencyContext = app(SalesDocumentCurrencyService::class)->resolveForExistingDocument(
+                $memo->currency_code,
+                $factorIsDirty ? $memo->currency_factor : null,
+            );
+
+            $memo->currency_code = $currencyContext['currency_code'];
+            $memo->currency_factor = $currencyContext['currency_factor'];
+        });
+
+        // A currency/rate change refreshes the LCY equivalents only; it never
+        // re-resolves the commercial document-currency line prices.
+        static::updated(function (SalesCreditMemo $memo): void {
+            if ($memo->wasChanged('currency_code') || $memo->wasChanged('currency_factor')) {
+                $memo->resyncLcyForCurrencyChange();
+            }
         });
     }
 
@@ -139,7 +170,28 @@ class SalesCreditMemo extends Model implements Approvable
             'total_amount' => $this->items()
                 ->get()
                 ->sum(fn (SalesCreditMemoLine $line): float => $this->lineAmountIncludingVat($line)),
+            'total_amount_lcy' => app(SalesDocumentMonetaryCalculator::class)->total(
+                $this->items()->pluck('amount_including_vat_lcy'),
+                DecimalPrecision::CURRENCY_SCALE,
+            ),
         ]);
+    }
+
+    /**
+     * Recompute each line's LCY equivalents and the header LCY total after the
+     * document currency/rate changes. Commercial FCY values are untouched.
+     */
+    public function resyncLcyForCurrencyChange(): void
+    {
+        $items = $this->items()->get();
+
+        foreach ($items as $line) {
+            $line->setRelation('creditMemo', $this);
+            $line->deriveLcyAmounts();
+            $line->saveQuietly();
+        }
+
+        $this->refreshTotal();
     }
 
     private function lineAmountIncludingVat(SalesCreditMemoLine $line): float

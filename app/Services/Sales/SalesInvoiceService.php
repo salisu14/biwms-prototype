@@ -24,6 +24,8 @@ use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\NumberSeriesService;
 use App\Services\PostingService;
 use App\Services\Sales\ReferralCommissions\CommissionCalculationService;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -99,6 +101,10 @@ class SalesInvoiceService
 
             $invoice->update([
                 'total_amount' => $total,
+                'total_amount_lcy' => app(SalesDocumentMonetaryCalculator::class)->total(
+                    $invoice->lines()->pluck('line_total_lcy'),
+                    DecimalPrecision::CURRENCY_SCALE,
+                ),
             ]);
 
             return $invoice;
@@ -198,6 +204,7 @@ class SalesInvoiceService
             $lineDiscountTotal = 0.0;
             $totalAmount = 0.0;
             $totalVat = 0.0;
+            $lineLcyValues = [];
 
             foreach ($invoice->lines as $line) {
                 $lineNumber += 10;
@@ -214,6 +221,21 @@ class SalesInvoiceService
                 $amountIncludingVat = $lineAmount + $vatAmount;
                 $unitCost = (float) ($item?->unit_cost ?? 0);
                 $costAmount = $quantityBase * $unitCost;
+
+                // LCY recognition equivalents of the document-currency line
+                // economics; the FCY values remain authoritative.
+                $lineLcy = app(SalesDocumentMonetaryCalculator::class)->deriveComponents(
+                    $currencyContext['currency_code'],
+                    $currencyContext['currency_factor'],
+                    [
+                        'unit_price_lcy' => $unitPrice,
+                        'line_total_lcy' => $lineSubTotal,
+                        'line_amount_lcy' => $lineAmount,
+                        'line_discount_amount_lcy' => $discountAmount,
+                        'vat_amount_lcy' => $vatAmount,
+                        'amount_including_vat_lcy' => $amountIncludingVat,
+                    ],
+                );
 
                 PostedSalesInvoiceLine::query()->create([
                     'posted_sales_invoice_id' => $postedInvoice->id,
@@ -244,6 +266,11 @@ class SalesInvoiceService
                     'vat_percentage' => (float) ($line->vat_percent ?? 0),
                     'vat_amount' => $vatAmount,
                     'amount_including_vat' => $amountIncludingVat,
+                    'unit_price_lcy' => $lineLcy['unit_price_lcy'],
+                    'line_total_lcy' => $lineLcy['line_total_lcy'],
+                    'line_discount_amount_lcy' => $lineLcy['line_discount_amount_lcy'],
+                    'vat_amount_lcy' => $lineLcy['vat_amount_lcy'],
+                    'amount_including_vat_lcy' => $lineLcy['amount_including_vat_lcy'],
                     'cost_amount' => $costAmount,
                     'profit_amount' => $lineAmount - $costAmount,
                     'lot_number' => null,
@@ -259,9 +286,20 @@ class SalesInvoiceService
                 $lineDiscountTotal += $discountAmount;
                 $totalAmount += $lineAmount;
                 $totalVat += $vatAmount;
+                $lineLcyValues[] = $lineLcy;
             }
 
             $grandTotal = $totalAmount + $totalVat;
+
+            $calculator = app(SalesDocumentMonetaryCalculator::class);
+            $subtotalLcy = $calculator->total(array_column($lineLcyValues, 'line_total_lcy'));
+            $lineDiscountTotalLcy = $calculator->total(array_column($lineLcyValues, 'line_discount_amount_lcy'));
+            $totalAmountLcy = $calculator->total(array_column($lineLcyValues, 'line_amount_lcy'));
+            $totalVatLcy = $calculator->total(array_column($lineLcyValues, 'vat_amount_lcy'));
+            $grandTotalLcy = $totalAmountLcy === null
+                ? null
+                : DecimalMath::add($totalAmountLcy, $totalVatLcy ?? '0', DecimalPrecision::AMOUNT_SCALE);
+
             $postedInvoice->update([
                 'subtotal' => $subtotal,
                 'line_discount_total' => $lineDiscountTotal,
@@ -270,6 +308,13 @@ class SalesInvoiceService
                 'total_vat' => $totalVat,
                 'grand_total' => $grandTotal,
                 'remaining_amount' => $grandTotal,
+                'subtotal_lcy' => $subtotalLcy,
+                'line_discount_total_lcy' => $lineDiscountTotalLcy,
+                'invoice_discount_amount_lcy' => $totalAmountLcy === null ? null : DecimalMath::toScale(0, DecimalPrecision::AMOUNT_SCALE),
+                'total_amount_lcy' => $totalAmountLcy,
+                'total_vat_lcy' => $totalVatLcy,
+                'grand_total_lcy' => $grandTotalLcy,
+                'remaining_amount_lcy' => $grandTotalLcy,
             ]);
 
             $invoiceLedgerExists = CustomerLedgerEntry::query()

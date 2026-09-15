@@ -495,9 +495,11 @@ it('preserves posted invoice economics on a linked credit memo line and does not
         'posted_sales_invoice_id' => $posted->id,
         'memo_number' => 'SCM-LINKED-001',
         'effective_date' => now()->toDateString(),
-        'currency_code' => 'NGN',
+        // A linked memo reverses the posted invoice, so the source posted
+        // invoice currency/factor are authoritative (Phase 3B2-B2).
+        'currency_code' => 'USD',
         'reason' => 'Customer return',
-        'currency_factor' => '1',
+        'currency_factor' => '1500',
         'items' => [[
             'item_id' => $item->id,
             'quantity' => 2,

@@ -110,8 +110,15 @@ class SalesInvoiceForm
                             }),
 
                         TextInput::make('currency_factor')
-                            ->label('Exchange Rate')
-                            ->helperText('1 FCY = X NGN')
+                            ->label('Exchange Rate (NGN per 1 FCY)')
+                            ->helperText(function (Get $get): string {
+                                $code = strtoupper((string) ($get('currency_code') ?: 'NGN'));
+                                $factor = $get('currency_factor');
+
+                                return $factor === null || $factor === ''
+                                    ? "Rate direction: 1 {$code} = NGN <rate>"
+                                    : 'Rate direction: 1 '.$code.' = NGN '.number_format((float) $factor, 2);
+                            })
                             ->numeric()
                             ->default(1)
                             ->minValue(0.000001)
@@ -303,8 +310,17 @@ class SalesInvoiceForm
                     ->schema([
                         TextInput::make('total_amount')
                             ->numeric()
-                            ->readonly()
-                            ->prefix('$')
+                            ->readOnly()
+                            ->prefix(fn (Get $get): string => (string) ($get('currency_code') ?: 'NGN'))
+                            ->extraInputAttributes(['class' => 'font-bold text-lg']),
+
+                        TextInput::make('total_amount_lcy')
+                            ->label('Total (LCY)')
+                            ->numeric()
+                            ->readOnly()
+                            ->prefix('NGN')
+                            ->dehydrated(false)
+                            ->visible(fn (Get $get): bool => strtoupper((string) $get('currency_code')) !== 'NGN')
                             ->extraInputAttributes(['class' => 'font-bold text-lg']),
 
                         Placeholder::make('post_info')

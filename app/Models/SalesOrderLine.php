@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\SalesLinePricingStatus;
 use App\Services\DimensionManagementService;
+use App\Services\Sales\SalesDocumentMonetaryCalculator;
 use App\Support\DocumentCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -48,6 +49,7 @@ class SalesOrderLine extends Model
         'line_amount_lcy',
         'line_discount_amount_lcy',
         'vat_amount_lcy',
+        'amount_including_vat_lcy',
         'planned_delivery_date',
         'requested_delivery_date',
         'promised_delivery_date',
@@ -90,6 +92,7 @@ class SalesOrderLine extends Model
         'line_amount_lcy' => 'decimal:4',
         'line_discount_amount_lcy' => 'decimal:4',
         'vat_amount_lcy' => 'decimal:4',
+        'amount_including_vat_lcy' => 'decimal:4',
         'reserved_quantity' => 'decimal:4',
         'return_quantity' => 'decimal:4',
         'planned_delivery_date' => 'date',
@@ -126,6 +129,8 @@ class SalesOrderLine extends Model
             $line->amount_including_vat = $line->line_amount + $line->vat_amount;
             $line->quantity_to_ship = $line->quantity;
 
+            $line->deriveLcyAmounts();
+
             // Copy posting groups from item if not set
             if ($line->item_id && ! $line->general_product_posting_group_id) {
                 $item = Item::find($line->item_id);
@@ -159,6 +164,8 @@ class SalesOrderLine extends Model
             // Update quantity to ship
             $line->quantity_to_ship = $line->quantity - $line->quantity_shipped;
 
+            $line->deriveLcyAmounts();
+
             $line->syncDimensionsWithDefaults();
         });
 
@@ -180,6 +187,44 @@ class SalesOrderLine extends Model
         }
 
         $order->saveRecalculatedTotalsFromPersistedLines();
+    }
+
+    /**
+     * Derive the LCY recognition equivalents of this line's document-currency
+     * monetary components.
+     *
+     * Commercial (FCY) values remain authoritative and are never modified here;
+     * only the `*_lcy` counterparts are set. The parent order's currency context
+     * is the authority: when it is unknown, or a foreign factor is unresolved,
+     * any existing LCY values are left untouched rather than cleared or
+     * fabricated for a legacy/ambiguous row.
+     */
+    public function deriveLcyAmounts(): void
+    {
+        $order = $this->relationLoaded('salesOrder') ? $this->salesOrder : $this->salesOrder()->first();
+
+        if (! $order instanceof SalesOrder) {
+            return;
+        }
+
+        $derived = app(SalesDocumentMonetaryCalculator::class)->deriveComponents(
+            $order->currency_code,
+            $order->currency_factor,
+            [
+                'unit_price_lcy' => $this->unit_price,
+                'line_total_lcy' => $this->line_total,
+                'line_amount_lcy' => $this->line_amount,
+                'line_discount_amount_lcy' => $this->line_discount_amount,
+                'vat_amount_lcy' => $this->vat_amount,
+                'amount_including_vat_lcy' => $this->amount_including_vat,
+            ],
+        );
+
+        foreach ($derived as $column => $value) {
+            if ($value !== null) {
+                $this->{$column} = $value;
+            }
+        }
     }
 
     public function syncDimensionsWithDefaults(): void
