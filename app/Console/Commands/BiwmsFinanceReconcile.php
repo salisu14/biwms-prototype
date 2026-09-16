@@ -16,6 +16,8 @@ use App\Models\PostingTransaction;
 use App\Models\ValueEntry;
 use App\Models\VendorLedgerEntry;
 use App\Models\VendorPostingGroup;
+use App\Support\DocumentCurrency;
+use App\Support\LedgerSemantics;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -395,7 +397,8 @@ class BiwmsFinanceReconcile extends Command
             ->map(function (VendorPostingGroup $group): ?array {
                 $subledgerBalance = (float) VendorLedgerEntry::query()
                     ->where('vendor_posting_group_id', $group->id)
-                    ->sum(DB::raw('credit_amount - debit_amount'));
+                    ->where('reversed', false)
+                    ->sum(DB::raw(LedgerSemantics::signedLcyRemainingSql('vendor_ledger_entries')));
 
                 $glBalance = $this->glCreditMinusDebit((int) $group->payables_account_id);
                 $difference = round($subledgerBalance - $glBalance, 2);
@@ -403,6 +406,16 @@ class BiwmsFinanceReconcile extends Command
                 if (abs($difference) < 0.01) {
                     return null;
                 }
+
+                // The difference may be fully explained by the known pre-3C-C
+                // foreign-currency purchase-invoice G/L convention (the payable
+                // control leg was posted in document currency while the vendor
+                // ledger is now LCY-normalized). Only classify as transitional
+                // when that known condition accounts for the whole difference;
+                // any residual stays a genuine critical mismatch.
+                $legacyFcyInvoiceGap = $this->legacyFcyInvoiceLcyGap((int) $group->id);
+                $unexplainedDifference = round($difference - $legacyFcyInvoiceGap, 2);
+                $isTransitional = abs($legacyFcyInvoiceGap) >= 0.01 && abs($unexplainedDifference) < 0.01;
 
                 return [
                     'posting_group_id' => $group->id,
@@ -412,16 +425,69 @@ class BiwmsFinanceReconcile extends Command
                     'subledger_balance' => round($subledgerBalance, 2),
                     'gl_balance' => round($glBalance, 2),
                     'difference' => $difference,
+                    'legacy_fcy_invoice_lcy_gap' => round($legacyFcyInvoiceGap, 2),
+                    'unexplained_difference' => $unexplainedDifference,
                     ...$this->findingMetadata(
-                        classification: 'vendor_ledger_gl_mismatch',
-                        severity: 'critical',
-                        suggestedRemediation: 'Trace vendor ledger entries to the payables control G/L entries by document number and posting date, then correct through approved posting/reversal paths.'
+                        classification: $isTransitional
+                            ? 'legacy_gl_currency_semantics_pending_3c_c'
+                            : 'vendor_ledger_gl_mismatch',
+                        severity: $isTransitional ? 'warning' : 'critical',
+                        suggestedRemediation: $isTransitional
+                            ? 'Known historical posting-semantics gap, pending Phase 3C-C. Legacy foreign-currency purchase invoice payable control G/L entries were posted in document currency under the pre-3C-C convention while the vendor ledger is now carried in LCY, so the payables control account does not reconcile under LCY yet. No data repair, repost or reversal of these historical transactions is required; equality is restored by Purchase invoice G/L caller adoption (Phase 3C-C).'
+                            : 'Trace vendor ledger entries to the payables control G/L entries by document number and posting date, then correct through approved posting/reversal paths.'
                     ),
                 ];
             })
             ->filter()
             ->values()
             ->all();
+    }
+
+    /**
+     * The portion of a payables-group difference explained by the known
+     * pre-3C-C foreign-currency purchase-invoice G/L convention.
+     *
+     * For those invoices the payable control G/L leg carries the document (FCY)
+     * amount, while the vendor ledger row carries its LCY-normalized amount, so
+     * the LCY subledger and the document-currency control disagree by exactly
+     * (LCY - document). Rows that cannot be normalized under the trusted
+     * LedgerSemantics rules are excluded rather than guessed.
+     */
+    private function legacyFcyInvoiceLcyGap(int $postingGroupId): float
+    {
+        $rows = VendorLedgerEntry::query()
+            ->where('vendor_posting_group_id', $postingGroupId)
+            ->where('reversed', false)
+            ->where('document_type', 'PURCHASE_INVOICE')
+            ->whereNotNull('currency_code')
+            ->whereRaw('UPPER(currency_code) <> ?', [DocumentCurrency::LCY_CODE])
+            ->get([
+                'credit_amount',
+                'debit_amount',
+                'amount',
+                'remaining_amount',
+                'original_remaining_amount',
+                'currency_factor',
+                'currency_code',
+                'ledger_semantics_version',
+                'document_type',
+            ]);
+
+        $gap = 0.0;
+
+        foreach ($rows as $row) {
+            $lcyRemaining = $row->lcy_remaining_amount;
+            $documentRemaining = $row->document_remaining_amount;
+
+            if ($lcyRemaining === null || $documentRemaining === null) {
+                continue;
+            }
+
+            $sign = (float) $row->credit_amount > 0 ? 1.0 : -1.0;
+            $gap += $sign * ($lcyRemaining - $documentRemaining);
+        }
+
+        return round($gap, 2);
     }
 
     /**
@@ -801,7 +867,7 @@ class BiwmsFinanceReconcile extends Command
                 'vle.document_type',
                 'vle.document_number',
                 'coa.account_number',
-                DB::raw('COALESCE(SUM(vle.credit_amount - vle.debit_amount), 0) as amount'),
+                DB::raw('COALESCE(SUM('.LedgerSemantics::lcyNetSql('vle').'), 0) as amount'),
             ])
             ->map(fn ($entry): array => [
                 'control_type' => 'VENDOR',
@@ -809,6 +875,7 @@ class BiwmsFinanceReconcile extends Command
                 'document_type' => $entry->document_type,
                 'document_number' => $entry->document_number,
                 'amount' => round((float) $entry->amount, 2),
+                'amount_unit' => 'LCY',
                 'source_hint' => 'Vendor Ledger Entry',
                 ...$this->findingMetadata(
                     classification: 'missing_control_account_entry',
@@ -1134,9 +1201,12 @@ class BiwmsFinanceReconcile extends Command
 
     private function glCreditMinusDebit(int $chartOfAccountId): float
     {
+        // LCY representation: legacy writers store the document amount in the
+        // nominal column and the LCY value in *_lcy; the kernel writes LCY in
+        // both. The subledger side is LCY-normalized, so compare like with like.
         return (float) GlEntry::query()
             ->where('chart_of_account_id', $chartOfAccountId)
-            ->sum(DB::raw('credit_amount - debit_amount'));
+            ->sum(DB::raw('COALESCE(credit_amount_lcy, credit_amount) - COALESCE(debit_amount_lcy, debit_amount)'));
     }
 
     /**

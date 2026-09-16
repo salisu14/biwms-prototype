@@ -18,6 +18,7 @@ use App\Models\GeneralLedgerSetup;
 use App\Models\User;
 use App\Models\VendorLedgerEntry;
 use App\Services\Finance\GeneralLedgerService;
+use App\Support\LedgerSemantics;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -517,6 +518,13 @@ class BankAccountLedgerService
         BankAccountLedgerEntry $bankEntry,
         VendorLedgerEntry $vendorEntry
     ): void {
+        // This legacy path mutates the vendor ledger remaining amount with a
+        // bank-currency amount. It is not version-2 aware, so it must never
+        // touch an LCY-base row; fail closed instead of corrupting it.
+        if (LedgerSemantics::isVersionTwo($vendorEntry->ledger_semantics_version)) {
+            throw new BusinessException('Bank-ledger settlement is not version-2 aware and cannot mutate an LCY-base (version 2) vendor ledger entry. Use the vendor payment settlement service.');
+        }
+
         // Update vendor entry with payment application
         $vendorEntry->update([
             'remaining_amount' => max(0, $vendorEntry->remaining_amount - abs($bankEntry->amount)),

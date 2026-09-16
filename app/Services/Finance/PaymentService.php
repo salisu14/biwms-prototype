@@ -29,6 +29,7 @@ use App\Services\BankAccountLedgerService;
 use App\Services\CurrencyService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
+use App\Support\LedgerSemantics;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -209,15 +210,18 @@ class PaymentService
 
             // --- Multi-Currency & Gain/Loss Logic (Business Central Style) ---
 
-            // Convert applied amount to LCY using both rates
-            $ratePayment = $payment->currency_factor ?? 1.0;
-            $rateDocument = $document->currency_factor ?? 1.0;
+            // Convert applied amount to LCY using both factors, resolved through
+            // the certified shared contract: NGN resolves to 1, a foreign
+            // currency must carry an explicit positive factor, and the result is
+            // deterministic decimal arithmetic at the ledger amount scale.
+            $paymentFactor = LedgerSemantics::normalizeFactor($payment->currency_code, $payment->currency_factor);
+            $documentFactor = LedgerSemantics::normalizeFactor($document->currency_code, $document->currency_factor);
 
-            $appliedLCYPayment = $amountToApply * $ratePayment;
-            $appliedLCYDocument = $amountToApply * $rateDocument;
+            $appliedLCYPayment = (float) LedgerSemantics::lcyFromDocument($amountToApply, $paymentFactor);
+            $appliedLCYDocument = (float) LedgerSemantics::lcyFromDocument($amountToApply, $documentFactor);
 
             // Realized gain/loss is the LCY value difference for the same FCY amount.
-            $gainLossAmount = $appliedLCYPayment - $appliedLCYDocument;
+            $gainLossAmount = round($appliedLCYPayment - $appliedLCYDocument, 4);
 
             // Create application record
             $remainingBefore = $this->roundMoney((float) $document->remaining_amount, $precision);
@@ -247,6 +251,7 @@ class PaymentService
                 'document_remaining_before' => $remainingBefore,
                 'amount_applied' => $amountToApply,
                 'amount_applied_lcy' => $appliedLCYPayment,
+                'document_amount_applied_lcy' => $appliedLCYDocument,
                 'gain_loss_amount' => $gainLossAmount,
                 'discount_applied' => $discountApplied,
                 'write_off_amount' => $writeOffAmount,
@@ -586,6 +591,19 @@ class PaymentService
             return;
         }
 
+        if (LedgerSemantics::isVersionTwo($ledgerEntry->ledger_semantics_version)) {
+            $remaining = max(0, $remaining);
+
+            $ledgerEntry->update([
+                'remaining_amount' => max(0, (float) LedgerSemantics::lcyFromDocument($remaining, $ledgerEntry->currency_factor)),
+                'original_remaining_amount' => $remaining,
+                'open' => $remaining > $tolerance,
+                'fully_applied' => $remaining <= $tolerance,
+            ]);
+
+            return;
+        }
+
         $ledgerEntry->update([
             'remaining_amount' => max(0, $remaining),
             'open' => $remaining > $tolerance,
@@ -609,6 +627,17 @@ class PaymentService
         $remaining = $this->roundMoney((float) $payment->unapplied_amount, 4);
         if (abs($remaining) <= $tolerance) {
             $remaining = 0.0;
+        }
+
+        if (LedgerSemantics::isVersionTwo($ledgerEntry->ledger_semantics_version)) {
+            $ledgerEntry->update([
+                'remaining_amount' => max(0, (float) LedgerSemantics::lcyFromDocument($remaining, $ledgerEntry->currency_factor)),
+                'original_remaining_amount' => max(0, $remaining),
+                'open' => $remaining > $tolerance,
+                'fully_applied' => $remaining <= $tolerance,
+            ]);
+
+            return;
         }
 
         $ledgerEntry->update([
@@ -727,7 +756,19 @@ class PaymentService
             ->first();
 
         $nextEntryNumber = ((int) ($lastEntry?->entry_number ?? 0)) + 1;
-        $runningBalance = (float) ($lastEntry?->running_balance ?? 0) - (float) $payment->payment_amount;
+
+        // Version-2 vendor ledger semantics: base columns carry the LCY value at
+        // the payment recognition factor, original columns the document amount.
+        $factor = LedgerSemantics::normalizeFactor($payment->currency_code, $payment->currency_factor);
+        $paymentAmountLcy = (float) LedgerSemantics::lcyFromDocument($payment->payment_amount, $factor);
+        $unappliedAmount = (float) $payment->unapplied_amount;
+        $unappliedAmountLcy = (float) LedgerSemantics::lcyFromDocument($unappliedAmount, $factor);
+
+        $runningBalance = VendorLedgerEntry::calculateLcyRunningBalance(
+            $vendor->id,
+            $nextEntryNumber,
+            -$paymentAmountLcy,
+        )['value'];
 
         return VendorLedgerEntry::create([
             'entry_number' => $nextEntryNumber,
@@ -738,18 +779,20 @@ class PaymentService
             'description' => "Payment {$payment->payment_number}",
             'posting_date' => $payment->posting_date,
             'document_date' => $payment->payment_date,
-            'debit_amount' => $payment->payment_amount,
+            'debit_amount' => $paymentAmountLcy,
             'credit_amount' => 0,
-            'amount' => -$payment->payment_amount,
+            'amount' => -$paymentAmountLcy,
             'running_balance' => $runningBalance,
-            'remaining_amount' => $payment->unapplied_amount,
-            'open' => ((float) $payment->unapplied_amount) > 0.01,
-            'fully_applied' => ((float) $payment->unapplied_amount) <= 0.01,
+            'remaining_amount' => $unappliedAmountLcy,
+            'open' => $unappliedAmount > 0.01,
+            'fully_applied' => $unappliedAmount <= 0.01,
             'currency_id' => $payment->currency_id,
             'currency_code' => $payment->currency_code,
-            'currency_factor' => $payment->currency_factor,
+            'currency_factor' => $factor,
             'original_debit_amount' => $payment->payment_amount,
             'original_credit_amount' => 0,
+            'original_remaining_amount' => $unappliedAmount,
+            'ledger_semantics_version' => LedgerSemantics::VERSION_LCY_BASE,
             'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
             'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
             'source_id' => $payment->id,

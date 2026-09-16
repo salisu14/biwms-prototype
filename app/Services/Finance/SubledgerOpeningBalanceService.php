@@ -18,6 +18,8 @@ use App\Services\AuditTrailService;
 use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
 use App\Services\PostingDateValidator;
+use App\Support\DocumentCurrency;
+use App\Support\LedgerSemantics;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -67,11 +69,13 @@ final class SubledgerOpeningBalanceService
         }
 
         $postingDate = $data['posting_date'] ?? now();
-        $currencyCode = strtoupper((string) ($data['currency_code'] ?? 'NGN'));
-        $currencyFactor = (float) ($data['currency_factor'] ?? 1);
-        if ($currencyFactor <= 0) {
-            throw new BusinessException('Currency factor must be greater than zero.');
-        }
+        $currencyCode = strtoupper(trim((string) ($data['currency_code'] ?? DocumentCurrency::LCY_CODE)));
+
+        // Certified factor contract: NGN resolves to 1 when omitted, a foreign
+        // currency must state an explicit positive factor (fail closed), and the
+        // persisted factor is normalized to 6 dp so the derived LCY amount is
+        // reproducible for the version-2 ledger representation.
+        $currencyFactor = $this->resolveOpeningCurrencyFactor($currencyCode, $data['currency_factor'] ?? null);
 
         $group = $partyType === 'CUSTOMER' ? $party->customerPostingGroup : $party->vendorPostingGroup;
         $controlAccount = $partyType === 'CUSTOMER'
@@ -102,7 +106,7 @@ final class SubledgerOpeningBalanceService
 
             $documentNumber = $this->numberSeriesService->getNextNo($numberSeries, Carbon::parse($postingDate));
             $equity = $this->openingEquityAccount();
-            $amountLcy = round($amount * $currencyFactor, 4);
+            $amountLcy = (float) LedgerSemantics::lcyFromDocument($amount, $currencyFactor);
 
             $opening = SubledgerOpeningBalance::query()->create([
                 'business_id' => $businessId,
@@ -232,8 +236,17 @@ final class SubledgerOpeningBalanceService
                 'description' => $opening->description,
             ]);
 
+            $ledgerNumber = $this->nextLedgerNumber($opening);
+
+            // Vendor opening balances are version-2 (LCY base), so their running
+            // balance uses the prospective LCY-normalized contract; customer rows
+            // keep their legacy raw-increment behaviour.
+            $runningBalance = $opening->party_type === 'CUSTOMER'
+                ? $this->partyBalance($opening, $amount)
+                : VendorLedgerEntry::calculateLcyRunningBalance($party->id, $ledgerNumber, -$amount)['value'];
+
             $ledgerData = [
-                'entry_number' => $this->nextLedgerNumber($opening),
+                'entry_number' => $ledgerNumber,
                 'business_id' => $opening->business_id,
                 'document_type' => 'OPENING_BALANCE',
                 'document_number' => $opening->document_number,
@@ -244,9 +257,7 @@ final class SubledgerOpeningBalanceService
                 'amount' => $opening->party_type === 'CUSTOMER' ? $amount : -$amount,
                 'debit_amount' => $opening->party_type === 'CUSTOMER' ? $amount : 0,
                 'credit_amount' => $opening->party_type === 'CUSTOMER' ? 0 : $amount,
-                'running_balance' => $opening->party_type === 'CUSTOMER'
-                    ? $this->partyBalance($opening, $amount)
-                    : $this->partyBalance($opening, -$amount),
+                'running_balance' => $runningBalance,
                 // Ledger remaining amounts are maintained in local currency;
                 // original_amount remains the document-currency snapshot.
                 'remaining_amount' => $amount,
@@ -266,6 +277,15 @@ final class SubledgerOpeningBalanceService
                 'created_by' => $actorId,
                 'dimensions' => $opening->dimensions ?? [],
             ];
+
+            if ($opening->party_type === 'VENDOR') {
+                // Phase 3D-1: vendor opening balances already carry LCY base
+                // values, so mark them explicitly and record the document-currency
+                // open amount. Customer rows keep the schema capability only.
+                $ledgerData['ledger_semantics_version'] = LedgerSemantics::VERSION_LCY_BASE;
+                $ledgerData['original_remaining_amount'] = $opening->original_amount;
+            }
+
             $ledger = $opening->party_type === 'CUSTOMER'
                 ? CustomerLedgerEntry::query()->create(['customer_id' => $party->id, ...$ledgerData])
                 : VendorLedgerEntry::query()->create(['vendor_id' => $party->id, ...$ledgerData]);
@@ -319,21 +339,24 @@ final class SubledgerOpeningBalanceService
             }
 
             $amount = (float) ($data['original_amount'] ?? $locked->original_amount);
-            $factor = (float) ($data['currency_factor'] ?? $locked->currency_factor);
-            if ($amount <= 0 || $factor <= 0) {
-                throw new BusinessException('Opening amount and currency factor must be greater than zero.');
+            $currencyCode = strtoupper(trim((string) ($data['currency_code'] ?? $locked->currency_code)));
+            $factor = $this->resolveOpeningCurrencyFactor($currencyCode, $data['currency_factor'] ?? $locked->currency_factor);
+            if ($amount <= 0) {
+                throw new BusinessException('Opening amount must be greater than zero.');
             }
+
+            $amountLcy = (float) LedgerSemantics::lcyFromDocument($amount, $factor);
 
             $locked->forceFill([
                 'party_type' => $partyType,
                 'customer_id' => $partyType === 'CUSTOMER' ? $party->id : null,
                 'vendor_id' => $partyType === 'VENDOR' ? $party->id : null,
                 'original_amount' => $amount,
-                'currency_code' => strtoupper((string) ($data['currency_code'] ?? $locked->currency_code)),
+                'currency_code' => $currencyCode,
                 'currency_factor' => $factor,
-                'amount_lcy' => round($amount * $factor, 4),
+                'amount_lcy' => $amountLcy,
                 'remaining_amount' => $amount,
-                'remaining_amount_lcy' => round($amount * $factor, 4),
+                'remaining_amount_lcy' => $amountLcy,
                 'posting_date' => $data['posting_date'] ?? $locked->posting_date,
                 'document_date' => $data['document_date'] ?? $locked->document_date,
                 'due_date' => $data['due_date'] ?? null,
@@ -388,6 +411,36 @@ final class SubledgerOpeningBalanceService
 
             return $opening->fresh();
         });
+    }
+
+    /**
+     * Resolve an opening-balance exchange-rate factor through the certified
+     * shared contract.
+     *
+     * NGN is well-defined at factor 1 even when the factor is omitted. A
+     * foreign currency must state an explicit finite strictly-positive factor
+     * and fails closed (rather than silently becoming 1). The returned factor
+     * is normalized to 6 dp so the persisted factor reproduces the LCY amount
+     * exactly.
+     */
+    private function resolveOpeningCurrencyFactor(string $currencyCode, mixed $factor): float
+    {
+        if ($factor === null || $factor === '') {
+            $factor = DocumentCurrency::isLocalCurrency($currencyCode) ? '1' : null;
+        }
+
+        if ($factor !== null && (float) $factor <= 0) {
+            throw new BusinessException('Currency factor must be greater than zero.');
+        }
+
+        try {
+            return (float) LedgerSemantics::normalizeFactor($currencyCode, $factor);
+        } catch (\InvalidArgumentException $exception) {
+            throw new BusinessException(
+                'An explicit positive exchange-rate factor is required for a foreign-currency opening balance.',
+                previous: $exception,
+            );
+        }
     }
 
     private function resolveParty(string $partyType, int $partyId): Customer|Vendor

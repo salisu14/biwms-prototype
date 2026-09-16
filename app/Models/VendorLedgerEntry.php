@@ -7,6 +7,9 @@ namespace App\Models;
 use App\Exceptions\BusinessException;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\NumberSeriesService;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
+use App\Support\LedgerSemantics;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -46,6 +49,8 @@ class VendorLedgerEntry extends Model
         'original_debit_amount',
         'original_credit_amount',
         'currency_factor',
+        'original_remaining_amount',
+        'ledger_semantics_version',
         'general_business_posting_group_id',
         'vendor_posting_group_id',
         'gl_entry_id',
@@ -79,6 +84,8 @@ class VendorLedgerEntry extends Model
         'original_debit_amount' => 'decimal:4',
         'original_credit_amount' => 'decimal:4',
         'currency_factor' => 'decimal:6',
+        'original_remaining_amount' => 'decimal:4',
+        'ledger_semantics_version' => 'integer',
         'reversed' => 'boolean',
         'reversed_at' => 'datetime',
         'payment_discount_percent' => 'decimal:2',
@@ -108,6 +115,17 @@ class VendorLedgerEntry extends Model
 
             if (array_intersect($immutableFields, array_keys($entry->getDirty())) !== []) {
                 throw new BusinessException('Posted vendor ledger facts are immutable. Use an approved posting, settlement, or reversal service.');
+            }
+
+            // Semantic immutability: a legacy/unclassified row can never be
+            // promoted to version 2 by a generic fill/update. Only row creation
+            // (approved posting, reversal and opening-balance paths) may stamp
+            // the prospective semantics, so historical rows can never be
+            // silently reinterpreted as LCY-base.
+            if (array_key_exists('ledger_semantics_version', $entry->getDirty())
+                && ! LedgerSemantics::isVersionTwo($entry->getOriginal('ledger_semantics_version'))
+                && LedgerSemantics::isVersionTwo($entry->ledger_semantics_version)) {
+                throw new BusinessException('The vendor ledger semantics version is immutable: a legacy vendor ledger entry cannot be promoted to version 2.');
             }
         });
 
@@ -257,23 +275,85 @@ class VendorLedgerEntry extends Model
 
     public function getSignedRemainingAmountAttribute(): float
     {
-        $remainingAmount = (float) $this->remaining_amount;
+        return LedgerSemantics::signedRemaining(
+            $this->is_debit_entry,
+            $this->is_credit_entry,
+            $this->amount,
+            (float) $this->remaining_amount,
+        );
+    }
 
-        if ($remainingAmount === 0.0) {
-            return 0.0;
+    /**
+     * True when this row explicitly declares the version-2 prospective
+     * semantics (base columns are LCY, original columns are document currency).
+     */
+    public function getIsVersionTwoAttribute(): bool
+    {
+        return LedgerSemantics::isVersionTwo($this->ledger_semantics_version);
+    }
+
+    /**
+     * The document-currency (FCY) amount still open.
+     *
+     * Version-2 rows track it explicitly; legacy rows keep it in the base
+     * `remaining_amount` column, whose meaning is document currency for them.
+     */
+    public function getDocumentRemainingAmountAttribute(): ?float
+    {
+        if ($this->is_version_two) {
+            return $this->original_remaining_amount === null
+                ? null
+                : (float) $this->original_remaining_amount;
         }
 
-        if ($this->is_credit_entry) {
-            return abs($remainingAmount);
-        }
+        return (float) $this->remaining_amount;
+    }
 
-        if ($this->is_debit_entry) {
-            return -abs($remainingAmount);
-        }
+    /**
+     * LCY carrying value of the open remaining amount, or null when the row
+     * cannot be converted under a trusted rule.
+     */
+    public function getLcyRemainingAmountAttribute(): ?float
+    {
+        $lcy = LedgerSemantics::toLcy(
+            $this->remaining_amount,
+            $this->ledger_semantics_version,
+            $this->document_type,
+            $this->currency_factor,
+            $this->currency_code,
+        );
 
-        return (float) $this->amount >= 0
-            ? abs($remainingAmount)
-            : -abs($remainingAmount);
+        return $lcy === null ? null : (float) $lcy;
+    }
+
+    /**
+     * LCY carrying value of the signed `amount` column, or null when the row
+     * cannot be converted under a trusted rule.
+     */
+    public function getLcyAmountAttribute(): ?float
+    {
+        $lcy = LedgerSemantics::toLcy(
+            $this->amount,
+            $this->ledger_semantics_version,
+            $this->document_type,
+            $this->currency_factor,
+            $this->currency_code,
+        );
+
+        return $lcy === null ? null : (float) $lcy;
+    }
+
+    /**
+     * Signed LCY open exposure: the control-account measure for this row.
+     */
+    public function getSignedLcyRemainingAmountAttribute(): float
+    {
+        return LedgerSemantics::signedRemaining(
+            $this->is_debit_entry,
+            $this->is_credit_entry,
+            $this->lcy_amount ?? $this->amount,
+            $this->lcy_remaining_amount ?? 0.0,
+        );
     }
 
     public function getDaysOverdueAttribute(): ?int
@@ -372,7 +452,10 @@ class VendorLedgerEntry extends Model
             throw new \Exception('Only vendor payment or credit memo entries can be applied');
         }
 
+        $creditVersionTwo = LedgerSemantics::isVersionTwo($creditEntry->ledger_semantics_version);
+
         $totalApplied = 0.0;
+        $totalAppliedLcy = 0.0;
         $appliedEntries = $creditEntry->applied_to_entries ?? [];
 
         foreach ($normalizedApplications as $app) {
@@ -394,6 +477,53 @@ class VendorLedgerEntry extends Model
             if (filled($creditEntry->currency_code) && filled($invoiceEntry->currency_code)
                 && strtoupper((string) $creditEntry->currency_code) !== strtoupper((string) $invoiceEntry->currency_code)) {
                 throw new BusinessException('Vendor settlement entries must use the same currency.');
+            }
+
+            if ($creditVersionTwo !== LedgerSemantics::isVersionTwo($invoiceEntry->ledger_semantics_version)) {
+                throw new BusinessException('Vendor settlement entries must share the same ledger semantics version.');
+            }
+
+            if ($creditVersionTwo) {
+                // Version-2 settlement is driven by the document-currency amount;
+                // the base LCY carrying amount is released at each entry's own
+                // recognition factor so both representations stay synchronized.
+                if (DecimalMath::compare($creditEntry->currency_factor, $invoiceEntry->currency_factor) !== 0) {
+                    throw new BusinessException('Vendor settlement entries must use the same recognition factor.');
+                }
+
+                $creditDocumentRemaining = (float) ($creditEntry->original_remaining_amount ?? 0);
+                $invoiceDocumentRemaining = (float) ($invoiceEntry->original_remaining_amount ?? 0);
+
+                $appliedDocumentAmount = min(
+                    (float) $app['amount'],
+                    max(0, $creditDocumentRemaining - $totalApplied),
+                    $invoiceDocumentRemaining,
+                );
+
+                if ($appliedDocumentAmount <= 0) {
+                    continue;
+                }
+
+                $invoiceLcyReleased = (float) LedgerSemantics::lcyFromDocument($appliedDocumentAmount, $invoiceEntry->currency_factor);
+                $settlementLcyReleased = (float) LedgerSemantics::lcyFromDocument($appliedDocumentAmount, $creditEntry->currency_factor);
+
+                $invoiceEntry->original_remaining_amount = max(0, $invoiceDocumentRemaining - $appliedDocumentAmount);
+                $invoiceEntry->remaining_amount = max(0, (float) $invoiceEntry->remaining_amount - $invoiceLcyReleased);
+                $invoiceEntry->open = $invoiceEntry->original_remaining_amount > 0.01;
+                $invoiceEntry->save();
+
+                $appliedEntries[] = [
+                    'entry_id' => $invoiceEntry->id,
+                    'document_number' => $invoiceEntry->document_number,
+                    'amount' => $appliedDocumentAmount,
+                    'lcy_amount' => $invoiceLcyReleased,
+                    'applied_at' => now()->toDateTimeString(),
+                ];
+
+                $totalApplied += $appliedDocumentAmount;
+                $totalAppliedLcy += $settlementLcyReleased;
+
+                continue;
             }
 
             $applyAmount = min(
@@ -420,6 +550,23 @@ class VendorLedgerEntry extends Model
             ];
 
             $totalApplied += $applyAmount;
+        }
+
+        if ($creditVersionTwo) {
+            $creditEntry->original_remaining_amount = max(0, (float) ($creditEntry->original_remaining_amount ?? 0) - $totalApplied);
+            $creditEntry->remaining_amount = max(0, (float) $creditEntry->remaining_amount - $totalAppliedLcy);
+            $creditEntry->applied_to_entries = $appliedEntries;
+            $creditEntry->fully_applied = $creditEntry->original_remaining_amount <= 0.01;
+            $creditEntry->open = ! $creditEntry->fully_applied;
+
+            if ($creditEntry->fully_applied) {
+                $creditEntry->original_remaining_amount = 0;
+                $creditEntry->remaining_amount = 0;
+            }
+
+            $creditEntry->save();
+
+            return $totalApplied;
         }
 
         // Update this entry
@@ -580,6 +727,8 @@ class VendorLedgerEntry extends Model
             }
 
             $reversalDocumentNumber = Str::limit('REV-'.$original->document_number, 20, '');
+            $reversalEntryNumber = self::getNextEntryNumber($original->vendor_id);
+            $reversalAmount = (float) -$original->amount;
 
             $reversalTransaction = app(GeneralLedgerService::class)->postTransaction(
                 $originalGlEntries->map(fn (GlEntry $entry): array => [
@@ -611,7 +760,7 @@ class VendorLedgerEntry extends Model
             );
 
             $reversal = self::create([
-                'entry_number' => self::getNextEntryNumber($original->vendor_id),
+                'entry_number' => $reversalEntryNumber,
                 'vendor_id' => $original->vendor_id,
                 'business_id' => $original->business_id,
                 'document_type' => 'ADJUSTMENT',
@@ -622,13 +771,20 @@ class VendorLedgerEntry extends Model
                 'debit_amount' => $original->credit_amount,
                 'credit_amount' => $original->debit_amount,
                 'amount' => -$original->amount,
-                'running_balance' => self::calculateNewBalance($original->vendor_id, -$original->amount),
+                'running_balance' => self::runningBalanceForNewRow(
+                    $original->vendor_id,
+                    $reversalEntryNumber,
+                    $reversalAmount,
+                    $original->ledger_semantics_version,
+                ),
                 'remaining_amount' => 0,
                 'open' => false,
                 'currency_code' => $original->currency_code,
                 'original_debit_amount' => $original->original_credit_amount,
                 'original_credit_amount' => $original->original_debit_amount,
+                'original_remaining_amount' => 0,
                 'currency_factor' => $original->currency_factor,
+                'ledger_semantics_version' => $original->ledger_semantics_version,
                 'general_business_posting_group_id' => $original->general_business_posting_group_id,
                 'vendor_posting_group_id' => $original->vendor_posting_group_id,
                 'gl_entry_id' => $reversalTransaction->glEntries->firstWhere('chart_of_account_id', $originalGlEntry->chart_of_account_id)?->id,
@@ -644,6 +800,7 @@ class VendorLedgerEntry extends Model
                 'reversed_by' => $userId,
                 'reversal_entry_number' => $reversal->entry_number,
                 'remaining_amount' => 0,
+                'original_remaining_amount' => 0,
                 'open' => false,
             ]);
 
@@ -672,8 +829,21 @@ class VendorLedgerEntry extends Model
         foreach ($this->applied_to_entries ?? [] as $app) {
             $invoiceEntry = self::find($app['entry_id']);
             if ($invoiceEntry) {
-                $invoiceEntry->remaining_amount += $app['amount'];
-                $invoiceEntry->open = true;
+                $restore = (float) ($app['amount'] ?? 0);
+
+                if (LedgerSemantics::isVersionTwo($invoiceEntry->ledger_semantics_version)) {
+                    $lcyRestore = array_key_exists('lcy_amount', $app)
+                        ? (float) $app['lcy_amount']
+                        : (float) LedgerSemantics::lcyFromDocument($restore, $invoiceEntry->currency_factor);
+
+                    $invoiceEntry->original_remaining_amount = (float) ($invoiceEntry->original_remaining_amount ?? 0) + $restore;
+                    $invoiceEntry->remaining_amount = (float) $invoiceEntry->remaining_amount + $lcyRestore;
+                    $invoiceEntry->open = $invoiceEntry->remaining_amount > 0.01;
+                } else {
+                    $invoiceEntry->remaining_amount += $restore;
+                    $invoiceEntry->open = true;
+                }
+
                 $invoiceEntry->save();
             }
         }
@@ -695,6 +865,66 @@ class VendorLedgerEntry extends Model
     }
 
     /**
+     * Prospective-safe (version-2) LCY running balance.
+     *
+     * The running balance of a version-2 row is the LCY-normalized sum of the
+     * vendor's trusted preceding rows plus this row's own LCY amount, evaluated
+     * with deterministic decimal arithmetic. Preceding rows are normalized
+     * through the shared {@see LedgerSemantics} rules, so a legacy
+     * document-currency row contributes its LCY carrying amount and cannot be
+     * mixed into the total at face value.
+     *
+     * A predecessor that cannot be normalized under those rules (no usable
+     * factor) is never fabricated into LCY. In that case the returned value is
+     * this row's own LCY amount and `authoritative` is false: a partial or
+     * mixed-unit total is never presented as a vendor running balance. No
+     * historical row is rewritten and the NOT NULL column keeps its schema.
+     *
+     * @return array{value: float, authoritative: bool}
+     */
+    public static function calculateLcyRunningBalance(int $vendorId, int $beforeEntryNumber, float $currentLcyAmount): array
+    {
+        $preceding = self::forVendor($vendorId)
+            ->where('entry_number', '<', $beforeEntryNumber)
+            ->get(['amount', 'currency_factor', 'currency_code', 'ledger_semantics_version', 'document_type']);
+
+        $sum = '0';
+
+        foreach ($preceding as $row) {
+            $lcy = $row->lcy_amount;
+
+            if ($lcy === null) {
+                return [
+                    'value' => (float) DecimalMath::toScale($currentLcyAmount, DecimalPrecision::AMOUNT_SCALE),
+                    'authoritative' => false,
+                ];
+            }
+
+            $sum = DecimalMath::add($sum, $lcy, DecimalPrecision::AMOUNT_SCALE);
+        }
+
+        $sum = DecimalMath::add($sum, $currentLcyAmount, DecimalPrecision::AMOUNT_SCALE);
+
+        return ['value' => (float) $sum, 'authoritative' => true];
+    }
+
+    /**
+     * Running balance for a newly created row, selecting the contract that
+     * matches the row's own semantics.
+     *
+     * Version-2 rows use the LCY-normalized contract; legacy rows keep the
+     * historical raw-increment behaviour unchanged.
+     */
+    protected static function runningBalanceForNewRow(int $vendorId, int $entryNumber, float $currentAmount, mixed $version): float
+    {
+        if (LedgerSemantics::isVersionTwo($version)) {
+            return self::calculateLcyRunningBalance($vendorId, $entryNumber, $currentAmount)['value'];
+        }
+
+        return self::calculateNewBalance($vendorId, $currentAmount);
+    }
+
+    /**
      * Get next entry number for vendor
      */
     protected static function getNextEntryNumber(int $vendorId): int
@@ -709,8 +939,11 @@ class VendorLedgerEntry extends Model
      */
     public static function createFromInvoice(PurchaseInvoice|PostedPurchaseInvoice $invoice): self
     {
-        $amount = abs((float) $invoice->grand_total);
+        $documentAmount = abs((float) $invoice->grand_total);
+        $factor = LedgerSemantics::normalizeFactor($invoice->currency_code, $invoice->currency_factor);
+        $amount = (float) LedgerSemantics::lcyFromDocument($documentAmount, $factor);
         $signedAmount = $amount; // Positive vendor balance for credit-side payable exposure
+        $entryNumber = self::getNextEntryNumber($invoice->vendor_id);
 
         // Parse payment terms for discount
         $discountPercent = null;
@@ -726,7 +959,7 @@ class VendorLedgerEntry extends Model
         }
 
         return self::create([
-            'entry_number' => self::getNextEntryNumber($invoice->vendor_id),
+            'entry_number' => $entryNumber,
             'vendor_id' => $invoice->vendor_id,
             'business_id' => $invoice->business_id,
             'document_type' => 'PURCHASE_INVOICE',
@@ -739,13 +972,15 @@ class VendorLedgerEntry extends Model
             'debit_amount' => 0,
             'credit_amount' => $amount,
             'amount' => $signedAmount,
-            'running_balance' => self::calculateNewBalance($invoice->vendor_id, $signedAmount),
+            'running_balance' => self::calculateLcyRunningBalance($invoice->vendor_id, $entryNumber, $signedAmount)['value'],
             'remaining_amount' => $amount,
             'open' => true,
             'currency_code' => $invoice->currency_code,
             'original_debit_amount' => 0,
-            'original_credit_amount' => $amount / $invoice->currency_factor,
-            'currency_factor' => $invoice->currency_factor,
+            'original_credit_amount' => $documentAmount,
+            'original_remaining_amount' => $documentAmount,
+            'currency_factor' => $factor,
+            'ledger_semantics_version' => LedgerSemantics::VERSION_LCY_BASE,
             'general_business_posting_group_id' => $invoice->general_business_posting_group_id,
             'vendor_posting_group_id' => $invoice->vendor_posting_group_id,
             'gl_entry_id' => GlEntry::query()
@@ -768,11 +1003,14 @@ class VendorLedgerEntry extends Model
      */
     public static function createFromCreditMemo(PostedPurchaseCreditMemo $creditMemo): self
     {
-        $amount = abs((float) $creditMemo->grand_total);
+        $documentAmount = abs((float) $creditMemo->grand_total);
+        $factor = LedgerSemantics::normalizeFactor($creditMemo->currency_code, $creditMemo->currency_factor);
+        $amount = (float) LedgerSemantics::lcyFromDocument($documentAmount, $factor);
         $signedAmount = -$amount; // Negative balance impact reduces vendor payable
+        $entryNumber = self::getNextEntryNumber($creditMemo->vendor_id);
 
         return self::create([
-            'entry_number' => self::getNextEntryNumber($creditMemo->vendor_id),
+            'entry_number' => $entryNumber,
             'vendor_id' => $creditMemo->vendor_id,
             'business_id' => $creditMemo->business_id,
             'document_type' => 'PURCHASE_CREDIT_MEMO',
@@ -785,13 +1023,15 @@ class VendorLedgerEntry extends Model
             'debit_amount' => $amount,
             'credit_amount' => 0,
             'amount' => $signedAmount,
-            'running_balance' => self::calculateNewBalance($creditMemo->vendor_id, $signedAmount),
+            'running_balance' => self::calculateLcyRunningBalance($creditMemo->vendor_id, $entryNumber, $signedAmount)['value'],
             'remaining_amount' => $amount,
             'open' => true,
             'currency_code' => $creditMemo->currency_code,
-            'original_debit_amount' => $amount / $creditMemo->currency_factor,
+            'original_debit_amount' => $documentAmount,
             'original_credit_amount' => 0,
-            'currency_factor' => $creditMemo->currency_factor,
+            'original_remaining_amount' => $documentAmount,
+            'currency_factor' => $factor,
+            'ledger_semantics_version' => LedgerSemantics::VERSION_LCY_BASE,
             'general_business_posting_group_id' => $creditMemo->general_business_posting_group_id,
             'vendor_posting_group_id' => $creditMemo->vendor_posting_group_id,
             'gl_entry_id' => GlEntry::query()
@@ -810,10 +1050,14 @@ class VendorLedgerEntry extends Model
      */
     public static function createFromPayment(Payment $payment): self
     {
-        $amount = -$payment->payment_amount; // Negative (reduces AP)
+        $documentAmount = abs((float) $payment->payment_amount);
+        $factor = LedgerSemantics::normalizeFactor($payment->currency_code, $payment->currency_factor);
+        $lcyAmount = (float) LedgerSemantics::lcyFromDocument($documentAmount, $factor);
+        $amount = -$lcyAmount; // Negative (reduces AP)
+        $entryNumber = self::getNextEntryNumber($payment->party_id);
 
         return self::create([
-            'entry_number' => self::getNextEntryNumber($payment->party_id),
+            'entry_number' => $entryNumber,
             'vendor_id' => $payment->party_id,
             'business_id' => $payment->business_id,
             'document_type' => 'PAYMENT',
@@ -823,16 +1067,18 @@ class VendorLedgerEntry extends Model
             'posting_date' => $payment->posting_date,
             'document_date' => $payment->payment_date,
             'due_date' => null, // Payments don't have due dates
-            'debit_amount' => $payment->payment_amount,
+            'debit_amount' => $lcyAmount,
             'credit_amount' => 0,
             'amount' => $amount,
-            'running_balance' => self::calculateNewBalance($payment->party_id, $amount),
+            'running_balance' => self::calculateLcyRunningBalance($payment->party_id, $entryNumber, $amount)['value'],
             'remaining_amount' => 0, // Payments are always closed
             'open' => false,
             'currency_code' => $payment->currency_code,
-            'original_debit_amount' => $payment->payment_amount / $payment->currency_factor,
+            'original_debit_amount' => $documentAmount,
             'original_credit_amount' => 0,
-            'currency_factor' => $payment->currency_factor,
+            'original_remaining_amount' => 0,
+            'currency_factor' => $factor,
+            'ledger_semantics_version' => LedgerSemantics::VERSION_LCY_BASE,
             'general_business_posting_group_id' => $payment->general_business_posting_group_id,
             'vendor_posting_group_id' => $payment->posting_group_id,
             'gl_entry_id' => $payment->glEntries()->first()?->id,
@@ -843,7 +1089,13 @@ class VendorLedgerEntry extends Model
     }
 
     /**
-     * Create payment entry (legacy method - prefer createFromPayment)
+     * Create payment entry (legacy method - prefer createFromPayment).
+     *
+     * Legacy, non-versioned factory: it has no currency context and therefore
+     * never stamps version-2 semantics. It must not be used where LCY-base
+     * (version 2) vendor ledger semantics are expected; use
+     * {@see self::createFromPayment()} instead. It is retained for backwards
+     * compatibility because it is public API.
      */
     public static function createPayment(
         int $vendorId,
@@ -904,7 +1156,7 @@ class VendorLedgerEntry extends Model
             $query->where('posting_date', '<=', $asOf);
         }
 
-        return $query->sum('amount');
+        return (float) $query->sum(DB::raw(LedgerSemantics::lcyAmountSql('vendor_ledger_entries')));
     }
 
     /**
@@ -927,11 +1179,19 @@ class VendorLedgerEntry extends Model
         ];
 
         foreach ($openEntries as $entry) {
-            if ($entry->is_invoice) {
-                $category = $entry->aging_category;
-                $aging[$category] += $entry->remaining_amount;
-                $aging['TOTAL'] += $entry->remaining_amount;
+            if (! $entry->is_invoice) {
+                continue;
             }
+
+            $lcyRemaining = $entry->lcy_remaining_amount;
+
+            if ($lcyRemaining === null) {
+                continue;
+            }
+
+            $category = $entry->aging_category;
+            $aging[$category] += $lcyRemaining;
+            $aging['TOTAL'] += $lcyRemaining;
         }
 
         return $aging;

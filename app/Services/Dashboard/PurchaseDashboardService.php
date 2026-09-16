@@ -5,9 +5,9 @@ namespace App\Services\Dashboard;
 use App\Models\PostedPurchaseCreditMemo;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PurchaseReceiptLine;
-use App\Models\SubledgerOpeningBalance;
 use App\Models\VendorLedgerEntry;
 use App\Services\Business\BusinessContextService;
+use App\Support\LedgerSemantics;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -118,6 +118,8 @@ class PurchaseDashboardService
 
     private function remainingAmountLcyExpression(string $table): string
     {
-        return "CASE WHEN {$table}.source_type = '".SubledgerOpeningBalance::class."' THEN ABS({$table}.remaining_amount) ELSE ABS({$table}.remaining_amount * COALESCE({$table}.currency_factor, 1)) END";
+        // Version-aware: legacy and version-2 rows are never summed as if they
+        // shared the same base-column semantics.
+        return LedgerSemantics::lcyRemainingSql($table);
     }
 }

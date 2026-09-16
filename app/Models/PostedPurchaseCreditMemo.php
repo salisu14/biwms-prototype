@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\Business\BusinessContextService;
 use App\Services\NumberSeriesService;
+use App\Support\LedgerSemantics;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -209,7 +210,19 @@ class PostedPurchaseCreditMemo extends Model
             ->where('source_type', self::class)
             ->first();
 
-        return $ledgerEntry?->remaining_amount ?? $this->grand_total;
+        if (! $ledgerEntry) {
+            return (float) $this->grand_total;
+        }
+
+        // Version-2 rows keep the base column in LCY; their document-currency
+        // (FCY) open amount is tracked separately, so the LCY carrying amount is
+        // never exposed where the document currency is expected. Legacy rows
+        // keep the base column, whose meaning is document currency for them.
+        if (LedgerSemantics::isVersionTwo($ledgerEntry->ledger_semantics_version)) {
+            return (float) ($ledgerEntry->original_remaining_amount ?? 0);
+        }
+
+        return (float) $ledgerEntry->remaining_amount;
     }
 
     public function getIsFullyAppliedAttribute(): bool

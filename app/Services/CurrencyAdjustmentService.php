@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\CurrencyAdjustmentType;
+use App\Exceptions\BusinessException;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
@@ -13,6 +14,7 @@ use App\Models\CurrencyBuffer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\VendorLedgerEntry;
 use App\Services\Finance\GeneralLedgerService;
+use App\Support\LedgerSemantics;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -74,6 +76,8 @@ class CurrencyAdjustmentService
         float $paymentExchangeRate,
         string $documentNo
     ): ?CurrencyAdjustmentLedger {
+        $this->assertEntryIsNotVersionTwo($entry);
+
         $originalRate = $entry->original_exch_rate ?? $entry->currency_factor;
         $currency = $this->currencyService->getByCode($entry->currency_code);
 
@@ -131,6 +135,10 @@ class CurrencyAdjustmentService
      */
     public function prepareRevaluationBuffer(Currency $currency, string $bufferType): Collection
     {
+        if ($bufferType === 'payable') {
+            $this->assertVendorPopulationIsNotVersionTwo($currency->code);
+        }
+
         $openEntries = match ($bufferType) {
             'payable' => VendorLedgerEntry::where('currency_code', $currency->code)
                 ->where('open', true)
@@ -168,6 +176,38 @@ class CurrencyAdjustmentService
     }
 
     // Private methods
+    /**
+     * Fail closed when a single vendor ledger entry carries version-2 semantics.
+     *
+     * This service is not version-2 aware: it treats `remaining_amount` as the
+     * document (FCY) amount. Reading an LCY-base row through that assumption
+     * would revalue and rewrite the wrong figures, so the path is fenced until
+     * a dedicated version-aware revaluation phase exists.
+     */
+    private function assertEntryIsNotVersionTwo(VendorLedgerEntry $entry): void
+    {
+        if (LedgerSemantics::isVersionTwo($entry->ledger_semantics_version)) {
+            throw new BusinessException('Currency adjustment is not version-2 aware: this vendor ledger entry carries LCY-base (version 2) semantics. The adjustment was not posted.');
+        }
+    }
+
+    /**
+     * Fail closed when the open vendor population for a currency contains any
+     * version-2 (LCY-base) row. See {@see self::assertEntryIsNotVersionTwo()}.
+     */
+    private function assertVendorPopulationIsNotVersionTwo(string $currencyCode): void
+    {
+        $hasVersionTwo = VendorLedgerEntry::query()
+            ->where('currency_code', $currencyCode)
+            ->where('open', true)
+            ->where('ledger_semantics_version', LedgerSemantics::VERSION_LCY_BASE)
+            ->exists();
+
+        if ($hasVersionTwo) {
+            throw new BusinessException('Currency adjustment is not version-2 aware: the open vendor ledger population for '.$currencyCode.' contains LCY-base (version 2) entries. The adjustment was not posted.');
+        }
+    }
+
     private function revalueVendorLedger(
         Currency $currency,
         float $newRate,
@@ -175,6 +215,8 @@ class CurrencyAdjustmentService
         string $documentNo
     ): array {
         $adjustments = [];
+
+        $this->assertVendorPopulationIsNotVersionTwo($currency->code);
 
         $openEntries = VendorLedgerEntry::where('currency_code', $currency->code)
             ->where('open', true)

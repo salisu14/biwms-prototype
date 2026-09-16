@@ -11,6 +11,7 @@ use App\Models\VendorPostingGroup;
 use App\Services\AuditTrailService;
 use App\Support\DecimalMath;
 use App\Support\DecimalPrecision;
+use App\Support\LedgerSemantics;
 use Illuminate\Support\Facades\DB;
 
 final class VendorLedgerHistoricalNormalizationService
@@ -86,6 +87,10 @@ final class VendorLedgerHistoricalNormalizationService
                 ->findOrFail($vendorLedgerEntryId);
 
             $this->assertUniqueInvoiceLedgerEntry($entry);
+
+            if (LedgerSemantics::isVersionTwo($entry->ledger_semantics_version)) {
+                throw new BusinessException('Version-2 vendor ledger entries are canonical by construction and are not eligible for historical normalization.');
+            }
 
             if ($this->isCanonicalInvoiceRepresentation($entry, $payablesGlEntryId)) {
                 return $entry;

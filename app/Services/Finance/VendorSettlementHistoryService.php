@@ -11,6 +11,7 @@ use App\Models\PostedPurchaseInvoice;
 use App\Models\PurchaseInvoice;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
+use App\Support\LedgerSemantics;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as Paginator;
@@ -257,7 +258,7 @@ class VendorSettlementHistoryService
             }
 
             $ledgerEntry = $sourceEntries->get((int) $sourceLedgerId);
-            $remaining = (float) $ledgerEntry->remaining_amount + $group->sum('amount_applied');
+            $remaining = $this->documentRemainingFor($ledgerEntry) + $group->sum('amount_applied');
 
             foreach ($group->sortBy('application_date')->values() as $row) {
                 $row->source_remaining_before = round($remaining, 4);
@@ -272,7 +273,7 @@ class VendorSettlementHistoryService
             }
 
             $ledgerEntry = $targetEntries->get((int) $targetLedgerId);
-            $remaining = (float) $ledgerEntry->remaining_amount + $group->sum('amount_applied');
+            $remaining = $this->documentRemainingFor($ledgerEntry) + $group->sum('amount_applied');
 
             foreach ($group->sortBy('application_date')->values() as $row) {
                 $row->target_remaining_before = round($remaining, 4);
@@ -282,6 +283,22 @@ class VendorSettlementHistoryService
         }
 
         return $rows->values();
+    }
+
+    /**
+     * The document-currency (FCY) remaining amount for reconstruction.
+     *
+     * Version-2 rows keep the document amount separately; legacy rows keep it in
+     * the base remaining_amount column. Applied amounts are document currency, so
+     * the reconstruction must stay in document currency for both.
+     */
+    private function documentRemainingFor(VendorLedgerEntry $entry): float
+    {
+        if (LedgerSemantics::isVersionTwo($entry->ledger_semantics_version)) {
+            return (float) ($entry->original_remaining_amount ?? 0);
+        }
+
+        return (float) $entry->remaining_amount;
     }
 
     /**

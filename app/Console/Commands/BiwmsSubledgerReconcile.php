@@ -12,6 +12,7 @@ use App\Models\PostedSalesCreditMemo;
 use App\Models\PostedSalesInvoice;
 use App\Models\SubledgerOpeningBalance;
 use App\Models\VendorLedgerEntry;
+use App\Support\LedgerSemantics;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
 
@@ -285,10 +286,19 @@ class BiwmsSubledgerReconcile extends Command
                 + (float) $row->discount_applied
                 + (float) $row->write_off_amount
         );
-        $originalAmount = abs((float) ($ledger->original_debit_amount ?: $ledger->original_credit_amount ?: $ledger->amount));
+        if (LedgerSemantics::isVersionTwo($ledger->ledger_semantics_version)) {
+            // Version-2 rows: original columns are document currency and the
+            // document-currency open amount lives in original_remaining_amount.
+            $originalAmount = abs((float) ($ledger->original_credit_amount ?: $ledger->original_debit_amount ?: 0));
+            $ledgerRemaining = (float) ($ledger->original_remaining_amount ?? 0);
+        } else {
+            $originalAmount = abs((float) ($ledger->original_debit_amount ?: $ledger->original_credit_amount ?: $ledger->amount));
+            $ledgerRemaining = (float) $ledger->remaining_amount;
+        }
+
         $expectedRemaining = max(0, $originalAmount - $appliedTotal);
 
-        if (abs($expectedRemaining - (float) $ledger->remaining_amount) > 0.0001) {
+        if (abs($expectedRemaining - $ledgerRemaining) > 0.0001) {
             $this->finding('ledger_remaining_mismatch', 'critical', "Ledger entry {$ledger->id} remaining amount disagrees with canonical applications for {$application->document_number}.", 'Reconcile the document ledger and canonical applications through the settlement service.');
         }
 

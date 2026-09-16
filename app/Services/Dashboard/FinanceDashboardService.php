@@ -10,6 +10,7 @@ use App\Models\SubledgerOpeningBalance;
 use App\Models\VendorLedgerEntry;
 use App\Services\Business\BusinessContextService;
 use App\Services\IncomeStatementService;
+use App\Support\LedgerSemantics;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -93,7 +94,8 @@ class FinanceDashboardService
 
     private function payables(?int $businessId = null): float
     {
-        $remainingLcy = $this->remainingAmountLcyExpression('vendor_ledger_entries');
+        // Version-aware vendor ledger exposure (see LedgerSemantics).
+        $remainingLcy = LedgerSemantics::lcyRemainingSql('vendor_ledger_entries');
 
         return (float) VendorLedgerEntry::query()
             ->where('reversed', false)

@@ -84,6 +84,18 @@ class VendorLedgerEntriesTable
                     ->weight('bold')
                     ->color(fn ($record) => $record->open ? 'warning' : 'gray'),
 
+                TextColumn::make('original_remaining_amount')
+                    ->label('Remaining (FCY)')
+                    ->formatStateUsing(fn ($state, VendorLedgerEntry $record): string => number_format((float) $state, 2).' '.($record->currency_code ?: '—'))
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('ledger_semantics_version')
+                    ->label('Semantics')
+                    ->badge()
+                    ->formatStateUsing(fn ($state): string => $state === 2 ? 'V2 (LCY base)' : 'Legacy')
+                    ->color(fn ($state): string => $state === 2 ? 'success' : 'gray')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('original_debit_amount')
                     ->label('Debit (FCY)')
                     ->formatStateUsing(fn ($state, VendorLedgerEntry $record): string => number_format((float) $state, 2).' '.($record->currency_code ?: '—'))
