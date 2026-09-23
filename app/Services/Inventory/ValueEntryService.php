@@ -343,7 +343,9 @@ class ValueEntryService
             throw new \RuntimeException('Purchase invoice quantity exceeds remaining received quantity available for actualization.');
         }
 
-        $lineCost = $costAmountActual ?? (float) $line->line_total;
+        // The inventory valuation source is LCY: prefer the line's accounting
+        // LCY value over the commercial document-currency amount.
+        $lineCost = $costAmountActual ?? (float) ($line->line_total_lcy ?? $line->line_total);
         $unitCost = $quantityBase > 0 ? $lineCost / $quantityBase : 0.0;
 
         /** @var ValueEntry $actualEntry */

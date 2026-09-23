@@ -66,6 +66,24 @@ final class PurchasingCurrency
         );
     }
 
+    /**
+     * LCY amount for accounting (G/L postings and inventory valuation).
+     *
+     * This is the single deterministic rule the currency-aware posting boundary
+     * validates against: LCY = round(FCY x factor, 2, HALF_UP). It is
+     * deliberately distinct from {@see self::lcyFromFcy()}, which rounds at the
+     * wider amount scale before reducing to the currency scale and can differ by
+     * one minor unit through double rounding. Any value that will be posted to
+     * the G/L or validated by the posting kernel must use this rule so the
+     * caller and the kernel can never disagree.
+     */
+    public static function accountingLcy(mixed $fcy, mixed $factor): string
+    {
+        return DecimalMath::currency(
+            DecimalMath::mul($fcy, self::normalizeFactor($factor), DecimalPrecision::CURRENCY_SCALE)
+        );
+    }
+
     public static function fcyFromLcy(mixed $lcy, mixed $factor): string
     {
         return DecimalMath::currency(

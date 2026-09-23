@@ -500,7 +500,9 @@ class PurchaseOrderService
             throw new Exception("Location is missing for item {$item->item_code} on purchase receipt {$order->order_number}.");
         }
 
-        $lineCost = $quantity * (float) $line->unit_cost;
+        // The expected inventory cost entering the valuation subsystem is LCY;
+        // the PO commercial values (unit_cost, line totals) stay FCY.
+        $lineCost = PurchasingCurrency::accountingLcy($quantity * (float) $line->unit_cost, $order->resolvedCurrencyFactor());
 
         $entry = ItemLedgerEntry::query()->create([
             'entry_type' => ItemLedgerEntryType::PURCHASE,

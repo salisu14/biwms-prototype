@@ -1120,11 +1120,11 @@ test('3d1 the same-currency bank guard is unchanged', function (): void {
     expect(fn () => $guard->invoke($service, $payment))->toThrow(BusinessException::class);
 });
 
-test('3d1 the purchase invoice G/L caller has not adopted the currency-aware mode', function (): void {
+test('3d1 the purchase invoice G/L caller posts through the certified currency-aware boundary', function (): void {
     $source = file_get_contents(app_path('Services/Purchase/PurchaseInvoiceService.php'));
 
-    expect($source)->not->toContain('CURRENCY_AWARE')
-        ->and($source)->not->toContain('PostingMode::CURRENCY_AWARE');
+    expect($source)->toContain('PostingIntentMode::CURRENCY_AWARE')
+        ->and($source)->toContain('PostingIntent::fromArray');
 });
 
 test('3d1 no fixture or code path touches the protected production payment', function (): void {
@@ -1500,7 +1500,7 @@ test('3d1b a real NGN purchase invoice posting reconciles the payables control a
     expect(phase3d1ReconcileReport()['vendor_ledger_payables_mismatches'] ?? [])->toBe([]);
 });
 
-test('3d1b a real FCY purchase invoice posting yields the explicit pending-3C-C transition', function (): void {
+test('3d1b a real FCY purchase invoice posting reconciles the payables control account', function (): void {
     $ctx = phase3d1bPostingContext();
     $this->actingAs($ctx['user']);
 
@@ -1510,14 +1510,19 @@ test('3d1b a real FCY purchase invoice posting yields the explicit pending-3C-C 
 
     expect((float) $entry->credit_amount)->toBe(330000.0)
         ->and((float) $entry->original_remaining_amount)->toBe(220.0)
-        ->and((float) $entry->currency_factor)->toBe(1500.0);
+        ->and((float) $entry->currency_factor)->toBe(1500.0)
+        ->and($entry->gl_entry_id)->not->toBeNull();
 
-    $group = phase3d1bPayablesMismatchFor($ctx['vendorPostingGroup']->id);
+    // The certified currency-aware boundary posts the A/P control leg in LCY
+    // with an explicit document trace, so a prospective foreign invoice
+    // reconciles and is never reported as an unexplained legacy 3C-C gap.
+    $control = GlEntry::query()->findOrFail($entry->gl_entry_id);
 
-    expect($group)->not->toBeNull()
-        ->and($group['classification'])->toBe('legacy_gl_currency_semantics_pending_3c_c')
-        ->and($group['severity'])->toBe('warning')
-        ->and((float) $group['unexplained_difference'])->toBe(0.0);
+    expect($control->document_currency_code)->toBe('USD')
+        ->and((float) $control->credit_amount_lcy)->toBe(330000.0)
+        ->and((float) $control->document_credit_amount)->toBe(220.0);
+
+    expect(phase3d1ReconcileReport()['vendor_ledger_payables_mismatches'] ?? [])->toBe([]);
 });
 
 // ---------------------------------------------------------------------------

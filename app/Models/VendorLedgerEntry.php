@@ -937,11 +937,17 @@ class VendorLedgerEntry extends Model
     /**
      * Create from PurchaseInvoice
      */
-    public static function createFromInvoice(PurchaseInvoice|PostedPurchaseInvoice $invoice): self
+    public static function createFromInvoice(PurchaseInvoice|PostedPurchaseInvoice $invoice, ?string $authoritativeLcyAmount = null): self
     {
         $documentAmount = abs((float) $invoice->grand_total);
         $factor = LedgerSemantics::normalizeFactor($invoice->currency_code, $invoice->currency_factor);
-        $amount = (float) LedgerSemantics::lcyFromDocument($documentAmount, $factor);
+        // The initial LCY carrying amount is the authoritative recognition
+        // amount supplied by the posting caller (the exact value posted to the
+        // A/P control G/L), so the two writers cannot diverge. Callers that do
+        // not supply one keep the legacy LCY-normalization contract.
+        $amount = $authoritativeLcyAmount !== null && $authoritativeLcyAmount !== ''
+            ? (float) $authoritativeLcyAmount
+            : (float) LedgerSemantics::lcyFromDocument($documentAmount, $factor);
         $signedAmount = $amount; // Positive vendor balance for credit-side payable exposure
         $entryNumber = self::getNextEntryNumber($invoice->vendor_id);
 

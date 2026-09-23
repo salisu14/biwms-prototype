@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services\Purchase;
 
+use App\Accounting\PostingIntent;
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemLedgerEntryType;
+use App\Enums\PostingIntentLineType;
+use App\Enums\PostingIntentMode;
+use App\Enums\PostingLcyOnlyReason;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\SourceType;
+use App\Exceptions\BusinessException;
 use App\Exceptions\NumberSeriesException;
 use App\Exceptions\PostingSetupException;
 use App\Models\GeneralPostingSetup;
@@ -16,7 +21,6 @@ use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\PostedPurchaseInvoice;
 use App\Models\PostedPurchaseInvoiceLine;
-use App\Models\PostingTransaction;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceLine;
 use App\Models\PurchaseOrder;
@@ -25,17 +29,22 @@ use App\Models\ValueEntry;
 use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Services\Accounting\ControlAccountAssignmentService;
+use App\Services\Accounting\GeneralLedgerPostingKernel;
 use App\Services\Business\BusinessContextService;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
 use App\Services\NumberSeriesService;
 use App\Services\VatService;
+use App\Support\DecimalMath;
+use App\Support\DecimalPrecision;
+use App\Support\DecimalRounding;
 use App\Support\PurchasingCurrency;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 
 class PurchaseInvoiceService
 {
@@ -151,17 +160,17 @@ class PurchaseInvoiceService
                     'qty_per_unit_of_measure' => $conversionFactor,
                     'quantity_base' => $quantityBase,
                     'unit_cost' => $unitCost,
-                    'unit_cost_lcy' => PurchasingCurrency::lcyFromFcy($unitCost, $currencyFactor),
+                    'unit_cost_lcy' => PurchasingCurrency::accountingLcy($unitCost, $currencyFactor),
                     'line_total' => $lineTotal,
-                    'line_total_lcy' => PurchasingCurrency::lcyFromFcy($lineTotal, $currencyFactor),
+                    'line_total_lcy' => PurchasingCurrency::accountingLcy($lineTotal, $currencyFactor),
                     'line_discount_amount' => 0,
                     'line_discount_percent' => 0,
                     'vat_code' => $line->vat_code,
                     'vat_percentage' => $line->vat_percentage,
                     'vat_amount' => $vatAmount,
-                    'vat_amount_lcy' => PurchasingCurrency::lcyFromFcy($vatAmount, $currencyFactor),
+                    'vat_amount_lcy' => PurchasingCurrency::accountingLcy($vatAmount, $currencyFactor),
                     'amount_including_vat' => $amountIncludingVat,
-                    'amount_including_vat_lcy' => PurchasingCurrency::lcyFromFcy($amountIncludingVat, $currencyFactor),
+                    'amount_including_vat_lcy' => PurchasingCurrency::accountingLcy($amountIncludingVat, $currencyFactor),
                     'posting_date' => $invoice->posting_date,
                 ]);
 
@@ -177,10 +186,10 @@ class PurchaseInvoiceService
                 'total_vat' => $totalVat,
                 'grand_total' => $grandTotal,
                 'remaining_amount' => $grandTotal,
-                'total_amount_lcy' => PurchasingCurrency::lcyFromFcy($totalAmount, $currencyFactor),
-                'total_vat_lcy' => PurchasingCurrency::lcyFromFcy($totalVat, $currencyFactor),
-                'grand_total_lcy' => PurchasingCurrency::lcyFromFcy($grandTotal, $currencyFactor),
-                'remaining_amount_lcy' => PurchasingCurrency::lcyFromFcy($grandTotal, $currencyFactor),
+                'total_amount_lcy' => PurchasingCurrency::accountingLcy($totalAmount, $currencyFactor),
+                'total_vat_lcy' => PurchasingCurrency::accountingLcy($totalVat, $currencyFactor),
+                'grand_total_lcy' => PurchasingCurrency::accountingLcy($grandTotal, $currencyFactor),
+                'remaining_amount_lcy' => PurchasingCurrency::accountingLcy($grandTotal, $currencyFactor),
             ]);
 
             $order->refresh();
@@ -213,55 +222,66 @@ class PurchaseInvoiceService
 
             $this->assertPostingSetupComplete($invoice);
 
+            // Resolve the authoritative document factor once and fail closed
+            // before any accounting side effect when it is unresolved.
+            $currencyFactor = $this->resolveInvoiceCurrencyFactor($invoice);
+
+            $businessId = $invoice->business_id
+                ?? $invoice->purchaseOrder?->business_id
+                ?? app(BusinessContextService::class)->resolveId();
+
+            // Deterministic, side-effect-free plan: allocate each line's
+            // authoritative LCY value across its receipt chunks with a
+            // final-chunk residual so the valuation legs sum to the commercial
+            // clearing debit exactly.
+            $linePlans = $this->planLineValuations($invoice, $currencyFactor);
+
+            // Reject unsupported expected-cost G/L combinations before any
+            // inventory value entry, posted snapshot or subledger write.
+            $this->assertExpectedCostClearingSupported($invoice, $currencyFactor, $linePlans);
+
+            // Build the FINAL liability intent once and preflight exactly that
+            // intent, so no economic field, line reference or rounding line can
+            // change between preflight and posting.
+            $liabilityIntent = $this->buildLiabilityIntent($invoice, $currencyFactor, $businessId);
+
+            app(GeneralLedgerPostingKernel::class)->preflight(PostingIntent::fromArray([
+                ...$liabilityIntent['meta'],
+                'lines' => $liabilityIntent['lines'],
+            ]));
+
+            // ---- Accounting side effects begin here. ----
+
             foreach ($invoice->lines as $line) {
                 if (! $line->item) {
                     throw new \RuntimeException("Item is missing for purchase invoice line {$line->id}.");
                 }
 
                 $itemLedgerEntry = null;
-                $receiptItemLedgerEntries = $this->receiptItemLedgerEntriesForLine($line);
+                $plan = $linePlans[$line->id] ?? ['chunks' => [], 'direct_lcy' => null];
 
-                if ($receiptItemLedgerEntries->isNotEmpty()) {
-                    $quantityBase = $this->quantityBase($line, $line->item);
-                    $remainingQuantityBase = $quantityBase;
-                    $lineUnitCostBase = $quantityBase > 0 ? (float) $line->line_total / $quantityBase : 0.0;
-
-                    foreach ($receiptItemLedgerEntries as $receiptItemLedgerEntry) {
-                        if ($remainingQuantityBase <= 0.0001) {
-                            break;
-                        }
-
-                        $availableReceiptQuantityBase = $this->remainingExpectedQuantityBase($receiptItemLedgerEntry);
-                        if ($availableReceiptQuantityBase <= 0) {
-                            continue;
-                        }
-
-                        $actualizedQuantityBase = min($remainingQuantityBase, $availableReceiptQuantityBase);
+                if ($plan['chunks'] !== []) {
+                    foreach ($plan['chunks'] as $chunk) {
                         $actualValueEntry = app(ValueEntryService::class)->actualizePurchaseReceiptForInvoiceLine(
-                            receiptEntry: $receiptItemLedgerEntry,
+                            receiptEntry: $chunk['entry'],
                             invoice: $invoice,
                             line: $line,
-                            quantityBase: $actualizedQuantityBase,
-                            costAmountActual: $actualizedQuantityBase * $lineUnitCostBase
+                            quantityBase: $chunk['quantity'],
+                            costAmountActual: (float) $chunk['allocated_lcy'],
                         );
 
                         app(ValueEntryAccountingOrchestrator::class)->post($actualValueEntry);
-                        $itemLedgerEntry ??= $receiptItemLedgerEntry;
-                        $remainingQuantityBase -= $actualizedQuantityBase;
-                    }
-
-                    if ($remainingQuantityBase > 0.0001) {
-                        throw new \RuntimeException('Purchase invoice quantity exceeds remaining received quantity available for actualization.');
+                        $itemLedgerEntry ??= $chunk['entry'];
                     }
 
                     if ($itemLedgerEntry) {
                         $line->forceFill(['item_ledger_entry_id' => $itemLedgerEntry->id])->save();
                     }
                 } else {
-                    $itemLedgerEntry = $this->createItemLedgerEntryForLine($invoice, $line);
+                    $itemLedgerEntry = $this->createItemLedgerEntryForLine($invoice, $line, $currencyFactor);
                 }
 
-                if ($itemLedgerEntry && $receiptItemLedgerEntries->isEmpty()) {
+                if ($itemLedgerEntry && $plan['chunks'] === []) {
                     $line->forceFill(['item_ledger_entry_id' => $itemLedgerEntry->id])->save();
                     app(ValueEntryAccountingOrchestrator::class)->postForItemLedgerEntry($itemLedgerEntry);
                 }
@@ -271,7 +291,7 @@ class PurchaseInvoiceService
             $posted = PostedPurchaseInvoice::query()->firstOrCreate(
                 ['document_number' => $invoice->document_number],
                 [
-                    'business_id' => $invoice->business_id ?? $invoice->purchaseOrder?->business_id ?? app(BusinessContextService::class)->resolveId(),
+                    'business_id' => $businessId,
                     'external_document_number' => $invoice->external_document_number,
                     'order_id' => $invoice->order_id,
                     'order_number' => $invoice->order_number,
@@ -349,7 +369,10 @@ class PurchaseInvoiceService
                 ]);
             }
 
-            $postingTransaction = $this->postInvoiceLiabilityTransaction($invoice, $posted);
+            $postingTransaction = app(GeneralLedgerService::class)->postTransaction(
+                $liabilityIntent['lines'],
+                $liabilityIntent['meta'],
+            );
 
             $invoice->update([
                 'status' => ApprovalStatus::POSTED,
@@ -366,7 +389,13 @@ class PurchaseInvoiceService
                 ->exists();
 
             if (! $ledgerEntryExists) {
-                $vendorLedgerEntry = VendorLedgerEntry::createFromInvoice($posted);
+                // The vendor ledger's initial carrying amount must equal the
+                // A/P control G/L recognition exactly; both derive from this
+                // single authoritative accounting LCY value.
+                $vendorLedgerEntry = VendorLedgerEntry::createFromInvoice(
+                    $posted,
+                    PurchasingCurrency::accountingLcy(DecimalMath::amount($posted->grand_total), $currencyFactor),
+                );
 
                 GlEntry::query()
                     ->where('posting_transaction_id', $postingTransaction->id)
@@ -384,7 +413,54 @@ class PurchaseInvoiceService
         });
     }
 
-    private function postInvoiceLiabilityTransaction(PurchaseInvoice $invoice, PostedPurchaseInvoice $posted): PostingTransaction
+    /**
+     * Build the authoritative currency-aware purchase invoice liability intent.
+     *
+     * This is constructed once from pre-existing invoice economics only, so the
+     * exact same value object is used for the preflight and for the posting:
+     * no line reference (e.g. a generated item-ledger id), rounding line or
+     * ownership field can change between validating and posting.
+     *
+     * @return array{meta: array<string, mixed>, lines: array<int, array<string, mixed>>}
+     */
+    private function buildLiabilityIntent(PurchaseInvoice $invoice, string $currencyFactor, ?int $businessId): array
+    {
+        return [
+            'meta' => [
+                'business_id' => $businessId,
+                'posting_date' => $invoice->posting_date,
+                'document_date' => $invoice->document_date ?? $invoice->posting_date,
+                'source_module' => 'purchases',
+                'source_type' => SourceType::VENDOR->value,
+                'source_id' => $invoice->id,
+                'source_number' => $invoice->document_number,
+                'document_type' => 'PURCHASE_INVOICE',
+                'document_number' => $invoice->document_number,
+                'external_document_number' => $invoice->external_document_number,
+                'description' => "Purchase Invoice {$invoice->document_number}",
+                'currency_code' => $invoice->currency_code ?: 'NGN',
+                'exchange_rate' => $currencyFactor,
+                'mode' => PostingIntentMode::CURRENCY_AWARE->value,
+                'dimensions' => $invoice->dimensions ?? [],
+                'actor_id' => Auth::id(),
+                'transaction_key' => "PURCHASE_INVOICE:{$invoice->document_number}:LIABILITY",
+                'idempotency_key' => hash('sha256', "purchase-invoice-liability|{$invoice->id}|{$invoice->document_number}"),
+            ],
+            'lines' => $this->liabilityTransactionLines($invoice, $currencyFactor),
+        ];
+    }
+
+    /**
+     * Build the currency-aware purchase invoice liability intent.
+     *
+     * Commercial lines are document-currency amounts carried with an explicit
+     * document trace; their LCY economics are the authoritative accounting LCY
+     * values derived with the certified accounting rule. The A/P control credit
+     * carries the document grand total and its LCY equivalent.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function liabilityTransactionLines(PurchaseInvoice $invoice, string $currencyFactor): array
     {
         $invoice->loadMissing(['lines.item', 'vendor.vendorPostingGroup.payablesAccount']);
         $payablesAccount = $invoice->vendor?->getPayablesAccount();
@@ -394,6 +470,7 @@ class PurchaseInvoiceService
         }
 
         $lines = [];
+        $debitTotalFcy = '0';
 
         foreach ($invoice->lines as $line) {
             if (! $line->item) {
@@ -408,8 +485,9 @@ class PurchaseInvoiceService
                 throw new PostingSetupException("Posting setup missing for vendor {$vendorRef} and item {$line->item->item_code}");
             }
 
-            $lineAmount = round((float) $line->line_total, 4);
-            if ($lineAmount > 0.0001) {
+            $lineAmountFcy = DecimalMath::amount($line->line_total);
+
+            if (DecimalMath::isPositive($lineAmountFcy)) {
                 $purchaseAccount = $line->item->isInventoryItem()
                     ? $setup->getPurchaseClearingAccount()
                     : $setup->getExpensePurchaseAccount();
@@ -422,20 +500,25 @@ class PurchaseInvoiceService
 
                 $lines[] = [
                     'account_id' => $purchaseAccount->id,
-                    'debit_amount' => $lineAmount,
-                    'credit_amount' => 0,
+                    'debit_amount' => PurchasingCurrency::accountingLcy($lineAmountFcy, $currencyFactor),
+                    'credit_amount' => '0',
+                    'line_type' => PostingIntentLineType::DOCUMENT_MONETARY->value,
+                    'document_debit_amount' => $lineAmountFcy,
+                    'document_credit_amount' => '0',
                     'description' => ($line->item->isInventoryItem() ? 'Purchase clearing: ' : 'Purchase expense: ')
                         .($line->item_description ?? $line->item->description ?? 'Purchase Invoice Line'),
                     'source_type' => SourceType::ITEM->value,
                     'source_number' => $line->item->item_code,
                     'posting_group_source' => 'general_posting_setup',
-                    'item_ledger_entry_id' => $line->item_ledger_entry_id,
                     'dimensions' => $line->dimensions ?? [],
                 ];
+
+                $debitTotalFcy = DecimalMath::add($debitTotalFcy, $lineAmountFcy, DecimalPrecision::AMOUNT_SCALE);
             }
 
-            $vatAmount = round((float) $line->vat_amount, 4);
-            if ($vatAmount > 0.0001) {
+            $vatAmountFcy = DecimalMath::amount($line->vat_amount);
+
+            if (DecimalMath::isPositive($vatAmountFcy)) {
                 $vatSetup = app(VatService::class)->resolveSetup(
                     $invoice->vendor->vat_business_posting_group_id ?? $invoice->vendor->vat_bus_posting_group,
                     $line->item->vat_product_posting_group_id
@@ -444,30 +527,87 @@ class PurchaseInvoiceService
                 if ($vatSetup?->purchase_vat_account_id) {
                     $lines[] = [
                         'account_id' => $vatSetup->purchase_vat_account_id,
-                        'debit_amount' => $vatAmount,
-                        'credit_amount' => 0,
+                        'debit_amount' => PurchasingCurrency::accountingLcy($vatAmountFcy, $currencyFactor),
+                        'credit_amount' => '0',
+                        'line_type' => PostingIntentLineType::DOCUMENT_MONETARY->value,
+                        'document_debit_amount' => $vatAmountFcy,
+                        'document_credit_amount' => '0',
                         'description' => 'VAT Input: '.($line->item_description ?? $line->item->description ?? 'Purchase Invoice Line'),
                         'source_type' => SourceType::ITEM->value,
                         'source_number' => $line->item->item_code,
                         'posting_group_source' => 'vat_posting_setup',
-                        'item_ledger_entry_id' => $line->item_ledger_entry_id,
                         'dimensions' => $line->dimensions ?? [],
                     ];
+
+                    $debitTotalFcy = DecimalMath::add($debitTotalFcy, $vatAmountFcy, DecimalPrecision::AMOUNT_SCALE);
                 }
             }
         }
 
-        $grandTotal = round((float) $invoice->grand_total, 4);
-        $debitTotal = round(collect($lines)->sum(fn (array $line): float => (float) $line['debit_amount']), 4);
+        $grandTotalFcy = DecimalMath::amount($invoice->grand_total);
 
-        if (abs($grandTotal - $debitTotal) > 0.0001) {
+        if (abs((float) $grandTotalFcy - (float) $debitTotalFcy) > 0.0001) {
             throw new PostingSetupException("Purchase invoice {$invoice->document_number} posting lines do not match the invoice total.");
+        }
+
+        $payableLcy = PurchasingCurrency::accountingLcy($grandTotalFcy, $currencyFactor);
+
+        $debitTotalLcy = '0';
+
+        foreach ($lines as $line) {
+            $debitTotalLcy = DecimalMath::add($debitTotalLcy, $line['debit_amount'], DecimalPrecision::CURRENCY_SCALE);
+        }
+
+        // The per-line LCY rounding and the grand-total LCY rounding can differ
+        // by a minor unit. Post the residual explicitly; never absorb it
+        // silently and never adjust the A/P control amount.
+        $roundingResidual = DecimalMath::sub($payableLcy, $debitTotalLcy, DecimalPrecision::CURRENCY_SCALE);
+
+        // Bound the residual to the legitimate line-vs-header rounding of the
+        // independently converted monetary components. Anything larger is a
+        // substantive mismatch wearing a rounding label, so it must fail closed
+        // rather than move a material amount through the rounding account.
+        $roundingBound = DecimalMath::mul('0.01', (string) max(1, count($lines)), DecimalPrecision::CURRENCY_SCALE);
+
+        if (DecimalMath::compare(DecimalMath::abs($roundingResidual, DecimalPrecision::CURRENCY_SCALE), $roundingBound) > 0) {
+            throw new PostingSetupException(
+                "Purchase invoice {$invoice->document_number} has an LCY rounding difference of {$roundingResidual} "
+                ."that exceeds the supported per-component rounding bound of {$roundingBound}."
+            );
+        }
+
+        if (! DecimalMath::isZero($roundingResidual)) {
+            $roundingAccount = $invoice->vendor->vendorPostingGroup?->invoiceRoundingAccount;
+
+            if (! $roundingAccount) {
+                throw new PostingSetupException(
+                    "Purchase invoice {$invoice->document_number} has an LCY rounding difference of {$roundingResidual} "
+                    .'that cannot be posted: configure an Invoice Rounding Account on the vendor posting group.'
+                );
+            }
+
+            $isDebitResidual = DecimalMath::isPositive($roundingResidual);
+
+            $lines[] = [
+                'account_id' => $roundingAccount->id,
+                'debit_amount' => $isDebitResidual ? $roundingResidual : '0',
+                'credit_amount' => $isDebitResidual ? '0' : DecimalMath::abs($roundingResidual, DecimalPrecision::CURRENCY_SCALE),
+                'line_type' => PostingIntentLineType::LCY_ONLY->value,
+                'lcy_only_reason' => PostingLcyOnlyReason::ROUNDING->value,
+                'description' => 'Purchase invoice LCY rounding difference',
+                'source_type' => SourceType::VENDOR->value,
+                'source_number' => $invoice->vendor->vendor_code,
+                'dimensions' => $invoice->dimensions ?? [],
+            ];
         }
 
         $lines[] = [
             'account_id' => $payablesAccount->id,
-            'debit_amount' => 0,
-            'credit_amount' => $grandTotal,
+            'debit_amount' => '0',
+            'credit_amount' => $payableLcy,
+            'line_type' => PostingIntentLineType::DOCUMENT_MONETARY->value,
+            'document_debit_amount' => '0',
+            'document_credit_amount' => $grandTotalFcy,
             'description' => "Payable to {$invoice->vendor->vendor_name}",
             'source_type' => SourceType::VENDOR->value,
             'source_number' => $invoice->vendor->vendor_code,
@@ -475,28 +615,187 @@ class PurchaseInvoiceService
             'dimensions' => $invoice->dimensions ?? [],
         ];
 
-        return app(GeneralLedgerService::class)->postTransaction($lines, [
-            'business_id' => $invoice->business_id ?? $posted->business_id,
-            'posting_date' => $invoice->posting_date,
-            'document_date' => $invoice->document_date ?? $invoice->posting_date,
-            'source_module' => 'purchases',
-            'source_type' => SourceType::VENDOR->value,
-            'source_id' => $posted->id,
-            'source_number' => $invoice->document_number,
-            'document_type' => 'PURCHASE_INVOICE',
-            'document_number' => $invoice->document_number,
-            'external_document_number' => $invoice->external_document_number,
-            'description' => "Purchase Invoice {$invoice->document_number}",
-            'currency_code' => $invoice->currency_code ?: 'NGN',
-            'exchange_rate' => $invoice->currency_factor ?: '1',
-            'dimensions' => $invoice->dimensions ?? [],
-            'actor_id' => Auth::id(),
-            'transaction_key' => "PURCHASE_INVOICE:{$invoice->document_number}:LIABILITY",
-            'idempotency_key' => hash('sha256', "purchase-invoice-liability|{$invoice->id}|{$invoice->document_number}"),
-        ]);
+        return $lines;
     }
 
-    private function createItemLedgerEntryForLine(PurchaseInvoice $invoice, PurchaseInvoiceLine $line): ?ItemLedgerEntry
+    /**
+     * Resolve the authoritative document factor once for the invoice.
+     *
+     * NGN resolves to 1; a foreign invoice requires an explicit, finite,
+     * positive factor and otherwise fails closed before any side effect.
+     */
+    private function resolveInvoiceCurrencyFactor(PurchaseInvoice $invoice): string
+    {
+        try {
+            return PurchasingCurrency::factorFor($invoice->currency_code, $invoice->currency_factor);
+        } catch (InvalidArgumentException $exception) {
+            throw new BusinessException(
+                "Purchase invoice {$invoice->document_number} cannot be posted: ".$exception->getMessage()
+            );
+        }
+    }
+
+    /**
+     * The authoritative LCY value of a purchase invoice line at the accounting
+     * rule used by the posting boundary and the inventory valuation source.
+     */
+    private function lineValueLcy(PurchaseInvoiceLine $line, string $currencyFactor): string
+    {
+        return PurchasingCurrency::accountingLcy(DecimalMath::amount($line->line_total), $currencyFactor);
+    }
+
+    /**
+     * Deterministic, side-effect-free valuation plan for every invoice line.
+     *
+     * For a receipt-backed line the authoritative line LCY value is allocated
+     * across the receipt chunks that the invoice will actualize, using
+     * cumulative rounding with an exact final-chunk residual. Each chunk's
+     * allocation is the amount posted as its inventory valuation, so the sum of
+     * the valuation clearing legs equals the commercial clearing debit exactly.
+     *
+     * @return array<int, array{chunks: array<int, array{entry: ItemLedgerEntry, quantity: float, allocated_lcy: string}>, direct_lcy: ?string}>
+     */
+    private function planLineValuations(PurchaseInvoice $invoice, string $currencyFactor): array
+    {
+        $plans = [];
+
+        foreach ($invoice->lines as $line) {
+            $receiptEntries = $this->receiptItemLedgerEntriesForLine($line);
+
+            if ($receiptEntries->isEmpty()) {
+                $plans[$line->id] = [
+                    'chunks' => [],
+                    'direct_lcy' => $this->lineValueLcy($line, $currencyFactor),
+                ];
+
+                continue;
+            }
+
+            $quantityBase = $this->quantityBase($line, $line->item);
+            $remaining = $quantityBase;
+            $chunks = [];
+
+            foreach ($receiptEntries as $receiptEntry) {
+                if ($remaining <= 0.0001) {
+                    break;
+                }
+
+                $available = $this->remainingExpectedQuantityBase($receiptEntry);
+
+                if ($available <= 0) {
+                    continue;
+                }
+
+                $take = min($remaining, $available);
+                $chunks[] = ['entry' => $receiptEntry, 'quantity' => $take];
+                $remaining -= $take;
+            }
+
+            if ($remaining > 0.0001) {
+                throw new \RuntimeException('Purchase invoice quantity exceeds remaining received quantity available for actualization.');
+            }
+
+            $allocations = $this->allocateLineLcyAcrossChunks(
+                $this->lineValueLcy($line, $currencyFactor),
+                array_column($chunks, 'quantity'),
+            );
+
+            $plans[$line->id] = [
+                'chunks' => array_map(
+                    fn (array $chunk, string $allocated): array => [...$chunk, 'allocated_lcy' => $allocated],
+                    $chunks,
+                    $allocations,
+                ),
+                'direct_lcy' => null,
+            ];
+        }
+
+        return $plans;
+    }
+
+    /**
+     * Allocate a 2 dp LCY line total across receipt chunks by quantity using
+     * cumulative rounding, so the allocated total equals the authoritative line
+     * LCY exactly and no allocation is negative. The final chunk is pinned to
+     * the exact residual so accumulated rounding can never leave a stranded
+     * minor unit in the purchase clearing account.
+     *
+     * @param  array<int, float>  $quantities
+     * @return array<int, string>
+     */
+    private function allocateLineLcyAcrossChunks(string $totalLcy, array $quantities): array
+    {
+        $count = count($quantities);
+
+        if ($count === 0) {
+            return [];
+        }
+
+        $totalQuantity = array_sum($quantities);
+        $total = DecimalMath::of($totalLcy);
+        $allocations = [];
+        $previousCumulativeLcy = '0';
+        $cumulativeQuantity = 0.0;
+
+        foreach ($quantities as $index => $quantity) {
+            if ($index === $count - 1 || $totalQuantity <= 0.0) {
+                $allocations[] = DecimalMath::sub($totalLcy, $previousCumulativeLcy, DecimalPrecision::CURRENCY_SCALE);
+
+                continue;
+            }
+
+            $cumulativeQuantity += $quantity;
+            $cumulativeLcy = (string) $total
+                ->multipliedBy(DecimalMath::of((string) $cumulativeQuantity))
+                ->dividedBy(DecimalMath::of((string) $totalQuantity), DecimalPrecision::CURRENCY_SCALE, DecimalRounding::AMOUNT);
+
+            $allocations[] = DecimalMath::sub($cumulativeLcy, $previousCumulativeLcy, DecimalPrecision::CURRENCY_SCALE);
+            $previousCumulativeLcy = $cumulativeLcy;
+        }
+
+        return $allocations;
+    }
+
+    /**
+     * Fail closed before any side effect when expected-cost inventory G/L
+     * posting is enabled for a receipt-backed foreign-currency purchase
+     * invoice. The receipt expected cost is recognised per chunk, so independent
+     * per-chunk rounding cannot be guaranteed to clear the purchase clearing
+     * account exactly, and no exchange-rate or purchase-price variance mechanism
+     * is supported. This combination is fenced until an exact-allocation phase;
+     * direct (non-receipt-backed) invoices and local-currency documents are
+     * unaffected.
+     *
+     * @param  array<int, array{chunks: array<int, mixed>, direct_lcy: ?string}>  $linePlans
+     */
+    private function assertExpectedCostClearingSupported(
+        PurchaseInvoice $invoice,
+        string $currencyFactor,
+        array $linePlans,
+    ): void {
+        if (! config('accounts.post_expected_inventory_cost_to_gl', false)) {
+            return;
+        }
+
+        if (PurchasingCurrency::isLcyFactor($currencyFactor)) {
+            return;
+        }
+
+        $receiptBacked = collect($linePlans)->contains(fn (array $plan): bool => $plan['chunks'] !== []);
+
+        if (! $receiptBacked) {
+            return;
+        }
+
+        throw new BusinessException(
+            "Foreign-currency purchase invoice {$invoice->document_number} is backed by goods receipts and expected "
+            .'inventory cost G/L posting is enabled. Per-chunk receipt rounding cannot be guaranteed to clear the '
+            .'purchase clearing account exactly and no exchange-rate or purchase-price variance mechanism is '
+            .'supported; disable expected inventory cost G/L posting or post this document in the local currency.'
+        );
+    }
+
+    private function createItemLedgerEntryForLine(PurchaseInvoice $invoice, PurchaseInvoiceLine $line, string $currencyFactor): ?ItemLedgerEntry
     {
         $item = $line->item;
 
@@ -510,7 +809,9 @@ class PurchaseInvoiceService
             throw new \RuntimeException("Quantity must be greater than zero for item {$item->item_code}");
         }
 
-        $lineTotal = (float) $line->line_total;
+        // The valuation source entering inventory accounting is LCY; the
+        // commercial document amount (line_total, unit_cost) stays FCY.
+        $lineValueLcy = (float) $this->lineValueLcy($line, $currencyFactor);
         $locationId = $invoice->location_id ?? $item->location_id;
 
         if (! $locationId) {
@@ -531,9 +832,9 @@ class PurchaseInvoiceService
             'document_number' => $invoice->document_number,
             'source_id' => $invoice->id,
             'source_type' => PurchaseInvoice::class,
-            'cost_amount_actual' => $lineTotal,
+            'cost_amount_actual' => $lineValueLcy,
             'cost_amount_expected' => 0,
-            'purchase_amount_actual' => $lineTotal,
+            'purchase_amount_actual' => $lineValueLcy,
             'general_business_posting_group_id' => $invoice->general_business_posting_group_id,
             'general_product_posting_group_id' => $item->general_product_posting_group_id,
             'inventory_posting_group_id' => $item->inventory_posting_group_id,

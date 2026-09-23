@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Enums\AccountCategory;
+use App\Enums\PostingIntentLineType;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\CustomerLedgerEntry;
@@ -471,11 +472,25 @@ class BiwmsFinanceReconcile extends Command
                 'currency_code',
                 'ledger_semantics_version',
                 'document_type',
+                'gl_entry_id',
             ]);
+
+        // Only pre-3C-C postings contribute to the legacy gap. A purchase
+        // invoice posted through the certified currency-aware boundary records
+        // its A/P control leg with an explicit document-currency trace, so it
+        // already reconciles in LCY and must never be counted as an unexplained
+        // historical difference.
+        $currencyAwareGlEntryIds = array_flip($this->currencyAwarePayablesGlEntryIds(
+            $rows->pluck('gl_entry_id')->filter()->all()
+        ));
 
         $gap = 0.0;
 
         foreach ($rows as $row) {
+            if ($row->gl_entry_id !== null && isset($currencyAwareGlEntryIds[(int) $row->gl_entry_id])) {
+                continue;
+            }
+
             $lcyRemaining = $row->lcy_remaining_amount;
             $documentRemaining = $row->document_remaining_amount;
 
@@ -488,6 +503,47 @@ class BiwmsFinanceReconcile extends Command
         }
 
         return round($gap, 2);
+    }
+
+    /**
+     * A/P control G/L entries that carry the certified currency-aware purchase
+     * liability trace, and therefore reconcile in LCY already.
+     *
+     * A bare document-currency code is not sufficient evidence: the trace column
+     * predates caller adoption and a partially traced row could carry a code
+     * without being a certified currency-aware posting. Require the full
+     * document-monetary trace and a linked, completed posting transaction that
+     * persisted a currency-aware economic fingerprint.
+     *
+     * @param  array<int, int|string>  $glEntryIds
+     * @return array<int, int>
+     */
+    private function currencyAwarePayablesGlEntryIds(array $glEntryIds): array
+    {
+        if ($glEntryIds === []) {
+            return [];
+        }
+
+        return GlEntry::query()
+            ->whereIn('id', $glEntryIds)
+            ->whereNotNull('posting_transaction_id')
+            ->where('posting_line_type', PostingIntentLineType::DOCUMENT_MONETARY->value)
+            ->whereNotNull('document_currency_code')
+            ->where('document_currency_code', '<>', '')
+            ->whereNotNull('currency_factor')
+            ->where(function ($query): void {
+                $query->whereNotNull('document_debit_amount')
+                    ->orWhereNotNull('document_credit_amount');
+            })
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('posting_transactions')
+                    ->whereColumn('posting_transactions.id', 'gl_entries.posting_transaction_id')
+                    ->whereNotNull('posting_transactions.economic_fingerprint');
+            })
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
     }
 
     /**

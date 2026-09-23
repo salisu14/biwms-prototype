@@ -1,10 +1,12 @@
 # Purchasing Currency Contract
 
 **Status: Authoritative purchasing currency contract through Phase 1, Phase 1A,
-Phase 2 and Phase 2A.** Purchase posting, Vendor Ledger dual-currency storage
-integration, FX settlement, revaluation and historical repair remain **deferred**
-(Phase 3+). Sections marked *target contract* describe approved future semantics
-that are **not yet implemented**.
+Phase 2, Phase 2A and Phase 3C-C2.** The purchase invoice liability now posts
+through the certified currency-aware boundary and uses accounting LCY as the
+inventory valuation source (see §8). Vendor Ledger dual-currency storage
+integration, FX settlement, revaluation, purchase credit memo multicurrency and
+historical repair remain **deferred** (Phase 3+). Sections marked *target
+contract* describe approved future semantics that are **not yet implemented**.
 
 ## 1. Currencies and rate convention
 
@@ -210,3 +212,62 @@ historical trust policy, unless it is explicitly validated or corrected. The
 known malformed signature (foreign currency stamped rate 1 with
 `unit_cost == unit_cost_lcy`) therefore remains unresolved until an explicit
 correction phase.
+
+## 8. Posting boundary and inventory valuation source (Phase 3C-C2)
+
+The purchase invoice caller now posts its liability through the certified
+**currency-aware** posting boundary (`PostingIntentMode::CURRENCY_AWARE` via
+`PostingIntent::fromArray`). This section records the load-bearing semantics.
+
+### 8.1 Commercial FCY vs accounting LCY
+
+- The **document/FCY** commercial amounts (`unit_cost`, `line_total`,
+  `grand_total`, `vat_amount`) are unchanged and remain authoritative for the
+  purchase document.
+- The **G/L base `debit_amount` / `credit_amount` / `amount` columns are LCY**.
+  The document-currency amount of a commercial line is carried alongside in the
+  explicit trace columns `document_currency_code`, `document_debit_amount`,
+  `document_credit_amount`, `document_amount`, `currency_factor`,
+  `posting_line_type` (and `lcy_only_reason` for LCY-only lines).
+- **Inventory valuation is LCY.** The invoice-driven valuation source is the
+  line's accounting LCY value — never the commercial FCY amount. The receipt's
+  expected inventory cost is likewise LCY.
+
+### 8.2 One accounting rule
+
+The single deterministic LCY rule at the accounting boundary is:
+
+```
+LCY = round(FCY × factor, 2, HALF_UP)
+```
+
+implemented as `PurchasingCurrency::accountingLcy()`. It is deliberately
+**not** the wider-scale pipeline of `PurchasingCurrency::lcyFromFcy()`
+(round at amount scale, then reduce to currency scale), which can differ by one
+minor unit through double rounding. Every value that reaches the G/L or is
+validated by the posting kernel uses `accountingLcy()`; prospective purchase
+invoice LCY snapshots use the same rule so the document snapshot and its posting
+cannot diverge.
+
+### 8.3 Explicit rounding only
+
+If the sum of the per-line LCY debits differs from the LCY A/P control credit by
+a minor unit, the difference is posted as an **explicit `LCY_ONLY` line with
+`lcy_only_reason = ROUNDING`** against the vendor posting group's **Invoice
+Rounding Account**. A residual is never absorbed silently, the A/P control amount
+is never adjusted, and if no rounding account is configured the posting **fails
+closed**.
+
+### 8.4 Supported factor invariant
+
+When expected-cost inventory G/L posting is enabled, receipt recognition and
+invoice recognition must use the **same rate**. A foreign receipt recognised at
+one rate and an invoice recognised at another has no exchange-rate or
+purchase-price variance mechanism, so it **fails closed before posting**.
+
+### 8.5 Not yet supported
+
+Foreign-currency **purchase credit memo** posting remains **fenced** (it fails
+closed). Its legacy accounting path hard-codes factor 1 and writes its
+payable/VAT legs outside the certified currency-aware boundary while the vendor
+ledger is version-2 LCY. Local-currency credit memos are unchanged.

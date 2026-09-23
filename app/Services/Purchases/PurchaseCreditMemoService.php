@@ -8,6 +8,7 @@ use App\Data\Purchases\PurchaseCreditMemoData;
 use App\Data\Purchases\PurchaseCreditMemoLineData;
 use App\Enums\ApprovalStatus;
 use App\Enums\ItemLedgerEntryType;
+use App\Exceptions\BusinessException;
 use App\Models\Item;
 use App\Models\ItemLedgerEntry;
 use App\Models\PostedPurchaseCreditMemo;
@@ -25,6 +26,7 @@ use App\Services\Business\BusinessContextService;
 use App\Services\Inventory\ItemApplicationService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\PostingService;
+use App\Support\PurchasingCurrency;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -203,6 +205,8 @@ class PurchaseCreditMemoService
             if ($memo->status === ApprovalStatus::POSTED || PostedPurchaseCreditMemo::query()->where('document_number', $memo->document_number)->exists()) {
                 throw new \RuntimeException('Purchase credit memo is already posted.');
             }
+
+            $this->assertSupportedCreditMemoCurrency($memo);
 
             $approvalRequired = $this->approvalTemplateService->requiresApproval($memo);
 
@@ -671,5 +675,29 @@ class PurchaseCreditMemoService
                 ]);
             }
         }
+    }
+
+    /**
+     * Foreign-currency purchase credit memo posting is not yet supported.
+     *
+     * The legacy credit memo accounting path hard-codes a factor of one, has no
+     * stored currency factor and writes its payable/VAT legs outside the
+     * certified currency-aware boundary, while the vendor ledger is version-2
+     * LCY. Posting a foreign-currency memo through it would silently misstate
+     * the payable, so it fails closed until that path is redesigned. Local
+     * currency behaviour is unchanged.
+     */
+    private function assertSupportedCreditMemoCurrency(PurchaseCreditMemo $memo): void
+    {
+        $currencyCode = strtoupper(trim((string) ($memo->currency_code ?: PurchasingCurrency::LCY_CODE)));
+
+        if ($currencyCode === PurchasingCurrency::LCY_CODE) {
+            return;
+        }
+
+        throw new BusinessException(
+            "Foreign-currency purchase credit memo {$memo->document_number} cannot be posted: "
+            .'multicurrency purchase credit memo accounting is not yet supported under the certified currency path.'
+        );
     }
 }
