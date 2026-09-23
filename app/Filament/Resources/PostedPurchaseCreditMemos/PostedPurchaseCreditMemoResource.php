@@ -8,6 +8,7 @@ use App\Filament\Resources\PostedPurchaseCreditMemos\Schemas\PostedPurchaseCredi
 use App\Filament\Resources\PostedPurchaseCreditMemos\Schemas\PostedPurchaseCreditMemoInfolist;
 use App\Filament\Resources\PostedPurchaseCreditMemos\Tables\PostedPurchaseCreditMemosTable;
 use App\Models\PostedPurchaseCreditMemo;
+use App\Support\CurrencyPresentation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -100,7 +101,7 @@ class PostedPurchaseCreditMemoResource extends Resource
             'Vendor' => $record->vendor_name ?: '—',
             'Corrects Invoice' => $record->corrects_invoice_number ?: '—',
             'Posted' => $record->posted ? 'Yes' : 'No',
-            'Total' => Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD')),
+            'Total' => Number::currency((float) $record->grand_total, CurrencyPresentation::documentOrDefault($record->currency_code)),
         ];
     }
 

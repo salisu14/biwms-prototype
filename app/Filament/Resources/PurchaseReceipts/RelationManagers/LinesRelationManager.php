@@ -10,6 +10,8 @@ use App\Models\ItemCharge;
 use App\Models\PurchaseReceipt;
 use App\Models\PurchaseReceiptLine;
 use App\Models\VatPostingSetup;
+use App\Support\CurrencyPresentation;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -40,6 +42,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Number;
 
 class LinesRelationManager extends RelationManager
 {
@@ -332,7 +335,7 @@ class LinesRelationManager extends RelationManager
                                                     ->label('Direct Unit Cost')
                                                     ->numeric()
                                                     ->minValue(0)
-                                                    ->prefix('$')
+                                                    ->prefix(fn (): string => $this->ownerCurrencySymbol())
                                                     ->default(0)
                                                     ->required()
                                                     ->live(onBlur: true)
@@ -356,7 +359,7 @@ class LinesRelationManager extends RelationManager
 
                                                 Placeholder::make('line_amount_display')
                                                     ->label('Line Amount')
-                                                    ->content(fn (Get $get): string => '$'.number_format(
+                                                    ->content(fn (Get $get): string => $this->ownerCurrencySymbol().number_format(
                                                         self::computeLineAmount($get), 2
                                                     ))
                                                     ->extraAttributes([
@@ -395,7 +398,7 @@ class LinesRelationManager extends RelationManager
                                                     ->label('Line Discount Amount')
                                                     ->numeric()
                                                     ->minValue(0)
-                                                    ->prefix('$')
+                                                    ->prefix(fn (): string => $this->ownerCurrencySymbol())
                                                     ->live(onBlur: true)
                                                     ->afterStateUpdated(function (Set $set, Get $get) {
                                                         $cost = (float) ($get('direct_unit_cost') ?? 0);
@@ -411,7 +414,7 @@ class LinesRelationManager extends RelationManager
                                                     ->label('Invoice Discount Amount')
                                                     ->numeric()
                                                     ->minValue(0)
-                                                    ->prefix('$')
+                                                    ->prefix(fn (): string => $this->ownerCurrencySymbol())
                                                     ->disabled()
                                                     ->dehydrated(),
                                             ]),
@@ -474,14 +477,14 @@ class LinesRelationManager extends RelationManager
                                                 TextInput::make('vat_base_amount')
                                                     ->label('VAT Base Amount')
                                                     ->numeric()
-                                                    ->prefix('$')
+                                                    ->prefix(fn (): string => $this->ownerCurrencySymbol())
                                                     ->disabled()
                                                     ->dehydrated(),
 
                                                 TextInput::make('vat_difference')
                                                     ->label('VAT Difference')
                                                     ->numeric()
-                                                    ->prefix('$')
+                                                    ->prefix(fn (): string => $this->ownerCurrencySymbol())
                                                     ->disabled()
                                                     ->dehydrated(),
                                             ]),
@@ -529,7 +532,7 @@ class LinesRelationManager extends RelationManager
                                                 TextInput::make('job_line_amount')
                                                     ->label('Job Line Amount')
                                                     ->numeric()
-                                                    ->prefix('$')
+                                                    ->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('job_currency_code') ?: $this->ownerCurrencyCode()))
                                                     ->disabled()
                                                     ->dehydrated(),
 
@@ -560,21 +563,21 @@ class LinesRelationManager extends RelationManager
                                                 TextInput::make('prepmt_line_amount')
                                                     ->label('Prepmt. Line Amount')
                                                     ->numeric()
-                                                    ->prefix('$')
+                                                    ->prefix(fn (): string => $this->ownerCurrencySymbol())
                                                     ->disabled()
                                                     ->dehydrated(),
 
                                                 TextInput::make('prepmt_amt_inv')
                                                     ->label('Prepmt. Amt. Invoiced')
                                                     ->numeric()
-                                                    ->prefix('$')
+                                                    ->prefix(fn (): string => $this->ownerCurrencySymbol())
                                                     ->disabled()
                                                     ->dehydrated(),
 
                                                 TextInput::make('prepmt_amt_incl_vat')
                                                     ->label('Prepmt. Amt. Incl. VAT')
                                                     ->numeric()
-                                                    ->prefix('$')
+                                                    ->prefix(fn (): string => $this->ownerCurrencySymbol())
                                                     ->disabled()
                                                     ->dehydrated(),
                                             ]),
@@ -819,7 +822,7 @@ class LinesRelationManager extends RelationManager
 
                 TextColumn::make('direct_unit_cost')
                     ->label('Unit Cost')
-                    ->money('USD')
+                    ->formatStateUsing($this->documentMoneyFormatter())
                     ->alignEnd()
                     ->sortable()
                     ->toggleable(),
@@ -834,11 +837,11 @@ class LinesRelationManager extends RelationManager
 
                 TextColumn::make('line_amount')
                     ->label('Line Amount')
-                    ->money('USD')
+                    ->formatStateUsing($this->documentMoneyFormatter())
                     ->alignEnd()
                     ->sortable()
                     ->weight(FontWeight::SemiBold)
-                    ->summarize(Sum::make()->label('Total')->money('USD'))
+                    ->summarize(Sum::make()->label('Total')->formatStateUsing($this->documentMoneyFormatter()))
                     ->toggleable(),
 
                 TextColumn::make('expected_receipt_date')
@@ -972,5 +975,39 @@ class LinesRelationManager extends RelationManager
         return $receipt instanceof PurchaseReceipt && $receipt->hasResolvableExchangeRate()
             ? (float) $receipt->resolvedExchangeRate()
             : 1.0;
+    }
+
+    /**
+     * Document currency of the purchase receipt that owns these lines.
+     */
+    private function ownerCurrencyCode(): ?string
+    {
+        $receipt = $this->getOwnerRecord();
+
+        return $receipt instanceof PurchaseReceipt ? $receipt->currency_code : null;
+    }
+
+    private function ownerCurrencySymbol(): string
+    {
+        return CurrencyPresentation::symbol($this->ownerCurrencyCode());
+    }
+
+    private function documentMoneyFormatter(): Closure
+    {
+        return function (int|float|string|null $state): string|int|null {
+            if ($state === null || $state === '') {
+                return null;
+            }
+
+            if (! is_numeric($state)) {
+                return (string) $state;
+            }
+
+            $currency = CurrencyPresentation::document($this->ownerCurrencyCode());
+
+            return $currency === null
+                ? Number::format((float) $state, 2)
+                : Number::currency((float) $state, $currency);
+        };
     }
 }

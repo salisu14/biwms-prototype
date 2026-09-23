@@ -74,6 +74,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Default Currency
+    |--------------------------------------------------------------------------
+    |
+    | Company local currency (LCY) code. This is a presentation/default context
+    | only: it labels amounts that have no document-specific currency and is
+    | never used to convert, reinterpret, or persist monetary values. Document
+    | amounts must display their own currency code.
+    |
+    */
+
+    'default_currency' => env('APP_DEFAULT_CURRENCY', 'NGN'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

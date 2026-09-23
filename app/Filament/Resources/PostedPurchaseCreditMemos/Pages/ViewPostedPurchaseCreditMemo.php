@@ -8,6 +8,7 @@ use App\Models\PaymentApplication;
 use App\Models\PostedPurchaseCreditMemo;
 use App\Models\VendorLedgerEntry;
 use App\Services\Print\PurchaseDocumentPrintService;
+use App\Support\CurrencyPresentation;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Collection;
@@ -39,7 +40,7 @@ class ViewPostedPurchaseCreditMemo extends Page
     public function getHeading(): string
     {
         $vendor = $this->record->vendor_name ?: ($this->record->vendor?->vendor_name ?? 'Unknown Vendor');
-        $amount = Number::currency((float) $this->record->grand_total, $this->record->currency_code ?: config('app.default_currency', 'USD'));
+        $amount = Number::currency((float) $this->record->grand_total, CurrencyPresentation::documentOrDefault($this->record->currency_code));
 
         return ($this->record->document_number ?? 'Posted Purchase Credit Memo')
             .' • '.$vendor

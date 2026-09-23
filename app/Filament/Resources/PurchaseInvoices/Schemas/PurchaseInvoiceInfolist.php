@@ -6,6 +6,7 @@ use App\Filament\Resources\Locations\LocationResource;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
 use App\Filament\Resources\Vendors\VendorResource;
 use App\Models\PurchaseInvoice;
+use App\Support\CurrencyPresentation;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -90,19 +91,19 @@ class PurchaseInvoiceInfolist
                                 ->schema([
                                     TextEntry::make('grand_total')
                                         ->label('Total (Incl. VAT)')
-                                        ->state(fn (PurchaseInvoice $record): string => Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD')))
+                                        ->state(fn (PurchaseInvoice $record): string => Number::currency((float) $record->grand_total, CurrencyPresentation::documentOrDefault($record->currency_code)))
                                         ->size('lg')
                                         ->weight('bold'),
                                     TextEntry::make('total_vat')
                                         ->label('VAT Amount')
-                                        ->state(fn (PurchaseInvoice $record): string => Number::currency((float) $record->total_vat, $record->currency_code ?: config('app.default_currency', 'USD'))),
+                                        ->state(fn (PurchaseInvoice $record): string => Number::currency((float) $record->total_vat, CurrencyPresentation::documentOrDefault($record->currency_code))),
                                     TextEntry::make('amount_paid')
                                         ->label('Paid to Date')
-                                        ->state(fn (PurchaseInvoice $record): string => Number::currency((float) $record->amount_paid, $record->currency_code ?: config('app.default_currency', 'USD')))
+                                        ->state(fn (PurchaseInvoice $record): string => Number::currency((float) $record->amount_paid, CurrencyPresentation::documentOrDefault($record->currency_code)))
                                         ->color('success'),
                                     TextEntry::make('remaining_amount')
                                         ->label('Balance Due')
-                                        ->state(fn (PurchaseInvoice $record): string => Number::currency((float) $record->remaining_amount, $record->currency_code ?: config('app.default_currency', 'USD')))
+                                        ->state(fn (PurchaseInvoice $record): string => Number::currency((float) $record->remaining_amount, CurrencyPresentation::documentOrDefault($record->currency_code)))
                                         ->color(fn ($state) => $state > 0 ? 'danger' : 'success')
                                         ->weight('bold'),
                                 ]),

@@ -14,6 +14,7 @@ use App\Services\Print\PostedPurchaseInvoicePrintService;
 use App\Services\Print\ProformaInvoiceService;
 use App\Services\Purchase\PurchaseInvoiceService;
 use App\Services\Purchase\PurchaseOrderService;
+use App\Support\CurrencyPresentation;
 use App\Support\Filament\PostingFailureNotifier;
 use Exception;
 use Filament\Actions\Action;
@@ -112,7 +113,7 @@ class PurchaseOrdersTable
 
                 TextColumn::make('grand_total')
                     ->label('Total')
-                    ->money(fn (PurchaseOrder $record) => $record->currency_code ?: 'USD')
+                    ->money(fn (PurchaseOrder $record): string => CurrencyPresentation::documentOrDefault($record->currency_code))
                     ->sortable()
                     ->weight('bold'),
             ])->recordActions([

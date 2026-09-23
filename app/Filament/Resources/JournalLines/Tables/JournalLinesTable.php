@@ -20,7 +20,7 @@ class JournalLinesTable
                 TextColumn::make('posting_date')->date()->sortable(),
                 TextColumn::make('account_no')->searchable(),
                 TextColumn::make('description')->limit(30),
-                TextColumn::make('amount')->money('USD')->sortable(),
+                TextColumn::make('amount')->money('NGN')->sortable(),
                 TextColumn::make('status')
                     ->badge()
                     ->colors([

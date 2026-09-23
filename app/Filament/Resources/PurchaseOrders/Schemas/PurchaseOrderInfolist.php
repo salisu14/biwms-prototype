@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PurchaseOrders\Schemas;
 
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
+use App\Support\CurrencyPresentation;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -117,17 +118,26 @@ class PurchaseOrderInfolist
                     ->schema([
                         TextEntry::make('total_amount')
                             ->label('Total (Excl. VAT)')
-                            ->money('USD'),
+                            ->money(fn ($record): string => CurrencyPresentation::documentOrDefault($record->currency_code)),
 
                         TextEntry::make('total_vat')
                             ->label('Total VAT')
-                            ->money('USD'),
+                            ->money(fn ($record): string => CurrencyPresentation::documentOrDefault($record->currency_code)),
 
                         TextEntry::make('grand_total')
                             ->label('Grand Total')
-                            ->money('USD')
+                            ->money(fn ($record): string => CurrencyPresentation::documentOrDefault($record->currency_code))
                             ->weight('bold')
                             ->size('text-lg'),
+
+                        TextEntry::make('grand_total_lcy')
+                            ->label('Grand Total (LCY / '.CurrencyPresentation::lcy().')')
+                            ->state(fn ($record): ?string => $record->grand_total_lcy === null
+                                ? null
+                                : number_format((float) $record->grand_total_lcy, 2))
+                            ->weight('bold')
+                            ->size('text-lg')
+                            ->placeholder('—'),
                     ]),
 
                 Section::make('Approval Status')

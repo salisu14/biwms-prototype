@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PostedPurchaseCreditMemos\Schemas;
 
 use App\Models\Vendor;
+use App\Support\CurrencyPresentation;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
@@ -11,6 +12,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class PostedPurchaseCreditMemoForm
@@ -99,12 +101,12 @@ class PostedPurchaseCreditMemoForm
                             TextInput::make('warehouse_receipt_number'),
                         ]),
                         Grid::make(4)->schema([
-                            TextInput::make('subtotal')->numeric()->prefix('$')->disabled(),
-                            TextInput::make('discount_amount')->numeric()->prefix('$')->disabled(),
-                            TextInput::make('tax_amount')->numeric()->prefix('$')->disabled(),
+                            TextInput::make('subtotal')->numeric()->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency_code')))->disabled(),
+                            TextInput::make('discount_amount')->numeric()->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency_code')))->disabled(),
+                            TextInput::make('tax_amount')->numeric()->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency_code')))->disabled(),
                             TextInput::make('grand_total')
                                 ->numeric()
-                                ->prefix('$')
+                                ->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency_code')))
                                 ->label('Grand Total')
                                 ->extraInputAttributes(['class' => 'font-bold text-lg'])
                                 ->disabled(),

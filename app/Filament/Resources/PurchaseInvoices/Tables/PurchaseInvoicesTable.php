@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PurchaseInvoices\Tables;
 use App\Enums\ApprovalStatus;
 use App\Models\PurchaseInvoice;
 use App\Services\Purchase\PurchaseInvoiceService;
+use App\Support\CurrencyPresentation;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -46,14 +47,14 @@ class PurchaseInvoicesTable
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('grand_total')
                     ->label('Total')
-                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, CurrencyPresentation::documentOrDefault($record->currency_code)))
                     ->sortable()
                     ->alignment('right'),
                 SelectColumn::make('status')
                     ->options(ApprovalStatus::class)
                     ->disabled(fn ($record) => $record->isPosted()),
                 TextColumn::make('remaining_amount')
-                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, CurrencyPresentation::documentOrDefault($record->currency_code)))
                     ->label('Balance')
                     ->color(fn ($state) => $state > 0 ? 'warning' : 'success')
                     ->alignment('right'),

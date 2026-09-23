@@ -10,6 +10,7 @@ use App\Filament\Resources\PurchaseOrders\Schemas\PurchaseOrderForm;
 use App\Filament\Resources\PurchaseOrders\Schemas\PurchaseOrderInfolist;
 use App\Filament\Resources\PurchaseOrders\Tables\PurchaseOrdersTable;
 use App\Models\PurchaseOrder;
+use App\Support\CurrencyPresentation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -108,7 +109,7 @@ class PurchaseOrderResource extends Resource
             'Location' => $record->location?->code ? "{$record->location->code} - {$record->location->name}" : ($record->location?->name ?? '—'),
             'Status' => $record->status?->value ?? '—',
             'Order Type' => $record->order_type?->value ?? '—',
-            'Total' => Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD')),
+            'Total' => Number::currency((float) $record->grand_total, CurrencyPresentation::documentOrDefault($record->currency_code)),
         ];
     }
 

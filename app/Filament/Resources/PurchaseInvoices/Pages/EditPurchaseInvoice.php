@@ -6,6 +6,7 @@ use App\Enums\ApprovalStatus;
 use App\Filament\Resources\PurchaseInvoices\PurchaseInvoiceResource;
 use App\Models\PurchaseInvoice;
 use App\Services\Purchase\PurchaseInvoiceService;
+use App\Support\CurrencyPresentation;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
@@ -21,7 +22,7 @@ class EditPurchaseInvoice extends EditRecord
     {
         $record = $this->getRecord();
         $vendor = $record->vendor_name ?: ($record->vendor?->vendor_name ?? 'Unknown Vendor');
-        $amount = Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD'));
+        $amount = Number::currency((float) $record->grand_total, CurrencyPresentation::documentOrDefault($record->currency_code));
 
         return ($record->document_number ?? 'Purchase Invoice')
             .' • '.$vendor

@@ -119,7 +119,7 @@ class ItemsTable
 
                 TextColumn::make('unit_cost')
                     ->label('Cost')
-                    ->money(fn ($record) => $record->currency?->code ?? 'NGN')
+                    ->money('NGN')
                     ->alignRight()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),

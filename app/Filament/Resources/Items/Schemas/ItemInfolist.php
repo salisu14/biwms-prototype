@@ -85,8 +85,8 @@ class ItemInfolist
                                 ->money('NGN')
                                 ->placeholder('N/A'),
                             TextEntry::make('standard_cost')
-                                ->label('Standard / Reference Cost')
-                                ->money(fn ($record) => $record->currency?->code ?? 'NGN'),
+                                ->label('Standard / Reference Cost (LCY)')
+                                ->money('NGN'),
                             TextEntry::make('markup_percent')
                                 ->label('Indicative Markup %')
                                 ->state(fn ($record) => app(ProfitabilityReportService::class)->itemIndicativeMeasures($record)['markup_percent'])
@@ -99,9 +99,9 @@ class ItemInfolist
                                 ->money('NGN')
                                 ->placeholder('N/A'),
                             TextEntry::make('indicative_unit_margin')
-                                ->label('Indicative Unit Margin (Standard Cost)')
+                                ->label('Indicative Unit Margin (Standard Cost, LCY)')
                                 ->state(fn ($record) => app(ProfitabilityReportService::class)->itemIndicativeMeasures($record)['indicative_unit_margin'])
-                                ->money(fn ($record) => $record->currency?->code ?? 'NGN')
+                                ->money('NGN')
                                 ->placeholder('N/A'),
                             TextEntry::make('inventory_method')
                                 ->label('Inventory Method')

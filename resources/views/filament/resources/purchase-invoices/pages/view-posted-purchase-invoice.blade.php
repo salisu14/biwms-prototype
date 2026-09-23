@@ -1,6 +1,7 @@
 <x-filament-panels::page>
     @php
-        $currencyCode = $this->record->currency_code ?: 'NGN';
+        $currencyCode = \App\Support\CurrencyPresentation::documentOrDefault($this->record->currency_code);
+        $hasLcyColumns = $currencyCode !== 'NGN';
         $tableWrapper = 'overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900';
         $tableClass = 'min-w-full border-collapse text-sm';
         $headClass = 'bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300';
@@ -108,29 +109,47 @@
                     <thead class="{{ $headClass }}">
                         <tr>
                             <th class="{{ $headCellClass }}">Metric</th>
-                            <th class="{{ $headCellClass }} text-right">Amount</th>
+                            <th class="{{ $headCellClass }} text-right">Amount ({{ $currencyCode }})</th>
+                            @if($hasLcyColumns)
+                                <th class="{{ $headCellClass }} text-right">Amount (LCY / NGN)</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td class="{{ $bodyCellClass }}">Total Amount</td>
-                            <td class="{{ $bodyCellClass }} text-right">{{ $currencyCode }} {{ number_format((float) $this->record->total_amount, 2) }}</td>
+                            <td class="{{ $bodyCellClass }} text-right">{{ number_format((float) $this->record->total_amount, 2) }}</td>
+                            @if($hasLcyColumns)
+                                <td class="{{ $bodyCellClass }} text-right">{{ $this->record->total_amount_lcy === null ? '—' : number_format((float) $this->record->total_amount_lcy, 2) }}</td>
+                            @endif
                         </tr>
                         <tr>
                             <td class="{{ $bodyCellClass }}">VAT</td>
-                            <td class="{{ $bodyCellClass }} text-right">{{ $currencyCode }} {{ number_format((float) $this->record->total_vat, 2) }}</td>
+                            <td class="{{ $bodyCellClass }} text-right">{{ number_format((float) $this->record->total_vat, 2) }}</td>
+                            @if($hasLcyColumns)
+                                <td class="{{ $bodyCellClass }} text-right">{{ $this->record->total_vat_lcy === null ? '—' : number_format((float) $this->record->total_vat_lcy, 2) }}</td>
+                            @endif
                         </tr>
                         <tr>
                             <td class="{{ $bodyCellClass }} font-semibold">Grand Total</td>
-                            <td class="{{ $bodyCellClass }} text-right font-semibold">{{ $currencyCode }} {{ number_format((float) $this->record->grand_total, 2) }}</td>
+                            <td class="{{ $bodyCellClass }} text-right font-semibold">{{ number_format((float) $this->record->grand_total, 2) }}</td>
+                            @if($hasLcyColumns)
+                                <td class="{{ $bodyCellClass }} text-right font-semibold">{{ $this->record->grand_total_lcy === null ? '—' : number_format((float) $this->record->grand_total_lcy, 2) }}</td>
+                            @endif
                         </tr>
                         <tr>
                             <td class="{{ $bodyCellClass }}">Applied Amount</td>
-                            <td class="{{ $bodyCellClass }} text-right">{{ $currencyCode }} {{ number_format((float) $this->record->amount_paid, 2) }}</td>
+                            <td class="{{ $bodyCellClass }} text-right">{{ number_format((float) $this->record->amount_paid, 2) }}</td>
+                            @if($hasLcyColumns)
+                                <td class="{{ $bodyCellClass }} text-right">—</td>
+                            @endif
                         </tr>
                         <tr>
                             <td class="{{ $bodyCellClass }} font-semibold">Remaining Amount</td>
-                            <td class="{{ $bodyCellClass }} text-right font-semibold">{{ $currencyCode }} {{ number_format((float) $this->record->remaining_amount, 2) }}</td>
+                            <td class="{{ $bodyCellClass }} text-right font-semibold">{{ number_format((float) $this->record->remaining_amount, 2) }}</td>
+                            @if($hasLcyColumns)
+                                <td class="{{ $bodyCellClass }} text-right font-semibold">{{ $this->record->remaining_amount_lcy === null ? '—' : number_format((float) $this->record->remaining_amount_lcy, 2) }}</td>
+                            @endif
                         </tr>
                     </tbody>
                 </table>
@@ -200,11 +219,17 @@
                             <th class="{{ $headCellClass }}">Code</th>
                             <th class="{{ $headCellClass }}">Description</th>
                             <th class="{{ $headCellClass }} text-right">Qty</th>
-                            <th class="{{ $headCellClass }} text-right">Unit Cost</th>
-                            <th class="{{ $headCellClass }} text-right">Discount</th>
-                            <th class="{{ $headCellClass }} text-right">Line Total</th>
-                            <th class="{{ $headCellClass }} text-right">VAT</th>
-                            <th class="{{ $headCellClass }} text-right">Incl. VAT</th>
+                            <th class="{{ $headCellClass }} text-right">Unit Cost ({{ $currencyCode }})</th>
+                            <th class="{{ $headCellClass }} text-right">Discount ({{ $currencyCode }})</th>
+                            <th class="{{ $headCellClass }} text-right">Line Total ({{ $currencyCode }})</th>
+                            <th class="{{ $headCellClass }} text-right">VAT ({{ $currencyCode }})</th>
+                            <th class="{{ $headCellClass }} text-right">Incl. VAT ({{ $currencyCode }})</th>
+                            @if($hasLcyColumns)
+                                <th class="{{ $headCellClass }} text-right">Unit Cost (NGN)</th>
+                                <th class="{{ $headCellClass }} text-right">Line Total (NGN)</th>
+                                <th class="{{ $headCellClass }} text-right">VAT (NGN)</th>
+                                <th class="{{ $headCellClass }} text-right">Incl. VAT (NGN)</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -220,10 +245,16 @@
                                 <td class="{{ $bodyCellClass }} text-right">{{ number_format((float) $line->line_total, 4) }}</td>
                                 <td class="{{ $bodyCellClass }} text-right">{{ number_format((float) $line->vat_amount, 4) }}</td>
                                 <td class="{{ $bodyCellClass }} text-right">{{ number_format((float) $line->amount_including_vat, 4) }}</td>
+                                @if($hasLcyColumns)
+                                    <td class="{{ $bodyCellClass }} text-right">{{ $line->unit_cost_lcy === null ? '—' : number_format((float) $line->unit_cost_lcy, 4) }}</td>
+                                    <td class="{{ $bodyCellClass }} text-right">{{ $line->line_total_lcy === null ? '—' : number_format((float) $line->line_total_lcy, 4) }}</td>
+                                    <td class="{{ $bodyCellClass }} text-right">{{ $line->vat_amount_lcy === null ? '—' : number_format((float) $line->vat_amount_lcy, 4) }}</td>
+                                    <td class="{{ $bodyCellClass }} text-right">{{ $line->amount_including_vat_lcy === null ? '—' : number_format((float) $line->amount_including_vat_lcy, 4) }}</td>
+                                @endif
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10" class="border border-gray-200 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">No posted lines available.</td>
+                                <td colspan="{{ $hasLcyColumns ? 14 : 10 }}" class="border border-gray-200 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">No posted lines available.</td>
                             </tr>
                         @endforelse
                     </tbody>

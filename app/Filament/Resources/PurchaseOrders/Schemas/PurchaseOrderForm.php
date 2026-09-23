@@ -7,6 +7,7 @@ use App\Enums\PurchaseOrderType;
 use App\Filament\Traits\HasSystemGeneratedField;
 use App\Models\Vendor;
 use App\Services\Business\BusinessContextService;
+use App\Support\CurrencyPresentation;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Hidden;
@@ -167,7 +168,7 @@ class PurchaseOrderForm
                                 ->label('Total Excl. VAT')
                                 ->required()
                                 ->numeric()
-                                ->prefix('$')
+                                ->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency_code')))
                                 ->default(0)
                                 ->disabled(fn ($record) => $record && $record->id !== null)
                                 ->extraInputAttributes(['class' => 'text-xl font-semibold']),
@@ -176,7 +177,7 @@ class PurchaseOrderForm
                                 ->label('Total VAT')
                                 ->required()
                                 ->numeric()
-                                ->prefix('$')
+                                ->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency_code')))
                                 ->default(0)
                                 ->disabled(fn ($record) => $record && $record->id !== null)
                                 ->extraInputAttributes(['class' => 'text-xl font-semibold text-warning-600']),
@@ -185,7 +186,7 @@ class PurchaseOrderForm
                                 ->label('Grand Total')
                                 ->required()
                                 ->numeric()
-                                ->prefix('$')
+                                ->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency_code')))
                                 ->default(0)
                                 ->disabled(fn ($record) => $record && $record->id !== null)
                                 ->extraInputAttributes(['class' => 'text-2xl font-black text-primary-600']),
@@ -193,7 +194,7 @@ class PurchaseOrderForm
 
                         TextInput::make('total_summary')
                             ->label('Consolidated Total')
-                            ->prefix('$')
+                            ->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency_code')))
                             ->readOnly()
                             ->dehydrated(false) // 🔥 important: don't save to DB
                             ->formatStateUsing(function ($state, $get) {

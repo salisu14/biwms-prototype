@@ -4,6 +4,8 @@ namespace App\Filament\Resources\PurchaseOrders\Pages;
 
 use App\Enums\PurchaseOrderStatus;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
+use App\Models\PurchaseOrder;
+use App\Support\CurrencyPresentation;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Columns\TextColumn;
@@ -61,7 +63,7 @@ class ArchivedPurchaseOrders extends ListRecords
                     ->sortable(),
                 TextColumn::make('grand_total')
                     ->label('Total')
-                    ->money(fn ($record) => $record->currency_code ?: 'USD')
+                    ->money(fn (PurchaseOrder $record): string => CurrencyPresentation::documentOrDefault($record->currency_code))
                     ->sortable()
                     ->weight('bold'),
             ])

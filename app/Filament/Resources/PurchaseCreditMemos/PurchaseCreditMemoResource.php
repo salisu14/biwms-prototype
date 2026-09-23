@@ -12,6 +12,7 @@ use App\Filament\Shared\Actions\ApprovalActions;
 use App\Models\PurchaseCreditMemo;
 use App\Services\Approval\ApprovalTemplateService;
 use App\Services\Purchases\PurchaseCreditMemoService;
+use App\Support\CurrencyPresentation;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -50,7 +51,9 @@ class PurchaseCreditMemoResource extends Resource
             ->columns([
                 TextColumn::make('document_number')->searchable()->sortable(),
                 TextColumn::make('vendor_name')->searchable(),
-                TextColumn::make('grand_total')->money('NGN')->sortable(),
+                TextColumn::make('grand_total')
+                    ->money(fn ($record): string => CurrencyPresentation::documentOrDefault($record->currency_code))
+                    ->sortable(),
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => $state->color())

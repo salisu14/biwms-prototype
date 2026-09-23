@@ -2,6 +2,7 @@
 
 namespace App\Filament\Sales\Resources\Items\Tables;
 
+use App\Support\CurrencyPresentation;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -24,7 +25,7 @@ class ItemsTable
                     ->sortable()
                     ->limit(50),
                 TextColumn::make('unit_price')
-                    ->money('USD')
+                    ->money(fn ($record): string => CurrencyPresentation::document($record->currency?->code) ?? CurrencyPresentation::default())
                     ->sortable(),
                 TextColumn::make('unit_of_measure'),
                 TextColumn::make('inventory_quantity')

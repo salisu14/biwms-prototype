@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Vendors\Schemas;
 
 use App\Filament\Traits\HasSystemGeneratedField;
+use App\Support\CurrencyPresentation;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -10,6 +11,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class VendorForm
@@ -117,6 +119,7 @@ class VendorForm
                                             'NGN' => 'NGN - Nigerian Naira',
                                         ])
                                         ->default('USD')
+                                        ->live()
                                         ->required(),
 
                                     TextInput::make('payment_terms_code')
@@ -131,7 +134,7 @@ class VendorForm
                                     TextInput::make('minimum_order_amount')
                                         ->label('Min. Order Amount')
                                         ->numeric()
-                                        ->prefix('$')
+                                        ->prefix(fn (Get $get): string => CurrencyPresentation::symbol($get('currency')))
                                         ->step(0.0001),
 
                                     Toggle::make('is_price_inclusive')

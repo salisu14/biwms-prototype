@@ -11,6 +11,7 @@ use App\Filament\Resources\PurchaseInvoices\Schemas\PurchaseInvoiceForm;
 use App\Filament\Resources\PurchaseInvoices\Schemas\PurchaseInvoiceInfolist;
 use App\Filament\Resources\PurchaseInvoices\Tables\PurchaseInvoicesTable;
 use App\Models\PurchaseInvoice;
+use App\Support\CurrencyPresentation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -131,7 +132,7 @@ class PurchaseInvoiceResource extends Resource
             'Location' => $record->location?->code
                 ? "{$record->location->code} - {$record->location->name}"
                 : ($record->location?->name ?? '—'),
-            'Total' => Number::currency((float) $record->grand_total, $record->currency_code ?: config('app.default_currency', 'USD')),
+            'Total' => Number::currency((float) $record->grand_total, CurrencyPresentation::documentOrDefault($record->currency_code)),
         ];
     }
 

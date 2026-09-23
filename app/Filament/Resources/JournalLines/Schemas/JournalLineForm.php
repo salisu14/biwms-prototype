@@ -46,14 +46,14 @@ class JournalLineForm
                 Section::make('Financials')
                     ->schema([
                         Grid::make(3)->schema([
-                            TextInput::make('amount')->numeric()->prefix('$')->default(0),
-                            TextInput::make('debit_amount')->numeric()->prefix('$')->default(0),
-                            TextInput::make('credit_amount')->numeric()->prefix('$')->default(0),
+                            TextInput::make('amount')->numeric()->prefix('₦')->default(0),
+                            TextInput::make('debit_amount')->numeric()->prefix('₦')->default(0),
+                            TextInput::make('credit_amount')->numeric()->prefix('₦')->default(0),
                         ]),
                         Grid::make(3)->schema([
                             TextInput::make('currency_code'),
                             TextInput::make('currency_factor')->numeric()->default(1),
-                            TextInput::make('amount_lcy')->numeric()->prefix('$')->default(0),
+                            TextInput::make('amount_lcy')->numeric()->prefix('₦')->default(0),
                         ]),
                     ]),
             ]);

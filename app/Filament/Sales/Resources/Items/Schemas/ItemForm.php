@@ -2,6 +2,8 @@
 
 namespace App\Filament\Sales\Resources\Items\Schemas;
 
+use App\Models\Item;
+use App\Support\CurrencyPresentation;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Schema;
 
@@ -22,7 +24,7 @@ class ItemForm
 
                 TextInput::make('unit_price')
                     ->numeric()
-                    ->prefix('$')
+                    ->prefix(fn (?Item $record): string => CurrencyPresentation::symbol($record?->currency?->code ?: CurrencyPresentation::default()))
                     ->disabled(),
 
                 TextInput::make('unit_of_measure')

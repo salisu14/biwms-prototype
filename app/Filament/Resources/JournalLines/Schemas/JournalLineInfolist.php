@@ -28,9 +28,9 @@ class JournalLineInfolist
                 Section::make('Financial Data')
                     ->schema([
                         Grid::make(3)->schema([
-                            TextEntry::make('amount')->money('USD'),
-                            TextEntry::make('debit_amount')->money('USD'),
-                            TextEntry::make('credit_amount')->money('USD'),
+                            TextEntry::make('amount')->money('NGN'),
+                            TextEntry::make('debit_amount')->money('NGN'),
+                            TextEntry::make('credit_amount')->money('NGN'),
                         ]),
                     ]),
             ]);

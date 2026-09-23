@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PostedPurchaseCreditMemos\Schemas;
 
+use App\Support\CurrencyPresentation;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -56,12 +57,12 @@ class PostedPurchaseCreditMemoInfolist
                             Section::make('Financial Summary')
                                 ->schema([
                                     TextEntry::make('grand_total')
-                                        ->money(fn ($record) => $record->currency_code)
+                                        ->money(fn ($record): string => CurrencyPresentation::documentOrDefault($record->currency_code))
                                         ->size('lg')
                                         ->weight('bold'),
                                     TextEntry::make('tax_amount')
                                         ->label('Tax Amount')
-                                        ->money(fn ($record) => $record->currency_code),
+                                        ->money(fn ($record): string => CurrencyPresentation::documentOrDefault($record->currency_code)),
                                     TextEntry::make('currency_code')->label('Currency'),
                                 ]),
                             Section::make('Posting Dates')

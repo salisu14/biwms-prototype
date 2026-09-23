@@ -14,6 +14,7 @@ use App\Models\Manufacturing\ProductionBom;
 use App\Models\Manufacturing\Routing;
 use App\Models\UnitOfMeasure;
 use App\Models\Vendor;
+use App\Support\CurrencyPresentation;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -23,10 +24,23 @@ use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class ItemForm
 {
+    /**
+     * Symbol of the item's commercial currency (its declared default), falling
+     * back to the application default currency. Only used for item-level
+     * monetary fields; LCY reference costs always use the local currency.
+     */
+    private static function itemCurrencySymbol(Get $get): string
+    {
+        $code = Currency::query()->whereKey($get('currency_id'))->value('code');
+
+        return CurrencyPresentation::symbol($code ?: CurrencyPresentation::default());
+    }
+
     private static function isFinishedGood(mixed $itemType): bool
     {
         if ($itemType instanceof ItemType) {
@@ -178,31 +192,29 @@ class ItemForm
                                     TextInput::make('unit_price')
                                         ->label('Sales Price (Base)')
                                         ->numeric()
-                                        ->prefix('$')
+                                        ->prefix(fn (Get $get): string => self::itemCurrencySymbol($get))
                                         ->required()
                                         ->step(0.0001),
 
                                     TextInput::make('unit_cost')
-                                        ->label('Unit Cost (Avg/LIFO)')
+                                        ->label('Unit Cost (Avg/LIFO, LCY)')
                                         ->numeric()
-                                        ->prefix('$')
+                                        ->prefix(CurrencyPresentation::symbol(CurrencyPresentation::lcy()))
                                         ->required()
                                         ->step(0.0001),
 
                                     TextInput::make('standard_cost')
-                                        ->label('Standard Cost (Fixed)')
+                                        ->label('Standard Cost (Fixed, LCY)')
                                         ->required()
                                         ->numeric()
-                                        ->prefix('$')
+                                        ->prefix(CurrencyPresentation::symbol(CurrencyPresentation::lcy()))
                                         ->step(0.0001),
 
-                                    // Added: Missing last_direct_cost from model
                                     TextInput::make('last_direct_cost')
-                                        ->label('Last Direct Cost')
+                                        ->label('Last Direct Cost (Currency Unavailable)')
                                         ->numeric()
-                                        ->prefix('$')
                                         ->readOnly()
-                                        ->helperText('Last purchase price from vendor.'),
+                                        ->helperText('Legacy/master cost value; currency provenance is unavailable.'),
 
                                     TextInput::make('profit_percent')
                                         ->label('Profit Margin %')
@@ -327,7 +339,7 @@ class ItemForm
                                                     TextInput::make('unit_cost')
                                                         ->label('Purchase Price')
                                                         ->numeric()
-                                                        ->prefix('$')
+                                                        ->prefix(fn (Get $get): string => self::itemCurrencySymbol($get))
                                                         ->required(),
 
                                                     Select::make('purchase_uom_id')

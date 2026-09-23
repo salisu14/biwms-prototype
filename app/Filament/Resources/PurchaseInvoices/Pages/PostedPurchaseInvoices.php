@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PurchaseInvoices\Pages;
 
 use App\Filament\Resources\PurchaseInvoices\PurchaseInvoiceResource;
 use App\Models\PostedPurchaseInvoice;
+use App\Support\CurrencyPresentation;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Columns\TextColumn;
@@ -47,7 +48,7 @@ class PostedPurchaseInvoices extends ListRecords
                     ->toggleable(),
                 TextColumn::make('grand_total')
                     ->label('Amount')
-                    ->formatStateUsing(fn ($state, PostedPurchaseInvoice $record): string => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, PostedPurchaseInvoice $record): string => Number::currency((float) $state, CurrencyPresentation::documentOrDefault($record->currency_code)))
                     ->sortable(),
                 TextColumn::make('posted_at')->label('Posted Date')->dateTime()->sortable(),
                 TextColumn::make('status')

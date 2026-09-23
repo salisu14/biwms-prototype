@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PostedPurchaseCreditMemos\Tables;
 
+use App\Support\CurrencyPresentation;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -29,7 +30,7 @@ class PostedPurchaseCreditMemosTable
                     ->date()
                     ->sortable(),
                 TextColumn::make('grand_total')
-                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, $record->currency_code ?: config('app.default_currency', 'USD')))
+                    ->formatStateUsing(fn ($state, $record) => Number::currency((float) $state, CurrencyPresentation::documentOrDefault($record->currency_code)))
                     ->sortable()
                     ->alignment('right'),
                 IconColumn::make('posted')

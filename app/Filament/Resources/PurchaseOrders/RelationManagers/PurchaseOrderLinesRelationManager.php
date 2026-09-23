@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Models\PurchaseOrder;
 use App\Models\UnitOfMeasure;
 use App\Services\Purchase\PurchasePriceCalculationService;
+use App\Support\CurrencyPresentation;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -103,6 +104,7 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                         ->label('Unit Cost')
                         ->required()
                         ->numeric()
+                        ->prefix(fn (): string => CurrencyPresentation::symbol($this->ownerCurrencyCode()))
                         ->live() // Using live to update previews immediately
                         ->step(0.0001),
 
@@ -151,7 +153,7 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                             $qty = (float) ($get('quantity') ?? 0);
                             $cost = (float) ($get('unit_cost') ?? 0);
 
-                            return '$'.number_format($qty * $cost, 2);
+                            return CurrencyPresentation::symbol($this->ownerCurrencyCode()).number_format($qty * $cost, 2);
                         }),
 
                     Placeholder::make('vat_amount_preview')
@@ -163,7 +165,7 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                             $lineTotal = $qty * $cost;
                             $vatAmount = $lineTotal * ($vatRate / 100);
 
-                            return '$'.number_format($vatAmount, 2);
+                            return CurrencyPresentation::symbol($this->ownerCurrencyCode()).number_format($vatAmount, 2);
                         }),
 
                     Placeholder::make('total_amount_preview')
@@ -176,7 +178,7 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                             $vatAmount = $lineTotal * ($vatRate / 100);
                             $grandTotal = $lineTotal + $vatAmount;
 
-                            return '$'.number_format($grandTotal, 2);
+                            return CurrencyPresentation::symbol($this->ownerCurrencyCode()).number_format($grandTotal, 2);
                         })
                         ->extraAttributes(['class' => 'font-bold text-lg text-primary-600']),
                 ]),
@@ -213,6 +215,16 @@ class PurchaseOrderLinesRelationManager extends RelationManager
         return $order instanceof PurchaseOrder && $order->hasResolvableCurrencyFactor()
             ? (float) $order->resolvedCurrencyFactor()
             : 1.0;
+    }
+
+    /**
+     * Document currency of the purchase order that owns these lines.
+     */
+    private function ownerCurrencyCode(): ?string
+    {
+        $order = $this->getOwnerRecord();
+
+        return $order instanceof PurchaseOrder ? $order->currency_code : null;
     }
 
     public function table(Table $table): Table
@@ -254,23 +266,23 @@ class PurchaseOrderLinesRelationManager extends RelationManager
                     ->color('warning'),
 
                 TextColumn::make('unit_cost')
-                    ->money('USD')
+                    ->money(fn (): string => CurrencyPresentation::documentOrDefault($this->ownerCurrencyCode()))
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('line_total')
                     ->label('Subtotal')
-                    ->money('USD')
+                    ->money(fn (): string => CurrencyPresentation::documentOrDefault($this->ownerCurrencyCode()))
                     ->summarize([
                         Tables\Columns\Summarizers\Sum::make()
-                            ->money('USD'),
+                            ->money(fn (): string => CurrencyPresentation::documentOrDefault($this->ownerCurrencyCode())),
                     ]),
 
                 TextColumn::make('total_amount')
                     ->label('Total')
-                    ->money('USD')
+                    ->money(fn (): string => CurrencyPresentation::documentOrDefault($this->ownerCurrencyCode()))
                     ->summarize([
                         Tables\Columns\Summarizers\Sum::make()
-                            ->money('USD'),
+                            ->money(fn (): string => CurrencyPresentation::documentOrDefault($this->ownerCurrencyCode())),
                     ]),
 
                 Tables\Columns\IconColumn::make('is_fully_received')

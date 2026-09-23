@@ -65,11 +65,11 @@ class VendorLedgerEntryInfolist
 
                         TextEntry::make('original_debit_amount')
                             ->label('Original Debit (FCY)')
-                            ->state(fn (VendorLedgerEntry $record): string => Number::format((float) $record->original_debit_amount, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD'))),
+                            ->state(fn (VendorLedgerEntry $record): string => Number::format((float) $record->original_debit_amount, 2).' '.($record->currency_code ?: '—')),
 
                         TextEntry::make('original_credit_amount')
                             ->label('Original Credit (FCY)')
-                            ->state(fn (VendorLedgerEntry $record): string => Number::format((float) $record->original_credit_amount, 2).' '.($record->currency_code ?? config('app.default_currency', 'USD'))),
+                            ->state(fn (VendorLedgerEntry $record): string => Number::format((float) $record->original_credit_amount, 2).' '.($record->currency_code ?: '—')),
 
                         IconEntry::make('open')->label('Open?')->boolean(),
                         IconEntry::make('fully_applied')->label('Fully Applied?')->boolean(),

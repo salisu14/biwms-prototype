@@ -53,7 +53,8 @@ class ItemInfolist
                 TextEntry::make('standard_cost')
                     ->money(),
                 TextEntry::make('last_direct_cost')
-                    ->money()
+                    ->label('Last Direct Cost (Currency Unavailable)')
+                    ->numeric(decimalPlaces: 2)
                     ->placeholder('-'),
                 TextEntry::make('unit_price')
                     ->money(),
