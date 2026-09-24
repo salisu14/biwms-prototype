@@ -869,7 +869,16 @@ class LinesRelationManager extends RelationManager
                     ->toggleable(),
             ])
             ->defaultSort('line_number', 'asc')
-            ->reorderable('line_number')
+            ->reorderable('line_number', function (): bool {
+                $receipt = $this->getOwnerRecord();
+
+                return $receipt instanceof PurchaseReceipt
+                    && $receipt->exists
+                    && PurchaseReceipt::query()
+                        ->whereKey($receipt->getKey())
+                        ->where('posted', false)
+                        ->exists();
+            })
             ->filters([
                 SelectFilter::make('type')
                     ->options([

@@ -26,7 +26,6 @@ use App\Models\Vendor;
 use App\Models\VendorPostingGroup;
 use App\Support\CurrencyPresentation;
 use Database\Seeders\PermissionsTableSeeder;
-use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Number;
 use Livewire\Livewire;
@@ -188,48 +187,38 @@ it('presents a receipt with no currency as a neutral amount instead of NGN or US
     $this->actingAs($user);
 
     // The receipt line table is a lazy relation manager, so it is rendered directly.
-    // Strict authorization is relaxed for this render only: the table's reorderable
-    // column asks for a `reorder` policy method that PurchaseReceiptPolicy does not
-    // define, which is unrelated to currency presentation.
-    $panel = Filament::getCurrentOrDefaultPanel();
-    $panel->strictAuthorization(false);
+    $unknown = Livewire::test(LinesRelationManager::class, [
+        'ownerRecord' => $receipt,
+        'pageClass' => ViewPurchaseReceipt::class,
+    ]);
 
-    try {
-        $unknown = Livewire::test(LinesRelationManager::class, [
-            'ownerRecord' => $receipt,
-            'pageClass' => ViewPurchaseReceipt::class,
-        ]);
+    $unknown->assertSuccessful()
+        // Neutral numeric presentation: the amount renders without any currency.
+        ->assertSee(Number::format(4321, 2))
+        ->assertDontSee(Number::currency(4321, 'NGN'), escape: false)
+        ->assertDontSee(Number::currency(4321, 'USD'), escape: false)
+        ->assertDontSee(Number::currency(2160.5, 'NGN'), escape: false)
+        ->assertDontSee(Number::currency(2160.5, 'USD'), escape: false);
 
-        $unknown->assertSuccessful()
-            // Neutral numeric presentation: the amount renders without any currency.
-            ->assertSee(Number::format(4321, 2))
-            ->assertDontSee(Number::currency(4321, 'NGN'), escape: false)
-            ->assertDontSee(Number::currency(4321, 'USD'), escape: false)
-            ->assertDontSee(Number::currency(2160.5, 'NGN'), escape: false)
-            ->assertDontSee(Number::currency(2160.5, 'USD'), escape: false);
+    // An explicit NGN receipt keeps its own document currency.
+    $receipt->update(['currency_code' => 'NGN', 'exchange_rate' => 1]);
 
-        // An explicit NGN receipt keeps its own document currency.
-        $receipt->update(['currency_code' => 'NGN', 'exchange_rate' => 1]);
+    Livewire::test(LinesRelationManager::class, [
+        'ownerRecord' => $receipt->fresh(),
+        'pageClass' => ViewPurchaseReceipt::class,
+    ])->assertSuccessful()
+        ->assertSee(Number::currency(4321, 'NGN'), escape: false)
+        ->assertDontSee(Number::currency(4321, 'USD'), escape: false);
 
-        Livewire::test(LinesRelationManager::class, [
-            'ownerRecord' => $receipt->fresh(),
-            'pageClass' => ViewPurchaseReceipt::class,
-        ])->assertSuccessful()
-            ->assertSee(Number::currency(4321, 'NGN'), escape: false)
-            ->assertDontSee(Number::currency(4321, 'USD'), escape: false);
+    // An explicit USD receipt keeps its own document currency.
+    $receipt->update(['currency_code' => 'USD', 'exchange_rate' => 1500]);
 
-        // An explicit USD receipt keeps its own document currency.
-        $receipt->update(['currency_code' => 'USD', 'exchange_rate' => 1500]);
-
-        Livewire::test(LinesRelationManager::class, [
-            'ownerRecord' => $receipt->fresh(),
-            'pageClass' => ViewPurchaseReceipt::class,
-        ])->assertSuccessful()
-            ->assertSee(Number::currency(4321, 'USD'), escape: false)
-            ->assertDontSee(Number::currency(4321, 'NGN'), escape: false);
-    } finally {
-        $panel->strictAuthorization(true);
-    }
+    Livewire::test(LinesRelationManager::class, [
+        'ownerRecord' => $receipt->fresh(),
+        'pageClass' => ViewPurchaseReceipt::class,
+    ])->assertSuccessful()
+        ->assertSee(Number::currency(4321, 'USD'), escape: false)
+        ->assertDontSee(Number::currency(4321, 'NGN'), escape: false);
 });
 
 it('presents the active and archived purchase order lists in each document currency', function (): void {
