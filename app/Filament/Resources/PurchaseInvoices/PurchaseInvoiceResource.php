@@ -61,9 +61,6 @@ class PurchaseInvoiceResource extends Resource
             'vendor',
             'purchaseOrder',
             'location',
-            'capExProject',
-            'payableAccount',
-            'requester',
             'approver',
             'poster',
         ]);
@@ -142,9 +139,6 @@ class PurchaseInvoiceResource extends Resource
             'vendor',
             'purchaseOrder',
             'location',
-            'capExProject',
-            'payableAccount',
-            'requester',
             'approver',
             'poster',
         ])->withoutGlobalScopes([
