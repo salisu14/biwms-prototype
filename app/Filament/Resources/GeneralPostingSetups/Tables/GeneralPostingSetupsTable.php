@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\GeneralPostingSetups\Tables;
 
+use App\Models\ChartOfAccount;
+use App\Models\GeneralPostingSetup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -26,15 +28,26 @@ class GeneralPostingSetupsTable
                     ->label('Prod. Group')
                     ->sortable()
                     ->searchable(),
-                TextColumn::make('salesAccount.name')
+                TextColumn::make('salesAccount.account_number')
                     ->label('Sales Account')
-                    ->toggleable(),
-                TextColumn::make('cogsAccount.name')
+                    ->placeholder('—')
+                    ->toggleable()
+                    ->formatStateUsing(fn (GeneralPostingSetup $record): string => self::formatAccount($record->salesAccount)),
+                TextColumn::make('cogsAccount.account_number')
                     ->label('COGS Account')
-                    ->toggleable(),
-                TextColumn::make('inventoryAccount.name')
+                    ->placeholder('—')
+                    ->toggleable()
+                    ->formatStateUsing(fn (GeneralPostingSetup $record): string => self::formatAccount($record->cogsAccount)),
+                TextColumn::make('inventoryAccount.account_number')
                     ->label('Inventory Account')
-                    ->toggleable(),
+                    ->placeholder('—')
+                    ->toggleable()
+                    ->formatStateUsing(fn (GeneralPostingSetup $record): string => self::formatAccount($record->inventoryAccount)),
+                TextColumn::make('purchaseAccount.account_number')
+                    ->label('Purchase Account / Clearing (GRNI)')
+                    ->placeholder('—')
+                    ->toggleable()
+                    ->formatStateUsing(fn (GeneralPostingSetup $record): string => self::formatAccount($record->purchaseAccount)),
                 IconColumn::make('blocked')
                     ->boolean()
                     ->sortable()
@@ -62,5 +75,21 @@ class GeneralPostingSetupsTable
                     DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    private static function formatAccount(?ChartOfAccount $account): string
+    {
+        if (! $account) {
+            return '—';
+        }
+
+        $number = trim((string) $account->account_number);
+        $name = trim((string) $account->name);
+
+        if ($number === '') {
+            return $name !== '' ? $name : '—';
+        }
+
+        return $name !== '' ? "{$number} — {$name}" : $number;
     }
 }
