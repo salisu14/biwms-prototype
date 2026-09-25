@@ -4,7 +4,8 @@
 
 namespace App\Models;
 
-use App\Services\Business\BusinessContextService;
+use App\Exceptions\BusinessException;
+use App\Services\Business\BusinessOwnershipService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +20,10 @@ class Payment extends Model
     protected static function booted(): void
     {
         static::creating(function (Payment $payment): void {
-            $payment->business_id ??= app(BusinessContextService::class)->resolveId();
+            $payment->business_id = app(BusinessOwnershipService::class)->requireActiveContextId(
+                $payment->business_id,
+                'payment',
+            );
 
             if (! empty($payment->payment_number)) {
                 return;
@@ -64,6 +68,19 @@ class Payment extends Model
             $payment->currency_factor ??= 1;
             $payment->payment_amount_lcy ??= (float) ($payment->payment_amount ?? 0) * (float) $payment->currency_factor;
             $payment->status ??= 'PENDING';
+        });
+
+        // Business ownership is immutable after creation: a normal update must
+        // not move a payment between businesses or strip its owner once party,
+        // bank, G/L entries or applications may exist.
+        static::updating(function (Payment $payment): void {
+            if ($payment->isDirty('business_id')) {
+                throw new BusinessException(
+                    'Payment business ownership cannot be changed after creation.',
+                    title: 'Business ownership is immutable',
+                    field: 'business_id',
+                );
+            }
         });
     }
 

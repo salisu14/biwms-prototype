@@ -31,6 +31,7 @@ use App\Models\VendorLedgerEntry;
 use App\Services\Accounting\ControlAccountAssignmentService;
 use App\Services\Accounting\GeneralLedgerPostingKernel;
 use App\Services\Business\BusinessContextService;
+use App\Services\Business\BusinessOwnershipService;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\Inventory\ValueEntryAccountingOrchestrator;
 use App\Services\Inventory\ValueEntryService;
@@ -220,15 +221,39 @@ class PurchaseInvoiceService
                 throw new \RuntimeException('No lines to post for this purchase invoice.');
             }
 
+            // Ownership at posting comes ONLY from persisted authoritative state.
+            // The active session must never be adopted at the posting boundary: a
+            // null-owned document must not be silently reparented by whoever
+            // happens to post it.
+            $ownership = app(BusinessOwnershipService::class);
+            $invoiceBusinessId = $invoice->business_id;
+
+            if ($invoice->purchaseOrder !== null) {
+                $orderBusinessId = $ownership->requirePersistedId(
+                    $invoice->purchaseOrder->business_id,
+                    'purchase order',
+                );
+
+                $invoiceBusinessId = $ownership->requirePersistedId($invoiceBusinessId, 'purchase invoice');
+
+                if ($invoiceBusinessId !== $orderBusinessId) {
+                    throw new BusinessException(
+                        'The purchase invoice business does not match its purchase order business.',
+                        title: 'Business ownership mismatch',
+                        field: 'business_id',
+                    );
+                }
+            } else {
+                $invoiceBusinessId = $ownership->requirePersistedId($invoiceBusinessId, 'purchase invoice');
+            }
+
+            $businessId = $invoiceBusinessId;
+
             $this->assertPostingSetupComplete($invoice);
 
             // Resolve the authoritative document factor once and fail closed
             // before any accounting side effect when it is unresolved.
             $currencyFactor = $this->resolveInvoiceCurrencyFactor($invoice);
-
-            $businessId = $invoice->business_id
-                ?? $invoice->purchaseOrder?->business_id
-                ?? app(BusinessContextService::class)->resolveId();
 
             // Deterministic, side-effect-free plan: allocate each line's
             // authoritative LCY value across its receipt chunks with a

@@ -35,6 +35,7 @@ use App\Filament\Resources\Users\UserResource;
 use App\Filament\Resources\Vendors\VendorResource;
 use App\Filament\Resources\WarehouseReceipts\WarehouseReceiptResource;
 use App\Filament\Resources\WarehouseShipments\WarehouseShipmentResource;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\Department;
@@ -255,6 +256,11 @@ it('exposes richer search titles details and attributes for key records', functi
     ]);
 
     $purchaseOrder = PurchaseOrder::query()->create([
+        'business_id' => Business::query()->create([
+            'code' => 'BUS-P1E-'.substr(uniqid(), -6),
+            'name' => 'Phase 1E Business',
+            'is_active' => true,
+        ])->id,
         'order_number' => 'PO-2026-000002',
         'order_type' => PurchaseOrderType::PURCHASE_ORDER,
         'status' => PurchaseOrderStatus::APPROVED,

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Business;
 use App\Models\Contact;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\Location;
@@ -57,7 +58,14 @@ it('prefills purchase receipt header defaults from the purchase order and vendor
         'address' => 'Warehouse Street',
     ]);
 
+    $business = Business::query()->create([
+        'code' => 'BUS-PRH-'.substr(uniqid(), -6),
+        'name' => 'Receipt Header Prefill Business',
+        'is_active' => true,
+    ]);
+
     $purchaseOrder = PurchaseOrder::query()->create([
+        'business_id' => $business->id,
         'order_number' => 'PO-HEAD-0001',
         'vendor_id' => $vendor->id,
         'vendor_name' => $vendor->vendor_name,

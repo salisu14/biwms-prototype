@@ -23,6 +23,11 @@ it('records payment application and reversal audit trails from posting events', 
     $user = User::factory()->create();
     $payment = Payment::factory()->customerReceipt()->create([
         'payment_number' => 'PAY-AUD-001',
+        'business_id' => Business::query()->create([
+            'code' => 'BUS-AUD-'.substr(uniqid(), -6),
+            'name' => 'Audit Trail Business',
+            'is_active' => true,
+        ])->id,
         'status' => 'POSTED',
         'created_by' => $user->id,
         'posted_by' => $user->id,
@@ -168,6 +173,7 @@ it('records posting audit context with safe subject and actor fields', function 
     ]);
     $payment = Payment::factory()->customerReceipt()->create([
         'payment_number' => 'PAY-POST-AUD-001',
+        'business_id' => $business->id,
     ]);
 
     $this->actingAs($actor)

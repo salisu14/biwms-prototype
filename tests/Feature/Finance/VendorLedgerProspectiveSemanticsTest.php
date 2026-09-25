@@ -47,6 +47,7 @@ use App\Services\Finance\PaymentService;
 use App\Services\Finance\SubledgerOpeningBalanceService;
 use App\Services\Purchase\PurchaseInvoiceService;
 use App\Support\LedgerSemantics;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -1765,6 +1766,149 @@ test('3d1b currency adjustment refuses to consume a version-2 vendor ledger entr
         ->and((float) $entry->remaining_amount)->toBe(330000.0);
 });
 
+// ---------------------------------------------------------------------------
+// Phase 1C2: legacy currency adjustment inherits the vendor ledger business
+// ---------------------------------------------------------------------------
+
+test('1c2 a realized FX adjustment on an owned legacy v1 entry stamps its business on every G/L row', function (): void {
+    $vendorContext = phase3d1VendorContext();
+    $currencies = phase3d1Currencies();
+    $user = phase3d1User();
+    phase1c2OffsetAccounts();
+
+    $otherBusiness = Business::query()->create(['code' => 'B-1C2-OTHER', 'name' => 'Other Business']);
+
+    $this->actingAs($user);
+
+    $entry = phase1c2VendorLedgerEntry($vendorContext, $currencies, $user);
+
+    $adjustment = app(CurrencyAdjustmentService::class)
+        ->postRealizedGainLoss($entry, 100.0, 1550.0, 'CUR-ADJ-1C2-A');
+
+    expect($adjustment)->not->toBeNull();
+
+    $rows = GlEntry::query()->where('document_number', 'CUR-ADJ-1C2-A')->get();
+
+    expect($rows)->not->toBeEmpty();
+
+    foreach ($rows as $row) {
+        expect($row->business_id)->toBe($vendorContext['business']->id)
+            ->and($row->business_id)->not->toBe($otherBusiness->id);
+    }
+});
+
+test('1c2 revaluation of an owned legacy v1 entry writes no business-less G/L rows', function (): void {
+    $vendorContext = phase3d1VendorContext();
+    $currencies = phase3d1Currencies();
+    $user = phase3d1User();
+    phase1c2OffsetAccounts();
+
+    $this->actingAs($user);
+
+    $currencies['usd']->update([
+        'unrealized_gains_account_id' => $currencies['gain']->id,
+        'unrealized_losses_account_id' => $currencies['loss']->id,
+    ]);
+
+    // Entry carries 1400 while the currency now values at 1500, so the legacy
+    // revaluation step produces a non-zero adjustment and a ledger row.
+    phase1c2VendorLedgerEntry($vendorContext, $currencies, $user, ['currency_factor' => 1400]);
+
+    // The legacy revaluation step posts no G/L and is additionally fenced by the
+    // pre-existing vendor-ledger fact-immutability guard; whatever it ever writes
+    // must carry the entry's authoritative business and nothing unowned is left.
+    expect(fn () => app(CurrencyAdjustmentService::class)->revalueCurrency($currencies['usd'], now(), 'CUR-ADJ-1C2-B'))
+        ->toThrow(BusinessException::class);
+
+    foreach (GlEntry::query()->where('document_number', 'CUR-ADJ-1C2-B')->get() as $row) {
+        expect($row->business_id)->toBe($vendorContext['business']->id);
+    }
+
+    expect(GlEntry::query()->where('document_number', 'CUR-ADJ-1C2-B')->count())->toBe(0)
+        ->and(CurrencyAdjustmentLedger::query()->where('document_no', 'CUR-ADJ-1C2-B')->count())->toBe(0);
+});
+
+test('1c2 a realized FX loss adjustment on an owned legacy v1 entry stamps its business on every G/L row', function (): void {
+    $vendorContext = phase3d1VendorContext();
+    $currencies = phase3d1Currencies();
+    $user = phase3d1User();
+    phase1c2OffsetAccounts();
+
+    $this->actingAs($user);
+
+    $entry = phase1c2VendorLedgerEntry($vendorContext, $currencies, $user);
+
+    $adjustment = app(CurrencyAdjustmentService::class)
+        ->postRealizedGainLoss($entry, 100.0, 1450.0, 'CUR-ADJ-1C2-LOSS');
+
+    expect($adjustment)->not->toBeNull();
+
+    $rows = GlEntry::query()->where('document_number', 'CUR-ADJ-1C2-LOSS')->get();
+
+    expect($rows)->not->toBeEmpty();
+
+    foreach ($rows as $row) {
+        expect($row->business_id)->toBe($vendorContext['business']->id);
+    }
+});
+
+test('1c2 refuses to post a realized FX adjustment for a null-owned legacy entry', function (): void {
+    $vendorContext = phase3d1VendorContext();
+    $currencies = phase3d1Currencies();
+    $user = phase3d1User();
+    phase1c2OffsetAccounts();
+
+    $entry = phase1c2VendorLedgerEntry($vendorContext, $currencies, $user);
+    $entry->forceFill(['business_id' => null])->saveQuietly();
+
+    $this->actingAs($user);
+    // A valid active session business exists; the adjustment must not adopt it.
+    session(['active_business_id' => $vendorContext['business']->id]);
+
+    expect(fn () => app(CurrencyAdjustmentService::class)
+        ->postRealizedGainLoss($entry->refresh(), 100.0, 1550.0, 'CUR-ADJ-1C2-NULL'))
+        ->toThrow(BusinessException::class);
+
+    expect(GlEntry::query()->count())->toBe(0)
+        ->and(CurrencyAdjustmentLedger::query()->count())->toBe(0);
+});
+
+test('1c2 refuses to post a realized FX adjustment for an inactive-business legacy entry', function (): void {
+    $vendorContext = phase3d1VendorContext();
+    $currencies = phase3d1Currencies();
+    $user = phase3d1User();
+    phase1c2OffsetAccounts();
+
+    $inactive = Business::query()->create([
+        'code' => 'B-1C2-INACTIVE',
+        'name' => 'Inactive Adjustment Business',
+        'is_active' => false,
+    ]);
+
+    $entry = phase1c2VendorLedgerEntry($vendorContext, $currencies, $user, ['business_id' => $inactive->id]);
+
+    $this->actingAs($user);
+
+    expect(fn () => app(CurrencyAdjustmentService::class)
+        ->postRealizedGainLoss($entry, 100.0, 1550.0, 'CUR-ADJ-1C2-INACTIVE'))
+        ->toThrow(BusinessException::class);
+
+    expect(GlEntry::query()->count())->toBe(0)
+        ->and(CurrencyAdjustmentLedger::query()->count())->toBe(0);
+});
+
+test('1c2 a nonexistent business cannot be persisted on a vendor ledger entry (FK)', function (): void {
+    $vendorContext = phase3d1VendorContext();
+    $currencies = phase3d1Currencies();
+    $user = phase3d1User();
+
+    // vendor_ledger_entries.business_id is FK-constrained, so a nonexistent
+    // persisted business is not a representable state; requirePersistedId still
+    // guards it defensively against direct/edge writes.
+    expect(fn () => phase1c2VendorLedgerEntry($vendorContext, $currencies, $user, ['business_id' => 987654321]))
+        ->toThrow(QueryException::class);
+});
+
 test('3d1b the legacy bank-ledger vendor mutation path cannot touch a version-2 entry', function (): void {
     $vendorContext = phase3d1VendorContext();
     $user = phase3d1User();
@@ -2186,4 +2330,46 @@ function phase3d1bOpeningContext(): array
     ]);
 
     return compact('business', 'vendor', 'user', 'payables');
+}
+
+function phase1c2VendorLedgerEntry(array $vendorContext, array $currencies, User $user, array $overrides = []): VendorLedgerEntry
+{
+    return VendorLedgerEntry::query()->create(array_merge([
+        'entry_number' => ((int) VendorLedgerEntry::query()->max('entry_number')) + 1,
+        'vendor_id' => $vendorContext['vendor']->id,
+        'business_id' => $vendorContext['business']->id,
+        'document_type' => 'PURCHASE_INVOICE',
+        'document_number' => 'PI-1C2-'.substr(uniqid(), -6),
+        'description' => 'Legacy v1 vendor entry',
+        'posting_date' => now()->subDays(5),
+        'document_date' => now()->subDays(5),
+        'due_date' => now()->addDays(25),
+        'debit_amount' => 0,
+        'credit_amount' => 220,
+        'amount' => 220,
+        'remaining_amount' => 220,
+        'open' => true,
+        'fully_applied' => false,
+        'currency_code' => $currencies['usd']->code,
+        'currency_factor' => 1500,
+        'original_credit_amount' => 220,
+        'ledger_semantics_version' => null,
+        'created_by' => $user->id,
+    ], $overrides));
+}
+
+function phase1c2OffsetAccounts(): void
+{
+    foreach (['income', 'expense'] as $type) {
+        if (ChartOfAccount::query()->where('account_type', $type)->exists()) {
+            continue;
+        }
+
+        $account = ChartOfAccount::factory()->create([
+            'account_number' => '1C2-'.strtoupper($type).'-'.substr(uniqid(), -4),
+            'name' => 'Currency Adjustment Offset '.ucfirst($type),
+        ]);
+
+        $account->forceFill(['account_type' => $type])->save();
+    }
 }

@@ -3,6 +3,7 @@
 use App\Enums\AccountCategory;
 use App\Enums\IncomeBalanceType;
 use App\Models\AccountingPeriod;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Contact;
 use App\Models\Currency;
@@ -29,6 +30,15 @@ beforeEach(function (): void {
         'name' => 'FY2026',
         'is_closed' => false,
     ]);
+
+    // Authoritative business context: the payment and the invoice it settles
+    // must share one owner (fail-closed ownership invariant).
+    $business = Business::query()->create([
+        'code' => 'BUS-PCI',
+        'name' => 'Payment Currency Business',
+        'is_active' => true,
+    ]);
+    session(['active_business_id' => $business->id]);
 });
 
 test('it calculates and posts realized gain/loss during foreign currency application', function () {
@@ -101,6 +111,7 @@ test('it calculates and posts realized gain/loss during foreign currency applica
         'document_number' => 'INV-001',
         'vendor_id' => $vendor->id,
         'vendor_name' => $vendor->vendor_name,
+        'business_id' => session('active_business_id'),
         'posting_date' => now()->subDays(10),
         'document_date' => now()->subDays(10),
         'due_date' => now()->addDays(20),

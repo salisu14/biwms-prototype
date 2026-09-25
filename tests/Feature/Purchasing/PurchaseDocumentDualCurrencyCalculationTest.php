@@ -398,7 +398,7 @@ test('a purchase order for a USD vendor defaults to USD when no explicit currenc
     $fixture['vendor']->update(['currency' => 'USD']);
 
     $order = app(PurchaseOrderService::class)->create(new CreatePurchaseOrderData(
-        businessId: null,
+        businessId: $fixture['business']->id,
         orderType: PurchaseOrderType::PURCHASE_ORDER,
         vendorId: $fixture['vendor']->id,
         orderDate: now(),
@@ -424,7 +424,7 @@ test('a vendor with no authoritative currency falls back to LCY', function (): v
     $fixture['vendor']->update(['currency' => '']);
 
     $order = app(PurchaseOrderService::class)->create(new CreatePurchaseOrderData(
-        businessId: null,
+        businessId: $fixture['business']->id,
         orderType: PurchaseOrderType::PURCHASE_ORDER,
         vendorId: $fixture['vendor']->id,
         orderDate: now(),
@@ -450,7 +450,7 @@ test('an explicit document currency overrides the vendor default', function (): 
     $fixture['vendor']->update(['currency' => 'USD']);
 
     $order = app(PurchaseOrderService::class)->create(new CreatePurchaseOrderData(
-        businessId: null,
+        businessId: $fixture['business']->id,
         orderType: PurchaseOrderType::PURCHASE_ORDER,
         vendorId: $fixture['vendor']->id,
         orderDate: now(),

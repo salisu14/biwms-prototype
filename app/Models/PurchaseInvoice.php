@@ -5,7 +5,8 @@
 namespace App\Models;
 
 use App\Enums\ApprovalStatus;
-use App\Services\Business\BusinessContextService;
+use App\Exceptions\BusinessException;
+use App\Services\Business\BusinessOwnershipService;
 use App\Services\NumberSeriesService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -19,12 +20,49 @@ class PurchaseInvoice extends Model
     protected static function booted(): void
     {
         static::creating(function (PurchaseInvoice $invoice): void {
-            $invoice->business_id ??= $invoice->order_id
-                ? PurchaseOrder::query()->whereKey($invoice->order_id)->value('business_id')
-                : app(BusinessContextService::class)->resolveId();
+            $ownership = app(BusinessOwnershipService::class);
+
+            if ($invoice->order_id !== null) {
+                // A purchase-order-linked invoice must inherit the order's
+                // business. A null-owned purchase order fails closed rather
+                // than silently producing another null-owned accounting
+                // document.
+                $orderBusinessId = $ownership->requirePersistedId(
+                    PurchaseOrder::query()->whereKey($invoice->order_id)->value('business_id'),
+                    'purchase order',
+                );
+
+                if ($invoice->business_id !== null && (int) $invoice->business_id !== $orderBusinessId) {
+                    throw new BusinessException(
+                        'The purchase invoice business must match its purchase order business.',
+                        title: 'Business ownership mismatch',
+                        field: 'business_id',
+                    );
+                }
+
+                $invoice->business_id = $orderBusinessId;
+            } else {
+                $invoice->business_id = $ownership->requireActiveContextId(
+                    $invoice->business_id,
+                    'purchase invoice',
+                );
+            }
 
             if (empty($invoice->document_number)) {
                 $invoice->document_number = self::generateNumber();
+            }
+        });
+
+        // Business ownership is immutable after creation for transactional
+        // documents; a normal update must not move the invoice between
+        // businesses or strip its owner.
+        static::updating(function (PurchaseInvoice $invoice): void {
+            if ($invoice->isDirty('business_id')) {
+                throw new BusinessException(
+                    'Purchase invoice business ownership cannot be changed after creation.',
+                    title: 'Business ownership is immutable',
+                    field: 'business_id',
+                );
             }
         });
     }

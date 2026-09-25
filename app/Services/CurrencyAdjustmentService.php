@@ -13,6 +13,7 @@ use App\Models\CurrencyAdjustmentLedger;
 use App\Models\CurrencyBuffer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\VendorLedgerEntry;
+use App\Services\Business\BusinessOwnershipService;
 use App\Services\Finance\GeneralLedgerService;
 use App\Support\LedgerSemantics;
 use Illuminate\Support\Collection;
@@ -93,6 +94,11 @@ class CurrencyAdjustmentService
         if (abs($gainLoss) < 0.01) {
             return null; // Negligible
         }
+
+        // Authoritative ownership comes only from the persisted vendor ledger
+        // entry being adjusted; fail closed before any accounting side effect
+        // (no session, user or caller-supplied business is used).
+        app(BusinessOwnershipService::class)->requirePersistedId($entry->business_id, 'vendor ledger entry');
 
         $isGain = $gainLoss > 0;
         $adjustmentType = $isGain
@@ -313,6 +319,13 @@ class CurrencyAdjustmentService
             throw new \RuntimeException('Missing currency adjustment G/L account setup.');
         }
 
+        // Every G/L row of this adjustment carries the authoritative business of
+        // the persisted vendor ledger entry being adjusted. Fail closed (before
+        // the first G/L write) when that owner is missing, nonexistent or
+        // inactive; never adopt the active session context.
+        $businessId = app(BusinessOwnershipService::class)
+            ->requirePersistedId($adjustment->vendorLedgerEntry?->business_id, 'vendor ledger entry');
+
         $amount = $adjustment->adjustment_amount;
 
         $this->glService->post([
@@ -333,6 +346,7 @@ class CurrencyAdjustmentService
             'document_type' => 'currency_adjustment',
             'document_number' => $adjustment->document_no,
             'description' => $adjustment->description,
+            'business_id' => $businessId,
             'sourceable_type' => CurrencyAdjustmentLedger::class,
             'sourceable_id' => $adjustment->id,
         ]);

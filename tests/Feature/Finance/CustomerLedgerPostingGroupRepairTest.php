@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
@@ -64,9 +65,15 @@ function malformedPaymentCustomerLedgerEntry(): array
         'customer_posting_group_id' => $customerPostingGroup->id,
     ]);
     $user = User::factory()->create();
+    $business = Business::query()->create([
+        'code' => 'BUS-P1E-'.substr(uniqid(), -6),
+        'name' => 'Phase 1E Business',
+        'is_active' => true,
+    ]);
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
         'party_name' => $customer->name,
+        'business_id' => $business->id,
         'payment_amount' => 1800,
         'payment_amount_lcy' => 1800,
         'applied_amount' => 0,

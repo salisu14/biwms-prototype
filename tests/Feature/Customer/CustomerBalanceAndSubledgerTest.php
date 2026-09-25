@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\BankAccount;
+use App\Models\Business;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\NumberSeries;
@@ -158,9 +159,16 @@ it('posts customer receipts as open credit ledger entries until they are applied
 
     $bankAccount = BankAccount::factory()->receiptOnly()->create();
 
+    $business = Business::query()->create([
+        'code' => 'BUS-CUST-'.substr(uniqid(), -6),
+        'name' => 'Customer Subledger Business',
+        'is_active' => true,
+    ]);
+
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
         'party_name' => $customer->name,
+        'business_id' => $business->id,
         'bank_account_id' => $bankAccount->id,
         'status' => 'APPROVED',
         'payment_amount' => 450,

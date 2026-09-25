@@ -11,6 +11,7 @@ use App\Enums\ItemType;
 use App\Enums\ManufacturingCostComponent;
 use App\Enums\ProductionOrderStatus;
 use App\Models\AccountingPeriod;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\CostAdjustmentBatch;
 use App\Models\CostingPeriod;
@@ -1256,7 +1257,13 @@ function historicalSalesShipmentCostRepairOutboundFrom(
  */
 function phase1cPurchaseInvoiceAndLine(array $fixture, string $documentNumber, float $quantityBase, float $lineTotal): array
 {
+    $business = Business::query()->create([
+        'code' => 'BUS-P1E-'.substr(uniqid(), -6),
+        'name' => 'Phase 1E Business',
+        'is_active' => true,
+    ]);
     $invoice = PurchaseInvoice::query()->create([
+        'business_id' => $business->id,
         'document_number' => $documentNumber,
         'vendor_id' => $fixture['vendor']->id,
         'vendor_name' => $fixture['vendor']->vendor_name,

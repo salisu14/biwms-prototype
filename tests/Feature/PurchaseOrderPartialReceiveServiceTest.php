@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\PurchaseOrderStatus;
+use App\Models\Business;
 use App\Models\Contact;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\Item;
@@ -81,7 +82,13 @@ function makePurchaseOrderWithOneLine(float $quantity = 10): array
         'unit_cost' => 100,
     ]);
 
+    $business = Business::query()->create([
+        'code' => 'BUS-P1E-'.substr(uniqid(), -6),
+        'name' => 'Phase 1E Business',
+        'is_active' => true,
+    ]);
     $order = PurchaseOrder::query()->create([
+        'business_id' => $business->id,
         'order_number' => 'PO-T-0001',
         'order_type' => 'purchase_order',
         'status' => PurchaseOrderStatus::APPROVED,

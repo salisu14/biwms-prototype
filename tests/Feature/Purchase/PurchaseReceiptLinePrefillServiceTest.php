@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\PurchaseLineType;
 use App\Enums\PurchaseOrderStatus;
+use App\Models\Business;
 use App\Models\Contact;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralProductPostingGroup;
@@ -73,7 +74,14 @@ it('prefills purchase receipt lines from the remaining purchase order quantities
         'vat_product_posting_group_id' => $vatPostingGroup->id,
     ]);
 
+    $business = Business::query()->create([
+        'code' => 'BUS-PRL-'.substr(uniqid(), -6),
+        'name' => 'Receipt Line Prefill Business',
+        'is_active' => true,
+    ]);
+
     $purchaseOrder = PurchaseOrder::query()->create([
+        'business_id' => $business->id,
         'order_number' => 'PO-TEST-0001',
         'status' => PurchaseOrderStatus::APPROVED,
         'vendor_id' => $vendor->id,
@@ -177,7 +185,14 @@ it('does not duplicate receipt lines when prefill runs more than once', function
         'inventory_posting_group_id' => $inventoryPostingGroup->id,
     ]);
 
+    $business = Business::query()->create([
+        'code' => 'BUS-PRL-'.substr(uniqid(), -6),
+        'name' => 'Receipt Line Prefill Business',
+        'is_active' => true,
+    ]);
+
     $purchaseOrder = PurchaseOrder::query()->create([
+        'business_id' => $business->id,
         'order_number' => 'PO-TEST-0002',
         'status' => PurchaseOrderStatus::APPROVED,
         'vendor_id' => $vendor->id,

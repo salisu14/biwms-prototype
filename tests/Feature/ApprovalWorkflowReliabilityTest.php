@@ -3,6 +3,7 @@
 use App\Enums\ApprovalStatus;
 use App\Enums\ProductionOrderStatus;
 use App\Models\AuditTrail;
+use App\Models\Business;
 use App\Models\Customer;
 use App\Models\InventoryAdjustmentJournal;
 use App\Models\Item;
@@ -56,6 +57,11 @@ it('blocks payment posting until approval and keeps failed posting immutable', f
     grantWorkflowPermission($user, 'finance.payment.post');
 
     $payment = Payment::factory()->customerReceipt()->create([
+        'business_id' => Business::query()->create([
+            'code' => 'BUS-AW-'.substr(uniqid(), -6),
+            'name' => 'Approval Workflow Business',
+            'is_active' => true,
+        ])->id,
         'payment_amount' => 100,
         'payment_amount_lcy' => 100,
         'unapplied_amount' => 100,

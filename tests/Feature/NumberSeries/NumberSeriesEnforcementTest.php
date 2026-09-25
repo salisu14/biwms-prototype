@@ -5,6 +5,7 @@ use App\Exceptions\NumberSeriesException;
 use App\Models\AuditTrail;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
+use App\Models\Business;
 use App\Models\Customer;
 use App\Models\Item;
 use App\Models\NumberSeries;
@@ -55,6 +56,11 @@ it('generates sales, purchase, payroll, and payment numbers from configured numb
 
     $vendor = Vendor::factory()->create();
     $payment = Payment::query()->create([
+        'business_id' => Business::query()->create([
+            'code' => 'BUS-P1E-'.substr(uniqid(), -6),
+            'name' => 'Phase 1E Business',
+            'is_active' => true,
+        ])->id,
         'payment_direction' => 'DISBURSEMENT',
         'party_type' => 'VENDOR',
         'party_id' => $vendor->id,
@@ -241,6 +247,11 @@ function paymentPayloadForNumberSeriesTest(Vendor $vendor, string $externalRefer
         'party_type' => 'VENDOR',
         'party_id' => $vendor->id,
         'party_name' => $vendor->vendor_name,
+        'business_id' => Business::query()->create([
+            'code' => 'BUS-P1E-'.substr(uniqid(), -6),
+            'name' => 'Phase 1E Business',
+            'is_active' => true,
+        ])->id,
         'payment_method' => 'BANK_TRANSFER',
         'payment_amount' => 100,
         'external_reference' => $externalReference,

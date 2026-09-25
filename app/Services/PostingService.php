@@ -24,6 +24,7 @@ use App\Models\SalesInvoice;
 use App\Models\VatPostingSetup;
 use App\Models\Vendor;
 use App\Services\Accounting\LedgerSequenceAllocator;
+use App\Services\Business\BusinessOwnershipService;
 use App\Services\Finance\GeneralLedgerService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -323,7 +324,8 @@ class PostingService
         string $documentNumber,
         ?int $currencyId = null,
         ?float $exchangeRate = null,
-        ?int $customerLedgerEntryId = null
+        ?int $customerLedgerEntryId = null,
+        ?int $businessId = null
     ): array {
         $arAccount = $customer->customerPostingGroup?->receivablesAccount;
         $bankGlAccount = $bankAccount->glAccount;
@@ -332,7 +334,11 @@ class PostingService
             throw new PostingSetupException('Missing account setup for payment receipt.');
         }
 
-        return DB::transaction(function () use ($customer, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $arAccount, $bankGlAccount, $currencyId, $exchangeRate, $customerLedgerEntryId) {
+        // Fail closed before the first G/L write: a payment-specific posting must
+        // carry an authoritative business owner.
+        $businessId = app(BusinessOwnershipService::class)->requirePersistedId($businessId, 'payment');
+
+        return DB::transaction(function () use ($customer, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $arAccount, $bankGlAccount, $currencyId, $exchangeRate, $customerLedgerEntryId, $businessId) {
             $entries = [];
 
             // Debit Bank
@@ -340,6 +346,7 @@ class PostingService
                 'chart_of_account_id' => $bankGlAccount->id,
                 'debit_amount' => $amount,
                 'credit_amount' => 0,
+                'business_id' => $businessId,
                 'source_type' => 'BANK',
                 'source_number' => $bankAccount->account_code,
                 'document_type' => 'PAYMENT',
@@ -355,6 +362,7 @@ class PostingService
                 'chart_of_account_id' => $arAccount->id,
                 'debit_amount' => 0,
                 'credit_amount' => $amount + $discount,
+                'business_id' => $businessId,
                 'source_type' => 'CUSTOMER',
                 'source_number' => $customer->customer_number,
                 'document_type' => 'PAYMENT',
@@ -372,6 +380,7 @@ class PostingService
                     'chart_of_account_id' => $discountAccount->id,
                     'debit_amount' => $discount,
                     'credit_amount' => 0,
+                    'business_id' => $businessId,
                     'source_type' => 'CUSTOMER',
                     'source_number' => $customer->customer_number,
                     'document_type' => 'PAYMENT',
@@ -402,7 +411,8 @@ class PostingService
         string $documentNumber,
         ?int $currencyId = null,
         ?float $exchangeRate = null,
-        ?int $vendorLedgerEntryId = null
+        ?int $vendorLedgerEntryId = null,
+        ?int $businessId = null
     ): array {
         $apAccount = $vendor->vendorPostingGroup?->payablesAccount;
         $bankGlAccount = $bankAccount->glAccount;
@@ -411,7 +421,11 @@ class PostingService
             throw new PostingSetupException('Missing account setup for payment disbursement.');
         }
 
-        return DB::transaction(function () use ($vendor, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $apAccount, $bankGlAccount, $currencyId, $exchangeRate, $vendorLedgerEntryId) {
+        // Fail closed before the first G/L write: a payment-specific posting must
+        // carry an authoritative business owner.
+        $businessId = app(BusinessOwnershipService::class)->requirePersistedId($businessId, 'payment');
+
+        return DB::transaction(function () use ($vendor, $amount, $bankAccount, $discount, $postingDate, $documentNumber, $apAccount, $bankGlAccount, $currencyId, $exchangeRate, $vendorLedgerEntryId, $businessId) {
             $entries = [];
 
             // 1. Debit: A/P (decrease payable)
@@ -419,6 +433,7 @@ class PostingService
                 'chart_of_account_id' => $apAccount->id,
                 'debit_amount' => $amount + $discount,
                 'credit_amount' => 0,
+                'business_id' => $businessId,
                 'source_type' => 'VENDOR',
                 'source_number' => $vendor->vendor_number,
                 'document_type' => 'PAYMENT',
@@ -435,6 +450,7 @@ class PostingService
                 'chart_of_account_id' => $bankGlAccount->id,
                 'debit_amount' => 0,
                 'credit_amount' => $amount,
+                'business_id' => $businessId,
                 'source_type' => 'BANK',
                 'source_number' => $bankAccount->account_code,
                 'document_type' => 'PAYMENT',
@@ -453,6 +469,7 @@ class PostingService
                         'chart_of_account_id' => $discountAccount->id,
                         'debit_amount' => 0,
                         'credit_amount' => $discount,
+                        'business_id' => $businessId,
                         'source_type' => 'VENDOR',
                         'source_number' => $vendor->vendor_number,
                         'document_type' => 'PAYMENT',
@@ -484,10 +501,16 @@ class PostingService
             return [];
         }
 
+        // Authoritative ownership for every realized-FX row comes from the
+        // settled payment application; fail closed when it is unowned, before
+        // writing the first G/L row.
+        $businessId = app(BusinessOwnershipService::class)
+            ->requirePersistedId($application->business_id, 'payment application');
+
         $payment = $application->payment;
         $party = $payment->party;
 
-        return DB::transaction(function () use ($application, $currency, $gainLossAmount, $payment, $party) {
+        return DB::transaction(function () use ($application, $currency, $gainLossAmount, $payment, $party, $businessId) {
             $entries = [];
 
             // 1. Adjust the Accounts Receivable/Payable (Debit or Credit)
@@ -525,6 +548,7 @@ class PostingService
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Gain on {$application->document_number}",
                         'payment_application_id' => $application->id,
+                        'business_id' => $businessId,
                         'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|ar|debit'),
                     ]);
                     $entries[] = $this->createGlEntry([
@@ -536,6 +560,7 @@ class PostingService
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Gain on {$application->document_number}",
                         'payment_application_id' => $application->id,
+                        'business_id' => $businessId,
                         'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|gain|credit'),
                     ]);
                 } else {
@@ -550,6 +575,7 @@ class PostingService
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Loss on {$application->document_number}",
                         'payment_application_id' => $application->id,
+                        'business_id' => $businessId,
                         'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|loss|debit'),
                     ]);
                     $entries[] = $this->createGlEntry([
@@ -561,6 +587,7 @@ class PostingService
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Loss on {$application->document_number}",
                         'payment_application_id' => $application->id,
+                        'business_id' => $businessId,
                         'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|ap|credit'),
                     ]);
                 }
@@ -579,6 +606,7 @@ class PostingService
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Loss on {$application->document_number}",
                         'payment_application_id' => $application->id,
+                        'business_id' => $businessId,
                         'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|loss|debit'),
                     ]);
                     $entries[] = $this->createGlEntry([
@@ -590,6 +618,7 @@ class PostingService
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Loss on {$application->document_number}",
                         'payment_application_id' => $application->id,
+                        'business_id' => $businessId,
                         'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|ar|credit'),
                     ]);
                 } else {
@@ -604,6 +633,7 @@ class PostingService
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Gain on {$application->document_number}",
                         'payment_application_id' => $application->id,
+                        'business_id' => $businessId,
                         'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|ap|debit'),
                     ]);
                     $entries[] = $this->createGlEntry([
@@ -615,6 +645,7 @@ class PostingService
                         'document_number' => $payment->payment_number,
                         'description' => "Realized Gain on {$application->document_number}",
                         'payment_application_id' => $application->id,
+                        'business_id' => $businessId,
                         'idempotency_key' => hash('sha256', 'fx|'.$application->id.'|gain|credit'),
                     ]);
                 }
@@ -629,6 +660,11 @@ class PostingService
      */
     public function reverseRealizedGainLoss(PaymentApplication $application): void
     {
+        // The reversal must carry the same authoritative owner as the settled
+        // application; fail closed if the application is unowned.
+        $businessId = app(BusinessOwnershipService::class)
+            ->requirePersistedId($application->business_id, 'payment application');
+
         $entries = GlEntry::query()
             ->where('payment_application_id', $application->id)
             ->whereNull('reversal_of_gl_entry_id')
@@ -645,6 +681,7 @@ class PostingService
                 'source_type' => $entry->source_type,
                 'source_number' => $entry->source_number,
                 'payment_application_id' => $application->id,
+                'business_id' => $businessId,
                 'reversal_of_gl_entry_id' => $entry->id,
                 'idempotency_key' => hash('sha256', 'fx-reversal|'.$application->id.'|'.$entry->id),
             ]);

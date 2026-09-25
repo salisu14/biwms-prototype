@@ -178,7 +178,7 @@ it('renders the purchase three-way match report and exports direct invoice excep
     ]);
 
     $fixture = $this->createPostedPayableFixture(500.00);
-    $businessId = Business::query()->firstOrFail()->id;
+    $businessId = $fixture['business']->id;
     $item = Item::factory()->create();
     $purchaseInvoice = PurchaseInvoice::query()->create([
         'business_id' => $businessId,

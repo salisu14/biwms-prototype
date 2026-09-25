@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Exceptions\BusinessException;
+use App\Models\Business;
 use App\Models\CustomerLedgerApplication;
 use App\Models\CustomerLedgerEntry;
 use App\Models\GlEntry;
@@ -151,8 +152,12 @@ it('rejects sales credit memo currency mismatch', function (): void {
 
 it('rejects cross-business sales credit memo application where ownership is resolvable', function (): void {
     $fixture = postedSalesCreditMemoApplicationFixture($this, 300.00, 1000.00);
-    $fixture['postedCreditMemo']->update(['dimensions' => ['business_id' => 1]]);
-    $fixture['postedInvoice']->update(['dimensions' => ['business_id' => 2]]);
+
+    $businessA = Business::query()->create(['code' => 'BUS-CM-A', 'name' => 'Credit Memo Business A', 'is_active' => true]);
+    $businessB = Business::query()->create(['code' => 'BUS-CM-B', 'name' => 'Credit Memo Business B', 'is_active' => true]);
+
+    $fixture['postedCreditMemo']->update(['business_id' => $businessA->id]);
+    $fixture['postedInvoice']->update(['business_id' => $businessB->id]);
 
     expect(fn () => $fixture['postedCreditMemo']->fresh()->applyToInvoices([
         ['invoice_id' => $fixture['postedInvoice']->id, 'amount' => 100.00],

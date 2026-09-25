@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\BankAccount;
+use App\Models\Business;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Item;
@@ -40,7 +41,14 @@ it('creates items against reusable default posting groups', function (): void {
 });
 
 it('creates vendor payments with a valid vendor, currency, and creator context', function (): void {
+    $business = Business::query()->create([
+        'code' => 'BUS-FN-'.substr(uniqid(), -6),
+        'name' => 'Factory Normalization Business',
+        'is_active' => true,
+    ]);
+
     $payment = Payment::factory()->create([
+        'business_id' => $business->id,
         'payment_amount' => 125000,
     ]);
 
@@ -57,10 +65,16 @@ it('creates vendor payments with a valid vendor, currency, and creator context',
 
 it('creates customers and customer receipt payments with valid ar setup', function (): void {
     $customer = Customer::factory()->create();
+    $business = Business::query()->create([
+        'code' => 'BUS-FN-'.substr(uniqid(), -6),
+        'name' => 'Factory Normalization Business',
+        'is_active' => true,
+    ]);
     $payment = Payment::factory()
         ->customerReceipt()
         ->create([
             'party_id' => $customer->id,
+            'business_id' => $business->id,
             'payment_amount' => 37670.40,
         ]);
 

@@ -7,6 +7,7 @@ use App\Enums\CurrencyRoundingMethod;
 use App\Exceptions\BusinessException;
 use App\Filament\Resources\Payments\Pages\CreatePayment;
 use App\Models\BankAccount;
+use App\Models\Business;
 use App\Models\Currency;
 use App\Models\CurrencyExchangeRate;
 use App\Models\GeneralBusinessPostingGroup;
@@ -249,6 +250,16 @@ it('shows a clear notification and does not create a partial payment when the PA
         'vendor_posting_group_id' => $vendorPostingGroup->id,
         'vat_bus_posting_group' => null,
     ]);
+
+    // Interactive Filament workflow: establish the active-business context the
+    // create flow resolves ownership from (ownership is fixture infrastructure;
+    // the assertion under test remains the missing PAYMENT number series).
+    $business = Business::query()->create([
+        'code' => 'BUS-CER',
+        'name' => 'Currency Exchange Rate Business',
+        'is_active' => true,
+    ]);
+    session(['active_business_id' => $business->id]);
 
     Livewire::actingAs($user)
         ->test(CreatePayment::class)

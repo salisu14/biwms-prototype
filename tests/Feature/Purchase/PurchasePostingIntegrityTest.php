@@ -11,6 +11,7 @@ use App\Exceptions\BusinessException;
 use App\Exceptions\NumberSeriesException;
 use App\Exceptions\PostingSetupException;
 use App\Models\AccountingPeriod;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\GeneralBusinessPostingGroup;
 use App\Models\GeneralLedgerSetup;
@@ -1547,6 +1548,15 @@ function purchasePostingFixture(bool $createGeneralPostingSetup = true): array
     $user = User::factory()->create();
     $location = Location::factory()->create(['code' => 'MAIN']);
 
+    // Authoritative business context: purchasing documents require an
+    // unambiguous owner (fail-closed ownership invariant).
+    $business = Business::query()->create([
+        'code' => 'BUS-PPI',
+        'name' => 'Purchase Posting Business',
+        'is_active' => true,
+    ]);
+    session(['active_business_id' => $business->id]);
+
     $payablesAccount = purchasePostingTestAccount('2100', 'Accounts Payable', 'payable', IncomeBalanceType::BALANCE_SHEET);
     $inventoryAccount = purchasePostingTestAccount('1200', 'Inventory', 'inventory', IncomeBalanceType::BALANCE_SHEET);
     $purchaseAccount = purchasePostingTestAccount('5100', 'Purchases', 'direct_expense', IncomeBalanceType::INCOME_STATEMENT);
@@ -1625,7 +1635,7 @@ function purchasePostingFixture(bool $createGeneralPostingSetup = true): array
         'vat_bus_posting_group' => null,
     ]);
 
-    return compact('user', 'vendor', 'item', 'location');
+    return compact('user', 'vendor', 'item', 'location', 'business');
 }
 
 function purchasePostingTestAccount(

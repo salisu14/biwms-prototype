@@ -4,7 +4,8 @@ namespace App\Models;
 
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderType;
-use App\Services\Business\BusinessContextService;
+use App\Exceptions\BusinessException;
+use App\Services\Business\BusinessOwnershipService;
 use App\Services\Purchase\PurchaseOrderService;
 use App\Support\PurchasingCurrency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -83,7 +84,10 @@ class PurchaseOrder extends Model
         parent::boot();
 
         static::creating(function ($order) {
-            $order->business_id ??= app(BusinessContextService::class)->resolveId();
+            $order->business_id = app(BusinessOwnershipService::class)->requireActiveContextId(
+                $order->business_id,
+                'purchase order',
+            );
 
             // Default status if not provided
             if (empty($order->status)) {
@@ -93,6 +97,19 @@ class PurchaseOrder extends Model
             if (empty($order->order_number)) {
                 $order->order_number = app(PurchaseOrderService::class)
                     ->generateOrderNumber($order->order_type);
+            }
+        });
+
+        // Business ownership is immutable after creation for transactional
+        // documents: a normal update must never move a document between
+        // businesses or strip its owner once downstream artifacts may exist.
+        static::updating(function ($order) {
+            if ($order->isDirty('business_id')) {
+                throw new BusinessException(
+                    'Purchase order business ownership cannot be changed after creation.',
+                    title: 'Business ownership is immutable',
+                    field: 'business_id',
+                );
             }
         });
 

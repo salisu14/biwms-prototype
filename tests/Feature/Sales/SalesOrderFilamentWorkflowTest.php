@@ -17,6 +17,7 @@ use App\Filament\Sales\Resources\SalesOrders\Pages\EditSalesOrder;
 use App\Filament\Sales\Resources\SalesOrders\Pages\ListSalesOrders;
 use App\Models\AccountingPeriod;
 use App\Models\BankAccount;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
@@ -438,9 +439,18 @@ it('traces sales order shipment and posted invoice gl entries through canonical 
         'current_balance' => 1800,
         'available_balance' => 1800,
     ]);
+
+    $business = Business::query()->create([
+        'code' => 'BUS-SOF-'.substr(uniqid(), -6),
+        'name' => 'Sales Order Filament Business',
+        'is_active' => true,
+    ]);
+    $postedInvoice->update(['business_id' => $business->id]);
+
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $fixture['customer']->id,
         'party_name' => $fixture['customer']->name,
+        'business_id' => $business->id,
         'bank_account_id' => $bankAccount->id,
         'payment_amount' => 50000,
         'payment_amount_lcy' => 50000,
@@ -478,9 +488,17 @@ it('traces customer payment bank ledger to customer ledger and payment gl entrie
         'current_balance' => 0,
         'available_balance' => 0,
     ]);
+
+    $business = Business::query()->create([
+        'code' => 'BUS-SOF-'.substr(uniqid(), -6),
+        'name' => 'Sales Order Filament Business',
+        'is_active' => true,
+    ]);
+
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $fixture['customer']->id,
         'party_name' => $fixture['customer']->name,
+        'business_id' => $business->id,
         'bank_account_id' => $bankAccount->id,
         'payment_amount' => 50000,
         'payment_amount_lcy' => 50000,

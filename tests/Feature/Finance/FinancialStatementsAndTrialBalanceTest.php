@@ -426,9 +426,16 @@ it('keeps posted bank payment general ledger in agreement with bank ledger', fun
         'available_balance' => 0,
     ]);
 
+    $business = Business::query()->create([
+        'code' => 'BUS-FST',
+        'name' => 'Financial Statements Business',
+        'is_active' => true,
+    ]);
+
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
         'party_name' => $customer->name,
+        'business_id' => $business->id,
         'bank_account_id' => $bankAccount->id,
         'payment_amount' => 325,
         'payment_amount_lcy' => 325,

@@ -2,6 +2,7 @@
 
 use App\Enums\ItemLedgerEntryType;
 use App\Enums\ProductionOrderStatus;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\GlEntry;
@@ -385,6 +386,11 @@ it('reports purchase receipt invoice and vendor ledger reconciliation issues', f
     ]);
 
     $directInvoice = PurchaseInvoice::query()->create([
+        'business_id' => Business::query()->create([
+            'code' => 'BUS-P1E-'.substr(uniqid(), -6),
+            'name' => 'Phase 1E Business',
+            'is_active' => true,
+        ])->id,
         'document_number' => 'PI-DUP-LEDGER-001',
         'vendor_id' => $vendor->id,
         'vendor_name' => $vendor->vendor_name,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\PurchaseOrderStatus;
 use App\Models\BlanketOrder;
+use App\Models\Business;
 use App\Models\Location;
 use App\Models\NumberSeries;
 use App\Models\NumberSeriesLine;
@@ -50,6 +51,15 @@ function makeBlanketOrder(array $attributes = []): BlanketOrder
 {
     $user = User::factory()->create();
     Location::factory()->create(['code' => 'MAIN']);
+
+    // Authoritative business context: blanket-order conversion creates a
+    // purchase order, which requires an unambiguous owner.
+    $business = Business::query()->create([
+        'code' => 'BUS-BLKT',
+        'name' => 'Blanket Order Business',
+        'is_active' => true,
+    ]);
+    session(['active_business_id' => $business->id]);
 
     return BlanketOrder::query()->create(array_merge([
         'document_number' => 'BPO-'.uniqid(),

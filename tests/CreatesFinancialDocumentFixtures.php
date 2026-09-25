@@ -11,6 +11,7 @@ use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
 use App\Models\BankAccountStatementLine;
 use App\Models\BankReconciliation;
+use App\Models\Business;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\Payment;
@@ -26,12 +27,36 @@ use Carbon\Carbon;
 trait CreatesFinancialDocumentFixtures
 {
     /**
+     * Resolve an authoritative business for fixtures. A real, non-null owner is
+     * still assigned explicitly (satisfying the fail-closed ownership
+     * invariant). An existing active business is reused when present so a
+     * fixture never introduces a second active business — BusinessContextService
+     * keeps a legacy single-company access fallback that other suites rely on,
+     * and that fallback is disabled as soon as more than one active business
+     * exists. Reuse here therefore preserves the environment, it does not bypass
+     * ownership.
+     */
+    protected function fixtureBusiness(): Business
+    {
+        return Business::query()
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->first()
+            ?? Business::query()->create([
+                'code' => 'BUS-FX-'.substr(uniqid(), -6),
+                'name' => 'Fixture Business',
+                'is_active' => true,
+            ]);
+    }
+
+    /**
      * @return array{bankAccount: BankAccount, customer: Customer, documentEntry: CustomerLedgerEntry, payment: Payment, paymentEntry: CustomerLedgerEntry, user: User}
      */
     protected function createReceivablePaymentFixture(
         float $documentAmount = 37670.40,
         float $paymentAmount = 30000.00,
     ): array {
+        $business = $this->fixtureBusiness();
         $user = User::factory()->create();
         $bankAccount = BankAccount::factory()->receiptOnly()->create();
         $customer = Customer::factory()->create();
@@ -68,6 +93,7 @@ trait CreatesFinancialDocumentFixtures
             ->create([
                 'party_id' => $customer->id,
                 'party_name' => $customer->name,
+                'business_id' => $business->id,
                 'bank_account_id' => $bankAccount->id,
                 'payment_amount' => $paymentAmount,
                 'applied_amount' => 0,
@@ -113,6 +139,7 @@ trait CreatesFinancialDocumentFixtures
         float $documentAmount = 250000.00,
         float $paymentAmount = 200000.00,
     ): array {
+        $business = $this->fixtureBusiness();
         $user = User::factory()->create();
         $bankAccount = BankAccount::factory()->paymentOnly()->create();
         $vendor = Vendor::factory()->create();
@@ -147,6 +174,7 @@ trait CreatesFinancialDocumentFixtures
         $payment = Payment::factory()->create([
             'party_id' => $vendor->id,
             'party_name' => $vendor->vendor_name,
+            'business_id' => $business->id,
             'bank_account_id' => $bankAccount->id,
             'payment_amount' => $paymentAmount,
             'applied_amount' => 0,
@@ -190,12 +218,14 @@ trait CreatesFinancialDocumentFixtures
      */
     protected function createPostedReceivableFixture(float $documentAmount = 37670.40): array
     {
+        $business = $this->fixtureBusiness();
         $user = User::factory()->create();
         $customer = Customer::factory()->create();
         $postedInvoice = PostedSalesInvoice::query()->create([
             'document_number' => 'PSI-'.$customer->id.'-001',
             'customer_id' => $customer->id,
             'customer_name' => $customer->name,
+            'business_id' => $business->id,
             'customer_address' => (string) $customer->address,
             'ship_to_name' => $customer->name,
             'ship_to_address' => (string) $customer->address,
@@ -249,7 +279,7 @@ trait CreatesFinancialDocumentFixtures
             'created_by' => $user->id,
         ]);
 
-        return compact('customer', 'postedInvoice', 'documentEntry', 'user');
+        return compact('customer', 'postedInvoice', 'documentEntry', 'user', 'business');
     }
 
     /**
@@ -257,12 +287,14 @@ trait CreatesFinancialDocumentFixtures
      */
     protected function createPostedPayableFixture(float $documentAmount = 250000.00): array
     {
+        $business = $this->fixtureBusiness();
         $user = User::factory()->create();
         $vendor = Vendor::factory()->create();
         $postedInvoice = PostedPurchaseInvoice::query()->create([
             'document_number' => 'PPI-'.$vendor->id.'-001',
             'vendor_id' => $vendor->id,
             'vendor_name' => $vendor->vendor_name,
+            'business_id' => $business->id,
             'vendor_address' => (string) $vendor->address,
             'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
             'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
@@ -310,7 +342,7 @@ trait CreatesFinancialDocumentFixtures
             'created_by' => $user->id,
         ]);
 
-        return compact('vendor', 'postedInvoice', 'documentEntry', 'user');
+        return compact('vendor', 'postedInvoice', 'documentEntry', 'user', 'business');
     }
 
     /**
@@ -329,6 +361,7 @@ trait CreatesFinancialDocumentFixtures
             ->create([
                 'party_id' => $receivable['customer']->id,
                 'party_name' => $receivable['customer']->name,
+                'business_id' => $receivable['business']->id,
                 'bank_account_id' => $bankAccount->id,
                 'payment_amount' => $paymentAmount,
                 'applied_amount' => 0,
@@ -381,6 +414,7 @@ trait CreatesFinancialDocumentFixtures
         $payment = Payment::factory()->create([
             'party_id' => $payable['vendor']->id,
             'party_name' => $payable['vendor']->vendor_name,
+            'business_id' => $payable['business']->id,
             'bank_account_id' => $bankAccount->id,
             'payment_amount' => $paymentAmount,
             'applied_amount' => 0,

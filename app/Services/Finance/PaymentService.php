@@ -26,6 +26,7 @@ use App\Models\Vendor;
 use App\Models\VendorLedgerEntry;
 use App\Services\AuditTrailService;
 use App\Services\BankAccountLedgerService;
+use App\Services\Business\BusinessOwnershipService;
 use App\Services\CurrencyService;
 use App\Services\PostingDateValidator;
 use App\Services\PostingService;
@@ -86,6 +87,12 @@ class PaymentService
             }
 
             $this->assertBankAccountCurrencyMatches($payment);
+
+            // Require authoritative persisted business ownership before any
+            // accounting or subledger side effect: a payment must never post
+            // without a resolved business, and the owner is never re-resolved
+            // from the active session here.
+            app(BusinessOwnershipService::class)->requirePersistedId($payment->business_id, 'payment');
 
             // 1. Create Ledger Entries
             $partyLedgerEntry = null;
@@ -170,9 +177,11 @@ class PaymentService
                 throw new \Exception('Document type does not match payment party type.');
             }
 
-            $paymentBusinessId = $payment->business_id;
-            $documentBusinessId = $document->business_id ?? null;
-            if ($paymentBusinessId !== null && $documentBusinessId !== null && (int) $paymentBusinessId !== (int) $documentBusinessId) {
+            $ownership = app(BusinessOwnershipService::class);
+            $paymentBusinessId = $ownership->requirePersistedId($payment->business_id, 'payment');
+            $documentBusinessId = $ownership->requirePersistedId($document->business_id ?? null, 'document');
+
+            if ($paymentBusinessId !== $documentBusinessId) {
                 throw new \Exception('Payment and document must belong to the same business.');
             }
 
@@ -243,7 +252,7 @@ class PaymentService
 
             $application = PaymentApplication::create([
                 'payment_id' => $payment->id,
-                'business_id' => $paymentBusinessId ?? $documentBusinessId,
+                'business_id' => $paymentBusinessId,
                 'document_type' => $applicationData['document_type'],
                 'document_id' => $document->id,
                 'document_number' => $document->document_number,
@@ -773,6 +782,7 @@ class PaymentService
         return VendorLedgerEntry::create([
             'entry_number' => $nextEntryNumber,
             'vendor_id' => $vendor->id,
+            'business_id' => $payment->business_id,
             'document_type' => 'PAYMENT',
             'document_number' => $payment->payment_number,
             'external_document_number' => $payment->external_reference,
@@ -890,6 +900,7 @@ class PaymentService
                 currencyId: $payment->currency_id,
                 exchangeRate: (float) $payment->currency_factor,
                 customerLedgerEntryId: $partyLedgerEntry instanceof CustomerLedgerEntry ? $partyLedgerEntry->id : null,
+                businessId: $payment->business_id !== null ? (int) $payment->business_id : null,
             );
         }
 
@@ -903,6 +914,7 @@ class PaymentService
             currencyId: $payment->currency_id,
             exchangeRate: (float) $payment->currency_factor,
             vendorLedgerEntryId: $partyLedgerEntry instanceof VendorLedgerEntry ? $partyLedgerEntry->id : null,
+            businessId: $payment->business_id !== null ? (int) $payment->business_id : null,
         );
     }
 
@@ -1022,20 +1034,24 @@ class PaymentService
 
     protected function getOpenDocuments(Payment $payment)
     {
+        // Business ownership is a strict eligibility filter, never a wildcard:
+        // a payment without an authoritative business has no eligible documents.
+        $businessId = app(BusinessOwnershipService::class)->requirePersistedId($payment->business_id, 'payment');
+
         if ($payment->party_type === 'CUSTOMER') {
             return PostedSalesInvoice::forCustomer($payment->party_id)
-                ->when($payment->business_id !== null, fn (Builder $query) => $query->where('business_id', $payment->business_id))
-                ->where(fn (Builder $query) => $query
-                    ->where('paid_in_full', false)
-                    ->orWhereNull('paid_in_full'))
-                ->get();
-        } else {
-            return PostedPurchaseInvoice::forVendor($payment->party_id)
-                ->when($payment->business_id !== null, fn (Builder $query) => $query->where('business_id', $payment->business_id))
+                ->where('business_id', $businessId)
                 ->where(fn (Builder $query) => $query
                     ->where('paid_in_full', false)
                     ->orWhereNull('paid_in_full'))
                 ->get();
         }
+
+        return PostedPurchaseInvoice::forVendor($payment->party_id)
+            ->where('business_id', $businessId)
+            ->where(fn (Builder $query) => $query
+                ->where('paid_in_full', false)
+                ->orWhereNull('paid_in_full'))
+            ->get();
     }
 }

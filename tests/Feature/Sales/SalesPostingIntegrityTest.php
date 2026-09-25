@@ -6,6 +6,7 @@ use App\Enums\ItemLedgerEntryType;
 use App\Enums\ItemType;
 use App\Models\AccountingPeriod;
 use App\Models\BankAccount;
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
@@ -110,9 +111,17 @@ test('sales invoice posting creates traceable item, value, customer, and balance
         'current_balance' => 0,
         'available_balance' => 0,
     ]);
+
+    $business = Business::query()->create([
+        'code' => 'BUS-SPI-'.substr(uniqid(), -6),
+        'name' => 'Sales Posting Integrity Business',
+        'is_active' => true,
+    ]);
+
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $fixture['customer']->id,
         'party_name' => $fixture['customer']->name,
+        'business_id' => $business->id,
         'bank_account_id' => $bankAccount->id,
         'payment_amount' => 1000,
         'payment_amount_lcy' => 1000,

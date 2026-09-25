@@ -10,6 +10,7 @@ use App\Models\AccountingPeriod;
 use App\Models\AuditTrail;
 use App\Models\BankAccount;
 use App\Models\BankAccountLedgerEntry;
+use App\Models\Business;
 use App\Models\CashReceiptLine;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
@@ -56,6 +57,16 @@ beforeEach(function () {
         'end_date' => '2026-12-31',
         'is_closed' => false,
     ]);
+
+    // Authoritative business context: payments and the documents they settle
+    // must share one owner (fail-closed ownership invariant).
+    $business = Business::query()->create([
+        'code' => 'BUS-BLP',
+        'name' => 'Bank Ledger Payment Business',
+        'is_active' => true,
+    ]);
+    session(['active_business_id' => $business->id]);
+
     ensureBankLedgerNumberSeries();
 });
 
@@ -1022,6 +1033,7 @@ function postedSalesInvoice(Customer $customer, User $user, float $amount): Post
         'document_number' => 'PSI-'.fake()->unique()->numberBetween(1000, 9999),
         'customer_id' => $customer->id,
         'customer_name' => $customer->name,
+        'business_id' => session('active_business_id'),
         'general_business_posting_group_id' => $customer->general_business_posting_group_id,
         'customer_posting_group_id' => $customer->customer_posting_group_id,
         'posting_date' => now(),
@@ -1064,6 +1076,7 @@ function postedPurchaseInvoice(Vendor $vendor, User $user, float $amount): Poste
         'document_number' => 'PPI-'.fake()->unique()->numberBetween(1000, 9999),
         'vendor_id' => $vendor->id,
         'vendor_name' => $vendor->vendor_name,
+        'business_id' => session('active_business_id'),
         'general_business_posting_group_id' => $vendor->general_business_posting_group_id,
         'vendor_posting_group_id' => $vendor->vendor_posting_group_id,
         'posting_date' => now(),

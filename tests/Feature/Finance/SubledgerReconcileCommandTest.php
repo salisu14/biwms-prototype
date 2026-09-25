@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Business;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
@@ -65,9 +66,15 @@ function subledgerInvoiceFixture(float $total = 100): array
         'source_id' => $invoice->id,
         'created_by' => $user->id,
     ]);
+    $business = Business::query()->create([
+        'code' => 'BUS-P1E-'.substr(uniqid(), -6),
+        'name' => 'Phase 1E Business',
+        'is_active' => true,
+    ]);
     $payment = Payment::factory()->customerReceipt()->create([
         'party_id' => $customer->id,
         'party_name' => $customer->name,
+        'business_id' => $business->id,
         'payment_amount' => 100,
         'applied_amount' => 50,
         'unapplied_amount' => 50,
